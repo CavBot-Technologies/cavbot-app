@@ -1,0 +1,351 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+/**
+ * =========================
+ * ENUMS
+ * =========================
+ */
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum PlanTier {
+  SOLO
+  STUDIO
+  AGENCY
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum ApiKeyType {
+  PUBLISHABLE
+  SECRET
+  ADMIN
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  ROTATED
+  REVOKED
+}
+
+enum SiteStatus {
+  PENDING
+  VERIFIED
+  SUSPENDED
+}
+
+enum AuditAction {
+  ACCOUNT_CREATED
+  ACCOUNT_UPDATED
+  MEMBER_INVITED
+  MEMBER_REMOVED
+  PROJECT_CREATED
+  PROJECT_UPDATED
+  SITE_CREATED
+  SITE_VERIFIED
+  SITE_SUSPENDED
+  KEY_CREATED
+  KEY_ROTATED
+  KEY_REVOKED
+}
+
+enum AuthTokenType {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+/**
+ * =========================
+ * CORE MULTI-TENANT
+ * =========================
+ */
+
+model User {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  displayName String?
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations (MATCHES your routes exactly)
+  auth        UserAuth?
+  memberships Membership[]
+  invitesSent Invite[]     @relation("InvitesSent")
+  auditEvents AuditLog[]   @relation("AuditActor")
+  authTokens  AuthToken[]
+
+  @@index([createdAt])
+  @@index([lastLoginAt])
+}
+
+model UserAuth {
+  userId String @id
+
+  // PBKDF2 params (matches apiAuth.ts expectations)
+  passwordAlgo  String @default("pbkdf2_sha256")
+  passwordIters Int    @default(210000)
+  passwordSalt  String
+  passwordHash  String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 1:1 back to User via `user.auth`
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+}
+
+model AuthToken {
+  id     String        @id @default(cuid())
+  userId String
+  type   AuthTokenType
+
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([expiresAt])
+}
+
+model Account {
+  id   String   @id @default(cuid())
+  name String
+  tier PlanTier @default(SOLO)
+  slug String   @unique
+
+  billingEmail String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  members       Membership[]
+  projects      Project[]
+  subscriptions Subscription[]
+  invites       Invite[]
+  apiKeys       ApiKey[]
+  auditLogs     AuditLog[]
+
+  @@index([tier])
+  @@index([createdAt])
+}
+
+model Membership {
+  id        String     @id @default(cuid())
+  accountId String
+  userId    String
+  role      MemberRole @default(MEMBER)
+  createdAt DateTime   @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // IMPORTANT: this creates `accountId_userId` for Prisma `findUnique`
+  @@unique([accountId, userId])
+  @@index([userId])
+  @@index([accountId])
+}
+
+model Invite {
+  id        String     @id @default(cuid())
+  accountId String
+  email     String
+  role      MemberRole @default(MEMBER)
+
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  acceptedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  sentById String?
+  sentBy   User?   @relation("InvitesSent", fields: [sentById], references: [id], onDelete: SetNull)
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([email])
+  @@index([expiresAt])
+}
+
+/**
+ * =========================
+ * BILLING / LIMITS
+ * =========================
+ */
+
+model Subscription {
+  id        String             @id @default(cuid())
+  accountId String
+  status    SubscriptionStatus @default(TRIALING)
+  tier      PlanTier           @default(SOLO)
+
+  provider   String?
+  providerId String?
+  customerId String?
+
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([status])
+  @@index([tier])
+}
+
+/**
+ * =========================
+ * PROJECTS + SITES
+ * =========================
+ */
+
+model Project {
+  id        Int    @id @default(autoincrement())
+  accountId String
+
+  name String?
+  slug String
+
+  serverKeyHash  String @unique
+  serverKeyLast4 String
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  sites   Site[]
+  apiKeys ApiKey[]
+
+  @@unique([accountId, slug])
+  @@index([accountId])
+  @@index([isActive])
+  @@index([createdAt])
+}
+
+model Site {
+  id        String @id @default(cuid())
+  projectId Int
+
+  slug   String
+  label  String
+  origin String
+
+  status   SiteStatus @default(PENDING)
+  isActive Boolean    @default(true)
+
+  verifyTokenHash String?   @unique
+  verifyExpiresAt DateTime?
+  verifiedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  apiKeys ApiKey[]
+
+  @@unique([projectId, slug])
+  @@unique([projectId, origin])
+  @@index([projectId])
+  @@index([origin])
+  @@index([status])
+  @@index([isActive])
+}
+
+/**
+ * =========================
+ * API KEYS
+ * =========================
+ */
+
+model ApiKey {
+  id String @id @default(cuid())
+
+  accountId String?
+  projectId Int?
+
+  type   ApiKeyType
+  status ApiKeyStatus @default(ACTIVE)
+
+  name    String?
+  prefix  String
+  last4   String
+  keyHash String  @unique
+
+  siteId String?
+
+  rotatedFromId String?
+  rotatedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  site    Site?    @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+  @@index([projectId])
+  @@index([type])
+  @@index([status])
+}
+
+/**
+ * =========================
+ * AUDIT LOGS
+ * =========================
+ */
+
+model AuditLog {
+  id          String  @id @default(cuid())
+  accountId   String
+  actorUserId String?
+
+  action     AuditAction
+  targetType String?
+  targetId   String?
+  metaJson   String?
+
+  ip        String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  actor   User?   @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+  @@index([actorUserId])
+  @@index([action])
+  @@index([createdAt])
+}

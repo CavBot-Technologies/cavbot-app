@@ -1,0 +1,354 @@
+/* app/globals.css */
+
+/* ==========================
+  TOKENS (CavBot source of truth)
+========================== */
+:root{
+  --navy-950: #01030f;
+  --navy-900: #020616;
+  --navy-800: #050a1b;
+
+  --lime:#b9c85a;
+  --lime-soft: rgba(185,200,90,0.14);
+
+  --violet:#8b5cff;
+  --violet-soft: rgba(139,92,255,0.18);
+  --violet-border: rgba(139,92,255,0.55);
+
+  --blue:#4ea8ff;
+  --blue-soft: rgba(78,168,255,0.18);
+  --blue-border: rgba(78,168,255,0.55);
+
+  --ink:#f7fbff;
+  --ink-soft:#c5cee7;
+  --ink-subtle:#8890aa;
+
+  --border-subtle: rgba(255,255,255,0.08);
+  --border-soft: rgba(255,255,255,0.14);
+
+  --r-lg: 20px;
+  --r-md: 16px;
+  --r-sm: 12px;
+
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* ==========================
+  BASE / RESET
+========================== */
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  font-family: var(--font-sans);
+  color: var(--ink-soft);
+  background:
+   var(--navy-950)
+ 
+}
+
+a{ color:inherit; text-decoration:none; }
+img{ max-width:100%; display:block; }
+button{ font-family:inherit; }
+
+.skip-link{
+  position:absolute;
+  left:-999px;
+  top:10px;
+  padding:10px 12px;
+  border-radius:12px;
+  background: rgba(0,0,0,0.75);
+  border:1px solid var(--border-soft);
+  color: var(--ink);
+  z-index:9999;
+}
+.skip-link:focus{ left:12px; }
+
+/* ==========================
+  SHELL LAYOUT
+========================== */
+.cb-shell{
+  min-height:100vh;
+  display:grid;
+  grid-template-columns: 280px 1fr;
+}
+
+.cb-sidebar{
+  position:sticky;
+  top:0;
+  height:100vh;
+  padding:18px 16px;
+  border-right: 1px solid rgba(139,92,255,0.10);
+  background: 
+    linear-gradient(
+      to bottom,
+      rgba(10, 11, 30, 0.98),
+      rgba(3, 6, 22, 0.94)
+    );
+}
+
+.cb-main{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+}
+
+.cb-content{
+  padding: 26px 26px 44px;
+}
+
+/* Mobile */
+@media (max-width: 980px){
+  .cb-shell{ grid-template-columns: 1fr; }
+  .cb-sidebar{ display:none; }
+  .cb-content{ padding: 18px; }
+}
+
+/* ==========================
+  SIDEBAR (Wordmark + Nav)
+========================== */
+.cb-side-top{
+  padding: 8px 8px 12px;
+}
+
+.cb-wordmark{
+  display:flex;
+  align-items:center;
+  height:34px;
+}
+
+.cb-wordmark-img{
+  height: 72px;
+  width: 72px;;
+  opacity:0.98;
+}
+
+.cb-nav{
+  margin-top: 10px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.cb-nav-link{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding: 12px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(197,206,231,0.88);
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.cb-nav-link:hover{
+  border-color: rgba(185,200,90,0.14);
+  background: rgba(255,255,255,0.03);
+  transform: translateY(-1px);
+}
+
+.cb-nav-link[aria-current="page"]{
+  border-color: #b9c85a; 
+  background: rgba(185, 200, 90, 0.14);
+  color: var(--ink);
+}
+
+.cb-nav-meta{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  min-width:0;
+}
+
+.cb-nav-label{
+  font-weight: 650;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  color: rgba(247,251,255,0.92);
+}
+
+.cb-nav-hint{
+  font-size: 12px;
+  color: rgba(136,144,170,0.95);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cb-nav-caret{
+  opacity:0.55;
+}
+
+.cb-side-bottom{
+  position:absolute;
+  left:16px;
+  right:16px;
+  bottom:16px;
+  display:flex;
+  justify-content:flex-start;
+}
+
+.cb-mini-btn{
+  width:40px;
+  height:40px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255,255,255,0.03);
+  color: var(--ink);
+  cursor:pointer;
+}
+
+/* ==========================
+  TOPBAR (NO WHITE GLOW)
+========================== */
+.cb-topbar{
+  position:sticky;
+  top:0;
+  z-index:30;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(139,92,255,0.10);
+   background:
+    linear-gradient(
+      to bottom,
+      rgba(10, 11, 30, 0.98),
+      rgba(3, 6, 22, 0.94)
+    );
+
+}
+
+.cb-brand-lockup{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:0;
+}
+
+.cb-badge{
+  width:42px;
+  height:42px;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+}
+
+.cb-title{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+
+.cb-title-top{
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow:hidden;
+  text-overflow: ellipsis;
+}
+
+.cb-title-sub{
+  font-size: 12px;
+  color: rgba(136,144,170,0.95);
+  white-space: nowrap;
+  overflow:hidden;
+  text-overflow: ellipsis;
+}
+
+.cb-controls{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+/* Pills */
+.cb-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  height:34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.03);
+  color: rgba(197,206,231,0.90);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cb-pill-live{
+  border-color: rgba(185,200,90,0.35);
+}
+
+.cb-pill-btn{
+  cursor:pointer;
+}
+.cb-pill-btn:hover{
+  border-color: rgba(78,168,255,0.40);
+  background: rgba(78,168,255,0.06);
+}
+
+.cb-dot{
+  width:8px;
+  height:8px;
+  border-radius: 999px;
+  background: var(--lime);
+  box-shadow: 0 0 0 3px rgba(185,200,90,0.12);
+}
+
+/* Account */
+.cb-account{
+  height:34px;
+  padding: 0 10px 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.03);
+  color: rgba(247,251,255,0.92);
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.cb-account:hover{
+  border-color: rgba(139,92,255,0.40);
+  background: rgba(139,92,255,0.07);
+}
+.cb-account-chip{
+  width:22px;
+  height:22px;
+  border-radius: 999px;
+  display:grid;
+  place-items:center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--navy-950);
+  background: rgba(247,251,255,0.92);
+}
+.cb-account-label{
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 800;
+  opacity:0.88;
+}
+.cb-account-caret{
+  opacity:0.65;
+}
+
+/* ==========================
+  Motion safety
+========================== */
+@media (prefers-reduced-motion: reduce){
+  *{ transition:none !important; animation:none !important; }
+}
