@@ -190,7 +190,8 @@ export async function getProjectSites(projectId: string | number): Promise<CavBo
     `${baseUrl}/v1/projects/${String(projectId)}/sites`,
     {
       method: "GET",
-      headers: buildHeaders({ requireAdmin: true }),
+      // IMPORTANT: use project-key auth here (NOT admin) to avoid legacy fallback issues
+      headers: buildHeaders({ requireProjectKey: true }),
       cache: "no-store",
     }
   );
@@ -218,7 +219,8 @@ export async function getProjectSummary(
 
   const res = await fetchWithTimeout(url, {
     method: "GET",
-    headers: buildHeaders({ requireAdmin: true }),
+    // IMPORTANT: use project-key auth here (NOT admin) to avoid legacy fallback issues
+    headers: buildHeaders({ requireProjectKey: true }),
     cache: "no-store",
   });
 
