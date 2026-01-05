@@ -1,4 +1,8 @@
+# wrangler.toml
 name = "cavbot-app"
 compatibility_date = "2026-01-05"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = ".vercel/output/static"
+
+[env.production.vars]
+CAVBOT_API_BASE_URL = "https://api.cavbot.io"
