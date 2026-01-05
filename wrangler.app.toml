@@ -1,7 +1,5 @@
 name = "cavbot-app"
-compatibility_date = "2026-01-04"
-compatibility_flags = ["nodejs_compat"]
-pages_build_output_dir = ".vercel/output/static"
+compatibility_date = "2026-01-02"
 
 [[d1_databases]]
 binding = "DB"
