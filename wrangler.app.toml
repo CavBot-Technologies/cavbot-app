@@ -1,0 +1,7 @@
+name = "cavbot-app"
+compatibility_date = "2026-01-02"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cavbot_prod_db"
+database_id = "04c88a1d-9eab-4496-a495-98457d6a0154"
