@@ -1,8 +1,6 @@
 name = "cavbot-analytics"
 main = "src/index.js"
-compatibility_date = "2026-01-04"
-compatibility_flags = ["nodejs_compat"]
-pages_build_output_dir = ".vercel/output/static"
+compatibility_date = "2026-01-02"
 
 # D1 binding (change database_name / id to your real one)
 [[d1_databases]]
