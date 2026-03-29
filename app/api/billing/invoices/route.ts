@@ -6,7 +6,7 @@ import type Stripe from "stripe";
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import { stripe } from "@/lib/stripeClient";
+import { getStripe } from "@/lib/stripeClient";
 import { requireSession, requireAccountContext, requireAccountRole, isApiAuthError } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
     const stripeRows: InvoiceRow[] = [];
 
     if (stripeCustomerId) {
-      const invoices = await stripe.invoices.list({
+      const invoices = await getStripe().invoices.list({
         customer: stripeCustomerId,
         limit: 20,
       }) as Stripe.ApiList<Stripe.Invoice>;

@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, requireAccountRole, isApiAuthError } from "@/lib/apiAuth";
-import { stripe } from "@/lib/stripeClient";
+import { getStripe } from "@/lib/stripeClient";
 import { priceIdFor, type StripePlanId, type StripeBilling } from "@/lib/stripe";
 import { resolvePlanIdFromTier, parseBillingCycle } from "@/lib/plans";
 import { auditLogWrite } from "@/lib/audit";
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
       return json({ ok: false, error: "NO_STRIPE_SUBSCRIPTION", message: "No active Stripe subscription found to downgrade." }, 409);
     }
 
-    const sub = await stripe.subscriptions.retrieve(String(latestStripeSub.stripeSubscriptionId), {
+    const sub = await getStripe().subscriptions.retrieve(String(latestStripeSub.stripeSubscriptionId), {
       expand: ["items.data.price"],
     }) as Stripe.Subscription;
 
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
     const periodEnd = endSec ? new Date(endSec * 1000) : null;
 
     if (allowed === "free") {
-      await stripe.subscriptions.update(sub.id, {
+      await getStripe().subscriptions.update(sub.id, {
         cancel_at_period_end: true,
         metadata: {
           cavbot_account_id: String(accountId),
@@ -172,7 +172,7 @@ export async function POST(req: NextRequest) {
       scheduleId = typeof maybeId === "string" ? maybeId : null;
     }
     if (!scheduleId) {
-      const schedule = await stripe.subscriptionSchedules.create({ from_subscription: sub.id });
+      const schedule = await getStripe().subscriptionSchedules.create({ from_subscription: sub.id });
       scheduleId = schedule?.id ?? null;
     }
 
@@ -184,7 +184,7 @@ export async function POST(req: NextRequest) {
       return json({ ok: false, error: "NO_PERIOD_WINDOW", message: "Stripe subscription missing period window." }, 409);
     }
 
-    await stripe.subscriptionSchedules.update(scheduleId, {
+    await getStripe().subscriptionSchedules.update(scheduleId, {
       end_behavior: "release",
       phases: [
         { items: [{ price: currentPriceId, quantity: 1 }], start_date: startSec, end_date: endSec },

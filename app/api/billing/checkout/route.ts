@@ -14,7 +14,7 @@ import {
   requireAccountRole,
   isApiAuthError,
 } from "@/lib/apiAuth";
-import { stripe } from "@/lib/stripeClient";
+import { getStripe } from "@/lib/stripeClient";
 import { getAppUrl, priceIdFor, type StripePlanId, type StripeBilling } from "@/lib/stripe";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
       };
 
 
-      const customer = await stripe.customers.create(customerParams, {
+      const customer = await getStripe().customers.create(customerParams, {
         idempotencyKey: `cavbot_customer_${accountId}`,
       });
 
@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
     const idem = readIdempotencyKey(req);
 
 
-    const session = await stripe.checkout.sessions.create(
+    const session = await getStripe().checkout.sessions.create(
       {
         mode: "subscription",
         customer: stripeCustomerId,

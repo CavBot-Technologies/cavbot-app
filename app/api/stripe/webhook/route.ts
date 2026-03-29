@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 
 import { prisma } from "@/lib/prisma";
-import { stripe } from "@/lib/stripeClient";
+import { getStripe } from "@/lib/stripeClient";
 import { planFromPriceId } from "@/lib/stripe";
 import { type PlanId, resolvePlanIdFromTier } from "@/lib/plans";
 import { sendEmail } from "@/lib/email/sendEmail";
@@ -333,7 +333,7 @@ export async function POST(req: NextRequest) {
 
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(rawBody, sig, env("STRIPE_WEBHOOK_SECRET"));
+    event = getStripe().webhooks.constructEvent(rawBody, sig, env("STRIPE_WEBHOOK_SECRET"));
   } catch {
     return fail(400, "Webhook signature verification failed");
   }

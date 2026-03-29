@@ -13,7 +13,7 @@ import {
   requireAccountRole,
   isApiAuthError,
 } from "@/lib/apiAuth";
-import { stripe } from "@/lib/stripeClient";
+import { getStripe } from "@/lib/stripeClient";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
 
 
     if (!customerId) {
-      const customer = await stripe.customers.create(
+      const customer = await getStripe().customers.create(
         {
           email: s(account.billingEmail) || undefined,
           name: s(body?.name) || s(account.name) || undefined,
@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
 
 
       if (name || addr) {
-        await stripe.customers.update(customerId, {
+        await getStripe().customers.update(customerId, {
           name: name || undefined,
           address: addr
             ? {
@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
     }
 
 
-    const setupIntent = await stripe.setupIntents.create(
+    const setupIntent = await getStripe().setupIntents.create(
       {
         customer: customerId,
         usage: "off_session",

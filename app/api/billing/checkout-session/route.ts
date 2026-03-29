@@ -3,7 +3,7 @@ import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { stripe } from "@/lib/stripeClient";
+import { getStripe } from "@/lib/stripeClient";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
     const sessionId = s(searchParams.get("session_id"));
     if (!sessionId) return json({ ok: false, error: "MISSING_SESSION" }, 400);
 
-    const checkout = await stripe.checkout.sessions.retrieve(sessionId, {
+    const checkout = await getStripe().checkout.sessions.retrieve(sessionId, {
       expand: ["invoice", "payment_intent"],
     });
 
@@ -132,7 +132,7 @@ export async function GET(req: NextRequest) {
     try {
       const latestChargeId = typeof paymentIntent?.latest_charge === "string" ? paymentIntent.latest_charge : "";
       if (latestChargeId) {
-        charge = await stripe.charges.retrieve(latestChargeId, {
+        charge = await getStripe().charges.retrieve(latestChargeId, {
           expand: ["payment_method"],
         });
       }

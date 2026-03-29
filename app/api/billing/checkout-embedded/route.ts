@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, requireAccountRole, isApiAuthError } from "@/lib/apiAuth";
-import { stripe } from "@/lib/stripeClient";
+import { getStripe } from "@/lib/stripeClient";
 import { getAppUrl, priceIdFor, type StripePlanId, type StripeBilling } from "@/lib/stripe";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
@@ -69,7 +69,7 @@ async function ensureStripeCustomer(args: { accountId: string; operatorEmail: st
     metadata,
   };
 
-  const customer = await stripe.customers.create(customerParams);
+  const customer = await getStripe().customers.create(customerParams);
   const stripeCustomerId = customer.id;
 
   await prisma.account.update({ where: { id: args.accountId }, data: { stripeCustomerId } });
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
 
     const priceId = priceIdFor(planId, billing);
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       ui_mode: "embedded",
       mode: "subscription",
       customer: stripeCustomerId,

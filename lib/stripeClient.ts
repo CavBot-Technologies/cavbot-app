@@ -8,8 +8,18 @@ function env(name: string) {
   return v;
 }
 
-export const stripe = new Stripe(env("STRIPE_SECRET_KEY"), {
-  apiVersion: "2025-12-15.clover",
-});
+let stripeInstance: Stripe | null = null;
 
-export type StripeClient = typeof stripe;
+function createStripeClient() {
+  return new Stripe(env("STRIPE_SECRET_KEY"), {
+    apiVersion: "2025-12-15.clover",
+  });
+}
+
+export function getStripe() {
+  if (!stripeInstance) {
+    stripeInstance = createStripeClient();
+  }
+  return stripeInstance;
+}
+export type StripeClient = ReturnType<typeof getStripe>;

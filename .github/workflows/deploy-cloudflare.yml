@@ -20,6 +20,11 @@ jobs:
       # Build-only placeholders so prisma generate can run in CI without DB credentials.
       DATABASE_URL: postgresql://cavbot:placeholder@127.0.0.1:5432/cavbot
       DIRECT_URL: postgresql://cavbot:placeholder@127.0.0.1:5432/cavbot
+      # Official production app origin used for URL generation during build.
+      CAVBOT_APP_ORIGIN: https://app.cavbot.io
+      APP_URL: https://app.cavbot.io
+      NEXT_PUBLIC_APP_URL: https://app.cavbot.io
+      ALLOWED_ORIGINS: https://app.cavbot.io
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -4,7 +4,7 @@ import "server-only";
 import type Stripe from "stripe";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { stripe } from "@/lib/stripeClient";
+import { getStripe } from "@/lib/stripeClient";
 import { requireSession, requireAccountContext, requireAccountRole, isApiAuthError } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<DownloadParam
     if (!stripeCustomerId) return json({ ok: false, error: "NO_STRIPE_CUSTOMER" }, 409);
 
     // Retrieve invoice from Stripe (authoritative)
-    const inv = (await stripe.invoices.retrieve(invoiceId)) as Stripe.Invoice;
+    const inv = (await getStripe().invoices.retrieve(invoiceId)) as Stripe.Invoice;
 
     // Ownership check: invoice.customer must match this account's Stripe customer
     const invCustomerId = typeof inv?.customer === "string" ? inv.customer : inv?.customer?.id || "";

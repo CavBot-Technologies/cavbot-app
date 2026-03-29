@@ -3,7 +3,7 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, requireAccountRole, isApiAuthError } from "@/lib/apiAuth";
-import { stripe } from "@/lib/stripeClient";
+import { getStripe } from "@/lib/stripeClient";
 import { getAppUrl } from "@/lib/stripe";
 
 export const runtime = "nodejs";
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
       return json({ ok: false, error: "NO_STRIPE_CUSTOMER", message: "No billing profile found yet." }, 409);
     }
 
-    const portal = await stripe.billingPortal.sessions.create({
+    const portal = await getStripe().billingPortal.sessions.create({
       customer,
       return_url: `${appUrl}/settings?tab=billing`,
     });

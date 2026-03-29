@@ -12,7 +12,7 @@ import {
   requireAccountRole,
   isApiAuthError,
 } from "@/lib/apiAuth";
-import { stripe } from "@/lib/stripeClient";
+import { getStripe } from "@/lib/stripeClient";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
@@ -104,7 +104,7 @@ async function ensureStripeCustomer(args: {
  
  
   if (!customerId) {
-    const customer = await stripe.customers.create(
+    const customer = await getStripe().customers.create(
       {
         email,
         name,
@@ -133,7 +133,7 @@ async function ensureStripeCustomer(args: {
  
   // Keep Stripe customer profile current (invoice appearance + risk checks)
   if (email || name || args.address) {
-    await stripe.customers.update(customerId, {
+    await getStripe().customers.update(customerId, {
       email,
       name,
       address: args.address || undefined,
@@ -159,7 +159,7 @@ export async function GET(req: NextRequest) {
     const customerId = s(account?.stripeCustomerId);
     if (!customerId) return json(pmEmpty(), 200);
 
-    const customer = await stripe.customers.retrieve(customerId, {
+    const customer = await getStripe().customers.retrieve(customerId, {
       expand: ["invoice_settings.default_payment_method"],
     });
 
@@ -228,7 +228,7 @@ export async function POST(req: NextRequest) {
     // -----------------------
     const setupIntentId = s(body?.setupIntentId);
     if (setupIntentId) {
-      const si = await stripe.setupIntents.retrieve(setupIntentId, {
+      const si = await getStripe().setupIntents.retrieve(setupIntentId, {
         expand: ["payment_method", "customer"],
       });
 
@@ -267,7 +267,7 @@ export async function POST(req: NextRequest) {
  
  
       // Extra safety: ensure PM belongs to this customer (wallet/card correctness)
-      const pm = await stripe.paymentMethods.retrieve(pmId);
+      const pm = await getStripe().paymentMethods.retrieve(pmId);
       const pmCustomer =
         typeof pm.customer === "string" ? pm.customer : (pm.customer as Stripe.Customer)?.id || "";
       if (pmCustomer && pmCustomer !== customerId) {
@@ -275,7 +275,7 @@ export async function POST(req: NextRequest) {
       }
  
  
-      await stripe.customers.update(customerId, {
+      await getStripe().customers.update(customerId, {
         invoice_settings: { default_payment_method: pmId },
       });
  
@@ -343,7 +343,7 @@ export async function POST(req: NextRequest) {
     const idem = readIdem(req, `cavbot_setup_intent_${accountId}`);
  
  
-    const setupIntent = await stripe.setupIntents.create(
+    const setupIntent = await getStripe().setupIntents.create(
       {
         customer: customerId,
         usage: "off_session",
