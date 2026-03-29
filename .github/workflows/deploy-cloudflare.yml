@@ -17,6 +17,9 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # Build-only placeholders so prisma generate can run in CI without DB credentials.
+      DATABASE_URL: postgresql://cavbot:placeholder@127.0.0.1:5432/cavbot
+      DIRECT_URL: postgresql://cavbot:placeholder@127.0.0.1:5432/cavbot
     steps:
       - name: Checkout
         uses: actions/checkout@v4
