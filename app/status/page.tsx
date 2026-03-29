@@ -8,7 +8,7 @@ import StatusTimelineSection from "@/components/status/StatusTimelineSection";
 import { SERVICE_DEFINITIONS } from "@/lib/status/constants";
 import { getStatusPayload } from "@/lib/status/service";
 import { STATUS_POLL_INTERVAL_MS } from "@/lib/status/checker";
-import type { ServiceKey } from "@/lib/status/types";
+import type { IncidentSummary, ServiceKey } from "@/lib/status/types";
 import { getSystemStatusSnapshot, getSystemStatusTimeline } from "@/lib/system-status/pipeline";
 
 export const metadata = {
@@ -61,7 +61,7 @@ export default async function StatusPage() {
 
   const uptimePercentLabel = `${Math.min(100, Math.max(0, timelinePayload.global.uptimePct ?? 0)).toFixed(1)}%`;
 
-  const incidents = statusPayload.incidents ?? [];
+  const incidents: IncidentSummary[] = statusPayload.incidents ?? [];
   const activeIncidents = incidents.filter((incident) => incident.status !== "RESOLVED");
   const resolvedIncidents = incidents.filter((incident) => incident.status === "RESOLVED");
   const hasIncidents = incidents.length > 0;
