@@ -97,42 +97,6 @@ async function splitOversizedHandlerIfNeeded() {
 
 await splitOversizedHandlerIfNeeded();
 
-async function prebundleWorkerForPages() {
-  const workerPath = path.join(deployDir, "_worker.js");
-  const tempOutDir = await mkdtemp(path.join(os.tmpdir(), "cavbot-worker-prebundle-"));
-  const bundledWorkerPath = path.join(tempOutDir, "worker.bundle.mjs");
-  try {
-    await esbuildBuild({
-      entryPoints: [workerPath],
-      outfile: bundledWorkerPath,
-      bundle: true,
-      format: "esm",
-      platform: "node",
-      target: ["es2022"],
-      external: ["cloudflare:workers"],
-      minify: true,
-      legalComments: "none",
-      sourcemap: false,
-      define: {
-        "process.env.NODE_ENV": "\"production\""
-      },
-      logLevel: "silent"
-    });
-
-    const bundledStats = await stat(bundledWorkerPath);
-    if (bundledStats.size > MAX_PAGES_FILE_BYTES) {
-      const mb = (bundledStats.size / (1024 * 1024)).toFixed(2);
-      throw new Error(`Prebundled _worker.js exceeds 25 MiB (${mb} MiB).`);
-    }
-
-    await cp(bundledWorkerPath, workerPath, { recursive: false, force: true });
-  } finally {
-    await rm(tempOutDir, { recursive: true, force: true });
-  }
-}
-
-await prebundleWorkerForPages();
-
 const oversized = [];
 const bannedFileNames = new Set([".DS_Store"]);
 
