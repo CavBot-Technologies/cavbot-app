@@ -14,7 +14,7 @@
     "build": "next build",
     "build:cloudflare": "opennextjs-cloudflare build",
     "prepare:cloudflare:pages": "node scripts/prepare-cloudflare-pages-deploy.mjs",
-    "deploy:cloudflare": "npm run prepare:cloudflare:pages && wrangler pages deploy .open-next/pages-deploy --project-name cavbot-app --branch main --commit-dirty=true",
+    "deploy:cloudflare": "npm run prepare:cloudflare:pages && wrangler pages deploy .open-next/pages-deploy --project-name cavbot-app --branch main --commit-dirty=true --no-bundle",
     "start": "next start",
     "lint": "eslint",
     "test:sdk": "node --import tsx --test tests/cavai-analytics-load-order.test.mjs tests/cloudfare-analytics-worker.test.mjs tests/cavbot-asset-policy.test.ts tests/appshell-navigation-regressions.test.ts tests/desktop-selection-helpers.test.ts tests/desktop-selection-regressions.test.ts tests/left-nav-cavai-wiring.test.ts",
