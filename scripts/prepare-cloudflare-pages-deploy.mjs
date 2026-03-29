@@ -51,14 +51,10 @@ await cp(path.join(openNextDir, "server-functions"), path.join(deployDir, "serve
   recursive: true
 });
 
-// Keep OpenNext worker behavior intact while routing through the server entrypoint
-// that avoids inlining the oversized handler bundle into the Pages worker.
+// Keep OpenNext worker import graph intact; prebundleWorkerForPages() below
+// will collapse this to a single-file worker for Wrangler --no-bundle deploys.
 const workerSource = await readFile(path.join(openNextDir, "worker.js"), "utf8");
-const patchedWorkerSource = workerSource.replace(
-  "./server-functions/default/handler.mjs",
-  "./server-functions/default/index.mjs"
-);
-await writeFile(path.join(deployDir, "_worker.js"), patchedWorkerSource, "utf8");
+await writeFile(path.join(deployDir, "_worker.js"), workerSource, "utf8");
 
 async function splitOversizedHandlerIfNeeded() {
   const handlerDir = path.join(deployDir, "server-functions", "default");
