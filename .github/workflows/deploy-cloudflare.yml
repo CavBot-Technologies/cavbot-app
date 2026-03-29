@@ -33,6 +33,17 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Ensure OpenNext Config Exists
+        run: |
+          if [ ! -f open-next.config.ts ]; then
+            cat > open-next.config.ts <<'EOF'
+          import { defineCloudflareConfig } from "@opennextjs/cloudflare/config";
+
+          export default defineCloudflareConfig();
+          EOF
+          fi
+          ls -la open-next.config.ts
+
       - name: Build OpenNext For Cloudflare
         run: npm run build:cloudflare
 
