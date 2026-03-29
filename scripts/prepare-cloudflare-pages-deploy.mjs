@@ -42,6 +42,124 @@ await cp(path.join(openNextDir, "server-functions"), path.join(deployDir, "serve
   recursive: true
 });
 
+const compatRoot = path.join(deployDir, "server-functions", "default");
+const nextDistServerDir = path.join(compatRoot, "node_modules", "next", "dist");
+
+const compatReplacements = [
+  ["react-dom/server.edge", "next/dist/compiled/react-dom/server.edge"],
+  ["react-dom/static.edge", "next/dist/compiled/react-dom/static.edge"],
+  ["react-dom/server-rendering-stub", "next/dist/compiled/react-dom/server-rendering-stub"],
+  ["react-server-dom-webpack/client.edge", "next/dist/compiled/react-server-dom-webpack/client.edge"],
+  ["react-server-dom-webpack/server.edge", "next/dist/compiled/react-server-dom-webpack/server.edge"],
+  ["react-server-dom-webpack/server.node", "next/dist/compiled/react-server-dom-webpack/server.node"],
+  ["react-server-dom-turbopack/client.edge", "next/dist/compiled/react-server-dom-turbopack/client.edge"],
+  ["react-server-dom-turbopack/server.edge", "next/dist/compiled/react-server-dom-turbopack/server.edge"],
+  ["react-server-dom-turbopack/server.node", "next/dist/compiled/react-server-dom-turbopack/server.node"],
+  ["@opentelemetry/api", "next/dist/compiled/@opentelemetry/api"]
+];
+
+async function applyCompatRewrites(dir) {
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await applyCompatRewrites(fullPath);
+      continue;
+    }
+    if (!entry.isFile()) {
+      continue;
+    }
+    if (!entry.name.endsWith(".js") && !entry.name.endsWith(".mjs") && !entry.name.endsWith(".cjs")) {
+      continue;
+    }
+    const source = await readFile(fullPath, "utf8");
+    let rewritten = source;
+    for (const [from, to] of compatReplacements) {
+      rewritten = rewritten.replaceAll(`"${from}"`, `"${to}"`);
+      rewritten = rewritten.replaceAll(`'${from}'`, `'${to}'`);
+    }
+    if (rewritten !== source) {
+      await writeFile(fullPath, rewritten, "utf8");
+    }
+  }
+}
+
+await applyCompatRewrites(nextDistServerDir);
+await applyCompatRewrites(path.join(rootDir, "node_modules", "next", "dist"));
+
+for (const pkg of ["react", "react-dom"]) {
+  const srcPkg = path.join(rootDir, "node_modules", pkg);
+  const dstPkg = path.join(compatRoot, "node_modules", pkg);
+  await rm(dstPkg, { recursive: true, force: true });
+  await cp(srcPkg, dstPkg, { recursive: true });
+}
+
+async function writeCrittersShim(nodeModulesDir) {
+  const crittersDir = path.join(nodeModulesDir, "critters");
+  await mkdir(crittersDir, { recursive: true });
+  await writeFile(
+    path.join(crittersDir, "package.json"),
+    JSON.stringify(
+      {
+        name: "critters",
+        version: "0.0.0-cavbot-shim",
+        main: "index.js"
+      },
+      null,
+      2
+    ) + "\n",
+    "utf8"
+  );
+  await writeFile(
+    path.join(crittersDir, "index.js"),
+    [
+      "class Critters {",
+      "  constructor(options = {}) {",
+      "    this.options = options;",
+      "  }",
+      "  async process(html) {",
+      "    return html;",
+      "  }",
+      "}",
+      "module.exports = Critters;",
+      "module.exports.default = Critters;"
+    ].join("\n") + "\n",
+    "utf8"
+  );
+}
+
+async function writeOtelAlias(nodeModulesDir) {
+  const otelApiDir = path.join(nodeModulesDir, "@opentelemetry", "api");
+  await mkdir(otelApiDir, { recursive: true });
+  await writeFile(
+    path.join(otelApiDir, "package.json"),
+    JSON.stringify(
+      {
+        name: "@opentelemetry/api",
+        version: "0.0.0-cavbot-shim",
+        main: "index.js"
+      },
+      null,
+      2
+    ) + "\n",
+    "utf8"
+  );
+  await writeFile(
+    path.join(otelApiDir, "index.js"),
+    "module.exports = require('next/dist/compiled/@opentelemetry/api');\n",
+    "utf8"
+  );
+}
+
+await writeCrittersShim(path.join(compatRoot, "node_modules"));
+await writeOtelAlias(path.join(compatRoot, "node_modules"));
+await writeCrittersShim(path.join(rootDir, "node_modules"));
+await writeOtelAlias(path.join(rootDir, "node_modules"));
+
+const deployNodeModulesDir = path.join(deployDir, "node_modules");
+await rm(deployNodeModulesDir, { recursive: true, force: true });
+await cp(path.join(compatRoot, "node_modules"), deployNodeModulesDir, { recursive: true });
+
 const workerSource = await readFile(path.join(openNextDir, "worker.js"), "utf8");
 const serverImport = './server-functions/default/handler.mjs';
 const replacementImport = './server-functions/default/index.mjs';
