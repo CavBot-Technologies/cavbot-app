@@ -56,14 +56,8 @@ jobs:
 
       - name: Prepare Pages Bundle
         run: |
-          rm -rf .open-next/pages-deploy
-          mkdir -p .open-next/pages-deploy
-          cp .open-next/worker.js .open-next/pages-deploy/_worker.js
-          cp -R .open-next/assets/. .open-next/pages-deploy/
-          cp -R .open-next/cloudflare .open-next/pages-deploy/cloudflare
-          cp -R .open-next/middleware .open-next/pages-deploy/middleware
-          cp -R .open-next/server-functions .open-next/pages-deploy/server-functions
-          cp -R .open-next/.build .open-next/pages-deploy/.build
+          npm run prepare:cloudflare:pages
+          test -z "$(find .open-next/pages-deploy -type f -size +25M -print)"
           ls -la .open-next/pages-deploy | sed -n '1,80p'
 
       - name: Deploy To Cloudflare Pages
