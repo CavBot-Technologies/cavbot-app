@@ -13,7 +13,7 @@
     "clean:next": "node scripts/clean-next.mjs",
     "build": "next build",
     "build:cloudflare": "opennextjs-cloudflare build",
-    "deploy:cloudflare": "opennextjs-cloudflare deploy",
+    "deploy:cloudflare": "rm -rf .open-next/pages-deploy && mkdir -p .open-next/pages-deploy && cp .open-next/worker.js .open-next/pages-deploy/_worker.js && cp -R .open-next/assets/. .open-next/pages-deploy/ && wrangler pages deploy .open-next/pages-deploy --project-name cavbot-app --branch main",
     "start": "next start",
     "lint": "eslint",
     "test:sdk": "node --import tsx --test tests/cavai-analytics-load-order.test.mjs tests/cloudfare-analytics-worker.test.mjs tests/cavbot-asset-policy.test.ts tests/appshell-navigation-regressions.test.ts tests/desktop-selection-helpers.test.ts tests/desktop-selection-regressions.test.ts tests/left-nav-cavai-wiring.test.ts",
