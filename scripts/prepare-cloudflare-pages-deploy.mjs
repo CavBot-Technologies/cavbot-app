@@ -126,8 +126,23 @@ async function prebundleWorkerForPages() {
       throw new Error(`Prebundled _worker.js exceeds 25 MiB (${mb} MiB).`);
     }
 
-    // Wrangler --no-bundle now rejects _worker.js imports, so deploy a single-file worker.
-    await cp(bundledWorkerPath, workerPath, { recursive: false, force: true });
+    let bundledSource = await readFile(bundledWorkerPath, "utf8");
+    const middlewareInitPattern =
+      /,([A-Za-z_$][A-Za-z0-9_$]*)=await ([A-Za-z_$][A-Za-z0-9_$]*)\(\{handler:([A-Za-z_$][A-Za-z0-9_$]*),type:"middleware"\}\);/;
+    const middlewareInitMatch = bundledSource.match(middlewareInitPattern);
+    if (middlewareInitMatch) {
+      const middlewareHandlerVar = middlewareInitMatch[1];
+      const middlewareFactoryVar = middlewareInitMatch[2];
+      const middlewareHandlerFnVar = middlewareInitMatch[3];
+      bundledSource = bundledSource.replace(
+        middlewareInitPattern,
+        `,${middlewareHandlerVar}Promise=${middlewareFactoryVar}({handler:${middlewareHandlerFnVar},type:"middleware"}),${middlewareHandlerVar}=async(...args)=>(await ${middlewareHandlerVar}Promise)(...args);`
+      );
+    }
+
+    // Wrangler --no-bundle rejects relative imports in _worker.js and validates with an
+    // iife compile pass that cannot handle top-level await.
+    await writeFile(workerPath, bundledSource, "utf8");
   } finally {
     await rm(tempOutDir, { recursive: true, force: true });
   }
