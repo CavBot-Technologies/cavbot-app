@@ -52,5 +52,13 @@ jobs:
       - name: Build OpenNext For Cloudflare
         run: npm run build:cloudflare
 
-      - name: Deploy To Cloudflare
-        run: npm run deploy:cloudflare
+      - name: Prepare Pages Bundle
+        run: |
+          rm -rf .open-next/pages-deploy
+          mkdir -p .open-next/pages-deploy
+          cp .open-next/worker.js .open-next/pages-deploy/_worker.js
+          cp -R .open-next/assets/. .open-next/pages-deploy/
+          ls -la .open-next/pages-deploy | sed -n '1,80p'
+
+      - name: Deploy To Cloudflare Pages
+        run: npx wrangler pages deploy .open-next/pages-deploy --project-name cavbot-app --branch main
