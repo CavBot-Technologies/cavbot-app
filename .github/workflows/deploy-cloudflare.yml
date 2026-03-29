@@ -25,6 +25,8 @@ jobs:
       APP_URL: https://app.cavbot.io
       NEXT_PUBLIC_APP_URL: https://app.cavbot.io
       ALLOWED_ORIGINS: https://app.cavbot.io
+      # Optional security secret for CavAi external share tokens.
+      CAVAI_SHARE_TOKEN_SECRET: ${{ secrets.CAVAI_SHARE_TOKEN_SECRET }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
