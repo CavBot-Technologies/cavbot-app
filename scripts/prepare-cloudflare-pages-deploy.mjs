@@ -1,6 +1,17 @@
 #!/usr/bin/env node
 
-import { cp, mkdir, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { build as esbuildBuild } from "esbuild";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile
+} from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 const MAX_PAGES_FILE_BYTES = 25 * 1024 * 1024;
@@ -24,13 +35,11 @@ for (const requiredPath of requiredPaths) {
 
 await rm(deployDir, { recursive: true, force: true });
 await rm(excludedDir, { recursive: true, force: true });
-
 await mkdir(deployDir, { recursive: true });
 await mkdir(excludedDir, { recursive: true });
 
-// Pages deploy root must contain the static asset tree.
+// Pages deploy root must contain static asset files directly.
 await cp(path.join(openNextDir, "assets"), deployDir, { recursive: true });
-
 await cp(path.join(openNextDir, "cloudflare"), path.join(deployDir, "cloudflare"), {
   recursive: true
 });
@@ -42,157 +51,68 @@ await cp(path.join(openNextDir, "server-functions"), path.join(deployDir, "serve
   recursive: true
 });
 
-const compatRoot = path.join(deployDir, "server-functions", "default");
-const nextDistServerDir = path.join(compatRoot, "node_modules", "next", "dist");
+// Keep OpenNext worker import graph intact to avoid runtime behavior changes.
+const workerSource = await readFile(path.join(openNextDir, "worker.js"), "utf8");
+await writeFile(path.join(deployDir, "_worker.js"), workerSource, "utf8");
 
-const compatReplacements = [
-  ["react-dom/server.edge", "next/dist/compiled/react-dom/server.edge"],
-  ["react-dom/static.edge", "next/dist/compiled/react-dom/static.edge"],
-  ["react-dom/server-rendering-stub", "next/dist/compiled/react-dom/server-rendering-stub"],
-  ["react-server-dom-webpack/client.edge", "next/dist/compiled/react-server-dom-webpack/client.edge"],
-  ["react-server-dom-webpack/server.edge", "next/dist/compiled/react-server-dom-webpack/server.edge"],
-  ["react-server-dom-webpack/server.node", "next/dist/compiled/react-server-dom-webpack/server.node"],
-  ["react-server-dom-turbopack/client.edge", "next/dist/compiled/react-server-dom-turbopack/client.edge"],
-  ["react-server-dom-turbopack/server.edge", "next/dist/compiled/react-server-dom-turbopack/server.edge"],
-  ["react-server-dom-turbopack/server.node", "next/dist/compiled/react-server-dom-turbopack/server.node"],
-  ["@opentelemetry/api", "next/dist/compiled/@opentelemetry/api"]
-];
+async function splitOversizedHandlerIfNeeded() {
+  const handlerDir = path.join(deployDir, "server-functions", "default");
+  const handlerPath = path.join(handlerDir, "handler.mjs");
+  const originalStats = await stat(handlerPath);
+  if (originalStats.size <= MAX_PAGES_FILE_BYTES) {
+    return;
+  }
 
-async function applyCompatRewrites(dir) {
-  const entries = await readdir(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      await applyCompatRewrites(fullPath);
-      continue;
+  // Keep a copy of the original OpenNext output for debugging/audit.
+  await cp(handlerPath, path.join(excludedDir, "handler.mjs"), { recursive: false });
+
+  const tempOutDir = await mkdtemp(path.join(os.tmpdir(), "cavbot-handler-minify-"));
+  const tempHandlerPath = path.join(tempOutDir, "handler.mjs");
+  try {
+    await esbuildBuild({
+      entryPoints: [handlerPath],
+      bundle: true,
+      format: "esm",
+      platform: "node",
+      target: ["es2022"],
+      outfile: tempHandlerPath,
+      minify: true,
+      legalComments: "none",
+      sourcemap: false,
+      logLevel: "silent"
+    });
+
+    const minifiedStats = await stat(tempHandlerPath);
+    if (minifiedStats.size > MAX_PAGES_FILE_BYTES) {
+      const mb = (minifiedStats.size / (1024 * 1024)).toFixed(2);
+      throw new Error(`Minified handler.mjs is still over 25 MiB (${mb} MiB).`);
     }
-    if (!entry.isFile()) {
-      continue;
-    }
-    if (!entry.name.endsWith(".js") && !entry.name.endsWith(".mjs") && !entry.name.endsWith(".cjs")) {
-      continue;
-    }
-    const source = await readFile(fullPath, "utf8");
-    let rewritten = source;
-    for (const [from, to] of compatReplacements) {
-      rewritten = rewritten.replaceAll(`"${from}"`, `"${to}"`);
-      rewritten = rewritten.replaceAll(`'${from}'`, `'${to}'`);
-    }
-    if (rewritten !== source) {
-      await writeFile(fullPath, rewritten, "utf8");
-    }
+
+    // Replace oversized handler with a minified equivalent.
+    await cp(tempHandlerPath, handlerPath, { recursive: false, force: true });
+  } finally {
+    await rm(tempOutDir, { recursive: true, force: true });
   }
 }
 
-await applyCompatRewrites(nextDistServerDir);
-await applyCompatRewrites(path.join(rootDir, "node_modules", "next", "dist"));
-
-for (const pkg of ["react", "react-dom"]) {
-  const srcPkg = path.join(rootDir, "node_modules", pkg);
-  const dstPkg = path.join(compatRoot, "node_modules", pkg);
-  await rm(dstPkg, { recursive: true, force: true });
-  await cp(srcPkg, dstPkg, { recursive: true });
-}
-
-async function writeCrittersShim(nodeModulesDir) {
-  const crittersDir = path.join(nodeModulesDir, "critters");
-  await mkdir(crittersDir, { recursive: true });
-  await writeFile(
-    path.join(crittersDir, "package.json"),
-    JSON.stringify(
-      {
-        name: "critters",
-        version: "0.0.0-cavbot-shim",
-        main: "index.js"
-      },
-      null,
-      2
-    ) + "\n",
-    "utf8"
-  );
-  await writeFile(
-    path.join(crittersDir, "index.js"),
-    [
-      "class Critters {",
-      "  constructor(options = {}) {",
-      "    this.options = options;",
-      "  }",
-      "  async process(html) {",
-      "    return html;",
-      "  }",
-      "}",
-      "module.exports = Critters;",
-      "module.exports.default = Critters;"
-    ].join("\n") + "\n",
-    "utf8"
-  );
-}
-
-async function writeOtelAlias(nodeModulesDir) {
-  const otelApiDir = path.join(nodeModulesDir, "@opentelemetry", "api");
-  await mkdir(otelApiDir, { recursive: true });
-  await writeFile(
-    path.join(otelApiDir, "package.json"),
-    JSON.stringify(
-      {
-        name: "@opentelemetry/api",
-        version: "0.0.0-cavbot-shim",
-        main: "index.js"
-      },
-      null,
-      2
-    ) + "\n",
-    "utf8"
-  );
-  await writeFile(
-    path.join(otelApiDir, "index.js"),
-    "module.exports = require('next/dist/compiled/@opentelemetry/api');\n",
-    "utf8"
-  );
-}
-
-await writeCrittersShim(path.join(compatRoot, "node_modules"));
-await writeOtelAlias(path.join(compatRoot, "node_modules"));
-await writeCrittersShim(path.join(rootDir, "node_modules"));
-await writeOtelAlias(path.join(rootDir, "node_modules"));
-
-const deployNodeModulesDir = path.join(deployDir, "node_modules");
-await rm(deployNodeModulesDir, { recursive: true, force: true });
-await cp(path.join(compatRoot, "node_modules"), deployNodeModulesDir, { recursive: true });
-
-const workerSource = await readFile(path.join(openNextDir, "worker.js"), "utf8");
-const serverImport = './server-functions/default/handler.mjs';
-const replacementImport = './server-functions/default/index.mjs';
-if (!workerSource.includes(serverImport)) {
-  throw new Error(`Expected to find ${serverImport} import in .open-next/worker.js`);
-}
-const patchedWorker = workerSource.replace(serverImport, replacementImport);
-await writeFile(path.join(deployDir, "_worker.js"), patchedWorker, "utf8");
-
-const oversizedHandler = path.join(deployDir, "server-functions", "default", "handler.mjs");
-try {
-  await cp(oversizedHandler, path.join(excludedDir, "handler.mjs"), { recursive: false });
-  await unlink(oversizedHandler);
-} catch {
-  // If OpenNext ever stops emitting this file, no action needed.
-}
+await splitOversizedHandlerIfNeeded();
 
 const oversized = [];
 const bannedFileNames = new Set([".DS_Store"]);
 
-async function scanLargeFiles(dir) {
+async function scanAndPrune(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      await scanLargeFiles(fullPath);
+      await scanAndPrune(fullPath);
       continue;
     }
     if (!entry.isFile()) {
       continue;
     }
     if (bannedFileNames.has(entry.name) || entry.name.startsWith(".env")) {
-      await unlink(fullPath);
+      await rm(fullPath, { force: true });
       continue;
     }
     const fileStats = await stat(fullPath);
@@ -205,7 +125,7 @@ async function scanLargeFiles(dir) {
   }
 }
 
-await scanLargeFiles(deployDir);
+await scanAndPrune(deployDir);
 
 if (oversized.length > 0) {
   const list = oversized.map((item) => `${item.file} (${item.sizeMb} MiB)`).join(", ");
