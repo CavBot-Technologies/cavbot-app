@@ -60,7 +60,11 @@ jobs:
           mkdir -p .open-next/pages-deploy
           cp .open-next/worker.js .open-next/pages-deploy/_worker.js
           cp -R .open-next/assets/. .open-next/pages-deploy/
+          cp -R .open-next/cloudflare .open-next/pages-deploy/cloudflare
+          cp -R .open-next/middleware .open-next/pages-deploy/middleware
+          cp -R .open-next/server-functions .open-next/pages-deploy/server-functions
+          cp -R .open-next/.build .open-next/pages-deploy/.build
           ls -la .open-next/pages-deploy | sed -n '1,80p'
 
       - name: Deploy To Cloudflare Pages
-        run: npx wrangler pages deploy .open-next/pages-deploy --project-name cavbot-app --branch main
+        run: npx wrangler pages deploy .open-next/pages-deploy --project-name cavbot-app --branch main --commit-dirty=true
