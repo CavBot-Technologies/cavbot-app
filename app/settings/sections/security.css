@@ -1,0 +1,901 @@
+/* app/settings/sections/security.css */
+/* CavBot Security Settings (square rhythm, single-column, full-bleed session lines) */
+
+.sx-secHead{
+  align-items: center;
+}
+
+.sx-secSave{
+  height: 38px;
+  border-radius: var(--sx-r10);
+  padding: 0 16px;
+}
+
+.sx-secError{
+  border: 1px solid rgba(255,120,120,0.22);
+  background: rgba(255,120,120,0.06);
+  color: rgba(255,120,120,0.95);
+  border-radius: var(--sx-r10);
+  padding: 14px 16px;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+/* SINGLE COLUMN STACK */
+.sx-secStack{
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sx-secWide{
+  width: 100%;
+}
+
+/* Card top row */
+.sx-secCardTop{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sx-secCardTopRow .sx-cardSub{
+  margin-top: 6px;
+}
+
+.sx-secSub{
+  max-width: 72ch;
+}
+
+/* Refresh */
+.sx-btn.sx-secRefresh{
+  height: 40px !important;
+  width: 40px !important;
+  min-width: 40px !important;
+  padding: 0 !important;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(4,6,12,0.9);
+  color: rgba(234,240,255,0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: none;
+}
+
+.sx-btn.sx-secRefresh:hover{
+  border-color: rgba(255,255,255,0.12);
+  background: rgba(4,6,12,0.9);
+  transform: none;
+}
+
+.sx-secRefreshIcon{
+  width: 19px;
+  height: 19px;
+  display: block;
+  margin: 0 auto;
+  background-color: currentColor;
+  -webkit-mask-image: url("/icons/refresh-circle-svgrepo-com.svg");
+  mask-image: url("/icons/refresh-circle-svgrepo-com.svg");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: 19px 19px;
+  mask-size: 19px 19px;
+  transform-origin: center;
+  transition: transform .2s ease;
+}
+
+.sx-btn.sx-secRefresh:hover .sx-secRefreshIcon{
+  animation: sx-secRefreshSpin .62s ease-out 1;
+}
+
+@keyframes sx-secRefreshSpin{
+  from{ transform: rotate(0deg); }
+  to{ transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .sx-btn.sx-secRefresh:hover .sx-secRefreshIcon{
+    animation: none;
+  }
+}
+
+/* Password form */
+.sx-secForm{
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sx-secPwWrap{
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.sx-secPwWrap .sx-input{
+  padding-right: 54px;
+}
+
+.sx-secShow{
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 32px;
+  width: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(234,240,255,0.86);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sx-secShow:hover{
+  color: rgba(234,240,255,0.98);
+}
+
+.sx-secShow:focus-visible{
+  outline: 2px solid rgba(78,168,255,0.65);
+  outline-offset: 2px;
+}
+
+.sx-secPwGrid{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.sx-input.is-error{
+  border-color: rgba(255,120,120,0.45);
+}
+
+.sx-secHintBad{
+  margin-top: 2px;
+  font-size: 12px;
+  color: rgba(255,170,170,0.95);
+}
+
+/* Sessions (FULL BLEED so lines reach edges) */
+.sx-secSessions{
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--sx-r10);
+  background: rgba(5,7,18,0.9);
+  padding: 4px 0;
+  max-height: min(520px, 70vh);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.sx-secSessions::-webkit-scrollbar{
+  width: 6px;
+}
+
+.sx-secSessions::-webkit-scrollbar-thumb{
+  background: rgba(255,255,255,0.16);
+  border-radius: 999px;
+}
+
+.sx-secSessionRow{
+  display: grid;
+  grid-template-columns: 34px minmax(0,1fr) 44px;
+  gap: 12px;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  transition: background .18s ease;
+}
+
+.sx-secSessionRow:last-child{
+  border-bottom: 0;
+}
+
+.sx-secIcon{
+  width: 36px;
+  height: 36px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(78,168,255,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sx-secSessMain{ min-width: 0; }
+
+.sx-secSessTitle{
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sx-secSessLabel{
+  color: rgba(234,240,255,0.94);
+  font-weight: 800;
+  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sx-secLiveDot{
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(34,197,94,0.96);
+  box-shadow:
+    0 0 0 1px rgba(34,197,94,0.26),
+    0 0 6px rgba(34,197,94,0.34);
+  display: inline-block;
+}
+
+.sx-secActive{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  line-height: 24px;
+  padding: 0 10px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(185,200,90,0.28);
+  background: rgba(185,200,90,0.10);
+  color: rgba(234,240,255,0.92);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 800;
+  flex: 0 0 auto;
+}
+
+.sx-secSessMeta{
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(234,240,255,0.62);
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  flex-wrap: wrap;
+}
+
+.sx-secLoc,
+.sx-secWhen{
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sx-secSessMeta span{
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sx-secDot{
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(234,240,255,0.34);
+  flex: 0 0 auto;
+}
+
+/* Trash button (real click target) */
+.sx-secSessRight{
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.sx-secTrash{
+  width: 28px;
+  height: 28px;
+  border-radius: var(--sx-r10);
+  border: none;
+  background: transparent;
+  color: rgba(255,148,148,0.82);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform .16s ease, color .16s ease, opacity .16s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sx-secTrash:hover{
+  transform: translateY(-1px);
+  color: rgba(255,190,190,0.96);
+}
+
+.sx-secTrash.is-disabled,
+.sx-secTrash:disabled{
+  opacity: 0.34;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.sx-secMini{
+  padding: 14px 2px;
+  color: rgba(234,240,255,0.70);
+  font-size: 13px;
+}
+
+/* 2-step */
+.sx-secAuthIcon{
+  width: 28px;
+  height: 28px;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  position: relative;
+  box-shadow: none;
+}
+
+.sx-secAuthIcon svg{
+  width: 18px;
+  height: 18px;
+}
+.sx-secVerifyIcon{
+  width: 18px;
+  height: 18px;
+  display: block;
+  background-color: rgba(234,240,255,0.92);
+  -webkit-mask: url("/icons/app/security-protection-fingerprint-shield-svgrepo-com.svg") center/contain no-repeat;
+  mask: url("/icons/app/security-protection-fingerprint-shield-svgrepo-com.svg") center/contain no-repeat;
+}
+
+.sx-cavbot-eyes{
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.sx-cavbot-eyes span{
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.9);
+  opacity: 0;
+}
+
+.sx-cavbot-eyes.is-lime span{
+  animation: cavbotFlash 1.2s ease-in-out infinite;
+}
+
+.sx-cavbot-eyes.is-red span{
+  animation: cavbotFlashError 1.2s ease-in-out infinite;
+}
+
+@keyframes cavbotFlash{
+  0%{ opacity: 0; transform: scale(0.6); background: rgba(185,200,90,0.9); }
+  50%{ opacity: 1; transform: scale(1.1); background: rgba(185,200,90,1); }
+  100%{ opacity: 0; transform: scale(0.6); }
+}
+
+@keyframes cavbotFlashError{
+  0%{ opacity: 0; transform: scale(0.6); background: rgba(255,90,90,0.9); }
+  50%{ opacity: 1; transform: scale(1.1); background: rgba(255,90,90,1); }
+  100%{ opacity: 0; transform: scale(0.6); }
+}
+
+.sx-secTwoList{
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sx-secTwoWide{
+  max-width: 820px;
+}
+
+.sx-secToggle{
+  border: 1px solid rgba(255,255,255,0.08);
+  background: linear-gradient(180deg, rgba(3,7,15,0.85), rgba(3,7,15,0.65));
+  border-radius: var(--sx-r10);
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 52px;
+  gap: 14px;
+  align-items: center;
+  cursor: pointer;
+  position: relative;
+}
+
+.sx-publicProfileToggles .sx-secToggle{
+  /* Public profile: more grounded, near-rectangular cards (only in this section). */
+  border-radius: var(--sx-r10);
+}
+
+.sx-publicProfileToggles{
+  display:flex;
+  flex-direction: column;
+  margin-top: 16px;
+  gap: 24px;
+}
+
+.sx-publicProfileConfigRow{
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  padding-left: 16px;
+}
+
+.sx-publicProfileConfigBtn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.10);
+  background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(0,0,0,0.22));
+  color: rgba(234,240,255,0.82);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color .16s ease, background .16s ease, color .16s ease;
+}
+.sx-publicProfileConfigBtn:hover{
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.16);
+  color: rgba(247,251,255,0.94);
+}
+.sx-publicProfileConfigBtn:disabled{
+  opacity: 0.5;
+  cursor: default;
+}
+.sx-publicProfileConfigBtn:focus-visible{
+  outline: 2px solid rgba(120,170,255,0.56);
+  outline-offset: 2px;
+}
+
+.sx-publicProfileChevron{
+  width: 13px;
+  height: 13px;
+  opacity: 0.82;
+  transition: transform .16s ease;
+}
+.sx-publicProfileConfigBtn.is-open .sx-publicProfileChevron{
+  transform: rotate(180deg);
+}
+
+.sx-publicProfileConfigGrid{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 720px){
+  .sx-publicProfileConfigGrid{
+    grid-template-columns: 1fr;
+  }
+}
+
+.sx-secToggle.is-locked{
+  opacity: 0.55;
+  cursor: default;
+}
+
+.sx-secToggleLeft{ min-width: 0; }
+
+.sx-secToggleTitle{
+  color: rgba(234,240,255,0.94);
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.sx-secToggleSub{
+  margin-top: 6px;
+  color: rgba(234,240,255,0.62);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sx-secToggle input{
+  opacity: 0;
+  position: absolute;
+  pointer-events: none;
+}
+
+.sx-secSwitch{
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  position: relative;
+}
+
+.sx-secSwitch::after{
+  content:"";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(234,240,255,0.75);
+  transition: transform .16s ease, background .16s ease;
+}
+
+.sx-secToggle input:checked + .sx-secSwitch{
+  border-color: rgba(78,168,255,0.35);
+  background: linear-gradient(180deg, rgba(78,168,255,0.35), rgba(78,168,255,0.10));
+}
+
+.sx-secToggle input:checked + .sx-secSwitch::after{
+  transform: translateX(18px);
+  background: rgba(247,249,255,0.96);
+}
+
+/* Danger delete account (glass + soft red icon) */
+.sx-secDanger{
+  border-color: rgba(255,120,120,0.18) !important;
+}
+
+.sx-secDangerActions{
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* Keep secondary security actions compact and refined */
+.sx-secDangerActions .sx-btn{
+  height: 36px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 760;
+  letter-spacing: 0.01em;
+  width: auto;
+  min-width: 0;
+}
+
+.sx-secDelete{
+  border: 1px solid rgba(255,120,120,0.35);
+  background: rgba(255,120,120,0.18);
+  color: #fff;
+  gap: 10px;
+}
+
+.sx-secDeleteIco{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: rgba(255,170,170,0.95);
+}
+
+.sx-secDelete:hover{
+  background: rgba(255,120,120,0.14);
+  border-color: rgba(255,120,120,0.30);
+}
+
+/* Toast */
+.sx-secToast{
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%) translateY(0px);
+  opacity: 1;
+  pointer-events: none;
+  z-index: 999999;
+  padding: 12px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(0,0,0,0.55);
+  color: rgba(255,255,255,0.92);
+  font-weight: 750;
+  font-size: 12px;
+}
+
+.sx-secToast[data-tone="good"]{ border-color: rgba(185,200,90,0.28); }
+.sx-secToast[data-tone="bad"]{ border-color: rgba(255,120,120,0.34); }
+
+/* Responsive */
+@media (max-width: 1100px){
+  .sx-secPwGrid{ grid-template-columns: 1fr; }
+  .sx-secTwoWide{ max-width: 100%; }
+}
+
+@media (max-width: 960px){
+  .sx-secSessionRow{
+    grid-template-columns: 34px minmax(0,1fr);
+    grid-template-rows: repeat(2, auto);
+    gap: 10px 12px;
+    padding: 16px 18px;
+  }
+
+  .sx-secSessionRow .sx-secSessMain{
+    grid-column: 2;
+  }
+
+  .sx-secSessRight{
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    margin-top: 8px;
+  }
+
+  .sx-secTrash{
+    width: 28px;
+    height: 28px;
+    justify-content: center;
+  }
+
+  .sx-secSessMeta{
+    gap: 8px;
+    font-size: 11px;
+  }
+}
+
+/* --- glass red delete button (no icons) --- */
+.sx-secDelete{
+  border-color: rgba(255,120,120,0.22);
+  background: rgba(255,120,120,0.10);
+  color: rgba(234,240,255,0.92);
+}
+.sx-secDelete:hover{
+  background: rgba(255,120,120,0.14);
+  border-color: rgba(255,120,120,0.30);
+}
+
+/* ==========================
+  MODAL (MATCH TEAM MODAL)
+========================== */
+.sx-modalBackdrop{
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding: 18px;
+  background: rgba(0,0,0,0.62);
+}
+
+
+.sx-modalCard{
+  width: min(560px, 100%);
+  border-radius: var(--sx-r10);
+  background: rgba(20,20,34,0.95);
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 16px;
+  position: relative;
+}
+
+
+.sx-modalTop{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+
+.sx-modalTitle{
+  font-weight: 850;
+  color: rgba(234,240,255,0.95);
+  font-size: 14px;
+  letter-spacing: .01em;
+}
+
+
+.sx-modalClose{
+  height: 36px;
+  width: 36px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.30);
+  color: rgba(234,240,255,0.92);
+  cursor: pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.sx-modalClose .cb-closeIcon{
+  --cb-close-size: 13px;
+  opacity: .9;
+}
+
+.sx-modalCloseCorner{
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+
+.sx-modalBody{
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.10);
+}
+
+.sx-modalSpacing{
+  height: 18px;
+}
+
+.sx-sessionDeleteBody{
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.sx-modalHeading{
+  margin: 0 0 8px;
+  font-weight: 850;
+  font-size: 15px;
+  color: rgba(234,240,255,0.95);
+}
+
+.sx-modalBody.sx-sessionDeleteBody{
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.sx-modalBackdropNoBlur{
+  backdrop-filter: none;
+  background: rgba(0,0,0,0.45);
+}
+
+body.cb-security-session-delete-open .cb-topbar{
+  display:none;
+}
+
+body.cb-security-session-delete-open .cb-main{
+  padding-top:0;
+}
+
+.sx-modalBackdrop.sx-modalBackdropNoBlur{
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+
+.sx-modalText{
+  margin: 0;
+  color: rgba(234,240,255,0.90);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+
+.sx-modalHint{
+  margin-top: 8px;
+  color: rgba(234,240,255,0.62);
+  font-size: 12px;
+}
+
+
+.sx-modalActions{
+  margin-top: 14px;
+  display:flex;
+  justify-content:flex-end;
+  gap: 10px;
+}
+
+.sx-btnDanger{
+  border: 1px solid rgba(255,120,120,0.26);
+  background: rgba(255,120,120,0.14);
+  color: rgba(234,240,255,0.94);
+  font-weight: 850;
+}
+
+/* ==========================
+  TOTP SETUP LAYOUT
+========================== */
+.sx-totpGrid{
+  margin-top: 12px;
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.sx-totpBox{
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.18);
+  padding: 12px;
+  min-width: 0;
+}
+
+.sx-totpLabel{
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: rgba(234,240,255,0.66);
+  margin-bottom: 10px;
+}
+
+.sx-totpQr{
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.24);
+  padding: 10px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+}
+
+.sx-totpQr svg{
+  width: 180px;
+  height: 180px;
+}
+
+.sx-totpFallback{
+  color: rgba(234,240,255,0.72);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sx-totpSecret{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  color: rgba(234,240,255,0.92);
+  background: rgba(0,0,0,0.28);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: var(--sx-r10);
+  padding: 10px 12px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px){
+  .sx-totpGrid{ grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px){
+  .sx-secToggle{
+    grid-template-columns: 1fr;
+  }
+
+  .sx-secSessionRow{
+    padding: 12px 16px;
+  }
+
+  .sx-secSessRight{
+    justify-content: flex-start;
+  }
+}
+
+/* checkbox row (kept subtle) */
+.sx-delCheck{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  font-size: 12px;
+  color: rgba(234,240,255,0.72);
+}
+.sx-delCheck input{
+  width: 16px;
+  height: 16px;
+}

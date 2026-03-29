@@ -1,0 +1,48 @@
+import { requireCavsafeOwnerSession } from "@/lib/cavsafe/auth.server";
+import { cavsafeErrorResponse, jsonNoStore } from "@/lib/cavsafe/http.server";
+import { createFileMetadata } from "@/lib/cavsafe/storage.server";
+import { readSanitizedJson } from "@/lib/security/userInput";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+type CreateFileMetadataBody = {
+  folderId?: unknown;
+  folderPath?: unknown;
+  name?: unknown;
+  mimeType?: unknown;
+  bytes?: unknown;
+  sha256?: unknown;
+  r2Key?: unknown;
+};
+
+export async function POST(req: Request) {
+  try {
+    const sess = await requireCavsafeOwnerSession(req);
+
+    const body = (await readSanitizedJson(req, null)) as CreateFileMetadataBody | null;
+    if (!body) return jsonNoStore({ ok: false, error: "BAD_REQUEST", message: "Invalid JSON body." }, 400);
+
+    const file = await createFileMetadata({
+      accountId: sess.accountId,
+      operatorUserId: sess.sub,
+      folderId: body.folderId == null ? null : String(body.folderId || "").trim() || null,
+      folderPath: body.folderPath == null ? null : String(body.folderPath || "").trim() || null,
+      name: String(body.name || "").trim(),
+      mimeType: body.mimeType == null ? null : String(body.mimeType || "").trim() || null,
+      bytes: body.bytes == null ? null : Number(body.bytes),
+      sha256: body.sha256 == null ? null : String(body.sha256 || "").trim() || null,
+      r2Key: body.r2Key == null ? null : String(body.r2Key || "").trim() || null,
+    });
+
+    return jsonNoStore({
+      ok: true,
+      file,
+      fileId: file.id,
+      uploadUrl: `/api/cavsafe/files/upload?fileId=${encodeURIComponent(file.id)}`,
+    }, 200);
+  } catch (err) {
+    return cavsafeErrorResponse(err, "Failed to create file metadata.");
+  }
+}

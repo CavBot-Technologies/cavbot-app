@@ -1,0 +1,74 @@
+/* =========================================================
+  app/users/reset/reset.css
+  Reset-only overrides (must work WITH auth.css)
+========================================================= */
+
+.auth-shell[data-cavbot-page="reset"] .auth-card-top{
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+}
+
+.auth-shell[data-cavbot-page="reset"] .auth-title-row{
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.auth-shell[data-cavbot-page="reset"] .auth-kicker{
+  margin-top: 2px;
+}
+
+/* Copy block */
+.reset-blurb{
+  margin: 8px auto 6px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-subtle);
+  max-width: 56ch;
+  
+}
+
+/* Status pill */
+.reset-status{
+  display:none;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(78,168,255,.26);
+  background: rgba(78,168,255,.10);
+  color: var(--ink);
+  font-size: 11px;
+  letter-spacing: .06em;
+  line-height: 1.6;
+}
+.reset-status.is-on{
+  display:block;
+}
+
+/* Back link = LEFT aligned (same start line as inputs) */
+.reset-back-row{
+  text-align: left;
+}
+
+/* =========================================================
+  SHOW / HIDE button style (MATCH screenshot: no bg/border
+  until hover shows the cool border)
+========================================================= */
+
+.auth-shell[data-cavbot-page="reset"] .auth-show{
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  box-shadow: none !important;
+}
+
+.auth-shell[data-cavbot-page="reset"] .auth-show:hover{
+  background: rgba(255,255,255,.16) !important;
+  
+}
+
+.auth-shell[data-cavbot-page="reset"] .auth-show:focus-visible{
+  box-shadow: 0 0 0 3px rgba(185,200,90,.14) !important;
+  border-color: rgba(185,200,90,.22) !important;
+}

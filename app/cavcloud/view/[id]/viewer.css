@@ -1,0 +1,139 @@
+.cc-viewerRoot{
+  height: calc(100dvh - var(--cb-global-footer-height));
+  min-height: calc(100dvh - var(--cb-global-footer-height));
+  background: #040914;
+  color: rgba(247,251,255,.94);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.cc-viewerBody{
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+}
+.cc-viewerBody > .cc-previewPanel{
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.cc-viewerEmpty{
+  margin: 18px;
+  padding: 14px;
+  border: 1px dashed rgba(255,255,255,.16);
+  border-radius: 12px;
+  color: rgba(197,206,231,.8);
+  font-size: 12px;
+}
+.cc-viewerToasts{
+  position: fixed;
+  right: 14px;
+  bottom: calc(14px + var(--cb-global-footer-height) + var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 130;
+}
+.cc-viewerToast{
+  min-width: 190px;
+  max-width: min(360px, calc(100vw - 28px));
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.15);
+  background: rgba(11,19,37,.9);
+  color: rgba(247,251,255,.95);
+  font-size: 12px;
+  padding: 10px 12px;
+  box-shadow: none;
+}
+.cc-viewerToast.is-good{
+  border-color: rgba(185,200,90,.45);
+}
+.cc-viewerToast.is-bad{
+  border-color: rgba(255,132,132,.48);
+}
+.cc-viewerToast.is-watch{
+  border-color: rgba(255,206,120,.46);
+}
+.cc-viewerModal{
+  position: fixed;
+  inset: 0;
+  background: rgba(2,4,12,.65);
+  display: grid;
+  place-items: center;
+  z-index: 220;
+}
+.cc-viewerModalCard{
+  width: min(640px, 94vw);
+  background: rgba(8,12,28,.98);
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 18px;
+  box-shadow: none;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.cc-viewerModalHead{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cc-viewerModalTitle{
+  margin: 0;
+  font-size: 14px;
+  font-weight: 760;
+  color: rgba(247,251,255,.95);
+}
+.cc-viewerModalClose{
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid rgba(255,255,255,.16);
+  background: rgba(0,0,0,.22);
+  color: rgba(247,251,255,.92);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.cc-viewerModalClose .cb-closeIcon{
+  --cb-close-size: 12px;
+  opacity: .88;
+}
+.cc-viewerModalClose:hover{
+  border-color: rgba(255,255,255,.34);
+  background: rgba(255,255,255,.08);
+}
+.cc-viewerModalBody{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cc-viewerModalText{
+  margin: 0;
+  font-size: 12px;
+  color: rgba(197,206,231,.84);
+}
+.cc-viewerModalTextarea{
+  min-height: 96px;
+  max-height: min(42vh, 320px);
+  resize: vertical;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.16);
+  background: rgba(0,0,0,.2);
+  color: rgba(247,251,255,.94);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  overflow: auto;
+}
+.cc-viewerModalActions{
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.cc-viewerModalActions .cc-previewActionBtn{
+  min-width: 92px;
+}

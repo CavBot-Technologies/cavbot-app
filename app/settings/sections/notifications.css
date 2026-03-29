@@ -1,0 +1,270 @@
+/* app/settings/sections/notifications.css
+  Notifications panel (Settings-only)
+  - Matches sx tokens + spacing rhythm
+  - No signal examples box
+  - Email + In-app cards equal height
+  - Subtitles clamped to keep cards visually even
+*/
+
+.sx-notifHeaderText{
+  padding-left: 2px;
+}
+
+/* Keep Notifications surfaces neutral navy regardless of profile accent tone. */
+.sx-panel[aria-label="Notifications settings"]{
+  --cb-cavsafe-accent: #9fb6ff;
+  --cb-cavsafe-accent-strong: rgba(159,182,255,0.44);
+  --cb-cavsafe-accent-soft: rgba(2,6,18,0.28);
+}
+
+.sx-notifTopGrid{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px,1fr));
+  gap: 18px;
+  align-items: stretch;
+}
+
+/* Make both top cards visually identical height */
+.sx-notifCard{
+  display:flex;
+  flex-direction:column;
+  height: 100%;
+}
+
+/* Clamp long subtitles (keeps cards even) */
+.sx-notifCard .sx-cardSub{
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.sx-cardGroup{
+  margin-top: 24px;
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.sx-cardGroup .sx-notifRow{
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.08);
+  padding: 16px;
+  background: rgba(3,7,18,0.95);
+  display:grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.sx-notifRow{
+  display:grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 14px;
+}
+
+.sx-notifRowLeft{ min-width:0; }
+
+.sx-notifRowLeft,
+.sx-notifRowLeft .sx-notifLabel,
+.sx-notifRowLeft .sx-notifSub{
+  display:block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.sx-notifLabel{
+  font-weight: 800;
+  color: rgba(255,255,255,0.92);
+  font-size: 12px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Keep subcopy tight (2 lines max) */
+.sx-notifSub{
+  margin-top: 6px;
+  color: rgba(255,255,255,0.68);
+  font-size: 12px;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 58ch;
+}
+
+.sx-cardSquare{
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 28px;
+  display:flex;
+  flex-direction:column;
+  gap: 16px;
+  min-height: 0;
+  background: rgba(3,7,18,0.96);
+  overflow: hidden;
+}
+
+.sx-cardInner{
+  display:flex;
+  flex-direction:column;
+  gap: 18px;
+  height:auto;
+  overflow-y:auto;
+  padding-left: 2px;
+  padding-right: 8px;
+}
+
+.sx-notifGridWrap{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 32px;
+  align-items: stretch;
+}
+
+.sx-modernToggle{
+  width: 68px;
+  height: 24px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.35);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)),
+    rgba(2,6,18,0.85);
+  position: relative;
+  cursor: pointer;
+  transition: border-color .3s ease, background .3s ease, box-shadow .3s ease;
+  flex: 0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  padding: 0 4px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+}
+
+.sx-modernToggle:hover{
+  border-color: rgba(255,255,255,0.55);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.03)),
+    rgba(2,6,18,0.92);
+}
+
+.sx-modernToggleKnob{
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.95);
+  border: 1px solid rgba(255,255,255,0.8);
+  position: absolute;
+  left: 5px;
+  transition: transform .28s ease, border-color .28s ease, background .28s ease;
+}
+
+.sx-modernToggle.is-on{
+  border-color: rgba(255,255,255,0.65);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05)),
+    rgba(3,7,18,0.94);
+}
+
+.sx-modernToggle.is-on .sx-modernToggleKnob{
+  transform: translateX(36px);
+  border-color: rgba(255,255,255,0.9);
+  background: rgba(255,255,255,0.95);
+}
+
+.sx-panel[aria-label="Notifications settings"] .sx-divider{
+  flex: 1;
+  height: 1px;
+  margin: 0;
+  margin-inline: -28px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 0;
+  opacity: 1;
+}
+
+.sx-notifHead{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap: 14px;
+}
+
+.sx-notifGrid{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 32px;
+  row-gap: 48px;
+  margin-top: 12px;
+}
+
+.sx-notifGroup{
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(3,7,18,0.96);
+  padding: 12px;
+  display:flex;
+  flex-direction:column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.sx-notifGroupTitle{
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.72);
+}
+
+.sx-notifGroupBody{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 24px;
+  row-gap: 32px;
+}
+
+.sx-notifFooterNote{
+  color: rgba(255,255,255,0.62);
+  font-size: 12px;
+  line-height: 1.6;
+  max-width: 92ch;
+}
+
+@media (max-width: 980px){
+  .sx-cardGroup{
+    grid-template-columns: 1fr;
+  }
+  .sx-notifGridWrap,
+  .sx-notifGrid{
+    grid-template-columns: 1fr;
+  }
+  .sx-cardSquare{
+    min-height: auto;
+  }
+}
+
+@media (max-width: 760px){
+  .sx-cardGroup .sx-notifRow{
+    grid-template-columns: minmax(0,1fr);
+    gap: 12px;
+  }
+
+  .sx-cardGroup{
+    gap: 12px;
+  }
+
+  .sx-cardSquare{
+    padding: 20px;
+  }
+
+  .sx-modernToggle{
+    width: 60px;
+  }
+
+  .sx-notifGroupBody{
+    gap: 12px;
+  }
+}

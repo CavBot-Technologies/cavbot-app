@@ -1,0 +1,149 @@
+:root{ color-scheme: dark; }
+
+.pay-stage{
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  min-height:100vh;
+  height: 100%;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  background:#01030f;
+  color:#f7fbff;
+  text-align:center;
+  padding: 18px 16px;
+  z-index: 9999;
+}
+
+.pay-stage.is-success{
+  justify-content:flex-start;
+  padding-top: 26px;
+}
+
+.pay-badgeWrap{
+  transition: transform 700ms cubic-bezier(.2,.9,.3,1);
+  transform: none;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:12px;
+}
+
+.pay-dockline{
+  width: 120px;
+  height: 1px;
+  margin: 12px auto 0;
+  background: linear-gradient(90deg, rgba(185,200,90,0.0), rgba(185,200,90,0.35), rgba(139,92,255,0.35), rgba(185,200,90,0.0));
+  opacity: .8;
+}
+
+.cavbot-pay-processing .cavbot-eye-glow{
+  animation: cavbotProcessingEyes 2.25s linear infinite;
+}
+.cavbot-pay-processing .cavbot-eye-pupil{
+  animation: cavbotProcessingPupil 2.25s linear infinite;
+}
+
+@keyframes cavbotProcessingEyes{
+  0%{ background:rgba(139,92,255,.9); }
+  33%{ background:rgba(255,255,255,.9); }
+  66%{ background:rgba(185,200,90,.9); }
+  100%{ background:rgba(139,92,255,.9); }
+}
+@keyframes cavbotProcessingPupil{
+  0%,100%{ background:#8b5cff; }
+  33%{ background:#ffffff; }
+  66%{ background:#b9c85a; }
+}
+
+.cavbot-pay-success .cavbot-eye-glow{
+  background: rgba(92,255,154,0.45) !important;
+  animation: none !important;
+}
+.cavbot-pay-success .cavbot-eye-pupil{
+  background:#5cff9a !important;
+}
+
+@keyframes cavbotSuccessPulse{
+  0%,100%{ opacity:.4; transform:scale(1); }
+  50%{ opacity:1; transform:scale(1.15); }
+}
+
+.pay-processing{
+  margin-top: 26px;
+  max-width: 560px;
+}
+
+.pay-stage--badge-center .pay-badgeWrap{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:12px;
+}
+
+.pay-processing h1{
+  margin: 0;
+  font-size: 26px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+
+.pay-processing h1,
+.pay-processing h1.greeting {
+  font-size: 30px;
+  letter-spacing: .08em;
+}
+
+.pay-processing h1.greeting{
+  animation:
+    cavbotProcessingText 1.2s linear infinite,
+    greetingPulse 2.6s ease-in-out infinite;
+}
+
+.pay-stage.arcade-greeting-loading .pay-processing h1,
+.pay-stage.arcade-greeting-loading .pay-processing h1.greeting{
+  font-size: 22px;
+  letter-spacing: .06em;
+}
+
+.pay-stage.ent-loading .pay-processing h1{
+  font-size: 20px;
+  letter-spacing: .06em;
+}
+
+.pay-stage.ent-loading .pay-processing{
+  margin-top: 18px;
+}
+
+.pay-sub{
+  margin: 10px 0 0;
+  color: rgba(197,206,231,.78);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.pay-stage:not(.is-success) .pay-processing h1{
+  animation: cavbotProcessingText 1.2s linear infinite;
+}
+
+@keyframes cavbotProcessingText{
+  0%{ color: rgba(139,92,255,.95); }
+  33%{ color: rgba(255,255,255,.95); }
+  66%{ color: rgba(185,200,90,.95); }
+  100%{ color: rgba(139,92,255,.95); }
+}
+
+@keyframes greetingPulse{
+  0%{ opacity: 0; transform: translateY(12px); }
+  10%{ opacity: 1; transform: translateY(0); }
+  90%{ opacity: 1; }
+  100%{ opacity: 0; transform: translateY(-10px); }
+}

@@ -1,0 +1,28 @@
+/* =========================================================
+  app/users/recovery/email/confirm-email.css
+  Confirm-email page additions (inherits recovery.css + auth.css)
+========================================================= */
+
+/* Email reveal card (uses same pill DNA as recovery-status) */
+.recovery-email-card{
+  margin-top: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(78,168,255,.26);
+  background: rgba(78,168,255,.10);
+  color: var(--ink);
+  line-height: 1.6;
+  letter-spacing: .04em;
+  word-break: break-word;
+}
+
+.recovery-email-label{
+  opacity: .80;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.recovery-email-value{
+  font-weight: 700;
+  font-size: 12px;
+}

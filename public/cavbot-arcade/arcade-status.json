@@ -1,0 +1,32 @@
+[
+  {
+    "slug": "catch-cavbot",
+    "status": "Live",
+    "lastChecked": "2026-02-05T12:00:00.000Z"
+  },
+  {
+    "slug": "futbol-cavbot",
+    "status": "Live",
+    "lastChecked": "2026-02-05T11:50:00.000Z"
+  },
+  {
+    "slug": "tennis-cavbot",
+    "status": "Live",
+    "lastChecked": "2026-02-05T09:30:00.000Z"
+  },
+  {
+    "slug": "cavbot-imposter",
+    "status": "Live",
+    "lastChecked": "2026-02-04T22:10:00.000Z"
+  },
+  {
+    "slug": "cavbot-cache-sweep",
+    "status": "Live",
+    "lastChecked": "2026-02-04T20:45:00.000Z"
+  },
+  {
+    "slug": "cavbot-signal-chase",
+    "status": "Live",
+    "lastChecked": "2026-02-05T10:15:00.000Z"
+  }
+]

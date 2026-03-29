@@ -1,0 +1,153 @@
+.request-access-panel {
+  max-width: 780px;
+  margin: 26px auto;
+  padding: 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(6, 10, 21, 0.86);
+}
+
+.request-access-head h1 {
+  margin: 0;
+  font-size: 24px;
+  color: rgba(247, 249, 255, 0.95);
+}
+
+.request-access-head p {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: rgba(247, 249, 255, 0.68);
+}
+
+.request-access-field {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.request-access-field label {
+  font-size: 12px;
+  color: rgba(247, 249, 255, 0.74);
+}
+
+.request-access-field input {
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(247, 249, 255, 0.95);
+  padding: 0 12px;
+}
+
+.request-access-meta {
+  font-size: 12px;
+  color: rgba(247, 249, 255, 0.62);
+}
+
+.request-access-target {
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(247, 249, 255, 0.78);
+}
+
+.request-access-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(3, 6, 14, 0.9);
+}
+
+.request-access-result {
+  width: 100%;
+  text-align: left;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(247, 249, 255, 0.94);
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.request-access-result small {
+  font-size: 12px;
+  color: rgba(247, 249, 255, 0.62);
+}
+
+.request-access-result:hover,
+.request-access-result.is-active {
+  border-color: rgba(120, 170, 255, 0.52);
+  background: rgba(120, 170, 255, 0.14);
+}
+
+.request-access-error,
+.request-access-success {
+  margin-top: 14px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.request-access-error {
+  border: 1px solid rgba(255, 157, 166, 0.36);
+  background: rgba(255, 110, 120, 0.12);
+  color: rgba(255, 157, 166, 0.95);
+}
+
+.request-access-success {
+  border: 1px solid rgba(185, 200, 90, 0.4);
+  background: rgba(185, 200, 90, 0.16);
+  color: rgba(236, 242, 207, 0.95);
+}
+
+.request-access-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.request-access-submit {
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 10px;
+  border: 1px solid var(--cb-cavsafe-accent-strong, rgba(185, 200, 90, 0.52));
+  background: var(--cb-cavsafe-accent-soft, rgba(185, 200, 90, 0.22));
+  color: rgba(247, 249, 255, 0.96);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, transform .18s ease;
+}
+
+.request-access-submit:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--cb-cavsafe-accent, #b9c85a) 72%, rgba(255,255,255,0.26) 28%);
+  background: color-mix(in srgb, var(--cb-cavsafe-accent-soft, rgba(185,200,90,0.22)) 88%, rgba(255,255,255,0.08) 12%);
+  transform: translateY(-1px);
+}
+
+.request-access-submit:disabled {
+  opacity: 0.66;
+  cursor: default;
+}
+
+@media (max-width: 720px) {
+  .request-access-panel {
+    margin: 16px;
+  }
+
+  .request-access-actions {
+    justify-content: stretch;
+  }
+
+  .request-access-submit {
+    width: 100%;
+  }
+}

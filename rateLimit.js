@@ -8,14 +8,17 @@ export class RateLimiter {
     const data = await request.json().catch(() => null);
     if (!data) return new Response("bad request", { status: 400 });
 
-    const { key, capacity, refillPerSec } = data;
+    const { key, capacity, refillPerSec } = data ?? {};
+    if (!key || typeof key !== "string") {
+      return new Response("Missing key", { status: 400 });
+    }
 
     const cap = Math.max(1, Number(capacity || 60));
     const refill = Math.max(0.1, Number(refillPerSec || 1));
 
     const now = Date.now();
 
-    const stored = (await this.state.storage.get("bucket")) || {
+    const stored = (await this.state.storage.get(key)) || {
       tokens: cap,
       last: now,
     };
@@ -28,6 +31,7 @@ export class RateLimiter {
     if (tokens < 1) {
       // no token available
       await this.state.storage.put("bucket", { tokens, last: now });
+      await this.state.storage.put(key, { tokens, last: now });
       return new Response(JSON.stringify({ ok: false, limited: true }), {
         status: 429,
         headers: { "Content-Type": "application/json" },
@@ -35,7 +39,7 @@ export class RateLimiter {
     }
 
     // consume 1 token
-    await this.state.storage.put("bucket", { tokens: tokens - 1, last: now });
+    await this.state.storage.put(key, { tokens: tokens - 1, last: now });
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -51,12 +55,13 @@ function getIp(req) {
   );
 }
 
-export async function enforceRateLimit(req, env, projectId, origin, opts) {
+export async function enforceRateLimit(req, env, projectId, origin, opts, bucketSuffix) {
   if (!env.RL) throw new Error("Missing Durable Object binding RL");
 
   const ip = getIp(req);
   const o = origin || "no-origin";
-  const key = `${projectId}|${o}|${ip}`;
+  const scope = bucketSuffix || o;
+  const key = `${projectId}|${scope}|${ip}`;
 
   const id = env.RL.idFromName(key);
   const stub = env.RL.get(id);

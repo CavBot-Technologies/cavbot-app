@@ -1,0 +1,139 @@
+/* components/LightToggle.css */
+
+.cb-lightToggle{
+  --lt-size: 44px;
+  --lt-pad: 6px;
+  --lt-r: 14px;
+
+  position: relative;
+  width: var(--lt-size);
+  height: var(--lt-size);
+
+  display: inline-grid;
+  place-items: center;
+
+  border-radius: var(--lt-r);
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.02);
+
+  color: rgba(197,206,231,0.78);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease,
+    transform 120ms ease;
+}
+
+.cb-lightToggle:active{
+  transform: translateY(1px);
+}
+
+.cb-lightToggle:disabled{
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.cb-lightToggle--sm{
+  --lt-size: 38px;
+  --lt-r: 12px;
+}
+.cb-lightToggle--lg{
+  --lt-size: 54px;
+  --lt-r: 16px;
+}
+
+.cb-lightToggle__glow{
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(circle at 50% 50%,
+      rgba(78,168,255,0.34),
+      rgba(78,168,255,0.00) 68%);
+  transition: opacity 220ms ease;
+}
+
+.cb-lightToggle__trace{
+  position: absolute;
+  inset: var(--lt-pad);
+  pointer-events: none;
+}
+
+.cb-lightToggle__trace rect{
+  fill: none;
+  stroke: rgba(78,168,255,0.92);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  opacity: 0;
+}
+
+.cb-lightToggle__icon{
+  display: inline-grid;
+  place-items: center;
+  transform: translateZ(0);
+  transition: transform 200ms ease, filter 200ms ease, color 200ms ease;
+  filter: drop-shadow(0 0 0 rgba(78,168,255,0));
+}
+
+/* ON */
+.cb-lightToggle.is-on{
+  background: rgba(78,168,255,0.18);
+  border-color: rgba(78,168,255,0.55);
+  color: rgba(255,255,255,0.92);
+  box-shadow:
+    0 0 0 1px rgba(78,168,255,0.14) inset,
+    0 18px 40px rgba(2,4,10,0.45);
+}
+.cb-lightToggle.is-on .cb-lightToggle__glow{
+  opacity: 1;
+}
+.cb-lightToggle.is-on .cb-lightToggle__icon{
+  transform: translateY(-0.25px) scale(1.02);
+  filter: drop-shadow(0 0 12px rgba(78,168,255,0.26));
+}
+.cb-lightToggle.is-on .cb-lightToggle__trace rect{
+  opacity: 1;
+  stroke-dashoffset: 0;
+  animation: cb-lightToggle-trace-on 360ms cubic-bezier(.2,.9,.2,1) both;
+}
+
+/* OFF */
+.cb-lightToggle.is-off .cb-lightToggle__trace rect{
+  opacity: 0;
+  stroke-dashoffset: 100;
+  animation: cb-lightToggle-trace-off 280ms cubic-bezier(.2,.9,.2,1) both;
+}
+
+@keyframes cb-lightToggle-trace-on{
+  0%{ stroke-dashoffset: 100; opacity: 0; }
+  18%{ opacity: 1; }
+  100%{ stroke-dashoffset: 0; opacity: 1; }
+}
+
+@keyframes cb-lightToggle-trace-off{
+  0%{ stroke-dashoffset: 0; opacity: 1; }
+  100%{ stroke-dashoffset: 100; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .cb-lightToggle,
+  .cb-lightToggle__icon,
+  .cb-lightToggle__glow{
+    transition: none !important;
+  }
+  .cb-lightToggle__trace rect{
+    animation: none !important;
+  }
+}
+

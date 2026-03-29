@@ -1,16 +1,26 @@
 // lib/apiAuth.ts
 import "server-only";
 
+import { webcrypto as nodeCrypto } from "crypto";
+import { prisma } from "@/lib/prisma";
+
 /**
  * CavBot Auth Model (Multi-tenant)
  * - System admin token: INTERNAL ONLY (ops / emergency)
  * - User sessions: cookie-based, signed (HMAC), short-lived, httpOnly
- * - Session carries active account context (accountId + memberRole)
- * - Works on Cloudflare/edge runtimes (Web Crypto) + Node (WebCrypto)
+ * - Session carries active tenant context (accountId + memberRole)
+ *
+ * HARDENING:
+ * - Origin enforcement for write methods
+ * - Dev-safe cookie settings (Secure never set on http://localhost)
+ * - Normalized allowed origins
+ *
+ * NOTE:
+ * - This file is Node/runtime oriented (uses Prisma for session revocation checks).
  */
 
 type SystemRole = "system" | "user";
-type MemberRole = "OWNER" | "ADMIN" | "MEMBER";
+export type MemberRole = "OWNER" | "ADMIN" | "MEMBER";
 
 export type CavbotSession = {
   v: 1;
@@ -25,55 +35,148 @@ export type CavbotSession = {
   accountId?: string;
   memberRole?: MemberRole;
 
+  // Session version (DB-backed revocation)
+  // Token carries `sv`; DB stores sessionVersion; mismatch => revoked
+  sv?: number;
+
   iat: number;
   exp: number;
 };
 
-const SESSION_COOKIE = "cavbot_session";
+export type CavbotUserSession = CavbotSession & {
+  systemRole: "user";
+  sub: string;
+};
+
+export type CavbotAccountSession = CavbotUserSession & {
+  accountId: string;
+  memberRole: MemberRole;
+};
+
+export class ApiAuthError extends Error {
+  code: string;
+  status: number;
+
+  constructor(code: string, status = 401) {
+    super(code);
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export function isApiAuthError(e: unknown): e is ApiAuthError {
+  return !!e && typeof e === "object" && e !== null && "status" in e && "code" in e;
+}
+
 const SESSION_TTL_SECONDS = 60 * 60 * 8; // 8 hours
 
 function nowSec() {
   return Math.floor(Date.now() / 1000);
 }
 
-/**
- * Env helper (safe in local + Cloudflare/edge)
- */
 function env(name: string) {
-  return String((process.env as any)?.[name] || "").trim();
+  const envRecord = process.env as Record<string, string | undefined>;
+  return String(envRecord[name] || "").trim();
 }
 
-/**
- * Origins
- * - CAVBOT_APP_ORIGIN: primary app origin (ex: https://app.cavbot.io)
- * - ALLOWED_ORIGINS: comma-separated origins allowed for state-changing requests
- */
+const SESSION_COOKIE = env("CAVBOT_SESSION_COOKIE_NAME") || "cavbot_session";
+
+function getCrypto(): Crypto {
+  if (globalThis.crypto?.subtle) return globalThis.crypto;
+  return nodeCrypto as Crypto;
+}
+
+/* ==========================
+   ORIGIN NORMALIZATION
+========================== */
+
+function normalizeOriginValue(raw: string): string | null {
+  const v = (raw || "").trim();
+  if (!v) return null;
+
+  const hasScheme = /^https?:\/\//i.test(v);
+  const withScheme = hasScheme
+    ? v
+    : v.includes("localhost") || v.startsWith("127.") || v.endsWith(".local")
+    ? `http://${v}`
+    : `https://${v}`;
+
+  try {
+    return new URL(withScheme).origin;
+  } catch {
+    return null;
+  }
+}
+
+function inferRequestOrigin(req: Request): string {
+  const origin = String(req.headers.get("origin") || "").trim();
+  if (origin) return origin;
+
+  const proto = String(req.headers.get("x-forwarded-proto") || "").trim();
+  const host = String(req.headers.get("x-forwarded-host") || req.headers.get("host") || "").trim();
+  if (proto && host) return `${proto}://${host}`;
+
+  return "";
+}
+
 export function getAppOrigin() {
-  return env("CAVBOT_APP_ORIGIN") || "http://localhost:3000";
+  const candidates = [
+    env("CAVBOT_APP_ORIGIN"),
+    env("APP_URL"),
+    env("NEXT_PUBLIC_APP_URL"),
+    env("NEXT_PUBLIC_APP_ORIGIN"),
+    env("APP_ORIGIN"),
+    env("NEXTAUTH_URL"),
+  ];
+  for (const candidate of candidates) {
+    const normalized = normalizeOriginValue(candidate);
+    if (normalized) return normalized;
+  }
+
+  if (process.env.NODE_ENV !== "production") return "http://localhost:3000";
+  throw new Error("Missing app origin env. Set CAVBOT_APP_ORIGIN for production.");
 }
 
 export function getAllowedOrigins(): string[] {
   const primary = getAppOrigin();
-  const raw = env("ALLOWED_ORIGINS"); // ex: "https://app.cavbot.io,https://cavbot.io"
+
+  const raw = env("ALLOWED_ORIGINS");
   const list = raw
-    ? raw.split(",").map((s) => s.trim()).filter(Boolean)
+    ? raw
+        .split(",")
+        .map((s) => normalizeOriginValue(s))
+        .filter(Boolean) as string[]
     : [];
-  const merged = [primary, ...list].map((s) => s.trim()).filter(Boolean);
-  // de-dupe
-  return Array.from(new Set(merged));
+
+  const devDefaults =
+    process.env.NODE_ENV === "production"
+      ? []
+      : [
+          "http://localhost:3000",
+          "http://127.0.0.1:3000",
+          "http://localhost:3001",
+          "http://127.0.0.1:3001",
+        ];
+
+  return Array.from(new Set([primary, ...list, ...devDefaults]));
 }
 
-/** Base64 helpers that work in Node + Edge */
+/* ==========================
+   BASE64 / BASE64URL HELPERS
+========================== */
+
+function isBase64Url(s: string) {
+  const v = String(s || "");
+  return v.includes("-") || v.includes("_");
+}
+
 function b64Encode(bytes: Uint8Array) {
   if (typeof btoa === "function") {
     let str = "";
     for (let i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i]);
     return btoa(str);
   }
-  // Node fallback
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const buf = Buffer.from(bytes);
-  return buf.toString("base64");
+  return Buffer.from(bytes).toString("base64");
 }
 
 function b64DecodeToBytes(b64: string) {
@@ -83,8 +186,7 @@ function b64DecodeToBytes(b64: string) {
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     return bytes;
   }
-  const buf = Buffer.from(b64, "base64");
-  return new Uint8Array(buf);
+  return new Uint8Array(Buffer.from(b64, "base64"));
 }
 
 function base64urlEncode(bytes: Uint8Array) {
@@ -92,11 +194,26 @@ function base64urlEncode(bytes: Uint8Array) {
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-function base64urlDecodeToBytes(s: string) {
+function base64urlToBase64(s: string) {
   const pad = s.length % 4 ? "=".repeat(4 - (s.length % 4)) : "";
-  const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + pad;
-  return b64DecodeToBytes(b64);
+  return s.replace(/-/g, "+").replace(/_/g, "/") + pad;
 }
+
+function decodeAnyBase64ToBytes(s: string) {
+  const v = String(s || "").trim();
+  if (!v) return new Uint8Array();
+
+  if (isBase64Url(v)) return b64DecodeToBytes(base64urlToBase64(v));
+  return b64DecodeToBytes(v);
+}
+
+function encodeLikeExpected(bytes: Uint8Array, expected: string) {
+  return isBase64Url(expected) ? base64urlEncode(bytes) : b64Encode(bytes);
+}
+
+/* ==========================
+   CONSTANT TIME COMPARE
+========================== */
 
 function constantTimeEqual(a: string, b: string) {
   if (a.length !== b.length) return false;
@@ -105,28 +222,42 @@ function constantTimeEqual(a: string, b: string) {
   return out === 0;
 }
 
+/* ==========================
+   HMAC SIGNING
+========================== */
+
 async function hmacSha256(secret: string, data: string) {
-  const key = await crypto.subtle.importKey(
+  const c = getCrypto();
+  const key = await c.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
   );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
+
+  const sig = await c.subtle.sign("HMAC", key, new TextEncoder().encode(data));
   return base64urlEncode(new Uint8Array(sig));
 }
 
+/* ==========================
+   COOKIE PARSING
+========================== */
+
 function parseCookie(header: string, name: string) {
-  const parts = header.split(";").map((v) => v.trim());
+  const parts = (header || "")
+    .split(";")
+    .map((v) => v.trim())
+    .filter(Boolean);
+
   for (const p of parts) {
-    if (!p) continue;
     const idx = p.indexOf("=");
     if (idx === -1) continue;
     const k = p.slice(0, idx).trim();
     const v = p.slice(idx + 1).trim();
     if (k === name) return v;
   }
+
   return "";
 }
 
@@ -136,67 +267,76 @@ function getBearerToken(req: Request) {
   return "";
 }
 
-/**
- * Same-origin enforcement (CSRF hardening)
- * - Enforce only for state-changing requests
- * - Allows multiple trusted origins (ALLOWED_ORIGINS)
- */
+/* ==========================
+   WRITE ORIGIN ENFORCEMENT
+========================== */
+
 export function assertWriteOrigin(req: Request) {
   const method = (req.method || "GET").toUpperCase();
   if (method === "GET" || method === "HEAD" || method === "OPTIONS") return;
 
-  const origin = String(req.headers.get("origin") || "").trim();
-
-  // If no Origin header exists (some server-to-server calls), allow.
+  const inferred = inferRequestOrigin(req);
+  const origin = normalizeOriginValue(inferred) || inferred;
   if (!origin) return;
 
   const allowed = getAllowedOrigins();
-  if (!allowed.includes(origin)) {
-    const err = new Error("BAD_ORIGIN");
-    (err as any).code = "bad_origin";
-    throw err;
+  if (allowed.includes(origin)) return;
+
+  if (process.env.NODE_ENV !== "production") {
+    if (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")) return;
   }
+
+  throw new ApiAuthError("BAD_ORIGIN", 403);
 }
 
-/**
- * SYSTEM ADMIN TOKEN (internal only)
- * - keep for ops / emergency tooling / secure admin endpoints
- */
+/* ==========================
+   SYSTEM ADMIN TOKEN
+========================== */
+
 export function requireSystemToken(req: Request) {
   if (process.env.NODE_ENV !== "production" && env("CAVBOT_DEV_NO_ADMIN") === "1") return;
 
   const expected = env("CAVBOT_ADMIN_TOKEN");
-  if (!expected) throw new Error("Missing env: CAVBOT_ADMIN_TOKEN");
+  if (!expected) throw new ApiAuthError("MISSING_ADMIN_TOKEN_ENV", 500);
 
   const token = getBearerToken(req) || String(req.headers.get("x-admin-token") || "").trim();
-  if (!token) throw new Error("UNAUTHORIZED");
-  if (!constantTimeEqual(token, expected)) throw new Error("UNAUTHORIZED");
+  if (!token) throw new ApiAuthError("UNAUTHORIZED", 401);
+  if (!constantTimeEqual(token, expected)) throw new ApiAuthError("UNAUTHORIZED", 401);
 }
 
-/**
- * PASSWORD HASHING (Edge-safe)
- * PBKDF2-SHA256, per-user random salt
- * Stores: algo + iters + salt + hash in DB (UserAuth)
- */
+/* ==========================
+   PASSWORD HASHING
+========================== */
+
 export async function hashPassword(password: string) {
   const algo = "pbkdf2_sha256";
-  const iters = 210000;
+  const iters = Number(env("CAVBOT_PBKDF2_ITERS") || 210_000);
 
-  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const c = getCrypto();
+  const salt = c.getRandomValues(new Uint8Array(16));
+
   const saltB64 = base64urlEncode(salt);
 
-  const hashB64 = await pbkdf2Sha256(password, salt, iters, 32);
+  const bits = await pbkdf2Sha256Bits(password, salt, iters, 32);
+  const hashB64 = base64urlEncode(new Uint8Array(bits));
+
   return { algo, iters, salt: saltB64, hash: hashB64 };
 }
 
 export async function verifyPassword(password: string, saltB64: string, iters: number, expectedHashB64: string) {
-  const salt = base64urlDecodeToBytes(saltB64);
-  const hashB64 = await pbkdf2Sha256(password, salt, iters, 32);
-  return constantTimeEqual(hashB64, expectedHashB64);
+  const salt = decodeAnyBase64ToBytes(saltB64);
+
+  const bits = await pbkdf2Sha256Bits(password, salt, iters, 32);
+  const derivedBytes = new Uint8Array(bits);
+
+  const derived = encodeLikeExpected(derivedBytes, expectedHashB64);
+  return constantTimeEqual(String(expectedHashB64 || ""), derived);
 }
 
-async function pbkdf2Sha256(password: string, salt: Uint8Array, iters: number, byteLen: number) {
-  const key = await crypto.subtle.importKey(
+async function pbkdf2Sha256Bits(password: string, salt: Uint8Array, iters: number, byteLen: number) {
+  const c = getCrypto();
+
+  const key = await c.subtle.importKey(
     "raw",
     new TextEncoder().encode(password),
     { name: "PBKDF2" },
@@ -204,60 +344,68 @@ async function pbkdf2Sha256(password: string, salt: Uint8Array, iters: number, b
     ["deriveBits"]
   );
 
-const algo = {
-  name: "PBKDF2",
-  hash: { name: "SHA-256" },
-  salt: salt.byteOffset === 0 && salt.byteLength === salt.buffer.byteLength
-    ? salt.buffer
-    : salt.buffer.slice(salt.byteOffset, salt.byteOffset + salt.byteLength),
-  iterations: iters,
-} as Pbkdf2Params;
+  const algo = {
+    name: "PBKDF2",
+    hash: { name: "SHA-256" },
+    salt:
+      salt.byteOffset === 0 && salt.byteLength === salt.buffer.byteLength
+        ? salt.buffer
+        : salt.buffer.slice(salt.byteOffset, salt.byteOffset + salt.byteLength),
+    iterations: iters,
+  } as Pbkdf2Params;
 
-const bits = await crypto.subtle.deriveBits(algo, key, byteLen * 8);
-
-  return base64urlEncode(new Uint8Array(bits));
+  return await c.subtle.deriveBits(algo, key, byteLen * 8);
 }
 
-/**
- * SESSION TOKENS
- * Format: base64url(payloadJson).base64url(signature)
- */
+/* ==========================
+   SESSION TOKENS
+   Format: base64url(payloadJson).base64url(signature)
+========================== */
+
 async function signSession(payload: CavbotSession) {
   const secret = env("CAVBOT_SESSION_SECRET");
-  if (!secret) throw new Error("Missing env: CAVBOT_SESSION_SECRET");
+  if (!secret) throw new ApiAuthError("MISSING_SESSION_SECRET_ENV", 500);
 
   const payloadJson = JSON.stringify(payload);
   const payloadB64 = base64urlEncode(new TextEncoder().encode(payloadJson));
   const sig = await hmacSha256(secret, payloadB64);
+
   return `${payloadB64}.${sig}`;
 }
 
 async function verifySession(token: string): Promise<CavbotSession> {
   const secret = env("CAVBOT_SESSION_SECRET");
-  if (!secret) throw new Error("Missing env: CAVBOT_SESSION_SECRET");
+  if (!secret) throw new ApiAuthError("MISSING_SESSION_SECRET_ENV", 500);
 
   const parts = token.split(".");
-  if (parts.length !== 2) throw new Error("UNAUTHORIZED");
+  if (parts.length !== 2) throw new ApiAuthError("BAD_TOKEN_FORMAT", 401);
 
   const payloadB64 = parts[0];
   const sig = parts[1];
 
   const expected = await hmacSha256(secret, payloadB64);
-  if (!constantTimeEqual(sig, expected)) throw new Error("UNAUTHORIZED");
+  if (!constantTimeEqual(sig, expected)) throw new ApiAuthError("BAD_SIGNATURE", 401);
 
-  const payloadJson = new TextDecoder().decode(base64urlDecodeToBytes(payloadB64));
-  const payload = JSON.parse(payloadJson) as CavbotSession;
+  let payload: CavbotSession;
+  try {
+    const payloadJson = new TextDecoder().decode(decodeAnyBase64ToBytes(payloadB64));
+    payload = JSON.parse(payloadJson) as CavbotSession;
+  } catch {
+    throw new ApiAuthError("BAD_PAYLOAD", 401);
+  }
 
-  if (!payload?.exp || nowSec() > payload.exp) throw new Error("UNAUTHORIZED");
-  if (!payload?.sub || !payload?.systemRole) throw new Error("UNAUTHORIZED");
-  if (payload.v !== 1) throw new Error("UNAUTHORIZED");
+  if (!payload?.exp || !payload?.iat) throw new ApiAuthError("BAD_PAYLOAD", 401);
+  if (payload.v !== 1) throw new ApiAuthError("BAD_VERSION", 401);
+  if (!payload.sub || !payload.systemRole) throw new ApiAuthError("BAD_PAYLOAD", 401);
+  if (nowSec() > payload.exp) throw new ApiAuthError("EXPIRED", 401);
 
   return payload;
 }
 
-/**
- * Create a system session token (rare: internal tools, sealed admin surfaces)
- */
+/* ==========================
+   CREATE SESSIONS
+========================== */
+
 export async function createSystemSession() {
   const iat = nowSec();
   const session: CavbotSession = {
@@ -270,82 +418,197 @@ export async function createSystemSession() {
   return await signSession(session);
 }
 
-/**
- * Create a user session token (multi-tenant)
- * - userId is sub
- * - accountId/memberRole define the ACTIVE dashboard tenant context
- */
 export async function createUserSession(args: {
   userId: string;
   accountId: string;
   memberRole: MemberRole;
+  sessionVersion?: number; // ✅ now supported
 }) {
   const iat = nowSec();
+
+  const sv = Number.isFinite(Number(args.sessionVersion)) ? Number(args.sessionVersion) : 1;
+
   const session: CavbotSession = {
     v: 1,
     sub: args.userId,
     systemRole: "user",
     accountId: args.accountId,
     memberRole: args.memberRole,
+    sv,
     iat,
     exp: iat + SESSION_TTL_SECONDS,
   };
+
   return await signSession(session);
 }
 
-/**
- * Cookie headers
- */
-export function sessionCookieHeader(token: string) {
-  const secure = process.env.NODE_ENV === "production" ? " Secure;" : "";
-  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax;${secure} Max-Age=${SESSION_TTL_SECONDS};`;
+/* ==========================
+   COOKIE OPTIONS
+========================== */
+
+function isProd() {
+  return process.env.NODE_ENV === "production";
 }
 
-export function clearSessionCookieHeader() {
-  const secure = process.env.NODE_ENV === "production" ? " Secure;" : "";
-  return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax;${secure} Max-Age=0;`;
+function isLocalhostHost(host: string) {
+  const h = (host || "").toLowerCase();
+  return h.includes("localhost") || h.startsWith("127.0.0.1") || h.startsWith("0.0.0.0");
 }
 
-/**
- * Get session (non-throwing)
- */
+export function sessionCookieOptions(req?: Request) {
+  const prod = isProd();
+  let secure = prod;
+
+  if (!prod) {
+    secure = false;
+
+    const allowDevSecure = env("CAVBOT_DEV_SECURE_COOKIE") === "1";
+    if (allowDevSecure && req) {
+      const host = String(req.headers.get("host") || "");
+      const fp = String(req.headers.get("x-forwarded-proto") || "").toLowerCase();
+      if (!isLocalhostHost(host) && fp === "https") secure = true;
+    }
+  }
+
+  return {
+    name: SESSION_COOKIE,
+    httpOnly: true as const,
+    sameSite: "lax" as const,
+    secure,
+    path: "/",
+    maxAge: SESSION_TTL_SECONDS,
+  };
+}
+
+/* ==========================
+   SESSION READERS
+========================== */
+
 export async function getSession(req: Request): Promise<CavbotSession | null> {
   try {
     const cookieHeader = req.headers.get("cookie") || "";
     const cookieToken = parseCookie(cookieHeader, SESSION_COOKIE);
     const bearer = getBearerToken(req);
-    const token = bearer || cookieToken;
-    if (!token) return null;
-    return await verifySession(token);
+    const cookieFirstCandidates = [cookieToken, bearer].map((token) => String(token || "").trim()).filter(Boolean);
+
+    if (!cookieFirstCandidates.length) return null;
+    for (const token of cookieFirstCandidates) {
+      try {
+        return await verifySession(token);
+      } catch {
+        // try next candidate token
+      }
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
-/**
- * Require session (throwing)
- */
 export async function requireSession(req: Request): Promise<CavbotSession> {
   assertWriteOrigin(req);
+
   const sess = await getSession(req);
-  if (!sess) throw new Error("UNAUTHORIZED");
+  if (!sess) throw new ApiAuthError("UNAUTHORIZED", 401);
+
+  // DB-backed session invalidation for user sessions
+  if (sess.systemRole === "user" && sess.sub && sess.sub !== "system") {
+    const userId = String(sess.sub);
+    if (!sess.accountId || !sess.memberRole) {
+      try {
+        const memberships = await prisma.membership.findMany({
+          where: { userId },
+          select: { accountId: true, role: true, createdAt: true },
+        });
+        const roleRank = (role: string) => {
+          const normalized = String(role || "").toUpperCase();
+          if (normalized === "OWNER") return 3;
+          if (normalized === "ADMIN") return 2;
+          return 1;
+        };
+        const active = [...memberships].sort((a, b) => {
+          const rankDiff = roleRank(String(b.role)) - roleRank(String(a.role));
+          if (rankDiff !== 0) return rankDiff;
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        })[0];
+
+        if (!active?.accountId) throw new ApiAuthError("UNAUTHORIZED", 401);
+
+        sess.accountId = String(active.accountId);
+        const role = String(active.role || "").toUpperCase();
+        sess.memberRole = role === "OWNER" || role === "ADMIN" ? role : "MEMBER";
+      } catch {
+        if (process.env.NODE_ENV !== "production") return sess;
+        throw new ApiAuthError("UNAUTHORIZED", 401);
+      }
+    }
+
+    // Requires UserAuth.sessionVersion. In dev/bootstrap, schema may lag; don't brick the app.
+    let auth: { sessionVersion: number | null } | null = null;
+    try {
+      auth = await prisma.userAuth.findUnique({
+        where: { userId },
+        select: { sessionVersion: true },
+      });
+    } catch {
+      if (process.env.NODE_ENV !== "production") {
+        return sess;
+      }
+      throw new ApiAuthError("UNAUTHORIZED", 401);
+    }
+
+    if (!auth) {
+      // OAuth-only users may not have a UserAuth row yet; allow signed session tokens
+      // for those identities so protected APIs do not hard-fail.
+      try {
+        const oauthIdentity = await prisma.oAuthIdentity.findFirst({
+          where: { userId },
+          select: { id: true },
+        });
+        if (oauthIdentity?.id) return sess;
+      } catch {
+        if (process.env.NODE_ENV !== "production") return sess;
+      }
+
+      if (process.env.NODE_ENV !== "production") return sess;
+      throw new ApiAuthError("UNAUTHORIZED", 401);
+    }
+
+    // Backward compatibility: legacy tokens minted before sv existed are treated as sv=1.
+    const tokenSvRaw = Number(sess.sv ?? 1);
+    const tokenSv =
+      Number.isFinite(tokenSvRaw) && Number.isInteger(tokenSvRaw) && tokenSvRaw > 0
+        ? tokenSvRaw
+        : 1;
+    const dbSv = Number(auth.sessionVersion ?? 0);
+
+    // If DB hasn't been initialized yet, treat as 1
+    const dbEffective = dbSv > 0 ? dbSv : 1;
+
+    if (!tokenSv || tokenSv !== dbEffective) {
+      if (process.env.NODE_ENV !== "production") return sess;
+      throw new ApiAuthError("SESSION_REVOKED", 401);
+    }
+  }
+
   return sess;
 }
 
-/**
- * Guards
- */
-export function requireUser(sess: CavbotSession) {
-  if (sess.systemRole !== "user") throw new Error("UNAUTHORIZED");
-  if (!sess.sub || sess.sub === "system") throw new Error("UNAUTHORIZED");
+/* ==========================
+   GUARDS
+========================== */
+
+export function requireUser(sess: CavbotSession): asserts sess is CavbotUserSession {
+  if (sess.systemRole !== "user") throw new ApiAuthError("UNAUTHORIZED", 401);
+  if (!sess.sub || sess.sub === "system") throw new ApiAuthError("UNAUTHORIZED", 401);
 }
 
-export function requireAccountContext(sess: CavbotSession) {
+export function requireAccountContext(sess: CavbotSession): asserts sess is CavbotAccountSession {
   requireUser(sess);
-  if (!sess.accountId || !sess.memberRole) throw new Error("UNAUTHORIZED");
+  if (!sess.accountId || !sess.memberRole) throw new ApiAuthError("UNAUTHORIZED", 401);
 }
 
-export function requireAccountRole(sess: CavbotSession, roles: MemberRole[]) {
+export function requireAccountRole(sess: CavbotSession, roles: MemberRole[]): asserts sess is CavbotAccountSession {
   requireAccountContext(sess);
-  if (!roles.includes(sess.memberRole!)) throw new Error("UNAUTHORIZED");
+  if (!roles.includes(sess.memberRole)) throw new ApiAuthError("UNAUTHORIZED", 403);
 }

@@ -1,0 +1,74 @@
+/* =========================================================
+  app/users/recovery/recovery.css
+  Recovery-only overrides (loaded via layout.tsx to prevent FOUC)
+  ========================================================= */
+
+/* Recovery header layout */
+.auth-shell[data-cavbot-page="recovery"] .auth-card-top{
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+}
+
+.auth-shell[data-cavbot-page="recovery"] .auth-title-row{
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.auth-shell[data-cavbot-page="recovery"] .auth-kicker{
+  margin-top: 2px;
+}
+
+/* CRITICAL: indicator must NEVER block clicks */
+.auth-shell[data-cavbot-page="recovery"] .auth-toggle-indicator{
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Copy block */
+.recovery-blurb{
+  margin: 8px auto 6px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-subtle);
+  max-width: 56ch;
+}
+
+/* Status pill */
+.recovery-status{
+  display:none;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(78,168,255,.26);
+  background: rgba(78,168,255,.10);
+  color: var(--ink);
+  font-size: 11px;
+  letter-spacing: .06em;
+  line-height: 1.6;
+}
+
+.recovery-status.is-on{
+  display:block;
+}
+
+/* Future scan mode (optional hook) */
+@keyframes cavbotRecoveryScanPulse{
+  0%, 100% { opacity: .30; transform: scale(1); }
+  45%      { opacity: 1;   transform: scale(1.06); }
+}
+
+.cavbot-recovery-scan .cavbot-eye-glow,
+.cavbot-recovery-scan .cavbot-dm-eye-glow{
+  background: radial-gradient(circle at center, rgba(78,168,255,.95), rgba(78,168,255,0) 70%) !important;
+  box-shadow: 0 0 18px rgba(78,168,255,.55) !important;
+  animation: cavbotRecoveryScanPulse .28s ease-in-out infinite;
+}
+
+.cavbot-recovery-scan .cavbot-eye-pupil,
+.cavbot-recovery-scan .cavbot-dm-eye-pupil{
+  background: rgba(78,168,255,.95) !important;
+  box-shadow: 0 0 14px rgba(78,168,255,.40) !important;
+}

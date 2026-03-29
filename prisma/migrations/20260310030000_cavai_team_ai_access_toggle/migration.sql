@@ -1,0 +1,2 @@
+ALTER TABLE "CavCloudCollabPolicy"
+ADD COLUMN IF NOT EXISTS "allowTeamAiAccess" BOOLEAN NOT NULL DEFAULT false;

@@ -1,99 +1,340 @@
+// app/api/auth/session/route.ts
+import "server-only";
+
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
-  clearSessionCookieHeader,
   createSystemSession,
   createUserSession,
+  getSession,
   requireSystemToken,
-  sessionCookieHeader,
+  isApiAuthError,
+  sessionCookieOptions,
 } from "@/lib/apiAuth";
+import type { CavbotSession } from "@/lib/apiAuth";
+import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
+
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+
+const NO_STORE_HEADERS: Record<string, string> = {
+  "Cache-Control": "no-store, max-age=0",
+  Pragma: "no-cache",
+  Expires: "0",
+  Vary: "Cookie",
+};
+
+
+function json<T>(payload: T, init?: number | ResponseInit) {
+  const resInit: ResponseInit = typeof init === "number" ? { status: init } : init ?? {};
+  return NextResponse.json(payload, {
+    ...resInit,
+    headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS },
+  });
+}
+
+
+function clearSessionCookie(req: Request, res: NextResponse) {
+  const { name, ...cookieOpts } = sessionCookieOptions(req);
+  res.cookies.set(name, "", { ...cookieOpts, maxAge: 0 });
+  return res;
+}
+
 
 type Role = "OWNER" | "ADMIN" | "MEMBER";
-
 function roleRank(role: Role) {
   if (role === "OWNER") return 3;
   if (role === "ADMIN") return 2;
   return 1;
 }
-export const runtime = "edge";
+
+function normalizeRole(value: string | null | undefined): Role {
+  const normalized = String(value || "").toUpperCase();
+  if (normalized === "OWNER") return "OWNER";
+  if (normalized === "ADMIN") return "ADMIN";
+  return "MEMBER";
+}
+
+
+function normalizeEmail(x: unknown) {
+  return String(x ?? "").trim().toLowerCase();
+}
+
+
+type SessionBody = {
+  email?: string;
+  accountId?: string;
+};
+
+function toStringValue(value: unknown): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  return typeof value === "string" ? value : String(value);
+}
+
+async function readBody(req: Request): Promise<SessionBody> {
+  const ct = req.headers.get("content-type") || "";
+  if (ct.includes("application/json")) {
+    const raw = (await readSanitizedJson(req, ({}))) as Record<string, unknown>;
+    return {
+      email: toStringValue(raw.email),
+      accountId: toStringValue(raw.accountId),
+    };
+  }
+  if (ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data")) {
+    const fd = await readSanitizedFormData(req, null);
+    if (!fd) return {};
+    return {
+      email: toStringValue(fd.get("email")),
+      accountId: toStringValue(fd.get("accountId")),
+    };
+  }
+  const fallback = (await readSanitizedJson(req, ({}))) as Record<string, unknown>;
+  return {
+    email: toStringValue(fallback.email),
+    accountId: toStringValue(fallback.accountId),
+  };
+}
+
+
+/* =========================
+   Client fingerprint (read-only)
+   ========================= */
+
+
+function pickIp(req: Request) {
+  // Prefer first forwarded IP
+  const xff = String(req.headers.get("x-forwarded-for") || "").trim();
+  if (xff) return xff.split(",")[0].trim();
+  const xr = String(req.headers.get("x-real-ip") || "").trim();
+  if (xr) return xr;
+  return "";
+}
+
+
+function detectBrowser(uaRaw: string) {
+  const ua = String(uaRaw || "").toLowerCase();
+
+
+  // Order matters
+  if (ua.includes("edg/") || ua.includes("edge/")) return "edge";
+  if (ua.includes("brave")) return "brave";
+  if (ua.includes("firefox/")) return "firefox";
+  if (ua.includes("chrome/") && !ua.includes("chromium") && !ua.includes("edg/")) return "chrome";
+  if (ua.includes("safari/") && !ua.includes("chrome/") && !ua.includes("chromium")) return "safari";
+
+
+  return "unknown";
+}
+
+
+function detectPlatform(uaRaw: string) {
+  const ua = String(uaRaw || "");
+  const l = ua.toLowerCase();
+  if (l.includes("mac os x") || l.includes("macintosh")) return "macos";
+  if (l.includes("windows")) return "windows";
+  if (l.includes("android")) return "android";
+  if (l.includes("iphone") || l.includes("ipad") || l.includes("ios")) return "ios";
+  if (l.includes("linux")) return "linux";
+  return "unknown";
+}
+
+
+function makeClientMeta(req: Request) {
+  const ua = String(req.headers.get("user-agent") || "");
+  const browser = detectBrowser(ua);
+  const platform = detectPlatform(ua);
+  const ip = pickIp(req);
+
+
+  return {
+    userAgent: ua || null,
+    browser, // "chrome" | "safari" | ...
+    platform, // "macos" | "windows" | ...
+    ip: ip || null,
+  };
+}
+
+
+/**
+ * IMPORTANT:
+ * - Client bootstraps with GET /api/auth/session
+ * - This GET must return 200 always with { authed: boolean } to prevent loops
+ * - If cookie is invalid/stale, we clear it (so middleware + API agree)
+ *
+ * NOTE:
+ * - This endpoint does NOT create “session history” records.
+ *   Session history requires a real Session table + capture on login/refresh.
+ */
+export async function GET(req: Request) {
+  try {
+    const sess: CavbotSession | null = await getSession(req);
+    const client = makeClientMeta(req);
+
+
+    // Not logged in -> always 200
+    if (!sess) return json({ ok: true, authed: false, client }, 200);
+
+
+    // System session (ops)
+    if (sess.systemRole === "system") {
+      return json({ ok: true, authed: true, mode: "system", client }, 200);
+    }
+
+
+    const userId = String(sess.sub || "").trim();
+    const accountId = String(sess.accountId || "").trim();
+
+
+    if (!userId || !accountId) {
+      const res = json({ ok: true, authed: false, reason: "missing_session_fields", client }, 200);
+      return clearSessionCookie(req, res);
+    }
+
+
+    // Validate membership still exists (prevents stale cookies causing loops)
+    const membership = await prisma.membership.findUnique({
+      where: { accountId_userId: { accountId, userId } },
+      include: {
+        user: { select: { id: true, email: true, displayName: true } },
+        account: { select: { id: true, slug: true, tier: true, name: true } },
+      },
+    });
+
+
+    if (!membership) {
+      const res = json({ ok: true, authed: false, reason: "no_membership", client }, 200);
+      return clearSessionCookie(req, res);
+    }
+
+
+    // IMPORTANT:
+    // membership.role is the source-of-truth (cookie role can be stale)
+    return json(
+      {
+        ok: true,
+        authed: true,
+        mode: "user",
+        session: {
+          userId: membership.user.id,
+          email: membership.user.email,
+          displayName: membership.user.displayName,
+          accountId: membership.account.id,
+          memberRole: membership.role,
+        },
+        account: membership.account,
+        client,
+      },
+      200
+    );
+  } catch (error) {
+    // Always return 200 for session bootstrap stability
+    const client = makeClientMeta(req);
+
+
+    if (isApiAuthError(error)) {
+      const res = json({ ok: true, authed: false, error: error.code, client }, 200);
+      return clearSessionCookie(req, res);
+    }
+    const res = json({ ok: true, authed: false, client }, 200);
+    return clearSessionCookie(req, res);
+  }
+}
+
+
 export async function POST(req: Request) {
   try {
     // INTERNAL ONLY
     requireSystemToken(req);
 
-    const body = await req.json().catch(() => ({}));
-    const emailRaw = String(body.email || "").trim().toLowerCase();
-    const requestedAccountId = String(body.accountId || "").trim();
 
-    // If no email provided: mint a SYSTEM session (for internal ops surfaces)
-    if (!emailRaw) {
+    const body = await readBody(req);
+    const email = normalizeEmail(body?.email);
+    const requestedAccountId = String(body?.accountId || "").trim();
+
+
+    // No email -> mint SYSTEM session (ops)
+    if (!email) {
       const token = await createSystemSession();
-      const res = NextResponse.json({ ok: true, mode: "system" }, { headers: { "Cache-Control": "no-store" } });
-      res.headers.set("Set-Cookie", sessionCookieHeader(token));
+      const res = json({ ok: true, mode: "system" }, 200);
+
+
+      const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
+      const cookieOpts = {
+        ...cookieOptsFromLib,
+        secure: process.env.NODE_ENV === "production" ? cookieOptsFromLib.secure : false,
+      };
+
+
+      res.cookies.set(name, token, cookieOpts);
       return res;
     }
 
+
     const user = await prisma.user.findUnique({
-      where: { email: emailRaw },
+      where: { email },
       include: { memberships: true },
     });
 
-    if (!user || !user.memberships || user.memberships.length === 0) {
-      return NextResponse.json(
-        { ok: false, error: "user_not_found_or_no_membership" },
-        { status: 404, headers: { "Cache-Control": "no-store" } }
-      );
+
+    if (!user?.memberships?.length) {
+      return json({ ok: false, error: "user_not_found_or_no_membership" }, 404);
     }
 
-    // If accountId is provided, ensure membership exists in that tenant
-    let active = null as any;
+
+    let active = null as null | (typeof user.memberships)[number];
+
 
     if (requestedAccountId) {
-      active = user.memberships.find((m) => m.accountId === requestedAccountId) || null;
-      if (!active) {
-        return NextResponse.json(
-          { ok: false, error: "not_a_member_of_account" },
-          { status: 403, headers: { "Cache-Control": "no-store" } }
-        );
-      }
+      active = user.memberships.find((m) => String(m.accountId) === requestedAccountId) || null;
+      if (!active) return json({ ok: false, error: "not_a_member_of_account" }, 403);
     } else {
-      // Default: OWNER > ADMIN > MEMBER, earliest created membership
+      // Choose highest role deterministically, then oldest membership
       active = [...user.memberships].sort((a, b) => {
-        const rr = roleRank(a.role as Role) - roleRank(b.role as Role);
-        if (rr !== 0) return -rr;
-        const at = new Date(a.createdAt as any).getTime();
-        const bt = new Date(b.createdAt as any).getTime();
-        return at - bt;
+        const rr = roleRank(normalizeRole(b.role)) - roleRank(normalizeRole(a.role));
+        if (rr !== 0) return rr;
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       })[0];
     }
 
+
+    const memberRole = normalizeRole(active.role);
     const token = await createUserSession({
       userId: user.id,
       accountId: active.accountId,
-      memberRole: active.role as any,
+      memberRole,
     });
 
-    const res = NextResponse.json(
-      { ok: true, mode: "user", accountId: active.accountId, memberRole: active.role },
-      { headers: { "Cache-Control": "no-store" } }
-    );
+    const res = json({ ok: true, mode: "user", accountId: active.accountId, memberRole }, 200);
 
-    res.headers.set("Set-Cookie", sessionCookieHeader(token));
+
+    const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
+    const cookieOpts = {
+      ...cookieOptsFromLib,
+      secure: process.env.NODE_ENV === "production" ? cookieOptsFromLib.secure : false,
+    };
+
+
+    res.cookies.set(name, token, cookieOpts);
     return res;
-  } catch (e: any) {
-    const msg = String(e?.message || e);
-    if (msg === "UNAUTHORIZED") {
-      return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
-    }
-    return NextResponse.json(
-      { ok: false, error: "session_issue_failed", message: msg },
-      { status: 500, headers: { "Cache-Control": "no-store" } }
-    );
+  } catch (error) {
+    if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
+    return json({ ok: false, error: "session_issue_failed" }, 500);
   }
 }
 
-export async function DELETE() {
-  const res = NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
-  res.headers.set("Set-Cookie", clearSessionCookieHeader());
-  return res;
+
+export async function DELETE(req: Request) {
+  const res = json({ ok: true }, 200);
+  return clearSessionCookie(req, res);
+}
+
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: { ...NO_STORE_HEADERS, Allow: "GET,POST,DELETE,OPTIONS" },
+  });
 }

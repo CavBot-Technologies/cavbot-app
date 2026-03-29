@@ -1,0 +1,1182 @@
+/* app/settings/sections/billing.css */
+
+:root{
+  --sx-planContourGradient: conic-gradient(
+    rgba(185,200,90,0.18),
+    rgba(120,140,255,0.16),
+    rgba(139,92,255,0.14),
+    rgba(78,168,255,0.13),
+    rgba(185,200,90,0.18)
+  );
+}
+
+.sx-billError{
+  border: 1px solid rgba(255,120,120,0.26);
+  background: rgba(255,120,120,0.10);
+  color: rgba(234,240,255,0.92);
+  border-radius: var(--sx-r10);
+  padding: 12px 14px;
+  font-size: 13px;
+  margin-bottom: 12px;
+  line-height: 1.55;
+}
+
+/* =========================
+  HEADER SECURITY ICON (icon-only)
+========================= */
+.sx-secIcon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: rgba(234,240,255,0.90);
+  text-decoration:none;
+}
+.sx-secIcon:hover{
+  border-color: rgba(78,168,255,0.22);
+  background: rgba(78,168,255,0.08);
+}
+.sx-secIconIco{
+  width: 22px;
+  height: 22px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+
+/* =========================
+  TOP PLANS + MOBILE SLIDER
+========================= */
+.sx-billPlans{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
+}
+.sx-billPlanCard{
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--sx-r20);
+  background: rgba(5,7,18,0.92);
+  padding: 24px;
+  min-width: 0;
+  display:flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 320px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: none;
+  transition: border-color .25s ease;
+  isolation: isolate;
+}
+.sx-billPlanCard.is-current{
+  border-color: transparent;
+}
+.sx-billPlanCard.is-current::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius: inherit;
+  padding: 0.5px;
+  background: var(--sx-planContourGradient);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events:none;
+  z-index:0;
+  opacity: 0.62;
+}
+.sx-billPlanCard.is-current > *{
+  position:relative;
+  z-index:1;
+}
+.sx-billPlanTop{ display:flex; align-items:center; gap:10px; }
+.sx-billPlanBadge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height: 18px;
+  padding: 2px 7px;
+  border-radius: 2px !important;
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.04);
+  box-shadow: none;
+  color: rgba(234,240,255,0.9);
+  font-size: 9px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  font-weight: 700;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.sx-billPlanCard.is-current .sx-billPlanBadge{
+  border-color: color-mix(in srgb, var(--cb-cavsafe-accent, #b9c85a) 54%, rgba(255,255,255,0.2) 46%);
+  background: color-mix(in srgb, var(--cb-cavsafe-accent-soft, rgba(185,200,90,0.22)) 52%, rgba(255,255,255,0.01) 48%);
+  color: rgba(247,249,255,0.96);
+}
+.sx-billPlanTitle{
+  margin-top: 10px;
+  font-weight: 750;
+  color: rgba(247,249,255,0.94);
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+.sx-billPlanSub{
+  margin-top: 8px;
+  color: rgba(234,240,255,0.65);
+  font-size: 12px;
+  line-height: 1.55;
+  max-width: 65ch;
+}
+.sx-billPlanMeta{ margin-top: 14px; display:flex; flex-direction: column; gap: 10px; }
+.sx-billMetaRow{
+  display:flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: rgba(247,249,255,0.68);
+  font-size: 12px;
+}
+.sx-billMetaRow b{
+  color: rgba(234,240,255,0.92);
+  font-weight: 800;
+}
+.sx-billPlanActions{ margin-top: 14px; display:flex; justify-content:flex-end; }
+.sx-btnMuted{ opacity: .48; cursor: default !important; pointer-events:none !important; }
+
+/* Refined plan CTAs (Upgrade / Downgrade / Current plan) */
+.sx-billPlanActions .sx-btn{
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--sx-r10);
+  border-color: rgba(255,255,255,0.12);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.10)),
+    rgba(255,255,255,0.03);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+}
+.sx-billPlanActions .sx-btn:hover{
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.12)),
+    rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.16);
+  transform: translateY(-1px);
+}
+.sx-billPlanActions .sx-btnGhost{
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.035), rgba(0,0,0,0.10)),
+    rgba(255,255,255,0.02);
+  border-color: rgba(234,240,255,0.12);
+}
+.sx-billPlanActions .sx-btnGhost:hover{
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.045), rgba(0,0,0,0.12)),
+    rgba(255,255,255,0.03);
+  transform: translateY(-1px);
+}
+.sx-billPlanActions .sx-btnPrimary.sx-btnToneLinked{
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--cb-cavsafe-accent, #b9c85a) 26%, rgba(255,255,255,0.10) 74%), rgba(0,0,0,0.10)),
+    color-mix(in srgb, var(--cb-cavsafe-accent-soft, rgba(185,200,90,0.22)) 62%, rgba(0,0,0,0.10) 38%);
+  border-color: color-mix(in srgb, var(--cb-cavsafe-accent, #b9c85a) 58%, rgba(255,255,255,0.18) 42%);
+  color: rgba(247,249,255,0.96);
+}
+.sx-billPlanActions .sx-btnPrimary.sx-btnToneLinked:hover{
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--cb-cavsafe-accent, #b9c85a) 34%, rgba(255,255,255,0.12) 66%), rgba(0,0,0,0.12)),
+    color-mix(in srgb, var(--cb-cavsafe-accent-soft, rgba(185,200,90,0.22)) 74%, rgba(255,255,255,0.06) 26%);
+  border-color: color-mix(in srgb, var(--cb-cavsafe-accent, #b9c85a) 68%, rgba(255,255,255,0.24) 32%);
+}
+.sx-billPlanActions .sx-btnMuted{
+  opacity: .46;
+}
+
+.sx-planDots{
+  display:none;
+  margin-top: 10px;
+  justify-content: center;
+  gap: 8px;
+}
+.sx-dot{
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.10);
+}
+.sx-dot.is-on{
+  background: rgba(78,168,255,0.22);
+  border-color: rgba(78,168,255,0.34);
+}
+
+/* =========================
+  QWEN CODER USAGE CARD
+========================= */
+.sx-qwenUsageCard{
+  margin-top: 14px;
+  border-radius: var(--sx-r20);
+  border: 1px solid rgba(255,255,255,0.12);
+  background:
+    radial-gradient(120% 160% at 100% 0%, rgba(90,132,255,0.16), transparent 50%),
+    radial-gradient(120% 160% at 0% 100%, rgba(185,200,90,0.12), transparent 52%),
+    rgba(5,7,18,0.9);
+  padding: 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.sx-qwenUsageHead{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
+}
+
+.sx-qwenUsageTitle{
+  font-size: 13px;
+  font-weight: 760;
+  color: rgba(247,249,255,0.96);
+  letter-spacing: 0.01em;
+}
+
+.sx-qwenUsagePlan{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height: 22px;
+  padding: 0 10px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.04);
+  color: rgba(234,240,255,0.9);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.sx-qwenUsageMetric{
+  font-size: 18px;
+  font-weight: 800;
+  color: rgba(247,249,255,0.98);
+}
+
+.sx-qwenUsageSub{
+  font-size: 12px;
+  color: rgba(234,240,255,0.74);
+  line-height: 1.55;
+}
+
+.sx-qwenUsageBar{
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.1);
+  overflow: hidden;
+}
+
+.sx-qwenUsageBar > span{
+  display:block;
+  height:100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(112,212,128,0.95), rgba(255,190,92,0.95), rgba(255,118,118,0.95));
+}
+
+.sx-qwenUsageState{
+  font-size: 11px;
+  color: rgba(214,224,249,0.86);
+}
+
+.sx-qwenUsageUpgrade{
+  margin-top: 4px;
+  min-height: 34px;
+  border-radius: var(--sx-r10);
+  border: 1px solid color-mix(in srgb, var(--cb-cavsafe-accent, #b9c85a) 58%, rgba(255,255,255,0.2) 42%);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--cb-cavsafe-accent, #b9c85a) 22%, rgba(255,255,255,0.08) 78%), rgba(0,0,0,0.10)),
+    color-mix(in srgb, var(--cb-cavsafe-accent-soft, rgba(185,200,90,0.22)) 62%, rgba(0,0,0,0.10) 38%);
+  color: rgba(247,249,255,0.97);
+  font-size: 12px;
+  font-weight: 760;
+  letter-spacing: 0.01em;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  text-decoration:none;
+}
+
+.sx-qwenUsageUpgrade:hover{
+  border-color: color-mix(in srgb, var(--cb-cavsafe-accent, #b9c85a) 68%, rgba(255,255,255,0.24) 32%);
+  filter: brightness(1.04);
+}
+
+.sx-qwenUsageRecent{
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(255,255,255,0.12);
+  display:grid;
+  gap: 6px;
+}
+
+.sx-qwenUsageRecentTitle{
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(234,240,255,0.66);
+}
+
+.sx-qwenUsageRecentRow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
+  font-size: 11px;
+  color: rgba(234,240,255,0.78);
+}
+
+/* =========================
+  PAYMENT GRID
+========================= */
+.sx-billPayGrid{
+  margin-top: 16px;
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  align-items: stretch;
+}
+.sx-walletCardMatch,
+.sx-billDetailsMatch{
+  min-height: 240px;
+}
+
+.sx-billDetails{
+  padding: 20px 22px;
+  border-radius: var(--sx-r20);
+  background: rgba(4,6,14,0.92);
+  border: 1px solid rgba(255,255,255,0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sx-billDetailsCenter{
+  display:flex;
+  justify-content:center;
+  margin: 32px 0;
+}
+.sx-billDetailsCenter .sx-billDetails{
+  width: min(820px, 100%);
+}
+.sx-billDetailsHeader{
+  display:flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.sx-billDetailsHeader .sx-cardSub{
+  margin-top: 6px;
+  color: rgba(234,240,255,0.72);
+}
+.sx-billStatusPill{
+  padding: 6px 14px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(247,249,255,0.3);
+  color: rgba(247,249,255,0.92);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(185,200,90,0.15);
+  align-self: flex-start;
+}
+.sx-billStatusPill[data-tone="PAST_DUE"]{
+  background: rgba(255,120,120,0.15);
+}
+.sx-billStatusPill[data-tone="CANCELED"]{
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,120,120,0.95);
+  border-color: rgba(255,120,120,0.4);
+}
+.sx-billDetailsGrid{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.sx-billDetailCard{
+  padding: 14px 16px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(5,7,18,0.85);
+  display:flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sx-billCardWide{
+  grid-column: span 2;
+}
+.sx-billDetailLabel{
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(234,240,255,0.65);
+}
+.sx-billDetailValue{
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: rgba(247,249,255,0.95);
+}
+.sx-billDetailMeta{
+  font-size: 10px;
+  color: rgba(234,240,255,0.64);
+  line-height: 1.3;
+}
+.sx-billDetailTag{
+  margin-top: 4px;
+  font-size: 10px;
+  color: rgba(185,200,90,0.85);
+  font-weight: 700;
+}
+
+@media (max-width: 720px){
+  .sx-billDetails{
+    padding: 16px;
+  }
+  .sx-billCardWide{
+    grid-column: span 1;
+  }
+  .sx-billDetailValue{
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 960px){
+  .sx-billDetailsCenter{
+    margin: 24px 0;
+  }
+  .sx-billInfoRow{
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================
+  CAVCARD
+========================= */
+.sx-cavcardShell{
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+.sx-cavcard{
+  position: relative;
+  width: 100%;
+  height: 240px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.12);
+  background:
+    radial-gradient(900px 240px at 30% -20%, rgba(78,168,255,0.16), transparent 60%),
+    radial-gradient(900px 240px at 80% 120%, rgba(139,92,255,0.12), transparent 55%),
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.22));
+  overflow:hidden;
+  perspective: 1100px;
+}
+
+@media (min-width: 1101px){
+  .sx-cavcard{
+    width: calc(100% + 18px);
+  }
+}
+.sx-cavcardFace{
+  position:absolute;
+  inset: 0;
+  padding: 18px;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+  transition: transform 520ms cubic-bezier(.2,.8,.2,1);
+}
+.sx-cavcardFront{ transform: rotateY(0deg); }
+.sx-cavcardBack{ transform: rotateY(180deg); }
+.sx-cavcard.is-flipped .sx-cavcardFront{ transform: rotateY(-180deg); }
+.sx-cavcard.is-flipped .sx-cavcardBack{ transform: rotateY(0deg); }
+
+/* front layout */
+.sx-cardTop{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 12px;
+}
+.sx-chipSlot{
+  width: 52px;
+  height: 34px;
+  border-radius: var(--sx-r10);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex: 0 0 auto;
+}
+.sx-chipImg{
+  width: 46px;
+  height: 34px;
+  object-fit: contain;
+  opacity: .60;
+}
+.sx-cardTopRight{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  min-width: 140px;
+}
+.sx-cardWordmark{
+  height: 32px; /* bigger */
+  width: auto;
+  object-fit: contain;
+  opacity: .94;
+}
+.sx-cardSep{
+  height: 1px;
+  margin: 10px -18px 10px;
+  background: linear-gradient(90deg,
+    rgba(185,200,90,0.14),
+    rgba(139,92,255,0.35),
+    rgba(78,168,255,0.22),
+    rgba(185,200,90,0.14)
+  );
+  opacity: .95;
+}
+.sx-cardNumberLine{
+  font-size: 16px;
+  letter-spacing: .18em;
+  font-weight: 800;
+  color: rgba(234,240,255,0.92);
+}
+.sx-cardNumMuted{ color: rgba(234,240,255,0.72); }
+.sx-cardNumLast4{
+  color: var(--cb-cavsafe-accent, var(--lime));
+  
+}
+
+/* "Clear" tone should still render readable billing card last-4 text. */
+.cb-shell:has(.cb-account-chip[data-tone="transparent"]) .sx-cardNumLast4{
+  color: rgba(247,251,255,0.92);
+}
+.sx-cardMetaStack{
+  display:flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sx-cardName{
+  font-weight: 800;
+  color: rgba(234,240,255,0.92);
+  font-size: 12px;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 85%;
+}
+.sx-cardExp{
+  font-weight: 800;
+  color: rgba(234,240,255,0.82);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.sx-cardBrandCorner{
+  position:absolute;
+  right: 14px;
+  bottom: 14px;
+  opacity: .95;
+}
+.sx-cardBrand{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width: 64px;
+  height: 24px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.16);
+}
+
+/* back */
+.sx-cardBackStrip{
+  height: 48px;
+  margin: 4px -18px 0;
+  border-radius: 0;
+  background: linear-gradient(180deg, rgba(8,10,14,0.98), rgba(4,6,10,0.98));
+  border-top: 1px solid rgba(255,255,255,0.10);
+  border-bottom: 1px solid rgba(0,0,0,0.52);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    inset 0 -1px 0 rgba(0,0,0,0.55);
+}
+.sx-cardBackSigRow{
+  margin-top: 14px;
+  display:flex;
+  align-items:center;
+  gap: 12px;
+}
+.sx-cardBackSig{
+  flex: 1 1 auto;
+  height: 44px;
+  border-radius: var(--sx-r10);
+  background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.12));
+  border: 1px solid rgba(255,255,255,0.10);
+}
+.sx-cardBackCvv{
+  width: 74px;
+  height: 44px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.06);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight: 800;
+  letter-spacing: .20em;
+  color: rgba(234,240,255,0.92);
+}
+.sx-cardBackMeta{
+  position:absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  display:flex;
+  align-items:flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sx-cardBackNote{
+  font-size: 12px;
+  color: rgba(234,240,255,0.70);
+  line-height: 1.45;
+}
+.sx-cardBackMark{
+  width: 40px;
+  height: 40px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.18);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.sx-cardMark{
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  opacity: .92;
+}
+
+/* flip dock (bottom-left) */
+.sx-cardFlipDock{
+  margin-top: 10px;
+  display:flex;
+  justify-content:flex-start;
+}
+.sx-cardFlipBtn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.20);
+  color: rgba(234,240,255,0.88);
+  cursor:pointer;
+}
+.sx-cardFlipBtn:hover{
+  border-color: rgba(78,168,255,0.22);
+  background: rgba(78,168,255,0.08);
+}
+
+/* billing details */
+.sx-billDetails{
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: var(--sx-r10);
+  background: rgba(0,0,0,0.18);
+  padding: 16px;
+}
+.sx-billKeyVal{
+  margin-top: 12px;
+  display:flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sx-billKVRow{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: rgba(234,240,255,0.70);
+}
+.sx-billKVRow b{
+  color: rgba(234,240,255,0.92);
+  font-weight: 800;
+}
+
+/* card details section */
+.sx-cardDetailsSpan{ grid-column: 1 / -1; }
+.sx-cardDetails{
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: var(--sx-r10);
+  background: rgba(0,0,0,0.18);
+  padding: 16px;
+}
+.sx-cardDetailsHead{
+  display:flex;
+  align-items:flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.sx-cardDetails > .sx-divider.sx-billDivider{
+  width: calc(100% + 32px);
+  height: 1px;
+  margin: 12px -16px 14px;
+  background: rgba(255,255,255,0.10);
+  border-radius: 0;
+}
+.sx-cardFormWide{
+  margin-top: 14px;
+  display:grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+.sx-cardFormCol{
+  display:flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.sx-cardMiniRow{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+.sx-field{
+  display:flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.sx-cardFormCol .sx-field input,
+.sx-cardFormCol .sx-field select{
+  width: 100%;
+  box-sizing: border-box;
+}
+.sx-label{
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: rgba(234,240,255,0.65);
+  font-weight: 700;
+}
+.sx-input{
+  height: 44px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.18);
+  color: rgba(234,240,255,0.88);
+  padding: 0 12px;
+  font-weight: 600;
+  font-size: 13px;
+  outline: none;
+}
+.sx-input:focus{
+  border-color: rgba(78,168,255,0.30);
+  
+}
+.sx-stripeBox{
+  height: 44px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.18);
+  padding: 11px 12px;
+  color: rgba(234,240,255,0.88);
+  font-size: 13px;
+}
+.sx-stripeBox:focus-within{
+  border-color: rgba(78,168,255,0.30);
+ 
+}
+.sx-select{
+  height: 44px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.18);
+  color: rgba(234,240,255,0.88);
+  padding: 0 12px;
+  font-weight: 600;
+  font-size: 13px;
+  outline: none;
+}
+.sx-select:focus{
+  border-color: rgba(78,168,255,0.30);
+  
+}
+
+/* Save button row (after Country) */
+.sx-cardSaveRow{
+  margin-top: 16px;
+  display:flex;
+  justify-content:flex-end;
+  gap: 12px;
+}
+.sx-cardSaveRow--mobile{
+  display:none;
+}
+.sx-cardSaveTop{
+  display:inline-flex;
+}
+
+/* Refine Save card CTAs (Billing only) */
+.sx-cardSaveTop,
+.sx-cardSaveRow .sx-btn{
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--sx-r10);
+  border-color: rgba(255,255,255,0.12);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+}
+.sx-cardSaveTop:hover,
+.sx-cardSaveRow .sx-btn:hover{
+  transform: translateY(-1px);
+}
+.sx-cardSaveTop.sx-btnPrimary.sx-btnToneLinked,
+.sx-cardSaveRow .sx-btnPrimary.sx-btnToneLinked{
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--cb-cavsafe-accent, #b9c85a) 26%, rgba(255,255,255,0.10) 74%), rgba(0,0,0,0.10)),
+    color-mix(in srgb, var(--cb-cavsafe-accent-soft, rgba(185,200,90,0.22)) 62%, rgba(0,0,0,0.10) 38%);
+  border-color: color-mix(in srgb, var(--cb-cavsafe-accent, #b9c85a) 58%, rgba(255,255,255,0.18) 42%);
+  color: rgba(247,249,255,0.96);
+}
+.sx-cardSaveTop.sx-btnPrimary.sx-btnToneLinked:hover,
+.sx-cardSaveRow .sx-btnPrimary.sx-btnToneLinked:hover{
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--cb-cavsafe-accent, #b9c85a) 34%, rgba(255,255,255,0.12) 66%), rgba(0,0,0,0.12)),
+    color-mix(in srgb, var(--cb-cavsafe-accent-soft, rgba(185,200,90,0.22)) 74%, rgba(255,255,255,0.06) 26%);
+  border-color: color-mix(in srgb, var(--cb-cavsafe-accent, #b9c85a) 68%, rgba(255,255,255,0.24) 32%);
+}
+
+/* invoices */
+.sx-billInvHead{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.sx-card[aria-label="Invoices"] > .sx-divider.sx-billDivider{
+  width: calc(100% + 44px);
+  height: 1px;
+  margin: 12px -22px 8px;
+  background: rgba(255,255,255,0.10);
+  border-radius: 0;
+}
+.sx-billInvFilters{
+  display:inline-flex;
+  align-items:center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--sx-r16);
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.03);
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow-x: hidden;
+  min-width: min-content;
+  max-width: 100%;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  justify-content: center;
+}
+.sx-billInvFilters::-webkit-scrollbar{
+  width: 0;
+  height: 0;
+  display: none;
+}
+.sx-invTab{
+  height: 28px;
+  padding: 0 6px;
+  border-radius: var(--sx-r16);
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(234,240,255,0.78);
+  font-weight: 800;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: border-color .14s ease, background .14s ease, color .14s ease;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (max-width: 540px) {
+  .sx-billInvFilters {
+    gap: 4px;
+    padding: 3px 6px;
+  }
+
+  .sx-invTab {
+    height: 26px;
+    padding: 0 4px;
+    font-size: 9px;
+    letter-spacing: 0.06em;
+  }
+}
+.sx-invTab:hover{ color: rgba(234,240,255,0.92); }
+.sx-invTab.is-on{
+  border-color: rgba(78,168,255,0.30);
+  background: rgba(78,168,255,0.12);
+  color: rgba(234,240,255,0.95);
+}
+.sx-billInvoiceList{ margin-top: 10px; display:flex; flex-direction: column; }
+.sx-billInvoiceRow{
+  display:flex;
+  align-items:flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.sx-billInvoiceRow:last-child{ border-bottom: 0; }
+.sx-billInvoiceTitle{ font-weight: 800; color: rgba(234,240,255,0.94); font-size: 13px; }
+.sx-billInvoiceSub{ margin-top: 6px; color: rgba(234,240,255,0.62); font-size: 12px; }
+.sx-billInvoiceRight{ display:flex; align-items:center; gap: 10px; }
+.sx-billInvoiceStatus{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding: 4px 14px;
+  border-radius: var(--sx-r16);
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  color: rgba(234,240,255,0.86);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+.sx-billInvoiceStatus.is-good{ border-color: rgba(185,200,90,0.26); background: rgba(185,200,90,0.10); }
+.sx-billInvoiceStatus.is-watch{ border-color: rgba(78,168,255,0.26); background: rgba(78,168,255,0.10); }
+.sx-billInvoiceStatus.is-arch{ border-color: rgba(255,255,255,0.16); background: rgba(0,0,0,0.18); color: rgba(234,240,255,0.70); }
+.sx-billInvoiceAmt{
+  font-size: 12px;
+  color: rgba(234,240,255,0.86);
+  font-weight: 800;
+  min-width: 54px;
+  text-align: right;
+}
+.sx-invDl{
+  width: 38px;
+  height: 38px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.18);
+  color: rgba(234,240,255,0.82);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  transition: transform .14s ease, background .14s ease, border-color .14s ease, color .14s ease;
+}
+.sx-invDl:hover{
+  transform: translateY(-1px);
+  background: rgba(0,0,0,0.24);
+  border-color: rgba(255,255,255,0.16);
+  color: rgba(234,240,255,0.94);
+}
+.sx-invDl.is-disabled,
+.sx-invDl:disabled{ opacity: .40; cursor: not-allowed; transform: none; }
+.sx-billMini{ padding: 12px 2px; color: rgba(234,240,255,0.70); font-size: 13px; }
+
+/* toast */
+.sx-billToast{
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 999999;
+  padding: 12px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(0,0,0,0.55);
+  color: rgba(255,255,255,0.92);
+  font-weight: 750;
+  font-size: 12px;
+}
+.sx-billToast[data-tone="good"]{ border-color: rgba(185,200,90,0.28); }
+.sx-billToast[data-tone="bad"]{ border-color: rgba(255,120,120,0.34); }
+.sx-billToast[data-tone="watch"]{ border-color: rgba(78,168,255,0.30); }
+
+/* utility tweaks for tight pill text */
+.sx-billPlanBadge,
+.sx-billStatusPill,
+.sx-billInvoiceStatus,
+.sx-invTab{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* downgrade notice */
+.sx-billPending{
+  padding: 16px;
+  border-radius: var(--sx-r20);
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(4,6,14,0.9);
+  color: rgba(234,240,255,0.92);
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.sx-billPendingLeft{ min-width: 0; flex:1; }
+.sx-billPendingTitle{
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.sx-billPendingSub{
+  font-size: 13px;
+  color: rgba(234,240,255,0.75);
+  line-height: 1.6;
+  max-width: 100%;
+}
+
+/* responsive */
+@media (max-width: 1100px){
+  .sx-billPlansSlider{
+    grid-template-columns: 1fr;
+    display:flex;
+    gap: 12px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 6px;
+
+    /* remove scrollbar bar (keep scroll) */
+    scrollbar-width: none;          /* Firefox */
+    -ms-overflow-style: none;       /* IE/Edge legacy */
+  }
+  .sx-billPlansSlider::-webkit-scrollbar{
+    height: 0;
+    width: 0;
+    display: none;
+  }
+  .sx-billPlanCard{ min-width: 86%; scroll-snap-align: center; }
+  .sx-planDots{ display:flex; }
+
+  .sx-billPayGrid{ grid-template-columns: 1fr; }
+  .sx-cardDetailsSpan{ grid-column: auto; }
+  .sx-cardFormWide{ grid-template-columns: 1fr; gap: 18px; }
+  .sx-cardFormCol{ gap: 16px; }
+  .sx-cardMiniRow{ grid-template-columns: 1fr; gap: 14px; }
+
+  /* spacing polish so stacked fields never touch */
+  .sx-field{ gap: 10px; }
+  .sx-cardSaveRow{
+    margin-top: 18px;
+    justify-content: stretch;
+  }
+  .sx-cardSaveRow .sx-btn{
+    width: 100%;
+  }
+  .sx-cardSaveTop{
+    display:none;
+  }
+  .sx-cardSaveRow--mobile{
+    display:flex;
+  }
+}
+
+@media (max-width: 900px){
+  .sx-billPlanCard{
+    min-height: auto;
+    padding: 20px;
+  }
+  .sx-billPlanMeta{
+    gap: 6px;
+  }
+  .sx-billMetaRow{
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .sx-billPlanActions{
+    justify-content: stretch;
+  }
+  .sx-billPlanActions .sx-btn{
+    width: 100%;
+  }
+  .sx-billPendingSub{
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 720px){
+  .sx-billPending{
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 14px;
+  }
+  .sx-billDetailsHeader{
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .sx-billPayGrid{
+    gap: 16px;
+  }
+  .sx-billInvoiceRow{
+    flex-direction: column;
+    gap: 10px;
+  }
+  .sx-billInvoiceRight{
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .sx-billInvoiceStatus{
+    width: max-content;
+  }
+  .sx-billInvFilters{
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 480px){
+  .sx-billInvoiceRow{
+    padding: 12px 0;
+  }
+  .sx-billPending{
+    padding: 12px;
+  }
+}

@@ -1,0 +1,392 @@
+.sx-collabGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sx-collabRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 86px;
+  padding: 14px 16px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(5, 8, 18, 0.8), rgba(4, 7, 14, 0.72));
+  box-shadow: none;
+}
+
+.sx-collabRowTitle {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: rgba(247, 249, 255, 0.94);
+}
+
+.sx-collabRowSub {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(247, 249, 255, 0.62);
+}
+
+.sx-collabToggle {
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.07);
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.sx-collabToggle:disabled {
+  opacity: 0.66;
+  cursor: default;
+}
+
+.sx-collabToggle.is-on {
+  background: rgba(185, 200, 90, 0.2);
+  border-color: rgba(185, 200, 90, 0.42);
+}
+
+.sx-collabToggleKnob {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  transform: translateX(0);
+  transition: transform 0.16s ease;
+}
+
+.sx-collabToggle.is-on .sx-collabToggleKnob {
+  transform: translateX(20px);
+}
+
+.sx-collabState {
+  font-size: 12px;
+  color: rgba(247, 249, 255, 0.74);
+}
+
+.sx-collabState.is-error {
+  color: rgba(255, 157, 166, 0.95);
+}
+
+.sx-collabState.is-saved {
+  color: rgba(185, 200, 90, 0.92);
+}
+
+.sx-collabAudit {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(3, 7, 16, 0.88), rgba(3, 7, 14, 0.78));
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.sx-collabAuditHead {
+  display: block;
+}
+
+.sx-collabAuditHeading {
+  min-width: 0;
+}
+
+.sx-collabAuditTitle {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: rgba(247, 249, 255, 0.95);
+}
+
+.sx-collabAuditSub {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(247, 249, 255, 0.64);
+}
+
+.sx-collabAuditContent {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sx-collabAuditControls {
+  display: flex;
+  justify-content: flex-start;
+  flex: 0 0 auto;
+}
+
+.sx-collabAuditFilterField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 250px;
+}
+
+.sx-collabAuditFilterLabel {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(247, 249, 255, 0.6);
+}
+
+.sx-collabAuditFilterSelect {
+  height: 34px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(247, 249, 255, 0.9);
+  font-size: 12px;
+  padding: 0 10px;
+}
+
+.sx-collabAuditFilterSelect:focus-visible {
+  outline: 2px solid rgba(120, 170, 255, 0.56);
+  outline-offset: 2px;
+}
+
+.sx-collabAuditFilterSelect:disabled {
+  opacity: 0.72;
+  cursor: default;
+}
+
+.sx-collabAuditListWrap {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--sx-r10);
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+  min-width: 760px;
+}
+
+.sx-collabAuditTableScroll {
+  width: 100%;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+}
+
+.sx-collabAuditResults {
+  margin-top: 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sx-collabAuditCols {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.15fr) minmax(130px, 0.85fr) minmax(220px, 1.35fr) minmax(170px, 0.9fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: rgba(247, 249, 255, 0.54);
+}
+
+.sx-collabAuditList {
+  max-height: 388px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.sx-collabAuditList::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.sx-collabAuditList::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.sx-collabAuditList::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sx-collabAuditRow {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.15fr) minmax(130px, 0.85fr) minmax(220px, 1.35fr) minmax(170px, 0.9fr);
+  gap: 10px;
+  align-items: center;
+  padding: 11px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sx-collabAuditRow:first-child {
+  border-top: 0;
+}
+
+.sx-collabAuditRow:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.sx-collabAuditOperator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sx-collabAuditInitials {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(247, 249, 255, 0.9);
+}
+
+.sx-collabAuditOperatorText {
+  min-width: 0;
+}
+
+.sx-collabAuditOperatorName {
+  font-size: 12px;
+  color: rgba(247, 249, 255, 0.94);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sx-collabAuditOperatorMeta {
+  font-size: 11px;
+  color: rgba(247, 249, 255, 0.6);
+}
+
+.sx-collabAuditEvent,
+.sx-collabAuditTarget,
+.sx-collabAuditTime {
+  min-width: 0;
+  font-size: 12px;
+  color: rgba(247, 249, 255, 0.84);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sx-collabAuditEventPill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(247, 249, 255, 0.9);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sx-collabAuditLink {
+  color: rgba(219, 231, 255, 0.96);
+  text-decoration: none;
+}
+
+.sx-collabAuditLink:hover {
+  text-decoration: underline;
+}
+
+.sx-collabAuditTime {
+  justify-self: end;
+  text-align: right;
+  color: rgba(247, 249, 255, 0.62);
+}
+
+.sx-collabAuditPager {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sx-collabAuditPager.is-empty {
+  justify-content: center;
+  padding-top: 44px;
+}
+
+.sx-collabAuditMoreBtn {
+  min-height: 32px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(247, 249, 255, 0.9);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0 12px;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.sx-collabAuditMoreBtn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sx-collabAuditMoreBtn:disabled {
+  opacity: 0.62;
+  cursor: default;
+}
+
+.sx-collabAuditPagerText {
+  color: rgba(247, 249, 255, 0.44);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  text-align: center;
+  user-select: none;
+}
+
+@media (max-width: 1120px) {
+  .sx-collabGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .sx-collabAuditCols,
+  .sx-collabAuditRow {
+    grid-template-columns: minmax(160px, 1fr) minmax(120px, 0.8fr) minmax(180px, 1.2fr) minmax(140px, 0.85fr);
+  }
+}
+
+@media (max-width: 860px) {
+  .sx-collabAudit {
+    padding: 14px;
+  }
+
+  .sx-collabAuditContent {
+    margin-top: 20px;
+    gap: 12px;
+  }
+
+  .sx-collabAuditResults {
+    margin-top: 24px;
+  }
+
+  .sx-collabAuditControls {
+    justify-content: flex-start;
+  }
+
+  .sx-collabAuditFilterField {
+    min-width: 0;
+    width: 100%;
+  }
+}

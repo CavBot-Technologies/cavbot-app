@@ -1,0 +1,1421 @@
+/* app/cavtools/cavtools.css */
+/* CavBot CavTools — viewport-locked IDE surface
+   SINGLE SOURCE OF TRUTH — no duplicate rail rules.
+*/
+
+:root{
+  color-scheme: dark;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  --cb-bg0:#060812;
+  --cb-bg1:#070a16;
+
+  --cb-card: rgba(255,255,255,0.05);
+  --cb-card2: rgba(255,255,255,0.07);
+
+  --cb-stroke: rgba(255,255,255,0.10);
+  --cb-stroke2: rgba(255,255,255,0.14);
+
+  --cb-text: rgba(255,255,255,0.92);
+  --cb-muted: rgba(255,255,255,0.62);
+  --cb-dim: rgba(255,255,255,0.46);
+
+  --cb-lime:#b9c85a;
+  --cb-violet:#8b5cff;
+  --cb-red:#ff4d4d;
+  --cb-amber:#ffcc66;
+
+  --cb-radius-xl:18px;
+  --cb-radius-lg:16px;
+  --cb-radius-md:14px;
+  --cb-radius-sm:12px;
+
+  --cb-shadow: 0 20px 60px rgba(0,0,0,0.55);
+  --cb-shadow2: 0 12px 30px rgba(0,0,0,0.45);
+
+  --cb-font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+  --cb-mono: "JetBrains Mono","SF Mono",SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
+
+  --cb-pill-h:30px;
+  --cb-icon-h:34px;
+
+  --cb-surface: rgba(3,6,22,0.72);
+  --cb-surface2: rgba(255,255,255,0.02);
+  --cb-ink: rgba(0,0,0,0.14);
+}
+
+*{ box-sizing:border-box; }
+html,body{ height:100%; margin:0; padding:0; }
+body{
+  background: var(--cb-bg0);
+  overflow: hidden; /* LOCK viewport */
+}
+.mono{ font-family: var(--cb-mono); }
+
+/* =========================
+   ROOT
+========================= */
+.cb-cavtools-root{
+  height: calc(100dvh - var(--cb-global-footer-height));
+  overflow:hidden;
+  color:var(--cb-text);
+  font-family:var(--cb-font);
+  background: linear-gradient(180deg, var(--cb-bg0), var(--cb-bg1));
+}
+.cb-cavtools-root *{ box-sizing:border-box; }
+.cb-cavtools-root button{ font-family:inherit; }
+
+/* =========================
+   CavTools Boot Screen
+========================= */
+.cb-cavtools-loading{
+  min-height: calc(100dvh - var(--cb-global-footer-height));
+  display:grid;
+  place-items:center;
+  background:
+    radial-gradient(circle at top, rgba(9,18,38,.96) 0%, rgba(4,8,22,.98) 38%, rgba(2,5,16,1) 100%);
+  color: #f7fbff;
+}
+.cb-cavtools-loading-card{
+  width: min(420px, 90vw);
+  text-align:center;
+  border: 0;
+  background: transparent;
+  padding: 22px 18px;
+  box-shadow: none;
+}
+.cb-cavtools-loading-badge{
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 10px;
+  display:grid;
+  place-items:center;
+  border-radius: 16px;
+  border: 1px solid rgba(185,200,90,.45);
+  background: rgba(185,200,90,.12);
+  color: #b9c85a;
+  animation: cbCavtoolsPulse 1.2s ease-in-out infinite;
+}
+.cb-cavtools-loading-badge svg{
+  width: 28px;
+  height: 28px;
+}
+.cb-cavtools-loading-title{
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: .04em;
+}
+.cb-cavtools-loading-sub{
+  margin-top: 6px;
+  font-size: 12px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: rgba(197,206,231,.82);
+}
+@keyframes cbCavtoolsPulse{
+  0%{ transform: scale(1); box-shadow: 0 0 0 rgba(185,200,90,0.0); }
+  50%{ transform: scale(1.05); box-shadow: 0 0 24px rgba(185,200,90,0.35); }
+  100%{ transform: scale(1); box-shadow: 0 0 0 rgba(185,200,90,0.0); }
+}
+
+/* =========================
+   MOBILE GATE
+========================= */
+.cb-cavtools-mobile{
+  min-height:100vh;
+  padding:22px 18px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+}
+.cb-cavtools-mobile-card{
+  width:min(440px,92vw);
+  margin:0 auto;
+  text-align:center;
+  border-radius:var(--cb-radius-xl);
+  border:1px solid var(--cb-stroke);
+  background: rgba(3,6,22,0.92);
+  padding:18px 16px;
+}
+.cb-cavtools-mobile-top{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:12px;
+}
+.cb-cavtools-mobile-badge{
+  width:46px; height:46px;
+  display:grid; place-items:center;
+  overflow:hidden;
+}
+.cb-cavtools-mobile-title{
+  width:100%;
+  text-align:center;
+  margin-top:8px;
+  font-size:14px;
+  font-weight:860;
+  letter-spacing:-0.01em;
+  color:var(--cb-text);
+}
+.cb-cavtools-mobile-sub{
+  width:100%;
+  text-align:center;
+  max-width:38ch;
+  margin:10px auto 0;
+  font-size:12px;
+  line-height:1.45;
+  color: rgba(197,206,231,0.82);
+}
+.cb-cavtools-mobile-actions{
+  width:min(440px,92vw);
+  margin:20px auto 0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:12px;
+  flex-wrap:wrap;
+}
+.cb-cavtools-mobile-hint{
+  text-align:center;
+  font-size:12px;
+  color: rgba(136,144,170,0.95);
+}
+.cb-cavtools-mobile-btn{
+  height:34px;
+  padding:0 14px;
+  border-radius:999px;
+  border:1px solid var(--cb-stroke2);
+  background: rgba(255,255,255,0.03);
+  color:var(--cb-text);
+  font-size:10px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  font-weight:860;
+  cursor:pointer;
+}
+.cb-cavtools-mobile-btn:hover{
+  border-color: rgba(139,92,255,0.35);
+  background: rgba(139,92,255,0.06);
+}
+
+/* =========================
+   DESKTOP SHELL
+========================= */
+.cb-cavtools-desktop{
+  height: calc(100dvh - var(--cb-global-footer-height));
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+
+/* =========================
+   TOPBAR
+========================= */
+.cb-cavtools-top{
+  flex:0 0 auto;
+  position:sticky;
+  top:0;
+  z-index:9999;
+
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+
+  padding: calc(10px + var(--safe-top)) 14px 10px;
+  border-bottom:1px solid rgba(255,255,255,0.08);
+  background: linear-gradient(
+    to bottom,
+    rgba(10, 11, 30, 0.98),
+    rgba(3, 6, 22, 0.94)
+  );
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.cb-cavtools-top-left{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:0;
+}
+.cb-cavtools-badge{
+  width:40px;
+  height:30px;
+  border-radius:0;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  overflow:visible;
+  line-height:0;
+  text-decoration:none;
+  flex: 0 0 auto;
+  transform: translateY(0);
+}
+
+.cb-cavtools-badge .cb-cavtools-badgeNoRing{
+  width:auto;
+  height:auto;
+  padding:0;
+  background:none;
+  border:0;
+  border-radius:0;
+  box-shadow:none;
+}
+
+.cb-cavtools-badge .cb-cavtools-badgeNoRing .cavbot-dm-avatar-core{
+  width:40px;
+  height:30px;
+}
+.cb-cavtools-top-meta{
+  display:grid;
+  gap:2px;
+  min-width:0;
+}
+.cb-cavtools-title-row{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+}
+.cb-cavtools-title-ic{
+  width:24px; height:24px;
+  display:inline-grid;
+  place-items:center;
+  color: var(--cb-lime);
+}
+.cb-cavtools-top-title{
+  font-size:11px;
+  font-weight:860;
+  letter-spacing:-0.01em;
+  color:var(--cb-text);
+}
+.cb-cavtools-top-sub{
+  font-size:10px;
+  color: rgba(197,206,231,0.76);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  max-width:420px;
+}
+.cb-cavtools-top-right{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  justify-content:flex-end;
+  min-width:260px;
+}
+
+.cb-cavtools-account{
+  border: 0;
+  background: transparent;
+  padding: 0;
+  height: auto;
+}
+
+.cb-cavtools-account:hover{
+  border: 0;
+  background: transparent;
+}
+
+.cb-cavtools-account .cb-account-chip.cb-avatar-plain{
+  width: 34px;
+  height: 34px;
+}
+
+.cb-cavtools-account .cb-account-caret{
+  display: none;
+}
+
+/* =========================
+   BUTTONS
+========================= */
+.cb-cavtools-btn{
+  height: var(--cb-pill-h);
+  padding:0 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.03);
+  color:var(--cb-text);
+  font-size:9px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:860;
+  cursor:pointer;
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+.cb-cavtools-btn:hover{
+  border-color: rgba(139,92,255,0.28);
+  background: rgba(139,92,255,0.07);
+  transform: translateY(-1px);
+}
+.cb-cavtools-btn:active{ transform: translateY(0px); }
+.cb-cavtools-btn:disabled{
+  opacity:0.52;
+  cursor:not-allowed;
+}
+
+.cb-cavtools-btn-icon-light{
+  display:block;
+  filter: invert(97%) sepia(4%) saturate(303%) hue-rotate(176deg) brightness(115%) contrast(94%);
+}
+
+.cb-cavtools-action-btn{
+  width: var(--cb-pill-h);
+  min-width: var(--cb-pill-h);
+  padding:0;
+  border-radius:10px;
+  display:grid;
+  place-items:center;
+}
+
+.cb-cavtools-action-icon-image{
+  width:16px !important;
+  height:16px !important;
+  object-fit:contain;
+  display:block;
+}
+
+.cb-cavtools-action-icon-open{
+  transform: scale(0.96);
+  transform-origin:center;
+}
+
+.cb-cavtools-action-icon-command{
+  filter: brightness(0) invert(1);
+  width:16px !important;
+  height:16px !important;
+  transform: scale(1.18);
+  transform-origin:center;
+}
+
+.cb-cavtools-action-icon{
+  width:16px;
+  height:16px;
+  display:grid;
+  place-items:center;
+  color: rgba(247,251,255,0.95);
+}
+
+.cb-cavtools-action-icon svg{
+  width:16px;
+  height:16px;
+  display:block;
+}
+
+.cb-cavtools-btn-strong{
+  border-color: rgba(181,211,49,0.22);
+  background: rgba(181,211,49,0.12);
+}
+.cb-cavtools-btn-strong:hover{
+  border-color: rgba(181,211,49,0.34);
+  background: rgba(181,211,49,0.16);
+}
+
+.cb-cavtools-iconbtn{
+  width: var(--cb-icon-h);
+  height: var(--cb-icon-h);
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.14);
+  color:var(--cb-text);
+  display:grid;
+  place-items:center;
+  cursor:pointer;
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+.cb-cavtools-iconbtn:hover{
+  border-color: rgba(181,211,49,0.26);
+  background: rgba(181,211,49,0.06);
+  transform: translateY(-1px);
+}
+.cb-cavtools-markimg{ display:block; }
+
+/* =========================
+   SHELL LAYOUT
+========================= */
+.cb-cavtools-shell{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:hidden;
+  display:grid;
+  grid-template-columns: 248px 1fr;
+}
+
+/* =========================
+   SIDEBAR
+========================= */
+.cb-cavtools-side{
+  position:relative;
+  min-height:0;
+  overflow:hidden;
+  border-right:1px solid rgba(137,163,218,0.16);
+  background: linear-gradient(
+    to bottom,
+    rgba(10, 11, 30, 0.98),
+    rgba(3, 6, 22, 0.94)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.05),
+    inset -1px 0 0 rgba(255,255,255,0.04);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+.cb-cavtools-side::before{
+  content:none;
+}
+.cb-cavtools-sidehead{
+  padding:13px 12px 11px;
+  border-bottom:1px solid rgba(137,163,218,0.18);
+  background: transparent;
+}
+.cb-cavtools-sidek{
+  font-size:9px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  font-weight:860;
+  color: rgba(236,244,255,0.96);
+}
+.cb-cavtools-tree{
+  padding:12px 9px 12px;
+  overflow:auto;
+  flex:1 1 auto;
+  min-height:0;
+  scrollbar-width:none;
+}
+.cb-cavtools-tree::-webkit-scrollbar{ display:none; }
+
+.cb-cavtools-group{
+  margin-bottom:12px;
+  border:1px solid rgba(137,163,218,0.14);
+  border-radius:4px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  overflow:hidden;
+}
+.cb-cavtools-grouphead{
+  width:100%;
+  text-align:left;
+  border:0;
+  appearance:none;
+  -webkit-appearance:none;
+  background: rgba(8,15,37,0.58);
+  padding:8px 10px;
+
+  font-size:9px;
+  letter-spacing:0.10em;
+  text-transform:uppercase;
+  font-weight:800;
+  color: rgba(182,198,231,0.94);
+
+  display:flex;
+  align-items:center;
+  gap:8px;
+  cursor:pointer;
+  border-radius:2px !important;
+  transition: background 80ms linear, color 80ms linear;
+}
+.cb-cavtools-groupbtn{
+  border-radius:2px !important;
+}
+.cb-cavtools-grouphead:hover{
+  background: rgba(109,191,255,0.10);
+  color: rgba(245,250,255,0.96);
+}
+.cb-cavtools-grouphead.is-disabled,
+.cb-cavtools-grouphead:disabled{
+  opacity:0.40;
+  cursor:not-allowed;
+  background: rgba(8,15,37,0.42);
+}
+
+.cb-cavtools-groupchev{
+  display:inline-block;
+  transform: rotate(0deg);
+  transition: transform 90ms linear;
+  color: rgba(222,233,255,0.76);
+}
+.cb-cavtools-groupchev.is-open{ transform: rotate(90deg); }
+
+.cb-cavtools-groupitems{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  padding:12px 8px 14px;
+  margin-top:0;
+  border-top:1px solid rgba(137,163,218,0.10);
+}
+.cb-cavtools-treelevel{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.cb-cavtools-treelevel.is-nested{
+  margin-top:8px;
+  gap:11px;
+}
+.cb-cavtools-treechildren{
+  margin-top:8px;
+}
+.cb-cavtools-file{
+  width:100%;
+  text-align:left;
+  display:flex;
+  align-items:center;
+  gap:8px;
+
+  padding:10px 10px;
+  border-radius:9px;
+  border:1px solid rgba(137,163,218,0.18);
+  background: rgba(8,14,34,0.62);
+
+  color: rgba(236,243,255,0.92);
+  cursor:pointer;
+  transition: background 80ms linear, border-color 80ms linear, box-shadow 80ms linear;
+}
+.cb-cavtools-file:hover{
+  border-color: rgba(109,191,255,0.36);
+  background: rgba(109,191,255,0.12);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.cb-cavtools-file.is-on{
+  border-color: rgba(181,211,49,0.34);
+  background: rgba(181,211,49,0.10);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.11);
+}
+.cb-cavtools-file:disabled{ opacity:0.45; cursor:not-allowed; }
+
+.cb-cavtools-ic{ width:16px; opacity:0.76; }
+.cb-cavtools-fn{
+  font-size:10px;
+  font-weight:860;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+/* sidebar footer */
+.cb-cavtools-sidefoot{
+  padding:10px 9px;
+  border-top:1px solid rgba(137,163,218,0.18);
+  background: transparent;
+  display:grid;
+  gap:10px;
+  flex:0 0 auto;
+}
+.cb-cavtools-mini{
+  border-radius:3px;
+  border:1px solid rgba(137,163,218,0.18);
+  background: rgba(7,13,32,0.70);
+  padding:8px 9px;
+}
+.cb-cavtools-minik{
+  font-size:9px;
+  letter-spacing:0.11em;
+  text-transform:uppercase;
+  font-weight:800;
+  color: rgba(176,192,226,0.90);
+}
+.cb-cavtools-miniv{
+  margin-top:6px;
+  font-size:10px;
+  font-weight:860;
+  line-height:1.1;
+  color: rgba(241,247,255,0.93);
+  overflow-wrap:anywhere;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.cb-cavtools-dot{
+  --cb-dot-rgb: 181,211,49;
+  width:6px;
+  height:6px;
+  flex:0 0 auto;
+  border-radius:1.5px;
+  border:1px solid rgba(var(--cb-dot-rgb), 0.40);
+  background: rgba(var(--cb-dot-rgb), 0.9);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.10),
+    0 0 5px rgba(var(--cb-dot-rgb), 0.38);
+  position:relative;
+  transform: translateY(-0.5px);
+  animation: cb-cavtools-dot-live 1.6s steps(2, end) infinite;
+}
+.cb-cavtools-dot::after{
+  content:"";
+  position:absolute;
+  inset:1px;
+  border-radius:0.75px;
+  background: rgba(255,255,255,0.28);
+}
+.cb-cavtools-dot.good{ --cb-dot-rgb: 181,211,49; }
+.cb-cavtools-dot.watch{ --cb-dot-rgb: 255,204,102; }
+.cb-cavtools-dot.bad{ --cb-dot-rgb: 255,77,77; }
+
+@keyframes cb-cavtools-dot-live{
+  0%, 100%{
+    opacity: 1;
+    filter: brightness(1);
+  }
+  50%{
+    opacity: 0.72;
+    filter: brightness(1.14);
+  }
+}
+
+/* =========================
+   MAIN
+========================= */
+.cb-cavtools-main{
+  min-width:0;
+  min-height:0;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+}
+
+/* tabs strip */
+.cb-cavtools-tabs{
+  flex:0 0 auto;
+  display:flex;
+  gap:6px;
+  padding:8px 10px;
+  border-bottom:1px solid rgba(255,255,255,0.08);
+  background: rgba(3,6,22,0.70);
+  overflow-x:auto;
+  scrollbar-width:none;
+}
+.cb-cavtools-tabs::-webkit-scrollbar{ display:none; }
+
+.cb-cavtools-tab{
+  width:36px;
+  min-width:36px;
+  height:36px;
+  padding:0;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.14);
+  color: rgba(197,206,231,0.86);
+  display:grid;
+  place-items:center;
+  font-size:9px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:860;
+  cursor:pointer;
+  white-space:nowrap;
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+.cb-cavtools-tab:hover{
+  border-color: rgba(139,92,255,0.24);
+  background: rgba(139,92,255,0.06);
+  color: rgba(247,251,255,0.92);
+  transform: translateY(-1px);
+}
+.cb-cavtools-tab.is-on{
+  border-color: rgba(139,92,255,0.24);
+  background: rgba(139,92,255,0.06);
+  color: rgba(247,251,255,0.94);
+}
+
+.cb-cavtools-tab-icon-image{
+  width:20px !important;
+  height:20px !important;
+  object-fit:contain;
+  display:block;
+}
+
+.cb-cavtools-hotkey-chip{
+  display:inline-flex;
+  align-items:stretch;
+  gap:0;
+  margin-left:8px;
+  padding:3px;
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,0.14);
+  background: rgba(10,16,30,0.55);
+}
+.cb-cavtools-hotkey-half{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:0 4px;
+}
+.cb-cavtools-hotkey-divider{
+  width:1px;
+  align-self:stretch;
+  margin:2px 6px;
+  background: rgba(255,255,255,0.16);
+}
+.cb-cavtools-hotkey-sep{ display:none; }
+.kbd{
+  width:28px;
+  min-width:28px;
+  height:28px;
+  padding:0;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.03);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  line-height:1;
+}
+
+.cb-cavtools-kbd-icon{
+  width:16px !important;
+  height:16px !important;
+  object-fit:contain;
+  display:block;
+  filter: brightness(0) invert(1);
+  transform-origin:center;
+}
+
+.cb-cavtools-kbd-icon-command{
+  transform: scale(1.12);
+}
+
+.cb-cavtools-kbd-icon-k{
+  transform: scale(0.84);
+}
+
+.cb-cavtools-kbd-icon-ctrl{
+  transform: scale(1.08);
+}
+
+/* =========================
+   GRID
+========================= */
+.cb-cavtools-grid{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:hidden;
+  display:grid;
+  grid-template-columns: 1fr 400px;
+  gap:10px;
+  padding:10px;
+  align-items:stretch;
+}
+
+/* panels */
+.cb-cavtools-editor{
+  min-height:0;
+  overflow:hidden;
+  border-radius: var(--cb-radius-xl);
+  border:1px solid rgba(255,255,255,0.10);
+  background: rgba(3,6,22,0.70);
+  display:flex;
+  flex-direction:column;
+}
+
+/* panel heads */
+.cb-cavtools-editorhead,
+.cb-cavtools-railhead{
+  flex:0 0 auto;
+  padding:10px 10px 8px;
+  border-bottom:1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.02);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+.cb-cavtools-editorname,
+.cb-cavtools-railtitle{
+  font-size:11px;
+  font-weight:860;
+  letter-spacing:-0.01em;
+  color: rgba(247,251,255,0.94);
+}
+.cb-cavtools-editorhint{
+  font-size:10px;
+  color: rgba(197,206,231,0.74);
+}
+.cb-cavtools-editorhintcmd b{ color: rgba(247,251,255,0.92); }
+
+/* inspector/events/checklist/settings markdown pre */
+.cb-cavtools-editorpre{
+  margin:0;
+  padding:10px;
+  font-family: var(--cb-mono);
+  font-size:11px;
+  line-height:1.45;
+  color: rgba(247,251,255,0.88);
+  overflow:auto;
+  flex:1 1 auto;
+  min-height:0;
+  scrollbar-width:none;
+}
+.cb-cavtools-editorpre::-webkit-scrollbar{ display:none; }
+
+/* =========================
+   STUDIO (unified)
+========================= */
+.cb-cavtools-studio{
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  flex:1 1 auto;
+}
+.cb-cavtools-studio-toolbar{
+  padding:8px 10px;
+  border-bottom:1px solid rgba(255,255,255,0.08);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  background: rgba(255,255,255,0.02);
+}
+.cb-cavtools-studio-left,
+.cb-cavtools-studio-right{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:nowrap;
+  min-width:0;
+}
+.cb-cavtools-studio-left{
+  flex:1 1 auto;
+  overflow:hidden;
+}
+.cb-cavtools-studio-right{
+  flex:0 0 auto;
+}
+.cb-cavtools-studio-chip{
+  height:24px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:0 8px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.14);
+  color: rgba(197,206,231,0.90);
+  font-size:9px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:860;
+  line-height:1;
+  white-space:nowrap;
+}
+.cb-cavtools-studio-left .cb-cavtools-studio-chip.mono{
+  max-width: clamp(180px, 38vw, 520px);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  justify-content:flex-start;
+  text-transform:none;
+  letter-spacing:0.01em;
+}
+.cb-cavtools-studio-chip.good{ border-color: rgba(181,211,49,0.24); background: rgba(181,211,49,0.10); }
+.cb-cavtools-studio-chip.watch{ border-color: rgba(255,204,102,0.24); background: rgba(255,204,102,0.10); }
+
+.cb-cavtools-studio-body{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:hidden;
+}
+.cb-cavtools-studio-editor{
+  width:100%;
+  height:100%;
+  border:0;
+  outline:none;
+  padding:10px;
+  background: rgba(0,0,0,0.18);
+  color: rgba(247,251,255,0.92);
+  font-family: var(--cb-mono);
+  font-size:11px;
+  line-height:1.55;
+  resize:none;
+  overflow:auto;
+  scrollbar-width:none;
+}
+.cb-cavtools-studio-editor::-webkit-scrollbar{ display:none; }
+
+/* =========================
+   SETTINGS
+========================= */
+.cb-cavtools-settings{
+  padding:12px;
+  overflow:auto;
+  flex:1 1 auto;
+  min-height:0;
+  scrollbar-width:none;
+}
+.cb-cavtools-settings::-webkit-scrollbar{ display:none; }
+
+.cb-cavtools-settings-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:12px;
+}
+.cb-cavtools-configcard{
+  border-radius: var(--cb-radius-xl);
+  border:1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.14);
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  min-height:260px;
+}
+.cb-cavtools-confighead{
+  padding:10px 10px 8px;
+  border-bottom:1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.02);
+  font-size:11px;
+  font-weight:860;
+  color: rgba(247,251,255,0.94);
+}
+.cb-cavtools-configarea{
+  flex:1 1 auto;
+  width:100%;
+  border:0;
+  outline:none;
+  padding:10px;
+  min-height:220px;
+  resize:none;
+  background: rgba(0,0,0,0.18);
+  color: rgba(247,251,255,0.92);
+  font-family: var(--cb-mono);
+  font-size:11px;
+  line-height:1.55;
+  scrollbar-width:none;
+}
+.cb-cavtools-configarea::-webkit-scrollbar{ display:none; }
+.cb-cavtools-configmeta{
+  padding:8px 10px;
+  border-top:1px solid rgba(255,255,255,0.08);
+  display:flex;
+  align-items:center;
+  gap:10px;
+  justify-content:flex-start;
+}
+.cb-cavtools-pill{
+  height:20px;
+  padding:0 8px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.03);
+  font-size:9px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:860;
+  color: rgba(247,251,255,0.92);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  white-space:nowrap;
+}
+.cb-cavtools-pill.good{ border-color: rgba(181,211,49,0.24); background: rgba(181,211,49,0.10); }
+.cb-cavtools-pill.watch{ border-color: rgba(255,204,102,0.24); background: rgba(255,204,102,0.10); }
+.cb-cavtools-pill.bad{ border-color: rgba(255,77,77,0.26); background: rgba(255,77,77,0.10); }
+
+.cb-cavtools-err{
+  font-family: var(--cb-mono);
+  font-size:11px;
+  color: rgba(255,200,200,0.95);
+}
+
+/* =========================
+   RIGHT RAIL — Event Stream shines, Terminal compact but visible
+   - collapsed: Event Stream gets MOST, Terminal fixed small
+   - expanded: Terminal overlays whole rail (takeover), stream recesses
+========================= */
+.cb-cavtools-rail{
+  position: relative;
+  min-height:0;
+  display: grid;
+  gap:12px;
+
+  /* collapsed sizing */
+  grid-template-rows: minmax(0, 1fr) minmax(170px, 210px);
+  /* ^ tweak if needed:
+     - 160px = tighter (3 items)
+     - 210px = roomier (4+ items)
+  */
+}
+
+/* rail cards */
+.cb-cavtools-rail > .cb-cavtools-railcard{
+  min-height:0;
+  overflow:hidden;
+  border-radius: var(--cb-radius-xl);
+  border:1px solid rgba(255,255,255,0.10);
+  background: rgba(3,6,22,0.70);
+  display:flex;
+  flex-direction:column;
+}
+
+/* actions in rail head */
+.cb-cavtools-railactions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+}
+
+/* scroll containers */
+.cb-cavtools-stream,
+.cb-cavtools-terminal{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:auto;
+  padding:10px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.22) rgba(0,0,0,0.12);
+}
+.cb-cavtools-stream::-webkit-scrollbar,
+.cb-cavtools-terminal::-webkit-scrollbar{ width:10px; }
+.cb-cavtools-stream::-webkit-scrollbar-track,
+.cb-cavtools-terminal::-webkit-scrollbar-track{
+  background: rgba(0,0,0,0.12);
+  border-radius:999px;
+}
+.cb-cavtools-stream::-webkit-scrollbar-thumb,
+.cb-cavtools-terminal::-webkit-scrollbar-thumb{
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius:999px;
+}
+.cb-cavtools-stream::-webkit-scrollbar-thumb:hover,
+.cb-cavtools-terminal::-webkit-scrollbar-thumb:hover{
+  background: rgba(255,255,255,0.26);
+}
+
+/* collapsed terminal: never grows taller than its row */
+.cb-cavtools-rail[data-terminal-expanded="false"] > .cb-cavtools-railcard[aria-label="Terminal output"]{
+  max-height: none; /* the grid row is the limiter */
+}
+
+/* EXPANDED takeover overlay */
+.cb-cavtools-rail[data-terminal-expanded="true"] > .cb-cavtools-railcard[aria-label="Terminal output"]{
+  position:absolute;
+  inset:0;
+  z-index:20;
+}
+
+/* expand effect on stream */
+.cb-cavtools-rail[data-terminal-expanded="true"] > .cb-cavtools-railcard[aria-label="Event stream"]{
+  opacity:0.28;
+  filter: blur(0.2px);
+  pointer-events:none;
+}
+
+/* stream items */
+.cb-cavtools-streamitem{
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.14);
+  padding:8px 8px;
+  margin-bottom:8px;
+}
+.cb-cavtools-streamitem.good{ border-color: rgba(181,211,49,0.22); }
+.cb-cavtools-streamitem.watch{ border-color: rgba(255,204,102,0.22); }
+.cb-cavtools-streamitem.bad{ border-color: rgba(255,77,77,0.22); }
+
+.cb-cavtools-streamtop{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  margin-bottom:6px;
+}
+.cb-cavtools-streamtime{
+  font-size:10px;
+  color: rgba(197,206,231,0.74);
+  white-space:nowrap;
+}
+.cb-cavtools-streamsum{
+  font-size:10px;
+  color: rgba(197,206,231,0.82);
+  line-height:1.35;
+}
+
+/* Event labels in stream: plain text (no pill/badge) */
+.cb-cavtools-streamkind{
+  font-size:9px;
+  letter-spacing:0.03em;
+  font-weight:700;
+  color: rgba(247,251,255,0.88);
+  white-space:nowrap;
+  text-transform:none;
+}
+.cb-cavtools-streamkind.good{ color: rgba(201,221,96,0.95); }
+.cb-cavtools-streamkind.watch{ color: rgba(255,216,132,0.95); }
+.cb-cavtools-streamkind.bad{ color: rgba(255,148,148,0.95); }
+.cb-cavtools-streamempty{
+  width:100%;
+  min-height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  border:0;
+  background:transparent;
+  padding:0;
+  font-size:11px;
+  color: rgba(197,206,231,0.78);
+  line-height:1.5;
+}
+.cb-cavtools-emptycopy{
+  max-width: 420px;
+  width:100%;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+}
+.cb-cavtools-emptycopy .mono{
+  font-size:12px;
+  letter-spacing:0.01em;
+  color: rgba(225,236,255,0.92);
+}
+
+/* terminal lines */
+.cb-cavtools-termline{
+  border-radius:16px;
+  border:1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.14);
+  padding:10px 10px;
+  margin-bottom:10px;
+}
+.cb-cavtools-termline.good{ border-color: rgba(181,211,49,0.22); }
+.cb-cavtools-termline.watch{ border-color: rgba(255,204,102,0.22); }
+.cb-cavtools-termline.bad{ border-color: rgba(255,77,77,0.22); }
+
+.cb-cavtools-termmeta{
+  font-size:11px;
+  color: rgba(197,206,231,0.74);
+  margin-bottom:8px;
+}
+.cb-cavtools-termpre{
+  margin:0;
+  padding:12px 12px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,0.10);
+  background: rgba(8,12,22,0.55);
+  color: rgba(247,251,255,0.90);
+  font-size:12px;
+  line-height:1.75;
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+.cb-cavtools-termempty{
+  width:100%;
+  min-height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  border:0;
+  background:transparent;
+  padding:0;
+  font-size:11px;
+  color: rgba(197,206,231,0.78);
+  line-height:1.5;
+}
+
+/* =========================
+   BOTTOM TERMINAL BAR (sticky)
+   targets ONLY: .cb-cavtools-cmd[role="region"]
+========================= */
+.cb-cavtools-cmd[role="region"]{
+  flex:0 0 auto;
+  position: sticky;
+  bottom: 0;
+  z-index: 9999;
+
+  border-top:1px solid rgba(255,255,255,0.08);
+  background: rgba(6, 8, 18, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
+  padding: 8px 10px calc(8px + var(--safe-bottom));
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.cb-cavtools-cmdleft{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  min-width:190px;
+}
+.cb-cavtools-cmdk{
+  font-size:11px;
+  font-weight:700;
+  color: var(--cb-lime);
+  font-family: var(--cb-mono);
+  letter-spacing: 0.01em;
+}
+.cb-cavtools-cmdmid{
+  flex:1 1 auto;
+  min-width:0;
+}
+.cb-cavtools-promptwrap{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  width:100%;
+  color: var(--cb-lime);
+}
+.cb-cavtools-prompt{
+  opacity:0.75;
+  white-space:nowrap;
+  font-size:11px;
+  letter-spacing:0.01em;
+}
+.cb-cavtools-cmdinput{
+  width:100%;
+  height:34px;
+  border-radius:0;
+  border:1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.14);
+  color: rgba(247,251,255,0.92);
+  padding:0 10px;
+  font-family: var(--cb-mono);
+  font-size:11px;
+  outline:none;
+}
+.cb-cavtools-cmdinput:focus{
+  border-color: rgba(181,211,49,0.28);
+}
+.cb-cavtools-cmdright{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+/* =========================
+   COMMAND PALETTE OVERLAY (if present)
+   targets ONLY: .cb-cavtools-cmd[role="dialog"]
+========================= */
+.cb-cavtools-cmd[role="dialog"]{
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  padding: 18px;
+}
+.cb-cavtools-cmdcard{
+  width:min(900px, 96vw);
+  border-radius: var(--cb-radius-xl);
+  border:1px solid rgba(255,255,255,0.14);
+  background: rgba(3,6,22,0.92);
+  overflow:hidden;
+}
+.cb-cavtools-cmdhead{
+  padding:12px 12px 10px;
+  border-bottom:1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.02);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.cb-cavtools-cmdtitle{
+  font-size:12px;
+  font-weight:860;
+  color: rgba(247,251,255,0.94);
+}
+.cb-cavtools-cmdhint{
+  font-size:11px;
+  color: rgba(197,206,231,0.74);
+}
+.cb-cavtools-cmdbody{
+  padding:12px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+.cb-cavtools-cmdfoot{
+  padding: 10px 12px calc(10px + var(--safe-bottom));
+  border-top:1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.02);
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+}
+
+/* safety */
+.cb-cavtools-terminal,
+.cb-cavtools-termempty,
+.cb-cavtools-termline,
+.cb-cavtools-railcard[aria-label="Terminal output"]{
+  visibility: visible;
+  opacity: 1;
+}
+
+/* =========================
+   RESPONSIVE
+========================= */
+@media (max-width:1120px){
+  .cb-cavtools-grid{ grid-template-columns: 1fr; }
+  .cb-cavtools-rail{ display:none; }
+}
+@media (max-width:980px){
+  .cb-cavtools-shell{ grid-template-columns: 1fr; }
+  .cb-cavtools-side{ display:none; }
+  .cb-cavtools-top-left,
+  .cb-cavtools-top-right{ min-width:0; }
+}
+@media (max-width:720px){
+  .cb-cavtools-settings-grid{ grid-template-columns: 1fr; }
+}
+/* =========================================
+   FINAL: tighten collapsed Terminal height
+   (NO logic changes)
+   Paste at VERY BOTTOM of cavtools.css
+========================================= */
+
+/* Rail: Event stream gets remaining space, terminal is a fixed compact row */
+.cb-cavtools-rail{
+  display: grid !important;
+  grid-template-rows: minmax(0, 1fr) auto !important;
+  gap: 12px !important;
+  min-height: 0 !important;
+}
+
+/* Collapsed terminal: force an actual compact height (removes the dead gap) */
+.cb-cavtools-rail > .cb-cavtools-railcard[aria-label="Terminal output"]:not(.is-expanded){
+  height: 150px !important;     /* <- tweak: 140–170px until perfect */
+  min-height: 150px !important;
+}
+
+/* Expanded terminal: do not constrain height (keep your current behavior) */
+.cb-cavtools-rail > .cb-cavtools-railcard[aria-label="Terminal output"].is-expanded{
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+/* Make sure the inner scroll area doesn’t “stretch” the card */
+.cb-cavtools-terminal{
+  min-height: 0 !important;
+  overflow: auto !important;
+}
+
+/* Empty states are plain centered text, no box rendering. */
+
+/* Explorer root rows: force mini-rect corners in every interaction state. */
+html body .cb-cavtools-root .cb-cavtools-tree .cb-cavtools-group{
+  border-radius:3px !important;
+}
+
+html body .cb-cavtools-root .cb-cavtools-tree .cb-cavtools-group > .cb-cavtools-grouphead.cb-cavtools-groupbtn,
+html body .cb-cavtools-root .cb-cavtools-tree .cb-cavtools-group > .cb-cavtools-grouphead.cb-cavtools-groupbtn:hover,
+html body .cb-cavtools-root .cb-cavtools-tree .cb-cavtools-group > .cb-cavtools-grouphead.cb-cavtools-groupbtn:active,
+html body .cb-cavtools-root .cb-cavtools-tree .cb-cavtools-group > .cb-cavtools-grouphead.cb-cavtools-groupbtn:focus-visible{
+  border-radius:3px !important;
+}

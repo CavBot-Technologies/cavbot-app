@@ -1,25 +1,72 @@
 // app/api/auth/register/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { sendEmail } from "@/lib/email/sendEmail";
+import { isReservedUsername, isValidUsername, normalizeUsername } from "@/lib/username";
 import {
   assertWriteOrigin,
   createUserSession,
   hashPassword,
-  sessionCookieHeader,
+  isApiAuthError,
+  sessionCookieOptions,
 } from "@/lib/apiAuth";
 
+import { auditLogWrite } from "@/lib/audit";
+import {
+  buildVerifyErrorPayload,
+  ensureActionVerification,
+  extractVerifyGrantToken,
+  extractVerifySessionId,
+  recordVerifyActionFailure,
+  recordVerifyActionSuccess,
+} from "@/lib/auth/cavbotVerify";
+
+import { createHash, randomBytes } from "crypto";
+import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
+
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+const NO_STORE_HEADERS: Record<string, string> = {
+  "Cache-Control": "no-store, max-age=0",
+  Pragma: "no-cache",
+  Expires: "0",
+  Vary: "Cookie",
+};
+
+function json<T>(payload: T, init?: number | ResponseInit) {
+  const resInit: ResponseInit = typeof init === "number" ? { status: init } : init ?? {};
+  return NextResponse.json(payload, {
+    ...resInit,
+    headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS },
+  });
+}
+
+type RegisterBody = {
+  email?: string;
+  password?: string;
+  displayName?: string;
+  username?: string;
+  accountName?: string;
+  accountSlug?: string;
+  verificationGrantToken?: string;
+  verificationSessionId?: string;
+};
 
 function env(name: string) {
-  return String((process.env as any)?.[name] || "").trim();
+  return String(process.env[name as keyof NodeJS.ProcessEnv] || "").trim();
 }
 
-function normalizeEmail(email: string) {
-  return String(email || "").trim().toLowerCase();
+function normalizeEmail(email: unknown) {
+  return String(email ?? "").trim().toLowerCase();
 }
 
-function toSlug(input: string) {
-  const s = String(input || "")
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(String(email || "").trim());
+}
+
+function toSlug(input: unknown) {
+  const s = String(input ?? "")
     .trim()
     .toLowerCase()
     .replace(/['"]/g, "")
@@ -28,178 +75,392 @@ function toSlug(input: string) {
   return s || "account";
 }
 
-function bytesToHex(bytes: Uint8Array) {
-  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+function randomToken(bytes = 32) {
+  return randomBytes(bytes).toString("hex");
 }
 
 async function sha256Hex(text: string) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return bytesToHex(new Uint8Array(buf));
+  return createHash("sha256").update(text).digest("hex");
 }
 
-function randomToken(bytes = 32) {
-  const b = crypto.getRandomValues(new Uint8Array(bytes));
-  return bytesToHex(b);
+function deriveAccountNameFromEmail(email: string) {
+  const domain = (email.split("@")[1] || "").trim();
+  const base = (domain.split(".")[0] || "CavBot").trim();
+  const nice = base ? base.slice(0, 1).toUpperCase() + base.slice(1) : "CavBot";
+  return `${nice} Account`;
 }
-export const runtime = "edge";
+
+function toStringValue(value: unknown): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  return typeof value === "string" ? value : String(value);
+}
+
+async function readBody(req: Request): Promise<RegisterBody> {
+  const ct = req.headers.get("content-type") || "";
+
+  if (ct.includes("application/json")) {
+    const raw = (await readSanitizedJson(req, ({}))) as Record<string, unknown>;
+    return {
+      email: toStringValue(raw.email),
+      password: toStringValue(raw.password),
+      displayName: toStringValue(raw.displayName) ?? toStringValue(raw.name),
+      username: toStringValue(raw.username),
+      accountName: toStringValue(raw.accountName),
+      accountSlug: toStringValue(raw.accountSlug),
+      verificationGrantToken: toStringValue(raw.verificationGrantToken),
+      verificationSessionId: toStringValue(raw.verificationSessionId) ?? toStringValue(raw.verifySessionId),
+    };
+  }
+
+  if (ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data")) {
+    const fd = await readSanitizedFormData(req, null);
+    if (!fd) return {};
+    return {
+      email: toStringValue(fd.get("email")),
+      password: toStringValue(fd.get("password")),
+      displayName: toStringValue(fd.get("displayName")) ?? toStringValue(fd.get("name")),
+      username: toStringValue(fd.get("username")),
+      accountName: toStringValue(fd.get("accountName")),
+      accountSlug: toStringValue(fd.get("accountSlug")),
+      verificationGrantToken: toStringValue(fd.get("verificationGrantToken")),
+      verificationSessionId: toStringValue(fd.get("verificationSessionId")) ?? toStringValue(fd.get("verifySessionId")),
+    };
+  }
+
+  const fallback = (await readSanitizedJson(req, ({}))) as Record<string, unknown>;
+  return {
+    email: toStringValue(fallback.email),
+    password: toStringValue(fallback.password),
+    displayName: toStringValue(fallback.displayName) ?? toStringValue(fallback.name),
+    username: toStringValue(fallback.username),
+    accountName: toStringValue(fallback.accountName),
+    accountSlug: toStringValue(fallback.accountSlug),
+    verificationGrantToken: toStringValue(fallback.verificationGrantToken),
+    verificationSessionId: toStringValue(fallback.verificationSessionId) ?? toStringValue(fallback.verifySessionId),
+  };
+}
+
+async function findAvailableAccountSlug(requested: string) {
+  let slug = requested;
+
+  for (let i = 0; i < 10; i++) {
+    const exists = await prisma.account.findUnique({ where: { slug } });
+    if (!exists) return slug;
+    slug = `${requested}-${randomToken(3)}`;
+  }
+
+  return `${requested}-${randomToken(6)}`;
+}
+
+type PrismaUniqueError = {
+  code?: string;
+  meta?: {
+    target?: string | string[];
+  };
+};
+
+function isPrismaUniqueError(error: unknown): error is PrismaUniqueError {
+  return Boolean(error && typeof error === "object" && "code" in error);
+}
+
+/* =========================
+  Cloudflare IP + Geo
+  ========================= */
+
+function safeStr(v: unknown): string {
+  if (v == null) return "";
+  return String(v);
+}
+
+function readCloudflareGeo(req: Request) {
+  const countryRaw = safeStr(req.headers.get("cf-ipcountry")).trim();
+  const regionRaw =
+    safeStr(req.headers.get("cf-region")).trim() || safeStr(req.headers.get("cf-region-code")).trim();
+
+  const country = countryRaw && countryRaw !== "XX" ? countryRaw : "";
+  const region = regionRaw || "";
+
+  const label = [region, country].map((s) => String(s || "").trim()).filter(Boolean).join(", ");
+
+  return {
+    country: country || null,
+    region: region || null,
+    label: label || (country ? country : null),
+  };
+}
+
 export async function POST(req: Request) {
   try {
     assertWriteOrigin(req);
 
-    // Optional safety gate for early launch:
-    // - If CAVBOT_PUBLIC_SIGNUP !== "1", registration is blocked (until you enable it).
-    // - Set CAVBOT_PUBLIC_SIGNUP=1 when you’re ready to open to the public.
     if (env("CAVBOT_PUBLIC_SIGNUP") !== "1") {
-      return NextResponse.json(
-        { ok: false, error: "signup_disabled" },
-        { status: 403, headers: { "Cache-Control": "no-store" } }
+      return json({ ok: false, error: "signup_disabled" }, 403);
+    }
+
+    const body = await readBody(req);
+
+    const verificationGate = ensureActionVerification(req, {
+      actionType: "signup",
+      route: "/auth",
+      sessionIdHint: extractVerifySessionId(req, body?.verificationSessionId),
+      verificationGrantToken: extractVerifyGrantToken(req, body?.verificationGrantToken),
+    });
+    if (!verificationGate.ok) {
+      return json(
+        buildVerifyErrorPayload(verificationGate),
+        verificationGate.decision === "block" ? 429 : 403,
       );
     }
 
-    const body = await req.json().catch(() => ({}));
+    const verifySessionHint = verificationGate.sessionId;
+    const reject = (payload: Record<string, unknown>, status: number) => {
+      recordVerifyActionFailure(req, { actionType: "signup", sessionIdHint: verifySessionHint });
+      return json(payload, status);
+    };
 
-    const email = normalizeEmail(body.email);
-    const password = String(body.password || "").trim();
-    const displayName = body.displayName != null ? String(body.displayName).trim() : null;
+    const email = normalizeEmail(body?.email);
+    const password = String(body?.password || "");
+    const displayNameRaw =
+      body?.displayName != null && String(body.displayName).trim() ? String(body.displayName).trim() : null;
+    const usernameRaw = body?.username != null ? String(body.username).trim() : "";
+    const usernameNorm = normalizeUsername(usernameRaw);
 
-    const accountNameRaw =
-      body.accountName != null && String(body.accountName).trim()
-        ? String(body.accountName).trim()
-        : "CavBot Account";
-
-    const requestedSlug =
-      body.accountSlug != null && String(body.accountSlug).trim()
-        ? toSlug(String(body.accountSlug))
-        : toSlug(accountNameRaw);
-
-    if (!email || !password) {
-      return NextResponse.json(
-        { ok: false, error: "missing_fields" },
-        { status: 400, headers: { "Cache-Control": "no-store" } }
+    if (!email || !password) return reject({ ok: false, error: "missing_fields" }, 400);
+    if (!isValidEmail(email)) return reject({ ok: false, error: "invalid_email" }, 400);
+    if (!usernameRaw) {
+      return reject({ ok: false, error: "username_required", message: "Username is required." }, 400);
+    }
+    if (usernameRaw !== usernameNorm) {
+      return reject({ ok: false, error: "username_lowercase", message: "Username must be lowercase." }, 400);
+    }
+    if (!isValidUsername(usernameNorm)) {
+      return reject(
+        { ok: false, error: "invalid_username", message: "Username must be 3–20 chars, lowercase, start with a letter." },
+        400,
       );
+    }
+    if (isReservedUsername(usernameNorm)) {
+      return reject({ ok: false, error: "username_reserved", message: "That username is reserved." }, 400);
     }
 
     if (password.length < 10) {
-      return NextResponse.json(
-        { ok: false, error: "weak_password", message: "Use 10+ characters." },
-        { status: 400, headers: { "Cache-Control": "no-store" } }
-      );
+      return reject({ ok: false, error: "weak_password", message: "Use 10+ characters." }, 400);
     }
 
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
-      return NextResponse.json(
-        { ok: false, error: "email_in_use" },
-        { status: 409, headers: { "Cache-Control": "no-store" } }
-      );
-    }
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) return reject({ ok: false, error: "email_in_use" }, 409);
 
-    // Ensure unique account slug (auto-suffix if needed)
-    let accountSlug = requestedSlug;
-    const slugExists = await prisma.account.findUnique({ where: { slug: accountSlug } });
-    if (slugExists) {
-      accountSlug = `${requestedSlug}-${randomToken(3)}`; // short suffix
-    }
+    const existingUsername = await prisma.user.findUnique({ where: { username: usernameNorm } });
+    if (existingUsername) return reject({ ok: false, error: "username_in_use" }, 409);
+
+    const displayName = displayNameRaw && displayNameRaw.length > 64 ? displayNameRaw.slice(0, 64) : displayNameRaw;
+
+    const accountName =
+      body?.accountName != null && String(body.accountName).trim()
+        ? String(body.accountName).trim()
+        : deriveAccountNameFromEmail(email);
+
+    const requestedSlug =
+      body?.accountSlug != null && String(body.accountSlug).trim() ? toSlug(body.accountSlug) : toSlug(accountName);
+
+    const accountSlug = await findAvailableAccountSlug(requestedSlug);
 
     const pass = await hashPassword(password);
 
-    // Default project provisioning:
-    // - create a server key (raw) and store only hash + last4 in DB
     const serverKeyRaw = `cavbot_sk_${randomToken(24)}`;
     const serverKeyHash = await sha256Hex(serverKeyRaw);
     const serverKeyLast4 = serverKeyRaw.slice(-4);
 
     const now = new Date();
     const trialDays = 14;
-    const trialEnd = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
+    const trialEndsAt = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
 
-    const result = await prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: {
-          email,
-          displayName: displayName || undefined,
-          lastLoginAt: now,
-        },
-      });
+    const geo = readCloudflareGeo(req);
 
-      await tx.userAuth.create({
-        data: {
-          userId: user.id,
-          passwordAlgo: pass.algo,
-          passwordIters: pass.iters,
-          passwordSalt: pass.salt,
-          passwordHash: pass.hash,
-        },
-      });
+      try {
+        const result = await prisma.$transaction(async (tx) => {
+        const username = usernameNorm;
 
-      const account = await tx.account.create({
-        data: {
-          name: accountNameRaw,
-          slug: accountSlug,
-          tier: "SOLO",
-        },
-      });
+        const user = await tx.user.create({
+          data: {
+            email,
+            username,
+            displayName: displayName || undefined,
+            lastLoginAt: now,
+          },
+        });
 
-      await tx.membership.create({
-        data: {
-          accountId: account.id,
-          userId: user.id,
-          role: "OWNER",
-        },
-      });
+        await tx.userAuth.create({
+          data: {
+            userId: user.id,
+            passwordAlgo: pass.algo,
+            passwordIters: pass.iters,
+            passwordSalt: pass.salt,
+            passwordHash: pass.hash,
+          },
+        });
 
-      await tx.subscription.create({
-        data: {
-          accountId: account.id,
-          status: "TRIALING",
-          tier: "SOLO",
-          currentPeriodStart: now,
-          currentPeriodEnd: trialEnd,
-        },
-      });
+        const account = await tx.account.create({
+          data: {
+            name: accountName,
+            slug: accountSlug,
+            tier: "FREE",
+            trialSeatActive: true,
+            trialStartedAt: now,
+            trialEndsAt,
+            trialEverUsed: true,
+          },
+        });
 
-      // Create a default project (slug is unique per account)
-      const project = await tx.project.create({
-        data: {
-          accountId: account.id,
-          name: "Primary Project",
-          slug: "primary",
-          serverKeyHash,
-          serverKeyLast4,
-          isActive: true,
-        },
-      });
+        await tx.membership.create({
+          data: {
+            accountId: account.id,
+            userId: user.id,
+            role: "OWNER",
+          },
+        });
+
+        await tx.subscription.create({
+          data: {
+            accountId: account.id,
+            status: "TRIALING",
+            tier: "FREE",
+            currentPeriodStart: now,
+            currentPeriodEnd: trialEndsAt,
+          },
+        });
+
+        const project = await tx.project.create({
+          data: {
+            accountId: account.id,
+            name: "Primary Project",
+            slug: "primary",
+            serverKeyHash,
+            serverKeyLast4,
+            isActive: true,
+          },
+        });
+
+        await tx.projectGuardrails.create({
+          data: {
+            projectId: project.id,
+            blockUnknownOrigins: true,
+            enforceAllowlist: true,
+            alertOn404Spike: true,
+            alertOnJsSpike: true,
+            strictDeletion: true,
+          },
+        });
+
+        await tx.projectGeoPolicy.create({
+          data: {
+            projectId: project.id,
+            enabled: true,
+            captureLevel: "COUNTRY",
+            storeContinent: true,
+            storeCountry: true,
+            storeSubdivision: false,
+            storeCity: false,
+            includeInDashboard: true,
+          },
+        });
 
       return { user, account, project };
     });
 
-    const token = await createUserSession({
-      userId: result.user.id,
-      accountId: result.account.id,
-      memberRole: "OWNER",
-    });
+    if (result.account.id) {
+      await auditLogWrite({
+        request: req,
+        action: "ACCOUNT_CREATED",
+        accountId: result.account.id,
+        operatorUserId: result.user.id,
+        targetType: "auth",
+        targetId: result.user.id,
+        targetLabel: result.user.email || result.user.username || result.user.id,
+        metaJson: {
+          security_event: "register",
+          location: geo.label,
+          geoRegion: geo.region,
+          geoCountry: geo.country,
+        },
+      });
+    }
 
-    const res = NextResponse.json(
-      {
-        ok: true,
+      const token = await createUserSession({
         userId: result.user.id,
         accountId: result.account.id,
-        accountSlug: result.account.slug,
-        defaultProjectId: result.project.id,
-        defaultProjectSlug: result.project.slug,
-        // NOTE: Do not return serverKeyRaw here for security.
-      },
-      { status: 201, headers: { "Cache-Control": "no-store" } }
-    );
+        memberRole: "OWNER",
+      });
 
-    res.headers.set("Set-Cookie", sessionCookieHeader(token));
-    return res;
-  } catch (e: any) {
-    const msg = String(e?.message || e);
-    const status = msg === "BAD_ORIGIN" ? 403 : 500;
-    return NextResponse.json(
-      { ok: false, error: msg === "BAD_ORIGIN" ? "bad_origin" : "register_failed" },
-      { status, headers: { "Cache-Control": "no-store" } }
-    );
-  }
+      const res = json(
+        {
+          ok: true,
+          userId: result.user.id,
+          accountId: result.account.id,
+          accountSlug: result.account.slug,
+          defaultProjectId: result.project.id,
+          defaultProjectSlug: result.project.slug,
+          serverKey: serverKeyRaw,
+        },
+        201
+      );
+
+      const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
+      const cookieOpts = {
+        ...cookieOptsFromLib,
+        secure: process.env.NODE_ENV === "production" ? cookieOptsFromLib.secure : false,
+      };
+      res.cookies.set(name, token, cookieOpts);
+
+      const pointerCookieOpts = {
+        httpOnly: true,
+        sameSite: "lax" as const,
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 30,
+      };
+
+      res.cookies.set("cb_active_project_id", String(result.project.id), pointerCookieOpts);
+      res.cookies.set("cb_pid", String(result.project.id), pointerCookieOpts);
+
+      try {
+        await sendEmail({
+          to: email,
+          subject: "Welcome to CavBot",
+          html: `
+            <div style="font-family: ui-sans-serif, system-ui; line-height:1.6;">
+              <h2 style="margin:0 0 10px;">Welcome to CavBot</h2>
+              <p style="margin:0 0 12px;">
+                Your workspace is ready. CavBot will map routes, watch failures, and surface recovery insights in real time.
+              </p>
+              <p style="margin:0 0 12px;">
+                You can sign in using your email or username anytime.
+              </p>
+              <p style="margin:12px 0 0; font-size:12px; color:rgba(234,240,255,0.7);">
+                If you didn’t create this account, reply to this email or contact support immediately.
+              </p>
+            </div>
+          `,
+        });
+      } catch {}
+
+      recordVerifyActionSuccess(req, { actionType: "signup", sessionIdHint: verifySessionHint });
+      return res;
+      } catch (error) {
+        if (isPrismaUniqueError(error) && error.code === "P2002") {
+          const target = Array.isArray(error.meta?.target)
+            ? error.meta.target.join(",")
+            : String(error.meta?.target || "");
+          if (target.includes("email")) return reject({ ok: false, error: "email_in_use" }, 409);
+          if (target.includes("username")) return reject({ ok: false, error: "username_in_use" }, 409);
+          if (target.includes("slug")) return reject({ ok: false, error: "account_slug_in_use" }, 409);
+          return reject({ ok: false, error: "conflict" }, 409);
+        }
+        throw error;
+      }
+    } catch (error) {
+      if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
+      const message = error instanceof Error ? error.message : String(error);
+      return json({ ok: false, error: "register_failed", message }, 500);
+    }
 }

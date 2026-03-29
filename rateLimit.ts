@@ -1,3 +1,28 @@
+import type { RateLimitSpec } from "./rate-limiter.do";
+
+type DurableObjectIdLike = {
+  toString(): string;
+};
+
+type DurableObjectStubLike = {
+  fetch(input: string, init?: RequestInit): Promise<Response>;
+};
+
+type DurableObjectNamespaceLike = {
+  idFromName(name: string): DurableObjectIdLike;
+  get(id: DurableObjectIdLike): DurableObjectStubLike;
+};
+
+export type RateLimitEnv = {
+  RL?: DurableObjectNamespaceLike;
+};
+
+type RateLimitResponse = {
+  allowed?: boolean;
+  ok?: boolean;
+  remaining?: number;
+};
+
 function getIp(req: Request): string {
   // CF provides this header
   const ip = req.headers.get("CF-Connecting-IP") || req.headers.get("x-forwarded-for") || "";
@@ -16,16 +41,18 @@ function normalizeOrigin(origin: string | null): string {
 
 export async function enforceRateLimit(
   req: Request,
-  env: any,
+  env: RateLimitEnv | undefined,
   projectId: string,
   origin: string | null,
-  spec: { capacity: number; refillPerSec: number }
+  spec: RateLimitSpec,
+  bucketSuffix?: string
 ) {
   if (!env?.RL) return; // if not bound, skip (dev safety)
 
   const ip = getIp(req);
   const o = normalizeOrigin(origin);
-  const bucketKey = `rl:v1:${projectId}:${o || "no-origin"}:${ip}`;
+  const scope = bucketSuffix ?? o ?? "no-origin";
+  const bucketKey = `rl:v1:${projectId}:${scope}:${ip}`;
 
   const id = env.RL.idFromName(bucketKey);
   const stub = env.RL.get(id);
@@ -36,7 +63,7 @@ export async function enforceRateLimit(
     body: JSON.stringify({ key: bucketKey, spec }),
   });
 
-  const data = await r.json().catch(() => null) as any;
+  const data = (await r.json().catch(() => null)) as RateLimitResponse | null;
   if (!data?.allowed) {
     throw new Response(
       JSON.stringify({ ok: false, error: "rate_limited" }),

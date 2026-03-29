@@ -1,0 +1,295 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1250;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(2, 6, 22, 0.62);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 90ms ease-out, visibility 0s linear 90ms;
+}
+
+.overlay[data-open="true"] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 90ms ease-out;
+}
+
+@supports ((-webkit-backdrop-filter: blur(3px)) or (backdrop-filter: blur(3px))) {
+  .overlay {
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+  }
+}
+
+.card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  width: min(620px, 96vw);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background:
+    radial-gradient(360px 170px at 96% -42%, rgba(78, 168, 255, 0.16), transparent 64%),
+    rgba(1, 4, 16, 0.9);
+  box-shadow: none;
+  color: #d4dff8;
+  display: grid;
+  gap: 14px;
+  padding: 22px 20px 18px;
+  opacity: 0;
+  transform: translate3d(0, 8px, 0) scale(0.988);
+  transition: opacity 90ms ease-out, transform 110ms ease-out;
+  will-change: opacity, transform;
+}
+
+.overlay[data-open="true"] .card {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+}
+
+.glowTop,
+.glowBottom {
+  display: none;
+}
+
+.glowTop {
+  width: 280px;
+  height: 180px;
+  top: -110px;
+  right: -88px;
+  background: rgba(78, 168, 255, 0.22);
+}
+
+.glowBottom {
+  width: 260px;
+  height: 170px;
+  left: -78px;
+  bottom: -108px;
+  background: rgba(185, 200, 90, 0.18);
+}
+
+.header {
+  display: grid;
+  justify-items: center;
+  align-items: center;
+  gap: 14px;
+  padding-top: 10px;
+}
+
+.brSpacer {
+  height: 32px;
+}
+
+.brand {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  align-items: center;
+  row-gap: 24px;
+  text-align: center;
+}
+
+.emblem {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(6, 12, 28, 0.92);
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 0 0 1px rgba(78, 168, 255, 0.15);
+}
+
+.mark {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.shield {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(1, 8, 20, 0.98);
+  display: grid;
+  place-items: center;
+}
+
+.shieldIcon {
+  width: 10px;
+  height: 10px;
+  background: rgba(185, 200, 90, 0.96);
+  -webkit-mask: url("/icons/app/security-protection-hand-shield-svgrepo-com.svg") center / contain no-repeat;
+  mask: url("/icons/app/security-protection-hand-shield-svgrepo-com.svg") center / contain no-repeat;
+}
+
+.brandMeta {
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.kicker {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(197, 206, 231, 0.72);
+}
+
+.title {
+  margin: 0;
+  font-size: 23px;
+  letter-spacing: 0.03em;
+  color: #f7fbff;
+}
+
+.subtitle {
+  margin: 10px 0 0;
+  max-width: 34ch;
+  font-size: 12px;
+  text-align: center;
+  color: rgba(202, 214, 242, 0.8);
+}
+
+.body {
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 14px;
+  background: rgba(1, 4, 16, 0.58);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  padding: 14px 14px 13px;
+  display: grid;
+  gap: 14px;
+  min-height: 208px;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+}
+
+.headline {
+  margin: 0 auto;
+  width: min(52ch, 100%);
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #f7fbff;
+}
+
+.copyBlock {
+  width: min(52ch, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+
+.copyLine {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.72;
+  letter-spacing: 0.012em;
+  text-align: center;
+  color: rgba(224, 234, 252, 0.92);
+  max-width: 46ch;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 32px;
+}
+
+.actionBtn {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(247, 251, 255, 0.92);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background 120ms ease, color 120ms ease, opacity 120ms ease;
+}
+
+.actionBtn:hover {
+  background: rgba(78, 168, 255, 0.12);
+  color: rgba(247, 251, 255, 0.96);
+}
+
+.actionBtn:active {
+  opacity: 0.92;
+}
+
+.actionBtn:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .card {
+    transition: none;
+  }
+
+  .card {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .card {
+    border-radius: 16px;
+    padding: 18px 15px 14px;
+  }
+
+  .header {
+    padding-top: 8px;
+  }
+
+  .brand {
+    row-gap: 18px;
+  }
+
+  .brSpacer {
+    height: 24px;
+  }
+
+  .title {
+    font-size: 20px;
+  }
+
+  .copyLine {
+    font-size: 11px;
+  }
+
+  .body {
+    min-height: 190px;
+  }
+
+  .footer {
+    margin-top: 24px;
+  }
+}

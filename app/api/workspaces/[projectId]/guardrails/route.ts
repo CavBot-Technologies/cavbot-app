@@ -1,0 +1,162 @@
+// app/api/workspaces/[projectId]/guardrails/route.ts
+import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { readSanitizedJson } from "@/lib/security/userInput";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+const NO_STORE_HEADERS: Record<string, string> = {
+  "Cache-Control": "no-store, max-age=0",
+  Pragma: "no-cache",
+  Expires: "0",
+  Vary: "Cookie",
+};
+
+function json(data: unknown, init?: number | ResponseInit) {
+  const resInit: ResponseInit = typeof init === "number" ? { status: init } : init ?? {};
+  return NextResponse.json(data, {
+    ...resInit,
+    headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS },
+  });
+}
+
+function parseProjectId(raw: string): number | null {
+  if (!raw || !/^\d+$/.test(raw)) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
+const ALLOWED_KEYS = [
+  "blockUnknownOrigins",
+  "enforceAllowlist",
+  "alertOn404Spike",
+  "alertOnJsSpike",
+  "strictDeletion",
+] as const;
+
+type GuardrailKey = (typeof ALLOWED_KEYS)[number];
+
+function pickBooleanPatch(patch: unknown) {
+  const data: Partial<Record<GuardrailKey, boolean>> = {};
+  if (typeof patch !== "object" || patch === null) return data;
+  const asObj = patch as Record<string, unknown>;
+  for (const k of ALLOWED_KEYS) {
+    if (typeof asObj[k] === "boolean") data[k] = asObj[k] as boolean;
+  }
+  return data;
+}
+
+function isGuardrailsUniqueConflict(err: unknown): boolean {
+  if (err instanceof Prisma.PrismaClientKnownRequestError) return err.code === "P2002";
+  const code = String((err as { code?: unknown })?.code || "");
+  return code === "P2002";
+}
+
+async function ensureGuardrailsRow(
+  projectId: number,
+  patch?: Partial<Record<GuardrailKey, boolean>>
+) {
+  const data = (patch || {}) as Record<string, boolean>;
+  const hasPatch = Object.keys(data).length > 0;
+
+  if (hasPatch) {
+    const updated = await prisma.projectGuardrails.updateMany({
+      where: { projectId },
+      data,
+    });
+    if (updated.count > 0) {
+      return prisma.projectGuardrails.findUniqueOrThrow({
+        where: { projectId },
+      });
+    }
+  } else {
+    const existing = await prisma.projectGuardrails.findUnique({
+      where: { projectId },
+    });
+    if (existing) return existing;
+  }
+
+  try {
+    return await prisma.projectGuardrails.create({
+      data: { projectId, ...(hasPatch ? data : {}) },
+    });
+  } catch (err) {
+    if (!isGuardrailsUniqueConflict(err)) throw err;
+
+    if (hasPatch) {
+      return prisma.projectGuardrails.update({
+        where: { projectId },
+        data,
+      });
+    }
+
+    const existing = await prisma.projectGuardrails.findUnique({
+      where: { projectId },
+    });
+    if (existing) return existing;
+    throw err;
+  }
+}
+
+// Next 15+ params can be a Promise — always await it safely
+async function getParams(ctx: unknown): Promise<{ projectId?: string }> {
+  const params = typeof ctx === "object" && ctx !== null ? (ctx as { params?: { projectId?: string } }).params ?? {} : {};
+  return Promise.resolve(params);
+}
+
+export async function GET(req: Request, ctx: unknown) {
+  try {
+    const sess = await requireSession(req);
+    requireAccountContext(sess);
+
+    const params = await getParams(ctx);
+    const projectId = parseProjectId(params?.projectId || "");
+    if (!projectId) return json({ error: "BAD_PROJECT" }, 400);
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, accountId: sess.accountId },
+      select: { id: true },
+    });
+    if (!project) return json({ error: "NOT_FOUND" }, 404);
+
+    const guardrails = await ensureGuardrailsRow(project.id);
+
+    return json({ guardrails }, 200);
+  } catch (e: unknown) {
+    if (isApiAuthError(e)) return json({ error: e.code }, e.status);
+    return json({ error: "SERVER_ERROR" }, 500);
+  }
+}
+
+export async function PATCH(req: Request, ctx: unknown) {
+  try {
+    const sess = await requireSession(req);
+    requireAccountContext(sess);
+
+    const params = await getParams(ctx);
+    const projectId = parseProjectId(params?.projectId || "");
+    if (!projectId) return json({ error: "BAD_PROJECT" }, 400);
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, accountId: sess.accountId },
+      select: { id: true },
+    });
+    if (!project) return json({ error: "NOT_FOUND" }, 404);
+
+    const patch = await readSanitizedJson(req, null);
+    const data = pickBooleanPatch(patch);
+
+    if (Object.keys(data).length === 0) return json({ error: "NO_CHANGES" }, 400);
+
+    const guardrails = await ensureGuardrailsRow(project.id, data);
+
+    return json({ guardrails }, 200);
+  } catch (e: unknown) {
+    if (isApiAuthError(e)) return json({ error: e.code }, e.status);
+    return json({ error: "SERVER_ERROR" }, 500);
+  }
+}

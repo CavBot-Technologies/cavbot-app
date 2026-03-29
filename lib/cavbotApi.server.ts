@@ -2,26 +2,39 @@
 import "server-only";
 import type { CavBotSite, ProjectSummary } from "./cavbotTypes";
 
-export type SummaryRange = "7d" | "30d";
+export type SummaryRange = "24h" | "7d" | "14d" | "30d";
 
 type CavBotEnv = {
   baseUrl: string;
-  secretKey?: string;  // cavbot_sk_... (OPTIONAL for admin-only reads/writes)
-  adminToken?: string; // server-only admin (dashboard/admin reads)
+
+  // Optional "default" key (useful for single-tenant/dev). Multi-tenant routes should override per request.
+  secretKey?: string;
+
+  // Admin-only endpoints (dashboard/admin reads/writes)
+  adminToken?: string;
+
   runtimeEnv?: string;
   sdkVersion?: string;
+};
+
+export type RequestAuthOverride = {
+  projectKey?: string;
+  adminToken?: string;
+  requestId?: string;
 };
 
 type SummaryOptions = {
   range?: SummaryRange;
   siteId?: string;
   siteOrigin?: string;
+  auth?: RequestAuthOverride;
 };
 
 export class CavBotApiError extends Error {
   status?: number;
   code?: string;
   requestId?: string;
+
   constructor(message: string, status?: number, code?: string, requestId?: string) {
     super(message);
     this.name = "CavBotApiError";
@@ -32,14 +45,21 @@ export class CavBotApiError extends Error {
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
+
 let _cachedEnv: CavBotEnv | null = null;
 
 function env(name: string) {
-  return (process.env[name] || "").trim();
+  return String(process.env[name] || "").trim();
 }
 
 function normalizeBaseUrl(input: string): string {
   const s = (input || "").trim();
+  if (!s) return s;
+
+  // Accept:
+  // - https://api.cavbot.io
+  // - https://api.cavbot.io/v1
+  // - https://api.cavbot.io/v1/events
   try {
     const u = new URL(s);
     return u.origin.replace(/\/+$/, "");
@@ -51,29 +71,23 @@ function normalizeBaseUrl(input: string): string {
   }
 }
 
-function getEnv(): CavBotEnv {
+export function getEnv(): CavBotEnv {
   if (_cachedEnv) return _cachedEnv;
 
   const baseUrlRaw = env("CAVBOT_API_BASE_URL") || env("CAVBOT_API_URL");
-
-  // NOTE (upgrade): secretKey is OPTIONAL now for admin-only endpoints
-  const secretKey = env("CAVBOT_SECRET_KEY") || env("CAVBOT_PROJECT_KEY") || "";
-
-  const adminToken = env("CAVBOT_ADMIN_TOKEN") || undefined;
-
-  const runtimeEnv = env("CAVBOT_RUNTIME_ENV") || env("NODE_ENV") || undefined;
-  const sdkVersion = env("CAVBOT_SDK_VERSION") || undefined;
-
   if (!baseUrlRaw) {
     throw new Error("Missing env vars: CAVBOT_API_BASE_URL or CAVBOT_API_URL.");
   }
+
+  const secretKey = env("CAVBOT_SECRET_KEY") || env("CAVBOT_PROJECT_KEY") || "";
+  const adminToken = env("CAVBOT_ADMIN_TOKEN") || undefined;
 
   _cachedEnv = {
     baseUrl: normalizeBaseUrl(baseUrlRaw),
     secretKey: secretKey || undefined,
     adminToken,
-    runtimeEnv,
-    sdkVersion,
+    runtimeEnv: env("CAVBOT_RUNTIME_ENV") || env("NODE_ENV") || undefined,
+    sdkVersion: env("CAVBOT_SDK_VERSION") || undefined,
   };
 
   return _cachedEnv;
@@ -84,7 +98,7 @@ function normalizeOrigin(input: string): string {
   if (!s) return "";
   try {
     const u = new URL(s);
-    return u.origin; // strips path/query
+    return u.origin;
   } catch {
     return s.replace(/\/+$/, "");
   }
@@ -112,20 +126,28 @@ async function safeJson(res: Response) {
   }
 }
 
-function errorMessage(base: string, status: number, body: any) {
-  const code = body?.code ? ` ${String(body.code)}` : "";
+function errorMessage(base: string, status: number, body: unknown) {
+  const record: Record<string, unknown> =
+    typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+  const code = record?.code ? ` ${String(record.code)}` : "";
   const detail =
-    body?.error ? `: ${String(body.error)}` :
-    body?.message ? `: ${String(body.message)}` :
+    record?.error ? `: ${String(record.error)}` :
+    record?.message ? `: ${String(record.message)}` :
     "";
   return `${base} (${status})${code}${detail}`;
 }
 
 function randomHex(bytes = 16) {
-  const b = crypto.getRandomValues(new Uint8Array(bytes));
-  let out = "";
-  for (let i = 0; i < b.length; i++) out += b[i].toString(16).padStart(2, "0");
-  return out;
+  const cryptoObj = typeof globalThis.crypto === "object" ? (globalThis.crypto as Crypto) : null;
+  if (cryptoObj && typeof cryptoObj.getRandomValues === "function") {
+    const values = new Uint8Array(bytes);
+    cryptoObj.getRandomValues(values);
+    return Array.from(values)
+      .map((num) => num.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  throw new Error("Web Crypto not available for generating random IDs");
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS) {
@@ -134,9 +156,12 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = DEFA
 
   try {
     return await fetch(url, { ...init, signal: controller.signal });
-  } catch (e: any) {
-    if (e?.name === "AbortError") throw new CavBotApiError(`Request timed out after ${timeoutMs}ms`, 408, "timeout");
-    throw new CavBotApiError(`Network error while calling CavBot API`, 503, "network_error");
+  } catch (e: unknown) {
+    const err = e as { name?: string } | null;
+    if (err?.name === "AbortError") {
+      throw new CavBotApiError(`Request timed out after ${timeoutMs}ms`, 408, "timeout");
+    }
+    throw new CavBotApiError("Network error while calling CavBot API", 503, "network_error");
   } finally {
     clearTimeout(t);
   }
@@ -146,18 +171,25 @@ function buildHeaders(opts?: {
   requireAdmin?: boolean;
   requireProjectKey?: boolean;
   requestId?: string;
+
+  // per-request overrides (multi-tenant)
+  projectKey?: string;
+  adminToken?: string;
 }) {
-  const { secretKey, adminToken, runtimeEnv, sdkVersion } = getEnv();
+  const envv = getEnv();
 
   const requireAdmin = Boolean(opts?.requireAdmin);
   const requireProjectKey = Boolean(opts?.requireProjectKey);
+
+  const projectKey = (opts?.projectKey ?? envv.secretKey) || "";
+  const adminToken = (opts?.adminToken ?? envv.adminToken) || "";
 
   if (requireAdmin && !adminToken) {
     throw new Error("Missing env var: CAVBOT_ADMIN_TOKEN (required for admin/dashboard endpoints).");
   }
 
-  if (requireProjectKey && !secretKey) {
-    throw new Error("Missing env var: CAVBOT_PROJECT_KEY or CAVBOT_SECRET_KEY (required for project-key endpoints).");
+  if (requireProjectKey && !projectKey) {
+    throw new Error("Missing project key (CAVBOT_PROJECT_KEY/CAVBOT_SECRET_KEY or per-request projectKey override).");
   }
 
   const headers: Record<string, string> = {
@@ -165,44 +197,53 @@ function buildHeaders(opts?: {
     "Content-Type": "application/json",
   };
 
-  // Server-to-server auth (optional now; only included if present)
-  if (secretKey) headers["X-Project-Key"] = secretKey;
+  // Project auth (server-to-server)
+  if (projectKey) headers["X-Project-Key"] = projectKey;
 
+  // Admin auth (server-to-server)
   if (requireAdmin && adminToken) headers["X-Admin-Token"] = adminToken;
 
-  if (runtimeEnv) headers["X-Cavbot-Env"] = runtimeEnv;
-  if (sdkVersion) headers["X-Cavbot-Sdk-Version"] = sdkVersion;
+  // Telemetry / trace
+  if (envv.runtimeEnv) headers["X-Cavbot-Env"] = envv.runtimeEnv;
+  if (envv.sdkVersion) headers["X-Cavbot-Sdk-Version"] = envv.sdkVersion;
 
-  // Traceability at scale (helps debug prod incidents)
   headers["X-Request-Id"] = opts?.requestId || `cav_${Date.now()}_${randomHex(8)}`;
 
   return headers;
 }
 
 /* =========================
-  READS
-  ========================= */
+   READS
+   ========================= */
 
-export async function getProjectSites(projectId: string | number): Promise<CavBotSite[]> {
+export async function getProjectSites(
+  projectId: string | number,
+  auth?: RequestAuthOverride
+): Promise<CavBotSite[]> {
   const { baseUrl } = getEnv();
 
-  const res = await fetchWithTimeout(
-    `${baseUrl}/v1/projects/${String(projectId)}/sites`,
-    {
-      method: "GET",
-      // IMPORTANT: use project-key auth here (NOT admin) to avoid legacy fallback issues
-      headers: buildHeaders({ requireProjectKey: true }),
-      cache: "no-store",
-    }
-  );
+  const res = await fetchWithTimeout(`${baseUrl}/v1/projects/${String(projectId)}/sites`, {
+    method: "GET",
+    headers: buildHeaders({
+      requireProjectKey: true,
+      projectKey: auth?.projectKey,
+      requestId: auth?.requestId,
+    }),
+    cache: "no-store",
+  });
 
-  const json = await safeJson(res);
+  const body = await safeJson(res);
   if (!res.ok) {
-    const reqId = res.headers.get("X-Request-Id") || undefined;
-    throw new CavBotApiError(errorMessage("Failed to load sites", res.status, json), res.status, json?.code, reqId);
+    const reqId = res.headers.get("X-Request-Id") || auth?.requestId || undefined;
+    throw new CavBotApiError(
+      errorMessage("Failed to load sites", res.status, body),
+      res.status,
+      body?.code,
+      reqId
+    );
   }
 
-  return (Array.isArray(json?.sites) ? json.sites : []) as CavBotSite[];
+  return (Array.isArray(body?.sites) ? body.sites : []) as CavBotSite[];
 }
 
 export async function getProjectSummary(
@@ -219,23 +260,51 @@ export async function getProjectSummary(
 
   const res = await fetchWithTimeout(url, {
     method: "GET",
-    // IMPORTANT: use project-key auth here (NOT admin) to avoid legacy fallback issues
-    headers: buildHeaders({ requireProjectKey: true }),
+    headers: buildHeaders({
+      requireProjectKey: true,
+      projectKey: options?.auth?.projectKey,
+      requestId: options?.auth?.requestId,
+    }),
     cache: "no-store",
   });
 
-  const json = await safeJson(res);
+  const body = await safeJson(res);
   if (!res.ok) {
-    const reqId = res.headers.get("X-Request-Id") || undefined;
-    throw new CavBotApiError(errorMessage("Failed to load summary", res.status, json), res.status, json?.code, reqId);
+    const reqId = res.headers.get("X-Request-Id") || options?.auth?.requestId || undefined;
+    throw new CavBotApiError(
+      errorMessage("Failed to load summary", res.status, body),
+      res.status,
+      body?.code,
+      reqId
+    );
   }
 
-  return json as ProjectSummary;
+  return body as ProjectSummary;
+}
+
+/**
+ * Multi-tenant friendly wrapper.
+ * Your Next route can pass a per-project key (decrypted from DB).
+ */
+export async function getProjectSummaryForTenant(input: {
+  projectId: string | number;
+  range?: SummaryRange;
+  siteId?: string;
+  siteOrigin?: string;
+  projectKey?: string;
+  requestId?: string;
+}): Promise<ProjectSummary> {
+  return getProjectSummary(input.projectId, {
+    range: input.range,
+    siteId: input.siteId,
+    siteOrigin: input.siteOrigin,
+    auth: { projectKey: input.projectKey, requestId: input.requestId },
+  });
 }
 
 /* =========================
-  ADMIN SITE SYNC (Worker/D1)
-  ========================= */
+   ADMIN SITE SYNC (Worker/D1)
+   ========================= */
 
 export async function registerWorkerSite(projectId: string | number, origin: string, label: string) {
   const { baseUrl } = getEnv();
@@ -243,20 +312,22 @@ export async function registerWorkerSite(projectId: string | number, origin: str
   const safeOrigin = normalizeOrigin(origin);
   const safeLabel = normalizeLabel(label);
 
-  const res = await fetchWithTimeout(
-    `${baseUrl}/v1/admin/projects/${String(projectId)}/sites`,
-    {
-      method: "POST",
-      headers: buildHeaders({ requireAdmin: true }),
-      body: JSON.stringify({ origin: safeOrigin, label: safeLabel }),
-      cache: "no-store",
-    }
-  );
+  const res = await fetchWithTimeout(`${baseUrl}/v1/admin/projects/${String(projectId)}/sites`, {
+    method: "POST",
+    headers: buildHeaders({ requireAdmin: true }),
+    body: JSON.stringify({ origin: safeOrigin, label: safeLabel }),
+    cache: "no-store",
+  });
 
   const body = await safeJson(res);
   if (!res.ok) {
     const reqId = res.headers.get("X-Request-Id") || undefined;
-    throw new CavBotApiError(errorMessage("Failed to register site in Worker", res.status, body), res.status, body?.code, reqId);
+    throw new CavBotApiError(
+      errorMessage("Failed to register site in Worker", res.status, body),
+      res.status,
+      body?.code,
+      reqId
+    );
   }
 
   return body;
@@ -275,20 +346,22 @@ export async function updateWorkerSite(
     isActive: typeof params.isActive === "boolean" ? params.isActive : undefined,
   };
 
-  const res = await fetchWithTimeout(
-    `${baseUrl}/v1/admin/projects/${String(projectId)}/sites`,
-    {
-      method: "PATCH",
-      headers: buildHeaders({ requireAdmin: true }),
-      body: JSON.stringify(payload),
-      cache: "no-store",
-    }
-  );
+  const res = await fetchWithTimeout(`${baseUrl}/v1/admin/projects/${String(projectId)}/sites`, {
+    method: "PATCH",
+    headers: buildHeaders({ requireAdmin: true }),
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
 
   const body = await safeJson(res);
   if (!res.ok) {
     const reqId = res.headers.get("X-Request-Id") || undefined;
-    throw new CavBotApiError(errorMessage("Failed to update Worker site", res.status, body), res.status, body?.code, reqId);
+    throw new CavBotApiError(
+      errorMessage("Failed to update Worker site", res.status, body),
+      res.status,
+      body?.code,
+      reqId
+    );
   }
 
   return body;

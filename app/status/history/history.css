@@ -1,0 +1,552 @@
+.status-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.status-history-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-history-breadcrumb {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.status-history-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.status-history-meta {
+  font-size: var(--status-body);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.status-history-toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  width: 100%;
+  margin-top: clamp(20px, 2.8vw, 30px);
+}
+
+.status-history-title h1 {
+  margin: 0;
+}
+
+.status-history-title p {
+  margin: 6px 0 0;
+  font-size: var(--status-body);
+  color: rgba(197, 206, 231, 0.78);
+  max-width: 420px;
+  text-align: center;
+}
+
+.status-history-title {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.status-history-month-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 6px;
+  position: relative;
+}
+
+.status-history-summary-chip {
+  margin-bottom: 4px;
+  font-size: var(--status-body);
+  letter-spacing: 0;
+  text-transform: none;
+  color: rgba(255, 255, 255, 0.8);
+  background: transparent;
+  border: none;
+  display: block;
+}
+
+.status-history-date-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.status-history-calendar-trigger {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(8, 13, 30, 0.94);
+  color: rgba(245, 248, 255, 0.86);
+  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.status-history-calendar-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.status-history-calendar-trigger:hover,
+.status-history-calendar-trigger:focus-visible {
+  border-color: var(--blue-border, rgba(78, 168, 255, 0.55));
+  background: rgba(78, 168, 255, 0.14);
+  transform: translateY(-1px);
+}
+
+.status-history-day-caption,
+.status-history-fetch-error {
+  margin: 0;
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: none;
+  color: rgba(212, 225, 245, 0.72);
+}
+
+.status-history-fetch-error {
+  color: rgba(255, 177, 177, 0.88);
+}
+
+.status-history-calendar-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(320px, calc(100vw - 40px));
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(160deg, rgba(9, 17, 34, 0.95), rgba(4, 10, 22, 0.95));
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(14px);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.status-history-calendar-head {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) 26px;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  margin-left: -12px;
+  margin-right: -12px;
+  padding-left: 12px;
+  padding-right: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.status-history-calendar-title {
+  text-align: center;
+  font-size: 0.8rem;
+  letter-spacing: 0.09em;
+  text-transform: none;
+  color: rgba(239, 246, 255, 0.9);
+}
+
+.status-history-calendar-nav {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(244, 247, 255, 0.76);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.84rem;
+  line-height: 1;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.status-history-calendar-nav:hover,
+.status-history-calendar-nav:focus-visible {
+  border-color: var(--blue-border, rgba(78, 168, 255, 0.55));
+  background: rgba(78, 168, 255, 0.14);
+}
+
+.status-history-calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(184, 199, 226, 0.7);
+  text-align: center;
+}
+
+.status-history-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  column-gap: 6px;
+  row-gap: 8px;
+}
+
+.status-history-day-cell {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(6, 12, 28, 0.82);
+  color: rgba(240, 245, 255, 0.88);
+  font-size: 0.74rem;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  position: relative;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.status-history-day-cell:hover,
+.status-history-day-cell:focus-visible {
+  border-color: var(--blue, #4ea8ff);
+  background: rgba(78, 168, 255, 0.18);
+  transform: translateY(-1px);
+}
+
+.status-history-day-cell.is-outside-month {
+  opacity: 0.46;
+}
+
+.status-history-day-cell.is-selected {
+  border-color: rgba(78, 222, 159, 0.88);
+  background: rgba(78, 222, 159, 0.2);
+  color: #d9ffe8;
+}
+
+.status-history-day-cell.is-disabled {
+  opacity: 0.34;
+  cursor: not-allowed;
+}
+
+.status-history-day-cell.is-disabled:hover,
+.status-history-day-cell.is-disabled:focus-visible {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(6, 12, 28, 0.82);
+  transform: none;
+}
+
+.status-history-day-cell.is-today {
+  border-color: rgba(111, 204, 255, 0.82);
+}
+
+.status-history-day-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #4ede9f;
+}
+
+.status-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2.2vw, 24px);
+  margin-bottom: clamp(48px, 8vw, 80px);
+  margin-top: clamp(24px, 4vw, 40px);
+}
+
+.status-history-list > :first-child {
+  margin-top: clamp(8px, 1.8vw, 14px);
+}
+
+.status-history-empty {
+  padding: var(--status-card-pad);
+  border: 0;
+  background: transparent;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: var(--status-body);
+}
+
+.status-route--history .status-footer {
+  margin-top: clamp(40px, 7vw, 64px);
+}
+
+@media (max-width: 640px) {
+  .status-route--history .status-footer {
+    margin-top: clamp(28px, 8vw, 44px);
+  }
+}
+
+.history-incident {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(54px, 70px) minmax(0, 1fr) auto;
+  gap: clamp(16px, 1.5vw, 24px) clamp(24px, 2vw, 32px);
+  align-items: stretch;
+  padding: clamp(16px, 1.2vw, 20px);
+  border-radius: calc(var(--r-lg) - 8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(5, 7, 18, 0.92);
+  text-decoration: none;
+  color: inherit;
+  box-shadow: none;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+  margin-bottom: 18px;
+}
+
+.history-incident:hover,
+.history-incident:focus-visible {
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: none;
+  transform: none;
+}
+
+.history-incident.is-critical {
+  border-left: 4px solid #ff8a8a;
+}
+
+.history-incident.is-warning {
+  border-left: 4px solid #f2c96c;
+}
+
+.history-incident.is-success {
+  border-left: 4px solid #4ede9f;
+}
+
+.history-incident.is-neutral {
+  border-left: 4px solid rgba(255, 255, 255, 0.25);
+}
+
+.history-incident::before,
+.history-incident::after {
+  content: none;
+}
+
+.status-history-incident-date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--status-metric-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.status-history-date-day {
+  font-size: clamp(1.25rem, 1.35vw, 1.4rem);
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.status-history-date-weekday {
+  font-size: 0.78rem;
+}
+
+.status-history-incident-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 0.9rem;
+}
+
+.status-history-incident-content > * + * {
+  margin-top: 10px;
+}
+
+.status-history-incident-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.status-history-incident-head h2 {
+  margin: 0;
+  font-size: clamp(0.95rem, 1.05vw, 1.08rem);
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.status-history-updates {
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.58);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.status-history-incident-sub {
+  margin: 0;
+  font-size: var(--status-body);
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.5;
+}
+
+.status-history-incident-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.status-history-incident-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(5, 7, 18, 0.85);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.status-history-incident-flag--impact {
+  border-color: rgba(255, 90, 90, 0.45);
+  color: #ffd8d8;
+  background: rgba(255, 90, 90, 0.09);
+}
+
+.status-history-incident-flag--impact.is-major {
+  border-color: rgba(242, 201, 108, 0.55);
+  color: #ffecc4;
+  background: rgba(242, 201, 108, 0.11);
+}
+
+.status-history-incident-flag--impact.is-critical {
+  border-color: rgba(255, 94, 94, 0.6);
+  color: #ffb7b7;
+  background: rgba(255, 94, 94, 0.14);
+}
+
+.status-history-incident-flag--impact.is-minor {
+  border-color: rgba(78, 222, 159, 0.8);
+  color: #9ef8d5;
+  background: rgba(78, 222, 159, 0.14);
+}
+
+.history-incident.is-success .status-history-incident-flag--impact {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(13, 17, 28, 0.8);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.status-history-incident-flag--updates,
+.status-history-incident-flag--services {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(13, 17, 28, 0.8);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.status-history-incident-time {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: uppercase;
+}
+
+.status-history-incident-time span:first-child {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.25em;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.status-history-status-tag {
+  padding: 4px 14px;
+  border-radius: 8px;
+  font-size: 0.64rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(2, 3, 10, 0.65);
+}
+
+.status-tag-critical {
+  border-color: rgba(255, 90, 90, 0.6);
+  color: #ff9ea0;
+}
+
+.status-tag-warning {
+  border-color: rgba(255, 200, 120, 0.7);
+  color: #ffe4b8;
+}
+
+.status-tag-success {
+  border-color: rgba(78, 222, 159, 0.7);
+  color: #b5f8d3;
+}
+
+.status-tag-neutral {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+@media (max-width: 900px) {
+  .status-history-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .status-history-month-summary {
+    align-items: flex-start;
+  }
+
+  .status-history-date-control {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .status-history-calendar-popover {
+    right: auto;
+    left: 0;
+    width: min(320px, calc(100vw - 52px));
+  }
+
+  .history-incident {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .status-history-incident-time {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}

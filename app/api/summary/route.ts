@@ -3,146 +3,117 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAccountContext, requireSession } from "@/lib/apiAuth";
+import type { SummaryRange } from "@/lib/cavbotApi.server";
+import { getProjectSummary } from "@/lib/cavbotApi.server";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function mustEnv(name: string): string {
-  const v = (process.env[name] ?? "").trim();
-  if (!v) throw new Error(`missing_env:${name}`);
-  return v;
+const NO_STORE_HEADERS: Record<string, string> = {
+  "Cache-Control": "no-store, max-age=0",
+  Pragma: "no-cache",
+  Expires: "0",
+  Vary: "Cookie",
+};
+
+function json<T>(payload: T, init?: number | ResponseInit) {
+  const resInit: ResponseInit = typeof init === "number" ? { status: init } : init ?? {};
+  return NextResponse.json(payload, {
+    ...resInit,
+    headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS },
+  });
 }
 
-function readEnv(...names: string[]): string {
-  for (const n of names) {
-    const v = (process.env[n] ?? "").trim();
-    if (v) return v;
+function normalizeRange(input: string | null): SummaryRange {
+  const v = String(input ?? "").trim();
+  if (v === "24h" || v === "7d" || v === "14d" || v === "30d") return v as SummaryRange;
+  return "30d";
+}
+
+function parseProjectId(raw: string | null): number | null {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  if (!/^\d+$/.test(s)) return null;
+  const n = Number(s);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function normalizeMaybeOrigin(input: string | null): string | undefined {
+  const raw = String(input ?? "").trim();
+  if (!raw) return undefined;
+
+  const withProto =
+    raw.startsWith("http://") || raw.startsWith("https://") ? raw : `https://${raw}`;
+
+  let u: URL;
+  try {
+    u = new URL(withProto);
+  } catch {
+    throw new Error("BAD_ORIGIN");
   }
-  return "";
+
+  if (!u.hostname || u.hostname.includes("..")) throw new Error("BAD_ORIGIN");
+  if (u.username || u.password) throw new Error("BAD_ORIGIN");
+
+  return u.origin;
+}
+
+function asHttpError(e: unknown) {
+  const msg = String((e as { message?: unknown })?.message || e);
+
+  if (msg === "UNAUTHORIZED" || msg === "NO_SESSION" || msg === "UNAUTHENTICATED") {
+    return { status: 401, payload: { ok: false, error: "UNAUTHENTICATED" } };
+  }
+  if (msg === "FORBIDDEN") return { status: 403, payload: { ok: false, error: "FORBIDDEN" } };
+  if (msg === "BAD_ORIGIN") return { status: 400, payload: { ok: false, error: "BAD_ORIGIN" } };
+
+  return { status: 500, payload: { ok: false, error: "SUMMARY_PROXY_FAILED" } };
 }
 
 export async function GET(req: Request) {
   try {
-    // 1) Auth + account context
     const session = await requireSession(req);
     requireAccountContext(session);
 
-    // 2) Find the requested project in your Prisma DB (this is your "console app" world)
     const { searchParams } = new URL(req.url);
 
-    const projectIdRaw = (searchParams.get("projectId") ?? "").trim();
-    const projectSlug = (searchParams.get("projectSlug") ?? "").trim();
+    const pid = parseProjectId(searchParams.get("projectId"));
+    const projectSlug = String(searchParams.get("projectSlug") ?? "").trim();
 
-    let project: any = null;
+    const project = pid
+      ? await prisma.project.findFirst({
+          where: { id: pid, accountId: session.accountId!, isActive: true },
+          select: { id: true, slug: true, name: true },
+        })
+      : projectSlug
+      ? await prisma.project.findFirst({
+          where: { slug: projectSlug, accountId: session.accountId!, isActive: true },
+          select: { id: true, slug: true, name: true },
+        })
+      : await prisma.project.findFirst({
+          where: { accountId: session.accountId!, isActive: true },
+          orderBy: { createdAt: "asc" },
+          select: { id: true, slug: true, name: true },
+        });
 
-    if (projectIdRaw) {
-      const pid = Number(projectIdRaw);
-      if (!Number.isFinite(pid)) {
-        return NextResponse.json({ ok: false, error: "projectId must be a number" }, { status: 400 });
-      }
-      project = await prisma.project.findFirst({
-        where: { id: pid, accountId: session.accountId!, isActive: true },
-      });
-    } else if (projectSlug) {
-      project = await prisma.project.findFirst({
-        where: { slug: projectSlug, accountId: session.accountId!, isActive: true },
-      });
-    } else {
-      project = await prisma.project.findFirst({
-        where: { accountId: session.accountId!, isActive: true },
-        orderBy: { createdAt: "asc" },
-      });
-    }
+    if (!project) return json({ ok: false, error: "PROJECT_NOT_FOUND" }, 404);
 
-    if (!project) {
-      return NextResponse.json({ ok: false, error: "project_not_found" }, { status: 404 });
-    }
+    const range = normalizeRange(searchParams.get("range"));
 
-    // 3) Analytics Worker config (this is your "analytics world")
-    // Base URL: prefer server-only var, fallback to NEXT_PUBLIC if needed
-    const apiBase =
-      readEnv("CAVBOT_API_BASE_URL", "CAVBOT_API_BASE", "NEXT_PUBLIC_CAVBOT_API_BASE") ||
-      "https://api.cavbot.io";
+    const siteOrigin = normalizeMaybeOrigin(
+      searchParams.get("origin") ?? searchParams.get("siteOrigin")
+    );
+    const siteId = String(searchParams.get("siteId") ?? "").trim() || undefined;
 
-    // IMPORTANT: This must be a SECRET in Cloudflare Pages (cavbot-app)
-    // Do NOT use a NEXT_PUBLIC key for this server call.
-    const projectKey = mustEnv("CAVBOT_PROJECT_KEY");
-
-    const range = (searchParams.get("range") ?? "30d").trim() || "30d";
-
-    // 4) Call the Worker with X-Project-Key so it never hits legacy_requires_project_key
-    const url = new URL(`/v1/projects/${encodeURIComponent(String(project.id))}/summary`, apiBase);
-    url.searchParams.set("range", range);
-
-    // Optional: if you ever add origin filtering in the worker for server calls,
-    // you can pass an origin to filter by site:
-    // const origin = (searchParams.get("origin") ?? "").trim();
-    // if (origin) url.searchParams.set("origin", origin);
-
-    const res = await fetch(url.toString(), {
-      method: "GET",
-      headers: {
-        "Accept": "application/json",
-        "X-Project-Key": projectKey,
-        // (Optional) if you ever want admin-mode reads:
-        // "X-Admin-Token": mustEnv("CAVBOT_ADMIN_TOKEN"),
-      },
-      cache: "no-store",
+    const data = await getProjectSummary(String(project.id), {
+      range,
+      siteOrigin,
+      siteId,
     });
 
-    const text = await res.text();
-    let payload: any = null;
-    try {
-      payload = text ? JSON.parse(text) : null;
-    } catch {
-      payload = { ok: false, error: "bad_json_from_analytics", raw: text?.slice(0, 300) };
-    }
-
-    if (!res.ok) {
-      // Preserve worker status + message so debugging is clean
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "analytics_summary_failed",
-          status: res.status,
-          analytics: payload,
-        },
-        { status: res.status }
-      );
-    }
-
-    return NextResponse.json(
-      {
-        ok: true,
-        project: { id: project.id, slug: project.slug, name: project.name },
-        data: payload,
-      },
-      { headers: { "Cache-Control": "no-store" } }
-    );
-  } catch (e: any) {
-    const msg = String(e?.message || e);
-
-    if (msg === "UNAUTHORIZED") {
-      return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-    }
-
-    // Helpful env error
-    if (msg.startsWith("missing_env:")) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "server_misconfigured",
-          message: msg,
-          hint:
-            "Set this variable in Cloudflare Pages (cavbot-app) → Settings → Variables and Secrets (Production).",
-        },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json(
-      { ok: false, error: "summary_proxy_failed", message: msg },
-      { status: 500 }
-    );
+    return json({ ok: true, project, data }, 200);
+  } catch (e: unknown) {
+    const { status, payload } = asHttpError(e);
+    return json(payload, status);
   }
 }

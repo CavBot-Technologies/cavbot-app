@@ -1,9 +1,16 @@
 // lib/currentProject.server.ts
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { webcrypto as nodeCrypto } from "crypto";
 
 function env(name: string) {
   return (process.env[name] || "").trim();
+}
+
+// Node + Edge crypto safety
+function getCrypto(): Crypto {
+  if (globalThis.crypto?.subtle) return globalThis.crypto;
+  return nodeCrypto as Crypto;
 }
 
 function last4(s: string) {
@@ -18,13 +25,15 @@ function bytesToHex(bytes: Uint8Array) {
 }
 
 async function sha256Hex(input: string) {
+  const c = getCrypto();
   const data = new TextEncoder().encode(input);
-  const hash = await crypto.subtle.digest("SHA-256", data);
+  const hash = await c.subtle.digest("SHA-256", data);
   return bytesToHex(new Uint8Array(hash));
 }
 
 function randomToken(bytes = 24) {
-  const b = crypto.getRandomValues(new Uint8Array(bytes));
+  const c = getCrypto();
+  const b = c.getRandomValues(new Uint8Array(bytes));
   return bytesToHex(b);
 }
 
@@ -49,7 +58,23 @@ export async function getCurrentProject(opts?: {
     const projectId = opts.projectId;
     const projectSlug = (opts.projectSlug || "").trim();
 
-    let project = null as any;
+    type ProjectSummary = {
+      id: number;
+      accountId: string;
+      name: string;
+      slug: string;
+      serverKeyLast4: string;
+      isActive: boolean;
+    };
+
+    type ProjectRow = Omit<ProjectSummary, "name"> & { name: string | null };
+
+    const normalizeProject = (p: ProjectRow): ProjectSummary => ({
+      ...p,
+      name: p.name ?? "Project",
+    });
+
+    let project: ProjectRow | null = null;
 
     if (projectId != null) {
       project = await prisma.project.findFirst({
@@ -64,7 +89,7 @@ export async function getCurrentProject(opts?: {
         },
       });
       if (!project) throw new Error("Project not found");
-      return project;
+      return normalizeProject(project);
     }
 
     if (projectSlug) {
@@ -80,7 +105,7 @@ export async function getCurrentProject(opts?: {
         },
       });
       if (!project) throw new Error("Project not found");
-      return project;
+      return normalizeProject(project);
     }
 
     // Default: first active project for this tenant
@@ -122,10 +147,10 @@ export async function getCurrentProject(opts?: {
         },
       });
 
-      return created;
+      return normalizeProject(created);
     }
 
-    return project;
+    return normalizeProject(project);
   }
 
   // ==========================
@@ -183,5 +208,5 @@ export async function getCurrentProject(opts?: {
     },
   });
 
-  return project;
+  return { ...project, name: project.name ?? projectName };
 }

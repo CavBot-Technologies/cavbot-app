@@ -1,0 +1,32 @@
+/* app/billing/failed/billing-failed.css */
+/* This file ONLY overrides what needs to change vs billing-result.css (success) */
+
+.pay-stage.is-failed{
+  justify-content:flex-start;
+  padding-top: 26px;
+}
+
+/* FAILED EYES (RED) */
+.cavbot-pay-failed .cavbot-eye-glow{
+  background: radial-gradient(circle, rgba(255,120,120,.92), rgba(255,120,120,0)) !important;
+  animation: cavbotFailPulse .9s ease-in-out infinite !important;
+}
+.cavbot-pay-failed .cavbot-eye-pupil{
+  background: rgba(255,120,120,.95) !important;
+  box-shadow: 0 0 14px rgba(255,120,120,.22) !important;
+}
+
+@keyframes cavbotFailPulse{
+  0%,100%{ opacity:.35; transform:scale(1); }
+  50%{ opacity:1; transform:scale(1.12); }
+}
+
+/* FAILED STATUS + MUTED AMOUNT */
+.pay-receipt .bad{
+  color: rgba(255,120,120,.95);
+}
+
+.pay-amtMuted{
+  color: rgba(197,206,231,.62);
+  font-weight: 750;
+}

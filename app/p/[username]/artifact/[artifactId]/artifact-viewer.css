@@ -1,0 +1,260 @@
+.pav-page {
+  min-height: 100vh;
+  padding: 18px;
+  background:
+    radial-gradient(1200px 700px at 15% -10%, rgba(130, 170, 255, 0.2), transparent 70%),
+    radial-gradient(900px 600px at 100% 0%, rgba(140, 220, 160, 0.15), transparent 70%),
+    #070a12;
+  color: rgba(243, 248, 255, 0.92);
+}
+
+.pav-shell {
+  width: min(1280px, 100%);
+  margin: 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(10, 14, 24, 0.8);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.pav-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pav-headLeft {
+  min-width: 0;
+}
+
+.pav-back {
+  font-size: 12px;
+  color: rgba(206, 220, 248, 0.76);
+  text-decoration: none;
+}
+
+.pav-back:hover {
+  color: rgba(241, 248, 255, 0.95);
+}
+
+.pav-title {
+  margin: 6px 0 0;
+  font-size: 18px;
+  line-height: 1.25;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.pav-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(206, 220, 248, 0.62);
+}
+
+.pav-headRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pav-btn,
+.pav-iconBtn,
+.pav-modalBtn,
+.pav-crumb {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(241, 248, 255, 0.94);
+  border-radius: 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pav-btn {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pav-iconBtn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.pav-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.pav-crumb {
+  padding: 6px 10px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.pav-crumb.is-active {
+  border-color: rgba(180, 215, 255, 0.55);
+  background: rgba(180, 215, 255, 0.14);
+}
+
+.pav-error {
+  margin: 12px 18px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 120, 120, 0.45);
+  background: rgba(255, 78, 78, 0.1);
+  color: rgba(255, 220, 220, 0.95);
+  font-size: 13px;
+}
+
+.pav-body {
+  padding: 18px;
+}
+
+.pav-loading,
+.pav-empty {
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  color: rgba(210, 223, 248, 0.74);
+  text-align: center;
+  font-size: 13px;
+  padding: 22px 12px;
+}
+
+.pav-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 14px;
+}
+
+.pav-item {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  min-height: 124px;
+  padding: 14px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  cursor: default;
+  user-select: none;
+}
+
+.pav-item.is-selected {
+  border-color: rgba(180, 215, 255, 0.58);
+  box-shadow: 0 0 0 1px rgba(180, 215, 255, 0.32) inset;
+}
+
+.pav-itemMenu {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  color: rgba(232, 242, 255, 0.86);
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.pav-itemIcon {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.pav-itemName {
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(241, 248, 255, 0.92);
+  overflow-wrap: anywhere;
+}
+
+.pav-previewWrap {
+  min-height: calc(100vh - 220px);
+}
+
+.pav-modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(4, 7, 12, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.pav-modal {
+  width: min(360px, 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(10, 14, 24, 0.96);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.pav-modalTitle {
+  font-size: 13px;
+  color: rgba(206, 220, 248, 0.72);
+  padding: 4px 4px 6px;
+}
+
+.pav-modalBtn {
+  text-align: left;
+  padding: 9px 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pav-modalBtn.is-danger {
+  border-color: rgba(255, 110, 110, 0.5);
+  color: rgba(255, 218, 218, 0.96);
+  background: rgba(255, 86, 86, 0.12);
+}
+
+@media (max-width: 840px) {
+  .pav-page {
+    padding: 10px;
+  }
+
+  .pav-head {
+    padding: 12px 12px;
+  }
+
+  .pav-breadcrumbs {
+    padding: 10px 12px;
+  }
+
+  .pav-body {
+    padding: 12px;
+  }
+
+  .pav-grid {
+    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+    gap: 10px;
+  }
+}
+
