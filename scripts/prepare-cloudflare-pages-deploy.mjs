@@ -15,6 +15,19 @@ import os from "node:os";
 import path from "node:path";
 
 const MAX_PAGES_FILE_BYTES = 25 * 1024 * 1024;
+const EXTERNAL_PREBUNDLE_MODULES = [
+  "critters",
+  "react-dom/server.edge",
+  "react-dom/static.edge",
+  "react-dom/server-rendering-stub",
+  "react-server-dom-webpack/server.node",
+  "react-server-dom-webpack/server.edge",
+  "react-server-dom-webpack/client.edge",
+  "react-server-dom-turbopack/client.edge",
+  "react-server-dom-turbopack/server.edge",
+  "react-server-dom-turbopack/server.node",
+  "@opentelemetry/api"
+];
 const rootDir = process.cwd();
 const openNextDir = path.join(rootDir, ".open-next");
 const deployDir = path.join(openNextDir, "pages-deploy");
@@ -51,10 +64,14 @@ await cp(path.join(openNextDir, "server-functions"), path.join(deployDir, "serve
   recursive: true
 });
 
-// Keep OpenNext worker import graph intact; prebundleWorkerForPages() below
-// will collapse this to a single-file worker for Wrangler --no-bundle deploys.
+// Keep OpenNext behavior while routing to the smaller server index entrypoint.
+// prebundleWorkerForPages() below then collapses this to a single-file worker.
 const workerSource = await readFile(path.join(openNextDir, "worker.js"), "utf8");
-await writeFile(path.join(deployDir, "_worker.js"), workerSource, "utf8");
+const patchedWorkerSource = workerSource.replace(
+  "./server-functions/default/handler.mjs",
+  "./server-functions/default/index.mjs"
+);
+await writeFile(path.join(deployDir, "_worker.js"), patchedWorkerSource, "utf8");
 
 async function splitOversizedHandlerIfNeeded() {
   const handlerDir = path.join(deployDir, "server-functions", "default");
@@ -110,7 +127,7 @@ async function prebundleWorkerForPages() {
       format: "esm",
       platform: "node",
       target: ["es2022"],
-      external: ["cloudflare:workers"],
+      external: ["cloudflare:workers", ...EXTERNAL_PREBUNDLE_MODULES],
       minify: true,
       legalComments: "none",
       sourcemap: false,
