@@ -144,6 +144,16 @@ async function prebundleWorkerForPages() {
     }
 
     let bundledSource = await readFile(bundledWorkerPath, "utf8");
+    const dynamicRequireShimPreamble =
+      `const require=Object.assign(function(id){const key=String(id??"");` +
+      `if(typeof process<"u"&&typeof process.getBuiltinModule=="function"){` +
+      `let mod=process.getBuiltinModule(key);` +
+      `if(mod==null&&typeof key=="string"&&!key.startsWith("node:"))mod=process.getBuiltinModule("node:"+key);` +
+      `if(mod!=null)return mod;}` +
+      `throw Error('Dynamic require of "'+key+'" is not supported');` +
+      `},{resolve:function(id){return String(id??"")}});`;
+    bundledSource = `${dynamicRequireShimPreamble}${bundledSource}`;
+
     const middlewareInitPattern =
       /,([A-Za-z_$][A-Za-z0-9_$]*)=await ([A-Za-z_$][A-Za-z0-9_$]*)\(\{handler:([A-Za-z_$][A-Za-z0-9_$]*),type:"middleware"\}\);/;
     const middlewareInitMatch = bundledSource.match(middlewareInitPattern);
