@@ -145,7 +145,49 @@ async function prebundleWorkerForPages() {
 
     let bundledSource = await readFile(bundledWorkerPath, "utf8");
     const dynamicRequireShimPreamble =
+      `import * as __cavbot_node_path from "node:path";` +
+      `import * as __cavbot_node_module from "node:module";` +
+      `import * as __cavbot_node_async_hooks from "node:async_hooks";` +
+      `import * as __cavbot_node_crypto from "node:crypto";` +
+      `import * as __cavbot_node_buffer from "node:buffer";` +
+      `import * as __cavbot_node_stream from "node:stream";` +
+      `import * as __cavbot_node_stream_web from "node:stream/web";` +
+      `import * as __cavbot_node_querystring from "node:querystring";` +
+      `import * as __cavbot_node_url from "node:url";` +
+      `import * as __cavbot_node_http from "node:http";` +
+      `import * as __cavbot_node_https from "node:https";` +
+      `import * as __cavbot_node_net from "node:net";` +
+      `import * as __cavbot_node_tls from "node:tls";` +
+      `import * as __cavbot_node_zlib from "node:zlib";` +
+      `import * as __cavbot_node_os from "node:os";` +
+      `import * as __cavbot_node_fs from "node:fs";` +
+      `import * as __cavbot_node_events from "node:events";` +
+      `import * as __cavbot_node_util from "node:util";` +
+      `import * as __cavbot_node_vm from "node:vm";` +
+      `const __cavbot_node_module_cjs=__cavbot_node_module.default||__cavbot_node_module.Module||__cavbot_node_module;` +
+      `const __cavbot_builtin_modules={` +
+      `"path":__cavbot_node_path,"node:path":__cavbot_node_path,` +
+      `"module":__cavbot_node_module_cjs,"node:module":__cavbot_node_module_cjs,` +
+      `"async_hooks":__cavbot_node_async_hooks,"node:async_hooks":__cavbot_node_async_hooks,` +
+      `"crypto":__cavbot_node_crypto,"node:crypto":__cavbot_node_crypto,` +
+      `"buffer":__cavbot_node_buffer,"node:buffer":__cavbot_node_buffer,` +
+      `"stream":__cavbot_node_stream,"node:stream":__cavbot_node_stream,` +
+      `"stream/web":__cavbot_node_stream_web,"node:stream/web":__cavbot_node_stream_web,` +
+      `"querystring":__cavbot_node_querystring,"node:querystring":__cavbot_node_querystring,` +
+      `"url":__cavbot_node_url,"node:url":__cavbot_node_url,` +
+      `"http":__cavbot_node_http,"node:http":__cavbot_node_http,` +
+      `"https":__cavbot_node_https,"node:https":__cavbot_node_https,` +
+      `"net":__cavbot_node_net,"node:net":__cavbot_node_net,` +
+      `"tls":__cavbot_node_tls,"node:tls":__cavbot_node_tls,` +
+      `"zlib":__cavbot_node_zlib,"node:zlib":__cavbot_node_zlib,` +
+      `"os":__cavbot_node_os,"node:os":__cavbot_node_os,` +
+      `"fs":__cavbot_node_fs,"node:fs":__cavbot_node_fs,` +
+      `"events":__cavbot_node_events,"node:events":__cavbot_node_events,` +
+      `"util":__cavbot_node_util,"node:util":__cavbot_node_util,` +
+      `"vm":__cavbot_node_vm,"node:vm":__cavbot_node_vm` +
+      `};` +
       `const require=Object.assign(function(id){const key=String(id??"");` +
+      `if(Object.prototype.hasOwnProperty.call(__cavbot_builtin_modules,key))return __cavbot_builtin_modules[key];` +
       `if(typeof process<"u"&&typeof process.getBuiltinModule=="function"){` +
       `let mod=process.getBuiltinModule(key);` +
       `if(mod==null&&typeof key=="string"&&!key.startsWith("node:"))mod=process.getBuiltinModule("node:"+key);` +
