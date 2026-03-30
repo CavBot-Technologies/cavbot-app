@@ -64,14 +64,10 @@ await cp(path.join(openNextDir, "server-functions"), path.join(deployDir, "serve
   recursive: true
 });
 
-// Keep OpenNext behavior while routing to the smaller server index entrypoint.
-// prebundleWorkerForPages() below then collapses this to a single-file worker.
+// Keep the default OpenNext worker entrypoint so runtime bootstrapping remains compatible
+// with Workers (the server index path can trigger unsupported fs calls in workerd).
 const workerSource = await readFile(path.join(openNextDir, "worker.js"), "utf8");
-const patchedWorkerSource = workerSource.replace(
-  "./server-functions/default/handler.mjs",
-  "./server-functions/default/index.mjs"
-);
-await writeFile(path.join(deployDir, "_worker.js"), patchedWorkerSource, "utf8");
+await writeFile(path.join(deployDir, "_worker.js"), workerSource, "utf8");
 
 async function splitOversizedHandlerIfNeeded() {
   const handlerDir = path.join(deployDir, "server-functions", "default");
@@ -217,7 +213,9 @@ async function prebundleWorkerForPages() {
   }
 }
 
-await prebundleWorkerForPages();
+if (process.env.CF_PREBUNDLE_WORKER === "1") {
+  await prebundleWorkerForPages();
+}
 
 const oversized = [];
 const bannedFileNames = new Set([".DS_Store"]);
