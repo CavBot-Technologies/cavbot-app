@@ -16,6 +16,15 @@ Open `http://localhost:3000`.
 
 Primary deploy target is Cloudflare via OpenNext.
 
+### Production deploy policy
+
+- Primary path: GitHub Pages build on `main`.
+- Secondary emergency path: local ad-hoc deploy with `npm run deploy:cloudflare`.
+- Guardrails for ad-hoc production deploys:
+  - worktree must be clean
+  - `HEAD` must already be in `origin/main`
+  - deploy metadata is pinned to git (`branch=main`, exact `commit_hash`, `commit_dirty=false`)
+
 ### GitHub Actions Deploy Fallback (recommended)
 
 If Cloudflare's Git integration returns an internal installation error, deploy via GitHub Actions.
@@ -31,4 +40,10 @@ Local deploy commands:
 ```bash
 npm run build:cloudflare
 npm run deploy:cloudflare
+```
+
+Guard-only check:
+
+```bash
+npm run deploy:cloudflare:guard
 ```

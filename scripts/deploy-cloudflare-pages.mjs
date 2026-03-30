@@ -1,0 +1,53 @@
+#!/usr/bin/env node
+
+import { execFileSync, spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const shouldSkipBuild = process.env.CF_DEPLOY_SKIP_BUILD === "1";
+const env = {
+  ...process.env,
+  CF_PREBUNDLE_WORKER: "1"
+};
+
+function run(command, args) {
+  const result = spawnSync(command, args, {
+    cwd: rootDir,
+    stdio: "inherit",
+    env
+  });
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+}
+
+const guardOutput = execFileSync("node", ["scripts/cloudflare-deploy-guard.mjs", "--json"], {
+  cwd: rootDir,
+  encoding: "utf8",
+  env
+}).trim();
+
+const metadata = JSON.parse(guardOutput);
+
+if (!shouldSkipBuild) {
+  run("npm", ["run", "build:cloudflare"]);
+}
+
+run("npm", ["run", "prepare:cloudflare:pages"]);
+
+run("wrangler", [
+  "pages",
+  "deploy",
+  ".open-next/pages-deploy",
+  "--project-name",
+  "cavbot-app",
+  "--branch",
+  metadata.branch,
+  "--commit-hash",
+  metadata.commitHash,
+  "--commit-message",
+  metadata.commitMessage,
+  "--commit-dirty=false",
+  "--no-bundle"
+]);
