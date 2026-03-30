@@ -32,6 +32,8 @@ const rootDir = process.cwd();
 const openNextDir = path.join(rootDir, ".open-next");
 const deployDir = path.join(openNextDir, "pages-deploy");
 const excludedDir = path.join(openNextDir, "pages-deploy-excluded");
+const buildIdValue = (await readFile(path.join(openNextDir, "assets", "BUILD_ID"), "utf8")
+  .catch(async () => readFile(path.join(openNextDir, "BUILD_ID"), "utf8"))).trim();
 
 const requiredPaths = [
   path.join(openNextDir, "assets"),
@@ -144,6 +146,89 @@ async function prebundleWorkerForPages() {
     }
 
     let bundledSource = await readFile(bundledWorkerPath, "utf8");
+    const builtinAliases = [
+      { specifier: "path", alias: "__cavbot_node_path" },
+      { specifier: "module", alias: "__cavbot_node_module" },
+      { specifier: "async_hooks", alias: "__cavbot_node_async_hooks" },
+      { specifier: "crypto", alias: "__cavbot_node_crypto" },
+      { specifier: "vm", alias: "__cavbot_node_vm" },
+      { specifier: "http", alias: "__cavbot_node_http" },
+      { specifier: "https", alias: "__cavbot_node_https" },
+      { specifier: "stream", alias: "__cavbot_node_stream" },
+      { specifier: "stream/web", alias: "__cavbot_node_stream_web" },
+      { specifier: "buffer", alias: "__cavbot_node_buffer" },
+      { specifier: "url", alias: "__cavbot_node_url" },
+      { specifier: "util", alias: "__cavbot_node_util" },
+      { specifier: "events", alias: "__cavbot_node_events" },
+      { specifier: "fs", alias: "__cavbot_node_fs" },
+      { specifier: "os", alias: "__cavbot_node_os" },
+      { specifier: "net", alias: "__cavbot_node_net" },
+      { specifier: "tls", alias: "__cavbot_node_tls" },
+      { specifier: "zlib", alias: "__cavbot_node_zlib" },
+      { specifier: "querystring", alias: "__cavbot_node_querystring" }
+    ];
+    const builtinImportPreamble = builtinAliases
+      .map(({ specifier, alias }) => `import * as ${alias} from "node:${specifier}";`)
+      .join("");
+    const resolveBuiltinRef = ({ specifier, alias }) =>
+      specifier === "module"
+        ? "__cavbot_node_module_cjs"
+        : alias;
+    const builtinRequireEntries = builtinAliases
+      .flatMap((entry) => {
+        const ref = resolveBuiltinRef(entry);
+        return [
+          `"${entry.specifier}": ${ref}`,
+          `"node:${entry.specifier}": ${ref}`
+        ];
+      })
+      .join(",");
+    const requireShimPreamble =
+      `const __cavbot_node_module_cjs=__cavbot_node_module.default||__cavbot_node_module.Module||__cavbot_node_module;` +
+      `const __cavbotBuiltinModules={${builtinRequireEntries}};` +
+      `const require=Object.assign(function(id){const key=String(id||"");` +
+      `if(Object.prototype.hasOwnProperty.call(__cavbotBuiltinModules,key))return __cavbotBuiltinModules[key];` +
+      `throw Error('Dynamic require of "'+key+'" is not supported');},{resolve:function(id){return String(id||"");}});`;
+    bundledSource = `${builtinImportPreamble}${requireShimPreamble}${bundledSource}`;
+    bundledSource = bundledSource.replaceAll('eval("require")', "require");
+    bundledSource = bundledSource.replaceAll("eval('require')", "require");
+
+    const dynamicRequireHelperNeedle =
+      'function(e){if(typeof require<"u")return require.apply(this,arguments);throw Error(\'Dynamic require of "\'+e+\'" is not supported\')}';
+    const dynamicRequireHelperPatch =
+      'function(e){if(typeof require<"u")return require.apply(this,arguments);if(typeof process<"u"&&typeof process.getBuiltinModule=="function"){let t=process.getBuiltinModule(e);if(t==null&&typeof e=="string"&&!e.startsWith("node:"))t=process.getBuiltinModule("node:"+e);if(t!=null)return t;}throw Error(\'Dynamic require of "\'+e+\'" is not supported\')}';
+    if (bundledSource.includes(dynamicRequireHelperNeedle)) {
+      bundledSource = bundledSource.replace(dynamicRequireHelperNeedle, dynamicRequireHelperPatch);
+    }
+    for (const entry of builtinAliases) {
+      const ref = resolveBuiltinRef(entry);
+      bundledSource = bundledSource.replaceAll(`In("${entry.specifier}")`, ref);
+      bundledSource = bundledSource.replaceAll(`In("node:${entry.specifier}")`, ref);
+    }
+    const buildIdGetterStart = "getBuildId(){let t=(0,uu.join)(this.distDir,yc.BUILD_ID_FILE);";
+    const buildIdStartIdx = bundledSource.indexOf(buildIdGetterStart);
+    if (buildIdStartIdx >= 0) {
+      let depth = 0;
+      let endIdx = -1;
+      for (let i = buildIdStartIdx; i < bundledSource.length; i += 1) {
+        const ch = bundledSource[i];
+        if (ch === "{") depth += 1;
+        if (ch === "}") {
+          depth -= 1;
+          if (depth === 0) {
+            endIdx = i;
+            break;
+          }
+        }
+      }
+      if (endIdx > buildIdStartIdx) {
+        bundledSource =
+          bundledSource.slice(0, buildIdStartIdx) +
+          `getBuildId(){return ${JSON.stringify(buildIdValue)}}` +
+          bundledSource.slice(endIdx + 1);
+      }
+    }
+
     const middlewareInitPattern =
       /,([A-Za-z_$][A-Za-z0-9_$]*)=await ([A-Za-z_$][A-Za-z0-9_$]*)\(\{handler:([A-Za-z_$][A-Za-z0-9_$]*),type:"middleware"\}\);/;
     const middlewareInitMatch = bundledSource.match(middlewareInitPattern);
