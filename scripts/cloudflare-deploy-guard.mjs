@@ -16,12 +16,13 @@ function fail(message) {
 }
 
 function runGit(args, options = {}) {
-  return execFileSync("git", args, {
+  const output = execFileSync("git", args, {
     cwd: rootDir,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     ...options
-  }).trim();
+  });
+  return typeof output === "string" ? output.trim() : "";
 }
 
 try {
@@ -51,9 +52,7 @@ if (!allowDirty) {
 }
 
 try {
-  runGit(["merge-base", "--is-ancestor", commitHash, "origin/main"], {
-    stdio: "ignore"
-  });
+  runGit(["merge-base", "--is-ancestor", commitHash, "origin/main"]);
 } catch {
   fail(`HEAD (${commitHash}) is not contained in origin/main.`);
 }
