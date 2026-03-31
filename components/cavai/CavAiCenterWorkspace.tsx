@@ -3442,6 +3442,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [guestAuthUsername, setGuestAuthUsername] = useState("");
   const [guestAuthBusy, setGuestAuthBusy] = useState(false);
   const [guestAuthError, setGuestAuthError] = useState("");
+  const [guestAuthDismissed, setGuestAuthDismissed] = useState(false);
   const [accountInitialFallback, setAccountInitialFallback] = useState("");
   const [accountProfileUsername, setAccountProfileUsername] = useState("");
   const [accountProfileAvatar, setAccountProfileAvatar] = useState("");
@@ -5038,6 +5039,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
   useEffect(() => {
     if (isGuestPreviewMode) return;
+    setGuestAuthDismissed(false);
     setAccountMenuOpen(false);
     setGuestAuthStage("email");
     setGuestAuthEmail("");
@@ -5047,6 +5049,14 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     setGuestAuthBusy(false);
     setGuestAuthError("");
   }, [isGuestPreviewMode]);
+
+  useEffect(() => {
+    if (overlay) return;
+    if (!authProbeReady) return;
+    if (!isGuestPreviewMode) return;
+    if (guestAuthDismissed) return;
+    setAccountMenuOpen(true);
+  }, [authProbeReady, guestAuthDismissed, isGuestPreviewMode, overlay]);
 
   useEffect(() => {
     if (isGuestPreviewMode) return;
@@ -5650,6 +5660,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     if (!isGuestPreviewMode) return;
     setGuestAuthError("");
     setGuestAuthStage(opts?.stage || "email");
+    setGuestAuthDismissed(false);
     setAccountMenuOpen(true);
     if (opts?.closeDrawer) setMobileDrawerOpen(false);
   }, [isGuestPreviewMode]);
@@ -5776,6 +5787,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [isGuestPreviewMode, logoutPending]);
 
   const closeGuestAuthPanel = useCallback(() => {
+    setGuestAuthDismissed(true);
     setAccountMenuOpen(false);
     setGuestAuthError("");
   }, []);
