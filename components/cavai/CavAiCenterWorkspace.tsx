@@ -573,6 +573,9 @@ const CAVAI_GUEST_SYNC_ERROR_CODE_MAX_CHARS = 120;
 const CAVAI_GUEST_SESSION_SYNC_PENDING_STORAGE_KEY = "cavai_center_guest_sync_pending_v1";
 const CAVAI_GUEST_PREVIEW_LOGIN_HREF = "/auth?mode=login&next=%2Fcavai";
 const CAVAI_GUEST_PREVIEW_LOCK_MESSAGE = "Sign in to unlock uploads, image tools, advanced models, and deeper reasoning.";
+const CAVAI_MOBILE_LAYOUT_BREAKPOINT_PX = 760;
+const CAVAI_TERMS_OF_USE_HREF = "https://www.cavbot.io/terms-of-use";
+const CAVAI_PRIVACY_POLICY_HREF = "https://www.cavbot.io/privacy-policy";
 const CAVAI_GUEST_PREVIEW_MODELS: CavAiSelectableOption[] = [
   {
     id: ALIBABA_QWEN_FLASH_MODEL_ID,
@@ -3449,6 +3452,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [authProbeReady, setAuthProbeReady] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [isPhoneLayout, setIsPhoneLayout] = useState(false);
   const [chatsExpanded, setChatsExpanded] = useState(true);
   const [images, setImages] = useState<CavAiImageAttachment[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<CavAiUploadedFileAttachment[]>([]);
@@ -3614,6 +3619,42 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     installedAgentIdsRef.current = installedAgentIds;
   }, [installedAgentIds]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const query = `(max-width: ${CAVAI_MOBILE_LAYOUT_BREAKPOINT_PX}px)`;
+    const media = window.matchMedia(query);
+    const sync = () => {
+      const nextIsPhone = media.matches;
+      setIsPhoneLayout(nextIsPhone);
+      if (!nextIsPhone) setMobileDrawerOpen(false);
+    };
+    sync();
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", sync);
+      return () => media.removeEventListener("change", sync);
+    }
+    media.addListener(sync);
+    return () => media.removeListener(sync);
+  }, []);
+
+  useEffect(() => {
+    if (overlay || !isPhoneLayout || !mobileDrawerOpen || typeof document === "undefined") return;
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = overflow;
+    };
+  }, [isPhoneLayout, mobileDrawerOpen, overlay]);
+
+  useEffect(() => {
+    if (!mobileDrawerOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileDrawerOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileDrawerOpen]);
+
   const filteredSessions = useMemo(() => {
     const query = s(sessionQuery).toLowerCase();
     if (!query) return sessions;
@@ -3751,8 +3792,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   ]
     .filter(Boolean)
     .join(" ");
+  const sidebarCollapsedActive = !isPhoneLayout && sidebarCollapsed;
   const hasExistingThread = Boolean(sessionId || messages.length || currentSession || hasInlineEdit);
-  const centerComposerInThread = !overlay && isEmptyThread;
+  const centerComposerInThread = !overlay && isEmptyThread && !isPhoneLayout;
+  const showSignedOutMobileHelper = !overlay && isPhoneLayout && isGuestPreviewMode && isEmptyThread;
+  const showSignedOutMobileLegal = showSignedOutMobileHelper;
   const installedAgentIdSet = useMemo(
     () => new Set(installedAgentIds.map((id) => s(id).toLowerCase())),
     [installedAgentIds]
@@ -4979,10 +5023,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
   useEffect(() => {
     if (isGuestPreviewMode) return;
+    if (isPhoneLayout) return;
     if (!sidebarCollapsed) return;
     if (!accountMenuOpen) return;
     setAccountMenuOpen(false);
-  }, [accountMenuOpen, isGuestPreviewMode, sidebarCollapsed]);
+  }, [accountMenuOpen, isGuestPreviewMode, isPhoneLayout, sidebarCollapsed]);
 
   useEffect(() => {
     if (isGuestPreviewMode) return;
@@ -5009,6 +5054,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     }
     if (!isOpen) setHistoryOpen(false);
   }, [isOpen, overlay]);
+
+  useEffect(() => {
+    if (!isPhoneLayout) return;
+    if (!mobileDrawerOpen) return;
+    setSidebarCollapsed(false);
+  }, [isPhoneLayout, mobileDrawerOpen]);
 
   useEffect(() => {
     if (!shouldWarm) return;
@@ -5559,6 +5610,31 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     setComposerQuickMode((prev) => (prev === "agent_mode" ? null : prev));
   }, [installedCenterAgents, manualAgentRef]);
 
+  const openMobileDrawer = useCallback(() => {
+    if (!isPhoneLayout) return;
+    setOpenHeaderModelMenu(false);
+    setMobileDrawerOpen(true);
+  }, [isPhoneLayout]);
+
+  const closeMobileDrawer = useCallback(() => {
+    setMobileDrawerOpen(false);
+    setAccountMenuOpen(false);
+  }, []);
+
+  const toggleMobileDrawer = useCallback(() => {
+    if (!isPhoneLayout) return;
+    setOpenHeaderModelMenu(false);
+    setMobileDrawerOpen((prev) => !prev);
+  }, [isPhoneLayout]);
+
+  const openGuestAuthPanel = useCallback((opts?: { stage?: GuestAuthStage; closeDrawer?: boolean }) => {
+    if (!isGuestPreviewMode) return;
+    setGuestAuthError("");
+    setGuestAuthStage(opts?.stage || "email");
+    setAccountMenuOpen(true);
+    if (opts?.closeDrawer) setMobileDrawerOpen(false);
+  }, [isGuestPreviewMode]);
+
   const onNewSession = useCallback(() => {
     if (requestAbortRef.current) {
       requestAbortRef.current.abort();
@@ -5578,6 +5654,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     setMessageActionPending({});
     setCopiedMessageToken("");
     setHistoryOpen(false);
+    setMobileDrawerOpen(false);
     stopReasoningContext();
   }, [stopReasoningContext]);
 
@@ -5621,6 +5698,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const onSelectSession = useCallback((nextSessionId: string) => {
     const normalized = s(nextSessionId);
     if (!normalized) return;
+    setMobileDrawerOpen(false);
     activeSessionIdRef.current = normalized;
     const cachedMessages = sessionMessageCacheRef.current.get(normalized);
     if (cachedMessages) {
@@ -5639,6 +5717,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
   const onOpenAccountSettings = useCallback(() => {
     setAccountMenuOpen(false);
+    setMobileDrawerOpen(false);
     if (typeof window !== "undefined") {
       if (isGuestPreviewMode) {
         window.location.assign(CAVAI_GUEST_PREVIEW_LOGIN_HREF);
@@ -5656,6 +5735,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     if (logoutPending) return;
     setLogoutPending(true);
     setAccountMenuOpen(false);
+    setMobileDrawerOpen(false);
     try {
       await fetch("/api/auth/logout", {
         method: "POST",
@@ -5679,12 +5759,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     setAccountMenuOpen(false);
     setGuestAuthError("");
   }, []);
-
-  const onToggleGuestAuthPanel = useCallback(() => {
-    if (!isGuestPreviewMode) return;
-    setGuestAuthError("");
-    setAccountMenuOpen((prev) => !prev);
-  }, [isGuestPreviewMode]);
 
   const onGuestAuthOauth = useCallback((provider: "github" | "google") => {
     if (typeof window === "undefined") return;
@@ -8713,7 +8787,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     if (!input) return;
     input.focus();
     input.select();
-  }, []);
+    if (isPhoneLayout) setMobileDrawerOpen(true);
+  }, [isPhoneLayout]);
 
   const closeSessionActionModal = useCallback(() => {
     setSessionActionModal(null);
@@ -10546,18 +10621,38 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         className={[
           styles.centerShell,
           overlay ? styles.centerShellOverlay : styles.centerShellPage,
-          !overlay && sidebarCollapsed ? styles.centerShellPageSidebarCollapsed : "",
+          !overlay && sidebarCollapsedActive ? styles.centerShellPageSidebarCollapsed : "",
         ]
           .filter(Boolean)
           .join(" ")}
       >
+        {!overlay && isPhoneLayout ? (
+          <button
+            type="button"
+            className={[
+              styles.centerMobileDrawerBackdrop,
+              mobileDrawerOpen ? styles.centerMobileDrawerBackdropOpen : "",
+            ].filter(Boolean).join(" ")}
+            onClick={closeMobileDrawer}
+            aria-label="Close navigation drawer"
+            aria-hidden={!mobileDrawerOpen}
+            tabIndex={mobileDrawerOpen ? 0 : -1}
+          />
+        ) : null}
+
         {!overlay ? (
           <aside
-            className={[styles.centerSidebar, sidebarCollapsed ? styles.centerSidebarCollapsed : ""].filter(Boolean).join(" ")}
+            className={[
+              styles.centerSidebar,
+              sidebarCollapsedActive ? styles.centerSidebarCollapsed : "",
+              mobileDrawerOpen ? styles.centerSidebarMobileOpen : "",
+            ].filter(Boolean).join(" ")}
+            id="cavai-mobile-drawer"
             aria-label="CavAi conversation history"
+            aria-hidden={isPhoneLayout ? !mobileDrawerOpen && !accountMenuOpen : undefined}
           >
             <div className={styles.centerSidebarHead}>
-              {sidebarCollapsed ? (
+              {sidebarCollapsedActive ? (
                 <button
                   type="button"
                   className={styles.centerSidebarCollapsedToggle}
@@ -10576,15 +10671,27 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                   <Link href="/" className={styles.centerSidebarHomeLink} aria-label="Go to CavBot home" title="Home">
                     <span className={styles.centerSidebarBrandMark} aria-hidden="true" />
                   </Link>
-                  <button
-                    type="button"
-                    className={styles.centerSidebarToggleBtn}
-                    aria-label="Collapse CavAi sidebar"
-                    title="Collapse sidebar"
-                    onClick={() => setSidebarCollapsed(true)}
-                  >
-                    <span className={[styles.sidebarToggleGlyph, styles.sidebarLeftGlyph].join(" ")} aria-hidden="true" />
-                  </button>
+                  {isPhoneLayout ? (
+                    <button
+                      type="button"
+                      className={styles.centerSidebarCloseBtn}
+                      aria-label="Close navigation drawer"
+                      title="Close drawer"
+                      onClick={closeMobileDrawer}
+                    >
+                      <span className={styles.centerGuestAuthCloseGlyph} aria-hidden="true" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.centerSidebarToggleBtn}
+                      aria-label="Collapse CavAi sidebar"
+                      title="Collapse sidebar"
+                      onClick={() => setSidebarCollapsed(true)}
+                    >
+                      <span className={[styles.sidebarToggleGlyph, styles.sidebarLeftGlyph].join(" ")} aria-hidden="true" />
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -10604,6 +10711,16 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                 <span className={[styles.centerSidebarActionGlyph, styles.centerSidebarActionGlyphSearch].join(" ")} aria-hidden="true" />
                 <span className={styles.centerSidebarActionText}>Search chats</span>
               </button>
+              {isPhoneLayout ? (
+                <input
+                  ref={searchInputRef}
+                  className={styles.centerSidebarSearchInput}
+                  value={sessionQuery}
+                  onChange={(event) => setSessionQuery(event.currentTarget.value)}
+                  placeholder="Search CavAi"
+                  aria-label="Search chats"
+                />
+              ) : null}
             </div>
 
             <nav className={styles.centerSidebarSurfaceNav} aria-label="CavAi modules">
@@ -10616,6 +10733,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                     aria-current={item.active ? "page" : undefined}
                     aria-label={item.label}
                     title={item.description}
+                    onClick={() => setMobileDrawerOpen(false)}
                   >
                     <span className={[styles.centerSidebarNavGlyph, surfaceNavGlyphClass(item.surface)].join(" ")} aria-hidden="true" />
                     <span className={styles.centerSidebarNavLabel}>{item.label}</span>
@@ -10624,7 +10742,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
               </div>
             </nav>
 
-            {!sidebarCollapsed ? (
+            {!sidebarCollapsedActive ? (
               <div className={styles.centerSidebarChatsHead}>
                 <button
                   type="button"
@@ -10652,9 +10770,9 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
               </div>
             ) : null}
 
-            {!sidebarCollapsed && chatsExpanded ? <div id="cavai-your-chats-list" className={styles.centerSidebarBody}>{renderSessionList}</div> : null}
+            {!sidebarCollapsedActive && chatsExpanded ? <div id="cavai-your-chats-list" className={styles.centerSidebarBody}>{renderSessionList}</div> : null}
 
-            {!sidebarCollapsed ? (
+            {!sidebarCollapsedActive ? (
               <div className={styles.centerSidebarFoot}>
                 {isGuestPreviewMode ? (
                   authProbeReady ? (
@@ -10662,7 +10780,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                     <button
                       type="button"
                       className={[styles.centerSidebarActionBtn, styles.centerSidebarActionBtnPrimary].join(" ")}
-                      onClick={onToggleGuestAuthPanel}
+                      onClick={() => openGuestAuthPanel({ closeDrawer: isPhoneLayout })}
                       aria-label="CavBot Operator"
                       title="CavBot Operator"
                       aria-haspopup="dialog"
@@ -10975,6 +11093,22 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
         <section className={styles.centerMain} aria-label="CavAi chat workspace">
           <header className={styles.centerMainHeader}>
+            {!overlay ? (
+              <div className={styles.centerMobileHeaderLeft}>
+                <button
+                  type="button"
+                  className={[styles.centerIconBtn, styles.centerMobileMenuBtn].join(" ")}
+                  onClick={toggleMobileDrawer}
+                  aria-label="Open navigation drawer"
+                  title="Menu"
+                  aria-expanded={mobileDrawerOpen}
+                  aria-controls="cavai-mobile-drawer"
+                >
+                  <span className={[styles.sidebarToggleGlyph, styles.sidebarLeftGlyph].join(" ")} aria-hidden="true" />
+                </button>
+              </div>
+            ) : null}
+
             <div className={styles.centerMainHeadCopy}>
               <div className={styles.centerMainTitleRow}>
                 {overlay ? (
@@ -10986,7 +11120,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                     <button
                       type="button"
                       className={styles.centerModelTrigger}
-                      onClick={() => setOpenHeaderModelMenu((prev) => !prev)}
+                      onClick={() => {
+                        setMobileDrawerOpen(false);
+                        setOpenHeaderModelMenu((prev) => !prev);
+                      }}
                       aria-haspopup="menu"
                       aria-expanded={openHeaderModelMenu}
                       aria-label={`Model selector. Current model: ${selectedModelLabel}`}
@@ -11087,14 +11224,70 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                   <span className={styles.newChatGlyph} aria-hidden="true" />
                 </button>
               ) : (
-                <input
-                  ref={searchInputRef}
-                  className={styles.centerSidebarSearchInput}
-                  value={sessionQuery}
-                  onChange={(event) => setSessionQuery(event.currentTarget.value)}
-                  placeholder="Search CavAi"
-                  aria-label="Search CavAi"
-                />
+                <>
+                  {!isPhoneLayout ? (
+                    <div className={styles.centerHeaderDesktopSearch}>
+                      <input
+                        ref={searchInputRef}
+                        className={styles.centerSidebarSearchInput}
+                        value={sessionQuery}
+                        onChange={(event) => setSessionQuery(event.currentTarget.value)}
+                        placeholder="Search CavAi"
+                        aria-label="Search CavAi"
+                      />
+                    </div>
+                  ) : null}
+                  {isPhoneLayout ? (
+                    <div className={styles.centerHeaderMobileAccount}>
+                      {isGuestPreviewMode ? (
+                        <button
+                          type="button"
+                          className={styles.centerHeaderLoginBtn}
+                          onClick={() => openGuestAuthPanel({ closeDrawer: true })}
+                          aria-label="Log in"
+                          title="Log in"
+                          disabled={!authProbeReady}
+                        >
+                          Log in
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.centerHeaderAccountBtn}
+                          onClick={openMobileDrawer}
+                          aria-label={`Account: ${accountNameLabel}`}
+                          title="Account"
+                        >
+                          <span
+                            className={styles.centerHeaderAccountChip}
+                            data-tone={accountProfileTone || "lime"}
+                            aria-hidden="true"
+                            style={
+                              {
+                                background: accountChipBackground,
+                                "--center-account-ink": accountChipInk,
+                              } as React.CSSProperties
+                            }
+                          >
+                            {accountHasAvatar ? (
+                              <Image
+                                src={accountProfileAvatar}
+                                alt=""
+                                width={96}
+                                height={96}
+                                quality={60}
+                                unoptimized
+                                className={styles.centerHeaderAccountAvatarImage}
+                              />
+                            ) : (
+                              <span className={styles.centerHeaderAccountInitials}>{accountInitial}</span>
+                            )}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+                </>
               )}
 
               {overlay ? (
@@ -11137,6 +11330,31 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                     .filter(Boolean)
                     .join(" ")}
                 >
+                  {showSignedOutMobileHelper ? (
+                    <section className={styles.centerGuestMobilePrompt} aria-label="Sign in to unlock CavAi features">
+                      <h3 className={styles.centerGuestMobilePromptTitle}>Log in to unlock more with CavAi</h3>
+                      <p className={styles.centerGuestMobilePromptBody}>
+                        Save chats, unlock advanced capabilities, access premium tools, and keep conversations connected to your workspace.
+                      </p>
+                      <div className={styles.centerGuestMobilePromptActions}>
+                        <button
+                          type="button"
+                          className={styles.centerGuestMobilePromptAction}
+                          onClick={() => openGuestAuthPanel({ stage: "email", closeDrawer: true })}
+                        >
+                          Log in
+                        </button>
+                        <button
+                          type="button"
+                          className={[styles.centerGuestMobilePromptAction, styles.centerGuestMobilePromptActionGhost].join(" ")}
+                          onClick={() => openGuestAuthPanel({ stage: "email", closeDrawer: true })}
+                        >
+                          Sign up
+                        </button>
+                      </div>
+                    </section>
+                  ) : null}
+
                   {!overlay ? (
                     <div className={styles.centerEmptyBadgeWrap}>
                       <div className="cb-badge cb-badge-inline" aria-hidden="true">
@@ -12569,6 +12787,15 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
           ) : null}
 
           {!centerComposerInThread ? <footer className={styles.centerComposer}>{composerContent}</footer> : null}
+          {showSignedOutMobileLegal ? (
+            <footer className={styles.centerGuestMobileLegal}>
+              <span>By using CavAi, you agree to the </span>
+              <a href={CAVAI_TERMS_OF_USE_HREF} target="_blank" rel="noopener noreferrer">Terms</a>
+              <span> and </span>
+              <a href={CAVAI_PRIVACY_POLICY_HREF} target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+              <span>.</span>
+            </footer>
+          ) : null}
         </section>
       </section>
     </div>
