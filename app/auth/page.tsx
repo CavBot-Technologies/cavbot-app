@@ -807,7 +807,7 @@ const clearError = useCallback((fieldId: string) => {
                         aria-pressed={suShowPass}
                         onClick={() => setSuShowPass((v) => !v)}
                       >
-                        <PasswordVisibilityIcon shown={suShowPass} />
+                        <PasswordVisibilityIcon shown={suShowPass} variant="auth" />
                       </button>
                     </div>
                     <div className="auth-error" data-error-for="su-password" aria-live="polite">
@@ -944,7 +944,7 @@ const clearError = useCallback((fieldId: string) => {
                         aria-pressed={liShowPass}
                         onClick={() => setLiShowPass((v) => !v)}
                       >
-                        <PasswordVisibilityIcon shown={liShowPass} />
+                        <PasswordVisibilityIcon shown={liShowPass} variant="auth" />
                       </button>
                     </div>
                     <div className="auth-error" data-error-for="li-password" aria-live="polite">
