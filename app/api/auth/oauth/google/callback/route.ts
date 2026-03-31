@@ -57,6 +57,10 @@ function normalizeEmail(x: unknown) {
   return String(x ?? "").trim().toLowerCase();
 }
 
+function asRecord(x: unknown): Record<string, unknown> | null {
+  return x && typeof x === "object" ? (x as Record<string, unknown>) : null;
+}
+
 function toSlug(input: unknown) {
   const s = String(input ?? "")
     .trim()
@@ -132,14 +136,20 @@ async function exchangeCodeForToken(req: NextRequest, code: string) {
     cache: "no-store",
   });
 
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data?.access_token) {
-    throw new Error(data?.error_description || "google_token_exchange_failed");
+  const dataUnknown: unknown = await res.json().catch(() => null);
+  const data = asRecord(dataUnknown);
+  const accessToken = typeof data?.access_token === "string" ? data.access_token : "";
+  if (!res.ok || !accessToken) {
+    const errorMessage =
+      typeof data?.error_description === "string"
+        ? data.error_description
+        : "google_token_exchange_failed";
+    throw new Error(errorMessage);
   }
 
   return {
-    accessToken: String(data.access_token),
-    idToken: data.id_token ? String(data.id_token) : "",
+    accessToken,
+    idToken: typeof data?.id_token === "string" ? data.id_token : "",
   };
 }
 
@@ -149,9 +159,10 @@ async function fetchGoogleUserinfo(accessToken: string) {
     cache: "no-store",
   });
 
-  const data = await res.json().catch(() => ({}));
+  const dataUnknown: unknown = await res.json().catch(() => null);
+  const data = asRecord(dataUnknown);
   if (!res.ok) throw new Error("google_userinfo_failed");
-  return data;
+  return data ?? {};
 }
 
 export async function GET(req: NextRequest) {

@@ -19,16 +19,21 @@ async function apiJSON(url: string, init?: RequestInit) {
     cache: "no-store",
   });
 
-  const data = await res.json().catch(() => ({}));
+  const dataUnknown: unknown = await res.json().catch(() => null);
+  const data =
+    dataUnknown && typeof dataUnknown === "object"
+      ? (dataUnknown as Record<string, unknown>)
+      : null;
+  const errorMessage = typeof data?.error === "string" ? data.error : "REQUEST_FAILED";
 
   if (!res.ok) {
-    throw Object.assign(new Error(data?.error || "REQUEST_FAILED"), {
+    throw Object.assign(new Error(errorMessage), {
       status: res.status,
       data,
     });
   }
 
-  return data;
+  return dataUnknown;
 }
 
 function buildNext(token: string) {

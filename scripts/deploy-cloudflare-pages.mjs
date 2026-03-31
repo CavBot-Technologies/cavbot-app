@@ -6,10 +6,13 @@ import { fileURLToPath } from "node:url";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const shouldSkipBuild = process.env.CF_DEPLOY_SKIP_BUILD === "1";
-const env = {
-  ...process.env,
-  CF_PREBUNDLE_WORKER: "1"
-};
+const shouldNoBundle = process.env.CF_DEPLOY_NO_BUNDLE !== "0";
+const env = { ...process.env };
+
+// Keep worker packaging below the Pages 25 MiB publish limit by default.
+if (env.CF_PREBUNDLE_WORKER !== "0") {
+  env.CF_PREBUNDLE_WORKER = env.CF_PREBUNDLE_WORKER ?? "1";
+}
 
 function run(command, args) {
   const result = spawnSync(command, args, {
@@ -36,7 +39,7 @@ if (!shouldSkipBuild) {
 
 run("npm", ["run", "prepare:cloudflare:pages"]);
 
-run("wrangler", [
+const deployArgs = [
   "pages",
   "deploy",
   ".open-next/pages-deploy",
@@ -48,6 +51,13 @@ run("wrangler", [
   metadata.commitHash,
   "--commit-message",
   metadata.commitMessage,
-  "--commit-dirty=false",
-  "--no-bundle"
-]);
+  "--commit-dirty=false"
+];
+
+if (shouldNoBundle) {
+  deployArgs.push("--no-bundle");
+} else {
+  deployArgs.push("--bundle");
+}
+
+run("wrangler", deployArgs);

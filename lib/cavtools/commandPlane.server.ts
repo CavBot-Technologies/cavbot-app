@@ -3,6 +3,7 @@ import "server-only";
 import crypto from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { lstat, mkdtemp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Prisma, type CavCloudShareMode, type PlanTier, type PublicArtifactVisibility } from "@prisma/client";
@@ -55,7 +56,30 @@ import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { requirePremiumEntitlement } from "@/lib/security/authorize";
 import { buildCavGuardDecision } from "@/src/lib/cavguard/cavGuard.registry";
-import * as ts from "typescript";
+import type * as ts from "typescript";
+
+const requireForCavtools = createRequire(import.meta.url);
+const DEFAULT_TYPESCRIPT_MODULE_ID = ["type", "script"].join("");
+
+let cachedTypescriptModule: typeof import("typescript") | null = null;
+const getTypescriptModule = (): typeof import("typescript") => {
+  if (cachedTypescriptModule) {
+    return cachedTypescriptModule;
+  }
+  try {
+    const moduleId = process.env.CAVTOOLS_TYPESCRIPT_MODULE?.trim() || DEFAULT_TYPESCRIPT_MODULE_ID;
+    cachedTypescriptModule = requireForCavtools(moduleId) as typeof import("typescript");
+    return cachedTypescriptModule;
+  } catch {
+    throw new Error("TypeScript tooling is unavailable in this deployment.");
+  }
+};
+
+const ts = new Proxy({} as typeof import("typescript"), {
+  get(_target, key) {
+    return Reflect.get(getTypescriptModule() as object, key);
+  },
+}) as typeof import("typescript");
 
 export type CavtoolsNamespace = "cavcloud" | "cavsafe" | "cavcode" | "telemetry" | "workspace";
 

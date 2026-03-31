@@ -65,6 +65,10 @@ function normalizeEmail(x: unknown) {
   return String(x ?? "").trim().toLowerCase();
 }
 
+function asRecord(x: unknown): Record<string, unknown> | null {
+  return x && typeof x === "object" ? (x as Record<string, unknown>) : null;
+}
+
 function toSlug(input: unknown) {
   const s = String(input ?? "")
     .trim()
@@ -113,12 +117,21 @@ async function exchangeCodeForToken(code: string) {
     body: JSON.stringify({ client_id, client_secret, code }),
   });
 
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data?.access_token) {
-    throw new Error(data?.error_description || data?.error || "github_token_exchange_failed");
+  const dataUnknown: unknown = await res.json().catch(() => null);
+  const data = asRecord(dataUnknown);
+  const accessToken = typeof data?.access_token === "string" ? data.access_token : "";
+
+  if (!res.ok || !accessToken) {
+    const errorMessage =
+      typeof data?.error_description === "string"
+        ? data.error_description
+        : typeof data?.error === "string"
+        ? data.error
+        : "github_token_exchange_failed";
+    throw new Error(errorMessage);
   }
 
-  return String(data.access_token);
+  return accessToken;
 }
 
 async function fetchGitHubProfile(token: string) {
@@ -131,9 +144,10 @@ async function fetchGitHubProfile(token: string) {
     cache: "no-store",
   });
 
-  const data = await res.json().catch(() => ({}));
+  const dataUnknown: unknown = await res.json().catch(() => null);
+  const data = asRecord(dataUnknown);
   if (!res.ok) throw new Error("github_profile_failed");
-  return data;
+  return data ?? {};
 }
 
 async function fetchGitHubEmail(token: string) {

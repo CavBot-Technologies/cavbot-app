@@ -66,7 +66,26 @@ await cp(path.join(openNextDir, "server-functions"), path.join(deployDir, "serve
 
 // Keep the default OpenNext worker entrypoint so runtime bootstrapping remains compatible
 // with Workers (the server index path can trigger unsupported fs calls in workerd).
-const workerSource = await readFile(path.join(openNextDir, "worker.js"), "utf8");
+let workerSource = await readFile(path.join(openNextDir, "worker.js"), "utf8");
+const staticAssetBypass = `
+            const staticPath = url.pathname;
+            if (
+                staticPath.startsWith("/_next/static/") ||
+                staticPath.startsWith("/logo/") ||
+                staticPath.startsWith("/icons/") ||
+                staticPath.startsWith("/fonts/") ||
+                staticPath.startsWith("/images/")
+            ) {
+                const assetsResponse = await env.ASSETS?.fetch(request);
+                if (assetsResponse && assetsResponse.status !== 404) {
+                    return assetsResponse;
+                }
+            }
+`;
+workerSource = workerSource.replace(
+  "// - `Request`s are handled by the Next server",
+  `${staticAssetBypass}\n            // - \`Request\`s are handled by the Next server`
+);
 await writeFile(path.join(deployDir, "_worker.js"), workerSource, "utf8");
 
 async function splitOversizedHandlerIfNeeded() {

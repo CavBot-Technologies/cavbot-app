@@ -56,8 +56,9 @@ jobs:
 
       - name: Prepare Pages Bundle
         run: |
-          npm run prepare:cloudflare:pages
+          CF_PREBUNDLE_WORKER=1 npm run prepare:cloudflare:pages
           test -z "$(find .open-next/pages-deploy -type f -size +25M -print)"
+          test "$(wc -c < .open-next/pages-deploy/_worker.js)" -le 26214400
           ls -la .open-next/pages-deploy | sed -n '1,80p'
 
       - name: Deploy To Cloudflare Pages
