@@ -61,6 +61,9 @@ button{touch-action:manipulation}
   display:grid;
   gap: 64px;
 }
+.auth-stage-auth{
+  margin-top: clamp(22px, 4vh, 42px);
+}
 .auth-grid{display:block}
 
 .auth-stage-head{
@@ -573,6 +576,7 @@ button{touch-action:manipulation}
 @media (max-width: 520px){
   .auth-main{padding-left:14px;padding-right:14px}
   .auth-stage{gap:44px}
+  .auth-stage-auth{margin-top: clamp(16px, 3vh, 28px)}
   .auth-stage-head{gap:8px}
   .auth-wordmark-img{width:88px;height:88px}
   .auth-card{padding:14px 12px 10px}

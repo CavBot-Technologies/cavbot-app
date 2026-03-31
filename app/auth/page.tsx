@@ -551,7 +551,7 @@ const clearError = useCallback((fieldId: string) => {
   return (
     <>
       <main className="auth-main">
-      <section className="auth-stage" aria-label="CavBot sign up and login">
+      <section className="auth-stage auth-stage-auth" aria-label="CavBot sign up and login">
         <header className="auth-stage-head" aria-label="Authentication header">
           <a className="cb-wordmark auth-wordmark" aria-label="CavBot" href="https://www.cavbot.io">
             <Image
