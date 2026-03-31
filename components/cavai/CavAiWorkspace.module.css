@@ -3382,6 +3382,12 @@
   display: none;
 }
 
+.centerMobileMenuSvg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
 .centerMainHeadCopy {
   min-width: 0;
 }
@@ -3572,8 +3578,8 @@
   min-height: 32px;
   border: 0;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(247, 251, 255, 0.97);
+  background: rgba(241, 246, 255, 0.94);
+  color: rgba(8, 14, 28, 0.95);
   padding: 0 11px;
   font-size: 12px;
   font-weight: 720;
@@ -3584,8 +3590,8 @@
 
 .centerHeaderLoginBtn:hover,
 .centerHeaderLoginBtn:focus-visible {
-  background: rgba(255, 255, 255, 0.14);
-  color: rgba(247, 251, 255, 1);
+  background: rgba(247, 251, 255, 1);
+  color: rgba(4, 9, 20, 1);
 }
 
 .centerHeaderLoginBtn:disabled {
@@ -8158,6 +8164,17 @@
 
   .centerComposer {
     padding: 9px 9px calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .centerComposerInput {
+    min-height: 54px;
+    max-height: 150px;
+    padding: 8px 10px 8px;
+    line-height: 1.45;
+  }
+
+  .centerComposerInputWithMedia {
+    min-height: 68px;
   }
 
   .centerGuestMobilePrompt {
