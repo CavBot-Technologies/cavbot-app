@@ -3455,6 +3455,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [isPhoneLayout, setIsPhoneLayout] = useState(false);
   const [chatsExpanded, setChatsExpanded] = useState(true);
+  const [drawerSearchVisible, setDrawerSearchVisible] = useState(false);
   const [images, setImages] = useState<CavAiImageAttachment[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<CavAiUploadedFileAttachment[]>([]);
   const [modelOptions, setModelOptions] = useState<CavAiModelOption[]>([]);
@@ -3626,7 +3627,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     const sync = () => {
       const nextIsPhone = media.matches;
       setIsPhoneLayout(nextIsPhone);
-      if (!nextIsPhone) setMobileDrawerOpen(false);
+      if (!nextIsPhone) {
+        setMobileDrawerOpen(false);
+        setDrawerSearchVisible(false);
+      }
     };
     sync();
     if (typeof media.addEventListener === "function") {
@@ -5628,13 +5632,18 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
   const closeMobileDrawer = useCallback(() => {
     setMobileDrawerOpen(false);
+    setDrawerSearchVisible(false);
     setAccountMenuOpen(false);
   }, []);
 
   const toggleMobileDrawer = useCallback(() => {
     if (!isPhoneLayout) return;
     setOpenHeaderModelMenu(false);
-    setMobileDrawerOpen((prev) => !prev);
+    setMobileDrawerOpen((prev) => {
+      const next = !prev;
+      if (!next) setDrawerSearchVisible(false);
+      return next;
+    });
   }, [isPhoneLayout]);
 
   const openGuestAuthPanel = useCallback((opts?: { stage?: GuestAuthStage; closeDrawer?: boolean }) => {
@@ -5665,6 +5674,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     setCopiedMessageToken("");
     setHistoryOpen(false);
     setMobileDrawerOpen(false);
+    setDrawerSearchVisible(false);
     stopReasoningContext();
   }, [stopReasoningContext]);
 
@@ -8795,6 +8805,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const onFocusSessionSearch = useCallback(() => {
     if (isPhoneLayout) {
       setChatsExpanded(true);
+      setDrawerSearchVisible(true);
       setMobileDrawerOpen(true);
     }
     const input = searchInputRef.current;
@@ -10745,7 +10756,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                     aria-current={item.active ? "page" : undefined}
                     aria-label={item.label}
                     title={item.description}
-                    onClick={() => setMobileDrawerOpen(false)}
+                    onClick={closeMobileDrawer}
                   >
                     <span className={[styles.centerSidebarNavGlyph, surfaceNavGlyphClass(item.surface)].join(" ")} aria-hidden="true" />
                     <span className={styles.centerSidebarNavLabel}>{item.label}</span>
@@ -10784,7 +10795,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
             {!sidebarCollapsedActive && chatsExpanded ? (
               <div id="cavai-your-chats-list" className={styles.centerSidebarBody}>
-                {isPhoneLayout ? (
+                {isPhoneLayout && (drawerSearchVisible || s(sessionQuery).length > 0) ? (
                   <input
                     ref={searchInputRef}
                     className={styles.centerSidebarSearchInput}
@@ -11131,13 +11142,9 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                 aria-controls="cavai-mobile-drawer"
               >
                 <svg className={styles.centerMobileMenuSvg} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <path
-                    d="M4 7h16M4 12h16M4 17h16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                  />
+                  <circle cx="6" cy="12" r="1.8" fill="currentColor" />
+                  <circle cx="12" cy="12" r="1.8" fill="currentColor" />
+                  <circle cx="18" cy="12" r="1.8" fill="currentColor" />
                 </svg>
               </button>
             </div>
