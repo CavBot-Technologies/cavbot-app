@@ -869,7 +869,7 @@ const clearError = useCallback((fieldId: string) => {
 
                   <br />
 
-                  <button className="auth-primary auth-primary-signup" type="submit" disabled={loading}>
+                  <button className="auth-primary auth-primary-compact" type="submit" disabled={loading}>
                     {loading ? "Creating…" : "Create account"}
                     <span className="auth-primary-glow" aria-hidden="true"></span>
                   </button>
@@ -986,7 +986,7 @@ const clearError = useCallback((fieldId: string) => {
 
                   <br />
 
-                  <button className="auth-primary" type="submit" disabled={loading}>
+                  <button className="auth-primary auth-primary-compact" type="submit" disabled={loading}>
                     {loading ? "Signing in…" : "Log in"}
                     <span className="auth-primary-glow" aria-hidden="true"></span>
                   </button>

@@ -59,7 +59,7 @@ button{touch-action:manipulation}
   width:100%;
   max-width:640px;
   display:grid;
-  gap: 12px;
+  gap: 32px;
 }
 .auth-grid{display:block}
 
@@ -451,7 +451,7 @@ button{touch-action:manipulation}
   border-color: rgba(185,200,90,.30);
 }
 
-.auth-primary-signup{
+.auth-primary-compact{
   width: fit-content;
   max-width: 100%;
   min-width: 206px;
@@ -571,6 +571,7 @@ button{touch-action:manipulation}
 
 @media (max-width: 520px){
   .auth-main{padding-left:14px;padding-right:14px}
+  .auth-stage{gap:24px}
   .auth-stage-head{gap:8px}
   .auth-wordmark-img{width:88px;height:88px}
   .auth-card{padding:14px 12px 10px}
