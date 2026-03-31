@@ -3648,6 +3648,18 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [isPhoneLayout, mobileDrawerOpen, overlay]);
 
   useEffect(() => {
+    if (overlay || !isPhoneLayout || typeof document === "undefined") return;
+    const { overflowX: bodyOverflowX } = document.body.style;
+    const { overflowX: docOverflowX } = document.documentElement.style;
+    document.body.style.overflowX = "hidden";
+    document.documentElement.style.overflowX = "hidden";
+    return () => {
+      document.body.style.overflowX = bodyOverflowX;
+      document.documentElement.style.overflowX = docOverflowX;
+    };
+  }, [isPhoneLayout, overlay]);
+
+  useEffect(() => {
     if (!mobileDrawerOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setMobileDrawerOpen(false);
@@ -3796,8 +3808,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const sidebarCollapsedActive = !isPhoneLayout && sidebarCollapsed;
   const hasExistingThread = Boolean(sessionId || messages.length || currentSession || hasInlineEdit);
   const centerComposerInThread = !overlay && isEmptyThread && !isPhoneLayout;
-  const showSignedOutMobileHelper = !overlay && isPhoneLayout && isGuestPreviewMode && isEmptyThread;
-  const showSignedOutMobileLegal = showSignedOutMobileHelper;
+  const showSignedOutMobileLegal = !overlay && isPhoneLayout && isGuestPreviewMode && isEmptyThread;
   const installedAgentIdSet = useMemo(
     () => new Set(installedAgentIds.map((id) => s(id).toLowerCase())),
     [installedAgentIds]
@@ -11142,15 +11153,15 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                 aria-expanded={mobileDrawerOpen}
                 aria-controls="cavai-mobile-drawer"
               >
-                <svg className={styles.centerMobileMenuSvg} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <path
-                    d="M4 7h16M4 12h16M4 17h16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                  />
-                </svg>
+                <Image
+                  src="/icons/menu-svgrepo-com.svg"
+                  alt=""
+                  width={18}
+                  height={18}
+                  className={styles.centerMobileMenuSvg}
+                  aria-hidden="true"
+                  unoptimized
+                />
               </button>
             </div>
           ) : null}
@@ -11376,31 +11387,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                     .filter(Boolean)
                     .join(" ")}
                 >
-                  {showSignedOutMobileHelper ? (
-                    <section className={styles.centerGuestMobilePrompt} aria-label="Sign in to unlock CavAi features">
-                      <h3 className={styles.centerGuestMobilePromptTitle}>Log in to unlock more with CavAi</h3>
-                      <p className={styles.centerGuestMobilePromptBody}>
-                        Save chats, unlock advanced capabilities, access premium tools, and keep conversations connected to your workspace.
-                      </p>
-                      <div className={styles.centerGuestMobilePromptActions}>
-                        <button
-                          type="button"
-                          className={styles.centerGuestMobilePromptAction}
-                          onClick={() => openGuestAuthPanel({ stage: "email", closeDrawer: true })}
-                        >
-                          Log in
-                        </button>
-                        <button
-                          type="button"
-                          className={[styles.centerGuestMobilePromptAction, styles.centerGuestMobilePromptActionGhost].join(" ")}
-                          onClick={() => openGuestAuthPanel({ stage: "email", closeDrawer: true })}
-                        >
-                          Sign up
-                        </button>
-                      </div>
-                    </section>
-                  ) : null}
-
                   {!overlay ? (
                     <div className={styles.centerEmptyBadgeWrap}>
                       <div className="cb-badge cb-badge-inline" aria-hidden="true">
