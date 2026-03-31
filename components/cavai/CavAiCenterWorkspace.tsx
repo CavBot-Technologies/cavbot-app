@@ -3652,18 +3652,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [isPhoneLayout, mobileDrawerOpen, overlay]);
 
   useEffect(() => {
-    if (overlay || !isPhoneLayout || typeof document === "undefined") return;
-    const { overflowX: bodyOverflowX } = document.body.style;
-    const { overflowX: docOverflowX } = document.documentElement.style;
-    document.body.style.overflowX = "hidden";
-    document.documentElement.style.overflowX = "hidden";
-    return () => {
-      document.body.style.overflowX = bodyOverflowX;
-      document.documentElement.style.overflowX = docOverflowX;
-    };
-  }, [isPhoneLayout, overlay]);
-
-  useEffect(() => {
     if (!mobileDrawerOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setMobileDrawerOpen(false);
@@ -4247,13 +4235,14 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     [availableReasoningLevels, isGuestPreviewMode]
   );
   const selectedModelLabel = useMemo(() => {
+    if (isGuestPreviewMode) return resolveAiModelLabel(ALIBABA_QWEN_FLASH_MODEL_ID);
     if (selectedModel === ALIBABA_QWEN_IMAGE_MODEL_ID) return "Image Studio";
     if (selectedModel === ALIBABA_QWEN_IMAGE_EDIT_MODEL_ID) return "Image Edit";
     const match = modelMenuOptions.find((option) => option.id === selectedModel);
     if (match) return match.label;
     if (selectedModel === CAVAI_AUTO_MODEL_ID) return resolveAiModelLabel(CAVAI_AUTO_MODEL_ID);
     return resolveAiModelLabel(selectedModel);
-  }, [modelMenuOptions, selectedModel]);
+  }, [isGuestPreviewMode, modelMenuOptions, selectedModel]);
   const selectedAudioModelLabel = useMemo(() => {
     return "Voice";
   }, []);
@@ -11164,15 +11153,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                 aria-expanded={mobileDrawerOpen}
                 aria-controls="cavai-mobile-drawer"
               >
-                <Image
-                  src="/icons/menu-svgrepo-com.svg"
-                  alt=""
-                  width={18}
-                  height={18}
-                  className={styles.centerMobileMenuSvg}
-                  aria-hidden="true"
-                  unoptimized
-                />
+                <svg className={styles.centerMobileMenuSvg} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <circle cx="6" cy="12" r="1.8" fill="currentColor" />
+                  <circle cx="12" cy="12" r="1.8" fill="currentColor" />
+                  <circle cx="18" cy="12" r="1.8" fill="currentColor" />
+                </svg>
               </button>
             </div>
           ) : null}
