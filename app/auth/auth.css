@@ -59,7 +59,7 @@ button{touch-action:manipulation}
   width:100%;
   max-width:640px;
   display:grid;
-  gap: 32px;
+  gap: 48px;
 }
 .auth-grid{display:block}
 
@@ -429,10 +429,14 @@ button{touch-action:manipulation}
 /* Primary CTA */
 .auth-primary{
   position:relative;
-  width:100%;
+  width:min(228px, 100%);
+  margin-inline:auto;
+  display:flex;
+  align-items:center;
+  justify-content:center;
   border:0;
   cursor:pointer;
-  padding: 12px 14px;
+  padding: 12px 22px;
   border-radius: 12px;
   color: var(--ink);
   background: linear-gradient(135deg, rgba(185,200,90,.22), rgba(139,92,255,.22));
@@ -449,17 +453,6 @@ button{touch-action:manipulation}
 .auth-primary:active{transform: translateY(0)}
 .auth-primary:focus-visible{
   border-color: rgba(185,200,90,.30);
-}
-
-.auth-primary-compact{
-  width: fit-content;
-  max-width: 100%;
-  min-width: 206px;
-  margin-inline: auto;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  padding-inline: 24px;
 }
 
 /* links */
@@ -571,7 +564,7 @@ button{touch-action:manipulation}
 
 @media (max-width: 520px){
   .auth-main{padding-left:14px;padding-right:14px}
-  .auth-stage{gap:24px}
+  .auth-stage{gap:36px}
   .auth-stage-head{gap:8px}
   .auth-wordmark-img{width:88px;height:88px}
   .auth-card{padding:14px 12px 10px}
