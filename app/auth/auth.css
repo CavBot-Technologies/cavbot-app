@@ -59,7 +59,7 @@ button{touch-action:manipulation}
   width:100%;
   max-width:640px;
   display:grid;
-  gap: 48px;
+  gap: 64px;
 }
 .auth-grid{display:block}
 
@@ -68,6 +68,7 @@ button{touch-action:manipulation}
   align-items:center;
   justify-content:space-between;
   gap: 12px;
+  margin-bottom: 4px;
 }
 
 .auth-wordmark{
@@ -317,6 +318,10 @@ button{touch-action:manipulation}
 .auth-panels{display:grid;gap: 4px}
 .auth-panel{display:grid;gap: 4px}
 .auth-panel[hidden]{display:none !important;}
+.auth-form{
+  display:grid;
+  gap: 4px;
+}
 .auth-field-row{display:grid;gap: 6px}
 .auth-label{
   font-size:10px;
@@ -429,8 +434,11 @@ button{touch-action:manipulation}
 /* Primary CTA */
 .auth-primary{
   position:relative;
-  width:min(228px, 100%);
+  width:min(228px, 100%) !important;
+  max-width: 100%;
   margin-inline:auto;
+  margin-top: 8px;
+  justify-self:center;
   display:flex;
   align-items:center;
   justify-content:center;
@@ -564,7 +572,7 @@ button{touch-action:manipulation}
 
 @media (max-width: 520px){
   .auth-main{padding-left:14px;padding-right:14px}
-  .auth-stage{gap:36px}
+  .auth-stage{gap:44px}
   .auth-stage-head{gap:8px}
   .auth-wordmark-img{width:88px;height:88px}
   .auth-card{padding:14px 12px 10px}
