@@ -2,8 +2,7 @@
 "use client";
 
 import Image from "next/image";
-import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { isLoginUsername, isReservedUsername, isValidUsername, normalizeUsername } from "@/lib/username";
@@ -64,13 +63,12 @@ function parseVerifyStepUp(payload: Record<string, unknown>) {
 }
 
 export default function AuthPage() {
-  return <AuthPageClientOnly />;
+  return (
+    <Suspense fallback={null}>
+      <AuthPageInner />
+    </Suspense>
+  );
 }
-
-const AuthPageClientOnly = dynamic(() => Promise.resolve(AuthPageInner), {
-  ssr: false,
-  loading: () => null,
-});
 
 function AuthPageInner() {
   const router = useRouter();
