@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { unstable_noStore as noStore } from "next/cache";
 
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/prisma";
 import { isBasicUsername, isReservedUsername, normalizeUsername, RESERVED_ROUTE_SLUGS } from "@/lib/username";
 
 export const runtime = "nodejs";

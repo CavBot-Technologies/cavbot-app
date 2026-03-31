@@ -121,7 +121,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
         ) : null}
 
         {children}
-        <GlobalFooterMount />
+        <Suspense fallback={null}>
+          <GlobalFooterMount />
+        </Suspense>
       </body>
     </html>
   );

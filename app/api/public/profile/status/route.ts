@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { unstable_noStore as noStore, revalidateTag } from "next/cache";
 import type { Prisma } from "@prisma/client";
 
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/prisma";
 import { requireSession, requireUser, isApiAuthError } from "@/lib/apiAuth";
 import { isBasicUsername, isReservedUsername, normalizeUsername, RESERVED_ROUTE_SLUGS } from "@/lib/username";
 import { containsEmoji, isPublicStatusMode, normalizePublicStatusNote } from "@/lib/publicProfile/publicStatus";
