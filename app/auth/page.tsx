@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import { isLoginUsername, isReservedUsername, isValidUsername, normalizeUsername } from "@/lib/username";
 import { PasswordVisibilityIcon } from "@/components/icons/PasswordVisibilityIcon";
 import { CavBotVerifyModal } from "@/components/CavBotVerifyModal";
@@ -76,6 +77,7 @@ function AuthPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = safeNextPath(searchParams.get("next"));
+  const badgeRef = useRef<HTMLDivElement | null>(null);
 
   // ------------------------------------------------------------
   // MODE (tabs)
@@ -214,6 +216,98 @@ const clearError = useCallback((fieldId: string) => {
   useEffect(() => {
     setEyeWatch(Boolean(suShowPass || liShowPass));
   }, [suShowPass, liShowPass]);
+
+  useEffect(() => {
+    const root = badgeRef.current;
+    if (!root) return;
+
+    const pupils = Array.from(root.querySelectorAll<HTMLElement>(".cavbot-eye-pupil")).filter((pupil) =>
+      Boolean(pupil.closest(".cavbot-eye-inner"))
+    );
+    if (!pupils.length) return;
+
+    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+    const MAX_SHIFT_X = 2.15;
+    const MAX_SHIFT_Y = 1.7;
+    const EASE = 0.24;
+    const IDLE_X = 0.45;
+    const IDLE_Y = -0.12;
+
+    let rafId = 0;
+    let currentX = IDLE_X;
+    let currentY = IDLE_Y;
+    let targetX = IDLE_X;
+    let targetY = IDLE_Y;
+
+    const apply = () => {
+      rafId = 0;
+      currentX += (targetX - currentX) * EASE;
+      currentY += (targetY - currentY) * EASE;
+
+      const tx = currentX.toFixed(2);
+      const ty = currentY.toFixed(2);
+      for (const pupil of pupils) {
+        pupil.style.opacity = "1";
+        pupil.style.visibility = "visible";
+        pupil.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+      }
+
+      const settling = Math.abs(targetX - currentX) > 0.01 || Math.abs(targetY - currentY) > 0.01;
+      if (settling) rafId = window.requestAnimationFrame(apply);
+    };
+
+    const queue = () => {
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(apply);
+    };
+
+    const driveFromPoint = (clientX: number, clientY: number) => {
+      const rect = root.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const dx = clientX - cx;
+      const dy = clientY - cy;
+      const dist = Math.hypot(dx, dy) || 1;
+      const nx = dx / dist;
+      const ny = dy / dist;
+      const pull = clamp(dist / 160, 0, 1);
+      targetX = clamp(nx * MAX_SHIFT_X * pull, -MAX_SHIFT_X, MAX_SHIFT_X);
+      targetY = clamp(ny * MAX_SHIFT_Y * pull, -MAX_SHIFT_Y, MAX_SHIFT_Y);
+      queue();
+    };
+
+    const onPointerMove = (event: PointerEvent | MouseEvent) => {
+      driveFromPoint(event.clientX, event.clientY);
+    };
+
+    const onTouchMove = (event: TouchEvent) => {
+      const touch = event.touches?.[0];
+      if (!touch) return;
+      driveFromPoint(touch.clientX, touch.clientY);
+    };
+
+    const onPointerLeave = () => {
+      targetX = IDLE_X;
+      targetY = IDLE_Y;
+      queue();
+    };
+
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
+    window.addEventListener("mousemove", onPointerMove, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
+    window.addEventListener("pointerleave", onPointerLeave, { passive: true });
+    window.addEventListener("blur", onPointerLeave);
+    queue();
+
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("mousemove", onPointerMove);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("pointerleave", onPointerLeave);
+      window.removeEventListener("blur", onPointerLeave);
+      if (rafId) window.cancelAnimationFrame(rafId);
+    };
+  }, [mode]);
 
   // ------------------------------------------------------------
   // Validation
@@ -458,12 +552,75 @@ const clearError = useCallback((fieldId: string) => {
     <>
       <main className="auth-main">
       <section className="auth-stage" aria-label="CavBot sign up and login">
+        <header className="auth-stage-head" aria-label="Authentication header">
+          <a className="cb-wordmark auth-wordmark" aria-label="CavBot" href="https://www.cavbot.io">
+            <Image
+              className="cb-wordmark-img auth-wordmark-img"
+              src="/logo/official-logotype-light.svg"
+              alt="CavBot Logo"
+              width={220}
+              height={40}
+              priority
+              unoptimized
+            />
+          </a>
+
+          <div className="auth-toggle auth-toggle-head" role="tablist" aria-label="Toggle sign up and log in">
+            <button
+              className={`auth-toggle-btn ${isSignup ? "is-active" : ""}`}
+              type="button"
+              role="tab"
+              id="tab-signup"
+              aria-selected={isSignup ? "true" : "false"}
+              aria-controls="panel-signup"
+              tabIndex={isSignup ? 0 : -1}
+              onClick={() => setModeAndSync("signup")}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowRight") {
+                  e.preventDefault();
+                  setModeAndSync("login");
+                }
+              }}
+            >
+              Sign up
+            </button>
+
+            <button
+              className={`auth-toggle-btn ${!isSignup ? "is-active" : ""}`}
+              type="button"
+              role="tab"
+              id="tab-login"
+              aria-selected={!isSignup ? "true" : "false"}
+              aria-controls="panel-login"
+              tabIndex={!isSignup ? 0 : -1}
+              onClick={() => setModeAndSync("login")}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowLeft") {
+                  e.preventDefault();
+                  setModeAndSync("signup");
+                }
+              }}
+            >
+              Log in
+            </button>
+
+            <span
+              className="auth-toggle-indicator"
+              aria-hidden="true"
+              style={{
+                transform: isSignup ? "translateX(0)" : "translateX(100%)",
+              }}
+            />
+          </div>
+        </header>
+
         <div className="auth-grid">
           <section className="auth-card" aria-label="Authentication panel">
             <div className="auth-card-top">
               <div className="auth-title-row">
                 {/* CavBot badge snippet (UNCHANGED) */}
                 <div
+                  ref={badgeRef}
                   className={[
                     "auth-badge",
                     "cb-badge",
@@ -475,29 +632,7 @@ const clearError = useCallback((fieldId: string) => {
                   aria-hidden="false"
                 >
                   <div className="cavbot-badge-frame">
-                    <div className="cavbot-dm-avatar" data-cavbot-head="dm">
-                      <div className="cavbot-dm-avatar-core">
-                        <div className="cavbot-dm-face">
-                          <div className="cavbot-eyes-row">
-                            <div className="cavbot-eye">
-                              <div className="cavbot-eye-inner">
-                                <div className="cavbot-eye-pupil"></div>
-                              </div>
-                              <div className="cavbot-eye-glow"></div>
-                              <div className="cavbot-blink"></div>
-                            </div>
-
-                            <div className="cavbot-eye">
-                              <div className="cavbot-eye-inner">
-                                <div className="cavbot-eye-pupil"></div>
-                              </div>
-                              <div className="cavbot-eye-glow"></div>
-                              <div className="cavbot-blink"></div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <CdnBadgeEyes trackingMode="eyeOnly" />
                   </div>
                 </div>
 
@@ -512,55 +647,6 @@ const clearError = useCallback((fieldId: string) => {
                   </h2>
                   <br />
                 </div>
-              </div>
-
-              {/* TABLIST */}
-              <div className="auth-toggle" role="tablist" aria-label="Toggle sign up and log in">
-                <button
-                  className={`auth-toggle-btn ${isSignup ? "is-active" : ""}`}
-                  type="button"
-                  role="tab"
-                  id="tab-signup"
-                  aria-selected={isSignup ? "true" : "false"}
-                  aria-controls="panel-signup"
-                  tabIndex={isSignup ? 0 : -1}
-                  onClick={() => setModeAndSync("signup")}
-                  onKeyDown={(e) => {
-                    if (e.key === "ArrowRight") {
-                      e.preventDefault();
-                      setModeAndSync("login");
-                    }
-                  }}
-                >
-                  Sign up
-                </button>
-
-                <button
-                  className={`auth-toggle-btn ${!isSignup ? "is-active" : ""}`}
-                  type="button"
-                  role="tab"
-                  id="tab-login"
-                  aria-selected={!isSignup ? "true" : "false"}
-                  aria-controls="panel-login"
-                  tabIndex={!isSignup ? 0 : -1}
-                  onClick={() => setModeAndSync("login")}
-                  onKeyDown={(e) => {
-                    if (e.key === "ArrowLeft") {
-                      e.preventDefault();
-                      setModeAndSync("signup");
-                    }
-                  }}
-                >
-                  Log in
-                </button>
-
-                <span
-                  className="auth-toggle-indicator"
-                  aria-hidden="true"
-                  style={{
-                    transform: isSignup ? "translateX(0)" : "translateX(100%)",
-                  }}
-                />
               </div>
             </div>
 
@@ -783,7 +869,7 @@ const clearError = useCallback((fieldId: string) => {
 
                   <br />
 
-                  <button className="auth-primary" type="submit" disabled={loading}>
+                  <button className="auth-primary auth-primary-signup" type="submit" disabled={loading}>
                     {loading ? "Creating…" : "Create account"}
                     <span className="auth-primary-glow" aria-hidden="true"></span>
                   </button>
@@ -791,11 +877,11 @@ const clearError = useCallback((fieldId: string) => {
                   <p className="auth-legal">
                     <br />
                     By creating an account, you agree to our{" "}
-                    <a href="/terms-of-use" className="auth-link">
+                    <a href="https://www.cavbot.io/terms-of-use" className="auth-link">
                       Terms
                     </a>{" "}
                     and{" "}
-                    <a href="/privacy-policy" className="auth-link">
+                    <a href="https://www.cavbot.io/privacy-policy" className="auth-link">
                       Privacy Policy
                     </a>
                     .
