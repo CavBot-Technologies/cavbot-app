@@ -434,11 +434,11 @@ button{touch-action:manipulation}
 /* Primary CTA */
 .auth-primary{
   position:relative;
-  width:min(228px, 100%) !important;
-  max-width: 100%;
-  margin-inline:auto;
+  width:100%;
+  max-width:none;
+  margin-inline:0;
   margin-top: 8px;
-  justify-self:center;
+  justify-self:stretch;
   display:flex;
   align-items:center;
   justify-content:center;
