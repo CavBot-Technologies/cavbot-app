@@ -4326,8 +4326,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     const computed = window.getComputedStyle(node);
     const minHeight = Number.parseFloat(computed.minHeight) || CENTER_COMPOSER_MIN_HEIGHT_PX;
     const maxHeight = Number.parseFloat(computed.maxHeight) || CENTER_COMPOSER_MAX_HEIGHT_PX;
+    const hasTypedInput = s(node.value).length > 0;
     node.style.height = "auto";
-    const nextHeight = Math.min(maxHeight, Math.max(minHeight, node.scrollHeight));
+    const nextHeight = hasTypedInput
+      ? Math.min(maxHeight, Math.max(minHeight, node.scrollHeight))
+      : minHeight;
     node.style.height = `${Math.round(nextHeight)}px`;
     node.style.overflowY = node.scrollHeight > maxHeight + 1 ? "auto" : "hidden";
   }, []);
@@ -5508,6 +5511,13 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     if (!isOpen) return;
     syncComposerInputHeight();
   }, [isOpen, prompt, syncComposerInputHeight]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (typeof window === "undefined") return;
+    const handle = window.requestAnimationFrame(() => syncComposerInputHeight());
+    return () => window.cancelAnimationFrame(handle);
+  }, [isOpen, isPhoneLayout, syncComposerInputHeight]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -8783,11 +8793,23 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [onSubmitInlineEdit]);
 
   const onFocusSessionSearch = useCallback(() => {
+    if (isPhoneLayout) {
+      setChatsExpanded(true);
+      setMobileDrawerOpen(true);
+    }
     const input = searchInputRef.current;
-    if (!input) return;
-    input.focus();
-    input.select();
-    if (isPhoneLayout) setMobileDrawerOpen(true);
+    if (input) {
+      input.focus();
+      input.select();
+      return;
+    }
+    if (typeof window === "undefined") return;
+    window.requestAnimationFrame(() => {
+      const nextInput = searchInputRef.current;
+      if (!nextInput) return;
+      nextInput.focus();
+      nextInput.select();
+    });
   }, [isPhoneLayout]);
 
   const closeSessionActionModal = useCallback(() => {
@@ -10711,16 +10733,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                 <span className={[styles.centerSidebarActionGlyph, styles.centerSidebarActionGlyphSearch].join(" ")} aria-hidden="true" />
                 <span className={styles.centerSidebarActionText}>Search chats</span>
               </button>
-              {isPhoneLayout ? (
-                <input
-                  ref={searchInputRef}
-                  className={styles.centerSidebarSearchInput}
-                  value={sessionQuery}
-                  onChange={(event) => setSessionQuery(event.currentTarget.value)}
-                  placeholder="Search CavAi"
-                  aria-label="Search chats"
-                />
-              ) : null}
             </div>
 
             <nav className={styles.centerSidebarSurfaceNav} aria-label="CavAi modules">
@@ -10770,7 +10782,21 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
               </div>
             ) : null}
 
-            {!sidebarCollapsedActive && chatsExpanded ? <div id="cavai-your-chats-list" className={styles.centerSidebarBody}>{renderSessionList}</div> : null}
+            {!sidebarCollapsedActive && chatsExpanded ? (
+              <div id="cavai-your-chats-list" className={styles.centerSidebarBody}>
+                {isPhoneLayout ? (
+                  <input
+                    ref={searchInputRef}
+                    className={styles.centerSidebarSearchInput}
+                    value={sessionQuery}
+                    onChange={(event) => setSessionQuery(event.currentTarget.value)}
+                    placeholder="Search chats"
+                    aria-label="Search chats"
+                  />
+                ) : null}
+                {renderSessionList}
+              </div>
+            ) : null}
 
             {!sidebarCollapsedActive ? (
               <div className={styles.centerSidebarFoot}>
@@ -11095,19 +11121,27 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
           <header className={styles.centerMainHeader}>
             {!overlay ? (
               <div className={styles.centerMobileHeaderLeft}>
-                <button
-                  type="button"
-                  className={[styles.centerIconBtn, styles.centerMobileMenuBtn].join(" ")}
-                  onClick={toggleMobileDrawer}
-                  aria-label="Open navigation drawer"
-                  title="Menu"
-                  aria-expanded={mobileDrawerOpen}
-                  aria-controls="cavai-mobile-drawer"
-                >
-                  <span className={[styles.sidebarToggleGlyph, styles.sidebarLeftGlyph].join(" ")} aria-hidden="true" />
-                </button>
-              </div>
-            ) : null}
+              <button
+                type="button"
+                className={[styles.centerIconBtn, styles.centerMobileMenuBtn].join(" ")}
+                onClick={toggleMobileDrawer}
+                aria-label="Open navigation drawer"
+                title="Menu"
+                aria-expanded={mobileDrawerOpen}
+                aria-controls="cavai-mobile-drawer"
+              >
+                <svg className={styles.centerMobileMenuSvg} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path
+                    d="M4 7h16M4 12h16M4 17h16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
+          ) : null}
 
             <div className={styles.centerMainHeadCopy}>
               <div className={styles.centerMainTitleRow}>
