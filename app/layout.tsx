@@ -1,9 +1,11 @@
 // app/layout.tsx
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import Script from "next/script";
 import "./globals.css";
 import "./workspace.css";
 import "@/components/LightToggle.css";
+import { resolveCavbotAssetPolicy } from "@/lib/cavbotAssetPolicy";
 
 const APP_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://app.cavbot.io";
 
@@ -69,6 +71,7 @@ export const viewport = {
 };
 
 export const runtime = "nodejs";
+const OFFICIAL_CDN_ASSETS = resolveCavbotAssetPolicy("customer_snippet");
 const AI_ICON_PRELOADS = [
   "/icons/app/smart-optimization-svgrepo-com.svg",
   "/icons/history-svgrepo-coom.svg",
@@ -104,6 +107,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en" data-cavbot-react-app="1" style={{ backgroundColor: "#01030f" }}>
       <head>
+        <link rel="preconnect" href={OFFICIAL_CDN_ASSETS.baseUrl} crossOrigin="" />
         <link rel="preload" as="image" href="/logo/official-logotype-light.svg" type="image/svg+xml" />
         <link rel="preload" as="image" href="/logo/cavbot-logomark.svg" type="image/svg+xml" />
         <link rel="preload" as="image" href="/icons/cavpad/notepad-svgrepo-com.svg" type="image/svg+xml" />
@@ -127,6 +131,12 @@ export default function RootLayout({ children }: RootLayoutProps) {
         </a>
 
         {children}
+        <Script
+          id="cavbot-official-brain-cdn"
+          src={OFFICIAL_CDN_ASSETS.scripts.brain}
+          strategy="afterInteractive"
+          crossOrigin="anonymous"
+        />
       </body>
     </html>
   );
