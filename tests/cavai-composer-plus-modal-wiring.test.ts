@@ -45,6 +45,9 @@ test("center composer quick actions render compact mode toggles with compact age
   assert.equal(source.includes("document.addEventListener(\"visibilitychange\", onVisibilityChange);"), true);
   assert.equal(source.includes("document.documentElement.style.overflow = \"hidden\";"), true);
   assert.equal(source.includes("document.documentElement.style.overscrollBehaviorY = \"none\";"), true);
+  assert.equal(source.includes("document.body.style.position = \"fixed\";"), true);
+  assert.equal(source.includes("document.body.style.top = `${-scrollY}px`;"), true);
+  assert.equal(source.includes("window.scrollTo(0, scrollY);"), true);
   assert.equal(
     source.includes("const showSignedOutMobileLegal = !overlay && isPhoneLayout && authProbeReady && isGuestPreviewMode && isEmptyThread;"),
     true
@@ -78,4 +81,6 @@ test("center composer quick actions render compact mode toggles with compact age
   assert.equal(cssSource.includes(".centerAgentModeSearchGlyph"), true);
   assert.equal(cssSource.includes(".centerAgentModeLockedRow"), true);
   assert.equal(cssSource.includes(".centerComposerPresetModePill"), true);
+  assert.equal(cssSource.includes("overscroll-behavior-y: contain;"), true);
+  assert.equal(cssSource.includes("touch-action: pan-y;"), true);
 });

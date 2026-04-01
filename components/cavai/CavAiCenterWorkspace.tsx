@@ -3662,18 +3662,47 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, []);
 
   useEffect(() => {
-    if (overlay || !isPhoneLayout || typeof document === "undefined") return;
-    const { overflow: bodyOverflow, overscrollBehaviorY: bodyOverscrollBehaviorY } = document.body.style;
-    const { overflow: docOverflow, overscrollBehaviorY: docOverscrollBehaviorY } = document.documentElement.style;
+    if (overlay || !isPhoneLayout || typeof document === "undefined" || typeof window === "undefined") return;
+    const scrollY = window.scrollY;
+    const {
+      overflow: bodyOverflow,
+      overscrollBehaviorY: bodyOverscrollBehaviorY,
+      position: bodyPosition,
+      top: bodyTop,
+      left: bodyLeft,
+      right: bodyRight,
+      width: bodyWidth,
+      height: bodyHeight,
+    } = document.body.style;
+    const {
+      overflow: docOverflow,
+      overscrollBehaviorY: docOverscrollBehaviorY,
+      height: docHeight,
+    } = document.documentElement.style;
     document.body.style.overflow = "hidden";
     document.documentElement.style.overflow = "hidden";
     document.body.style.overscrollBehaviorY = "none";
     document.documentElement.style.overscrollBehaviorY = "none";
+    document.documentElement.style.height = "100%";
+    document.body.style.position = "fixed";
+    document.body.style.top = `${-scrollY}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    document.body.style.width = "100%";
+    document.body.style.height = "100%";
     return () => {
       document.body.style.overflow = bodyOverflow;
       document.documentElement.style.overflow = docOverflow;
       document.body.style.overscrollBehaviorY = bodyOverscrollBehaviorY;
       document.documentElement.style.overscrollBehaviorY = docOverscrollBehaviorY;
+      document.documentElement.style.height = docHeight;
+      document.body.style.position = bodyPosition;
+      document.body.style.top = bodyTop;
+      document.body.style.left = bodyLeft;
+      document.body.style.right = bodyRight;
+      document.body.style.width = bodyWidth;
+      document.body.style.height = bodyHeight;
+      window.scrollTo(0, scrollY);
     };
   }, [isPhoneLayout, overlay]);
 
