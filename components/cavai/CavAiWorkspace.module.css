@@ -8193,12 +8193,12 @@
   }
 
   .centerComposerFooter .centerAgentModeMenu {
-    left: clamp(-44px, -9vw, -24px);
-    bottom: calc(100% + 76px);
+    left: clamp(-26px, -6vw, -12px);
+    bottom: calc(100% - 10px);
     min-width: min(338px, calc(100vw - 20px));
     max-width: min(338px, calc(100vw - 20px));
     max-height: min(52vh, 420px);
-    z-index: 12090;
+    z-index: 2147483300;
   }
 
   .centerThread {
