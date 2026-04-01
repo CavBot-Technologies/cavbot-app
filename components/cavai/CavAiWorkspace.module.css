@@ -8101,6 +8101,10 @@
     padding-top: env(safe-area-inset-top);
   }
 
+  .centerSidebar.centerSidebarMobileOpen {
+    left: 0;
+  }
+
   .centerSidebarHead {
     padding: 0 12px;
   }
