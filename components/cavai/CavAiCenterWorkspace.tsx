@@ -3666,12 +3666,14 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     const trigger = agentModeTriggerRef.current;
     if (!trigger) return;
     const rect = trigger.getBoundingClientRect();
+    const composerShellRect = composerControlsRef.current?.parentElement?.getBoundingClientRect() ?? null;
     const width = Math.min(338, Math.max(260, window.innerWidth - 20));
     const left = Math.min(
       Math.max(10, rect.left),
       Math.max(10, window.innerWidth - width - 10)
     );
-    const bottom = Math.max(88, window.innerHeight - rect.top + 8);
+    const anchorTop = composerShellRect ? composerShellRect.top : rect.top;
+    const bottom = Math.max(88, window.innerHeight - anchorTop + 8);
     setAgentModeMenuAnchor({ left, bottom, width });
   }, []);
 
