@@ -58,8 +58,31 @@ button{touch-action:manipulation}
 .auth-stage{
   width:100%;
   max-width:640px;
+  display:grid;
+  gap: 64px;
+}
+.auth-stage-auth{
+  margin-top: clamp(22px, 4vh, 42px);
 }
 .auth-grid{display:block}
+
+.auth-stage-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.auth-wordmark{
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.auth-wordmark-img{
+  width: 96px;
+  height: 96px;
+}
 
 /* ===== Auth card ===== */
 .auth-card{
@@ -91,7 +114,7 @@ button{touch-action:manipulation}
 .auth-card-top{
   display:flex;
   align-items:flex-start;
-  justify-content:space-between;
+  justify-content:flex-start;
   gap: 14px;
 }
 .auth-title-row{
@@ -134,7 +157,7 @@ button{touch-action:manipulation}
   justify-content:center;
 }
 
-.auth-badge.cb-badge-inline .cavbot-dm-avatar{
+.auth-badge.cb-badge-inline :is(.cavbot-dm-avatar, .cavbot-dm-avatar-lite){
   width: 56px;
   height: 56px;
   border-radius: 9999px;
@@ -150,6 +173,25 @@ button{touch-action:manipulation}
   overflow: hidden;
 }
 
+.auth-badge.cb-badge .cavbot-eye-track{
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
+.auth-badge.cb-badge .cavbot-eye-pupil{
+  opacity: 1;
+  will-change: transform;
+}
+
+.auth-badge.cb-badge .cavbot-blink{
+  display: none !important;
+}
+
 /* Toggle pill */
 .auth-toggle{
   position:relative;
@@ -159,7 +201,11 @@ button{touch-action:manipulation}
   background: rgba(0,0,0,.22);
   overflow:hidden;
   flex: 0 0 auto;
-  min-width: 198px;
+  min-width: 176px;
+}
+
+.auth-toggle-head{
+  margin-left:auto;
 }
 .auth-toggle-btn{
   position:relative;
@@ -275,6 +321,10 @@ button{touch-action:manipulation}
 .auth-panels{display:grid;gap: 4px}
 .auth-panel{display:grid;gap: 4px}
 .auth-panel[hidden]{display:none !important;}
+.auth-form{
+  display:grid;
+  gap: 4px;
+}
 .auth-field-row{display:grid;gap: 6px}
 .auth-label{
   font-size:10px;
@@ -388,9 +438,16 @@ button{touch-action:manipulation}
 .auth-primary{
   position:relative;
   width:100%;
+  max-width:none;
+  margin-inline:0;
+  margin-top: 8px;
+  justify-self:stretch;
+  display:flex;
+  align-items:center;
+  justify-content:center;
   border:0;
   cursor:pointer;
-  padding: 12px 14px;
+  padding: 12px 22px;
   border-radius: 12px;
   color: var(--ink);
   background: linear-gradient(135deg, rgba(185,200,90,.22), rgba(139,92,255,.22));
@@ -518,9 +575,19 @@ button{touch-action:manipulation}
 
 @media (max-width: 520px){
   .auth-main{padding-left:14px;padding-right:14px}
+  .auth-stage{gap:44px}
+  .auth-stage-auth{margin-top: clamp(16px, 3vh, 28px)}
+  .auth-stage-head{gap:8px}
+  .auth-wordmark-img{width:88px;height:88px}
   .auth-card{padding:14px 12px 10px}
-  .auth-card-top{flex-direction:column; align-items:stretch}
-  .auth-toggle{width:100%; min-width:unset}
+  .auth-card-top{align-items:center}
+  .auth-toggle-head{
+    min-width: 154px;
+  }
+  .auth-toggle-btn{
+    padding: 9px 10px;
+    letter-spacing: .16em;
+  }
   .auth-badge.cb-badge{width:56px;height:56px}
   .auth-badge .cavbot-badge-frame{width:56px;height:56px}
   .auth-title{font-size:17px}

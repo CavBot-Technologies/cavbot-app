@@ -462,7 +462,68 @@ const clearError = useCallback((fieldId: string) => {
   return (
     <>
       <main className="auth-main">
-      <section className="auth-stage" aria-label="CavBot sign up and login">
+      <section className="auth-stage auth-stage-auth" aria-label="CavBot sign up and login">
+        <header className="auth-stage-head" aria-label="Authentication header">
+          <a className="cb-wordmark auth-wordmark" aria-label="CavBot" href="https://www.cavbot.io">
+            <Image
+              className="cb-wordmark-img auth-wordmark-img"
+              src="/logo/official-logotype-light.svg"
+              alt="CavBot Logo"
+              width={220}
+              height={40}
+              priority
+              unoptimized
+            />
+          </a>
+
+          <div className="auth-toggle auth-toggle-head" role="tablist" aria-label="Toggle sign up and log in">
+            <button
+              className={`auth-toggle-btn ${isSignup ? "is-active" : ""}`}
+              type="button"
+              role="tab"
+              id="tab-signup"
+              aria-selected={isSignup ? "true" : "false"}
+              aria-controls="panel-signup"
+              tabIndex={isSignup ? 0 : -1}
+              onClick={() => setModeAndSync("signup")}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowRight") {
+                  e.preventDefault();
+                  setModeAndSync("login");
+                }
+              }}
+            >
+              Sign up
+            </button>
+
+            <button
+              className={`auth-toggle-btn ${!isSignup ? "is-active" : ""}`}
+              type="button"
+              role="tab"
+              id="tab-login"
+              aria-selected={!isSignup ? "true" : "false"}
+              aria-controls="panel-login"
+              tabIndex={!isSignup ? 0 : -1}
+              onClick={() => setModeAndSync("login")}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowLeft") {
+                  e.preventDefault();
+                  setModeAndSync("signup");
+                }
+              }}
+            >
+              Log in
+            </button>
+
+            <span
+              className="auth-toggle-indicator"
+              aria-hidden="true"
+              style={{
+                transform: isSignup ? "translateX(0)" : "translateX(100%)",
+              }}
+            />
+          </div>
+        </header>
         <div className="auth-grid">
           <section className="auth-card" aria-label="Authentication panel">
             <div className="auth-card-top">
@@ -519,54 +580,6 @@ const clearError = useCallback((fieldId: string) => {
                 </div>
               </div>
 
-              {/* TABLIST */}
-              <div className="auth-toggle" role="tablist" aria-label="Toggle sign up and log in">
-                <button
-                  className={`auth-toggle-btn ${isSignup ? "is-active" : ""}`}
-                  type="button"
-                  role="tab"
-                  id="tab-signup"
-                  aria-selected={isSignup ? "true" : "false"}
-                  aria-controls="panel-signup"
-                  tabIndex={isSignup ? 0 : -1}
-                  onClick={() => setModeAndSync("signup")}
-                  onKeyDown={(e) => {
-                    if (e.key === "ArrowRight") {
-                      e.preventDefault();
-                      setModeAndSync("login");
-                    }
-                  }}
-                >
-                  Sign up
-                </button>
-
-                <button
-                  className={`auth-toggle-btn ${!isSignup ? "is-active" : ""}`}
-                  type="button"
-                  role="tab"
-                  id="tab-login"
-                  aria-selected={!isSignup ? "true" : "false"}
-                  aria-controls="panel-login"
-                  tabIndex={!isSignup ? 0 : -1}
-                  onClick={() => setModeAndSync("login")}
-                  onKeyDown={(e) => {
-                    if (e.key === "ArrowLeft") {
-                      e.preventDefault();
-                      setModeAndSync("signup");
-                    }
-                  }}
-                >
-                  Log in
-                </button>
-
-                <span
-                  className="auth-toggle-indicator"
-                  aria-hidden="true"
-                  style={{
-                    transform: isSignup ? "translateX(0)" : "translateX(100%)",
-                  }}
-                />
-              </div>
             </div>
 
             <br />

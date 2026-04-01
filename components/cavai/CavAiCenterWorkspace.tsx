@@ -4243,13 +4243,14 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     [availableReasoningLevels, isGuestPreviewMode]
   );
   const selectedModelLabel = useMemo(() => {
+    if (isGuestPreviewMode) return resolveAiModelLabel(ALIBABA_QWEN_FLASH_MODEL_ID);
     if (selectedModel === ALIBABA_QWEN_IMAGE_MODEL_ID) return "Image Studio";
     if (selectedModel === ALIBABA_QWEN_IMAGE_EDIT_MODEL_ID) return "Image Edit";
     const match = modelMenuOptions.find((option) => option.id === selectedModel);
     if (match) return match.label;
     if (selectedModel === CAVAI_AUTO_MODEL_ID) return resolveAiModelLabel(CAVAI_AUTO_MODEL_ID);
     return resolveAiModelLabel(selectedModel);
-  }, [modelMenuOptions, selectedModel]);
+  }, [isGuestPreviewMode, modelMenuOptions, selectedModel]);
   const selectedAudioModelLabel = useMemo(() => {
     return "Voice";
   }, []);
