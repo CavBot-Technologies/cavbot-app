@@ -5,13 +5,63 @@ import "./globals.css";
 import "./workspace.css";
 import "@/components/LightToggle.css";
 
+const APP_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://app.cavbot.io";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(APP_ORIGIN),
   title: {
     default: "CavBot",
     template: "%s · CavBot",
   },
   description:
     "CavBot Console — site intelligence across SEO, performance, accessibility, UX, engagement, and events.",
+  manifest: "/manifest.webmanifest",
+  applicationName: "CavBot",
+  appleWebApp: {
+    capable: true,
+    title: "CavBot",
+    statusBarStyle: "black-translucent",
+  },
+  openGraph: {
+    type: "website",
+    siteName: "CavBot",
+    title: "CavBot",
+    description:
+      "CavBot Console — site intelligence across SEO, performance, accessibility, UX, engagement, and events.",
+    images: [
+      { url: "/favicons/ogimage.png", alt: "CavBot" },
+      { url: "/favicons/metaproperty.png", alt: "CavBot" },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CavBot",
+    description:
+      "CavBot Console — site intelligence across SEO, performance, accessibility, UX, engagement, and events.",
+    images: ["/favicons/metaproperty.png"],
+  },
+  icons: {
+    icon: [
+      { url: "/favicons/favicon.ico", sizes: "any" },
+      { url: "/favicons/favicon-32x32.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicons/favicon-48x48.png", type: "image/png", sizes: "48x48" },
+      { url: "/favicons/favicon-64x64.png", type: "image/png", sizes: "64x64" },
+      { url: "/favicons/favicon-96x96.png", type: "image/png", sizes: "96x96" },
+    ],
+    shortcut: [{ url: "/favicons/favicon.ico" }],
+    apple: [
+      { url: "/favicons/apple-touch-icon-120x120.png", type: "image/png", sizes: "120x120" },
+      { url: "/favicons/apple-touch-icon-152x152.png", type: "image/png", sizes: "152x152" },
+      { url: "/favicons/apple-touch-icon.png", type: "image/png", sizes: "180x180" },
+    ],
+    other: [
+      { rel: "mask-icon", url: "/favicons/safari-pinned-tab.svg", color: "#01030f" },
+    ],
+  },
+  other: {
+    "msapplication-TileColor": "#01030f",
+    "msapplication-TileImage": "/favicons/mstile-144x144.png",
+  },
 };
 
 export const viewport = {

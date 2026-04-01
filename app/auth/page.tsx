@@ -74,11 +74,12 @@ function AuthPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = safeNextPath(searchParams.get("next"));
+  const queryMode = normalizeMode(searchParams.get("mode"));
 
   // ------------------------------------------------------------
   // MODE (tabs)
   // ------------------------------------------------------------
-  const [mode, setMode] = useState<Mode>("signup");
+  const [mode, setMode] = useState<Mode>(queryMode ?? "signup");
 
   // Keep a stable "setMode + sync URL" helper
   function setModeAndSync(next: Mode) {
@@ -98,17 +99,23 @@ function AuthPageInner() {
 
   // Read initial mode from query AFTER mount
   useEffect(() => {
-    const qMode = normalizeMode(searchParams.get("mode"));
-    if (qMode) {
-      setMode(qMode);
+    if (queryMode) {
+      if (queryMode !== mode) setMode(queryMode);
       return;
     }
 
     // fallback: support legacy hash if it exists
     const h = String(window.location.hash || "").toLowerCase();
-    if (h === "#login") setMode("login");
-    if (h === "#signup") setMode("signup");
-  }, [searchParams]);
+    const hashMode = h === "#login" ? "login" : h === "#signup" ? "signup" : null;
+    if (hashMode && hashMode !== mode) {
+      setMode(hashMode);
+    }
+  }, [mode, queryMode]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.title = mode === "login" ? "CavBot · Log in" : "CavBot · Sign up";
+  }, [mode]);
 
   // ------------------------------------------------------------
   // Badge eye states (error + watch)

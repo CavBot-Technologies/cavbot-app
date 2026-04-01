@@ -1,9 +1,12 @@
 // app/auth/layout.tsx
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./auth.css";
 
-export const metadata = {
-  title: "CavBot · Sign up / Log in",
+export const metadata: Metadata = {
+  title: {
+    absolute: "CavBot · Sign up",
+  },
   description:
     "Create your CavBot workspace. Sign up with GitHub or Google, or use email. Access CavAI Console.",
   robots: { index: true, follow: true },
