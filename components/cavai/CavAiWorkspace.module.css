@@ -6414,6 +6414,24 @@
   box-shadow: none;
 }
 
+.centerAgentModeModal {
+  width: min(420px, 100%);
+}
+
+.centerAgentModeModalBody {
+  padding: 12px;
+  max-height: min(74vh, 640px);
+  overflow: hidden;
+}
+
+.centerAgentModeModalPanel {
+  min-width: 0;
+  max-width: 100%;
+  max-height: none;
+  height: min(62vh, 560px);
+  overscroll-behavior: contain;
+}
+
 .centerAgentModeSearch {
   position: relative;
   display: block;
@@ -8192,13 +8210,17 @@
     width: min(336px, calc(100vw - 20px));
   }
 
-  .centerComposerFooter .centerAgentModeMenu {
-    left: clamp(-44px, -9vw, -24px);
-    bottom: calc(100% + 76px);
-    min-width: min(338px, calc(100vw - 20px));
-    max-width: min(338px, calc(100vw - 20px));
-    max-height: min(52vh, 420px);
-    z-index: 12090;
+  .centerAgentModeModal {
+    width: min(420px, calc(100vw - 16px));
+  }
+
+  .centerAgentModeModalBody {
+    padding: 10px;
+    max-height: min(76vh, 640px);
+  }
+
+  .centerAgentModeModalPanel {
+    height: min(64vh, 580px);
   }
 
   .centerThread {
