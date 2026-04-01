@@ -69,6 +69,17 @@ await cp(path.join(openNextDir, "server-functions"), path.join(deployDir, "serve
 const workerSource = await readFile(path.join(openNextDir, "worker.js"), "utf8");
 await writeFile(path.join(deployDir, "_worker.js"), workerSource, "utf8");
 
+const cloudflareInitPath = path.join(deployDir, "cloudflare", "init.js");
+const cloudflareInitSource = await readFile(cloudflareInitPath, "utf8");
+await writeFile(
+  cloudflareInitPath,
+  cloudflareInitSource.replace(
+    "__ASSETS_RUN_WORKER_FIRST__: false,",
+    "__ASSETS_RUN_WORKER_FIRST__: true,",
+  ),
+  "utf8",
+);
+
 async function splitOversizedHandlerIfNeeded() {
   const handlerDir = path.join(deployDir, "server-functions", "default");
   const handlerPath = path.join(handlerDir, "handler.mjs");
