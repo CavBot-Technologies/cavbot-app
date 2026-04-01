@@ -5959,6 +5959,7 @@
   gap: 0;
   padding: 6px 0 2px;
   overflow: visible;
+  isolation: isolate;
 }
 
 .centerComposerInputShell:focus-within {
@@ -7010,6 +7011,7 @@
 
 .centerComposerInputWrap {
   position: relative;
+  z-index: 1;
 }
 
 .centerComposerInputWithMedia {
@@ -8193,12 +8195,12 @@
   }
 
   .centerComposerFooter .centerAgentModeMenu {
-    left: clamp(-26px, -6vw, -12px);
-    bottom: calc(100% - 10px);
+    left: 0;
+    bottom: calc(100% + 8px);
     min-width: min(338px, calc(100vw - 20px));
     max-width: min(338px, calc(100vw - 20px));
     max-height: min(52vh, 420px);
-    z-index: 2147483300;
+    z-index: 2147483400;
   }
 
   .centerThread {
