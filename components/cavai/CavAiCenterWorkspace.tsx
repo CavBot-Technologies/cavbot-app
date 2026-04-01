@@ -3508,6 +3508,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [copiedMessageToken, setCopiedMessageToken] = useState("");
   const [activeSessionMenuId, setActiveSessionMenuId] = useState("");
   const [activeSessionMenuAnchor, setActiveSessionMenuAnchor] = useState<{ top: number; right: number } | null>(null);
+  const [agentModeMenuAnchor, setAgentModeMenuAnchor] = useState<{ left: number; bottom: number; width: number } | null>(null);
   const [sessionActionModal, setSessionActionModal] = useState<SessionActionModal | null>(null);
   const [sessionActionBusy, setSessionActionBusy] = useState(false);
   const [renameDraftTitle, setRenameDraftTitle] = useState("");
@@ -3549,6 +3550,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const composerControlsRef = useRef<HTMLDivElement | null>(null);
+  const agentModeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const headerModelMenuRef = useRef<HTMLDivElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const activeSessionIdRef = useRef(initialSessionId);
@@ -3658,6 +3660,35 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       document.documentElement.style.overflowX = docOverflowX;
     };
   }, [isPhoneLayout, overlay]);
+
+  const syncAgentModeMenuAnchor = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const trigger = agentModeTriggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const width = Math.min(338, Math.max(260, window.innerWidth - 20));
+    const left = Math.min(
+      Math.max(10, rect.left),
+      Math.max(10, window.innerWidth - width - 10)
+    );
+    const bottom = Math.max(88, window.innerHeight - rect.top + 8);
+    setAgentModeMenuAnchor({ left, bottom, width });
+  }, []);
+
+  useEffect(() => {
+    if (openComposerMenu !== "agent_mode" || !isPhoneLayout) {
+      setAgentModeMenuAnchor(null);
+      return;
+    }
+    syncAgentModeMenuAnchor();
+    const onViewportChange = () => syncAgentModeMenuAnchor();
+    window.addEventListener("resize", onViewportChange);
+    window.addEventListener("scroll", onViewportChange, true);
+    return () => {
+      window.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("scroll", onViewportChange, true);
+    };
+  }, [isPhoneLayout, openComposerMenu, syncAgentModeMenuAnchor]);
 
   useEffect(() => {
     if (!mobileDrawerOpen) return;
@@ -7215,7 +7246,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     setOpenHeaderModelMenu(false);
     setOpenComposerMenu((prev) => (prev === "agent_mode" ? null : "agent_mode"));
     setAgentModeQuery("");
-  }, []);
+    if (isPhoneLayout && typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        syncAgentModeMenuAnchor();
+      });
+    }
+  }, [isPhoneLayout, syncAgentModeMenuAnchor]);
 
   const clearAgentModeSelection = useCallback(() => {
     setOpenComposerMenu(null);
@@ -9291,6 +9327,18 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     }
     return null;
   }, [accountPlanId, createModeActive, editModeActive, images.length]);
+  const shouldFloatAgentModeMenu = isPhoneLayout && openComposerMenu === "agent_mode" && Boolean(agentModeMenuAnchor);
+  const floatingAgentModeMenuStyle = shouldFloatAgentModeMenu && agentModeMenuAnchor
+    ? {
+        position: "fixed" as const,
+        left: `${agentModeMenuAnchor.left}px`,
+        bottom: `${agentModeMenuAnchor.bottom}px`,
+        width: `${agentModeMenuAnchor.width}px`,
+        minWidth: `${agentModeMenuAnchor.width}px`,
+        maxWidth: `${agentModeMenuAnchor.width}px`,
+        zIndex: 2147483400,
+      }
+    : undefined;
 
   const composerContent = (
     <>
@@ -9753,6 +9801,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
             <div className={styles.iconMenuWrap}>
               <button
+                ref={agentModeTriggerRef}
                 type="button"
                 className={[
                   styles.centerAgentModeBtn,
@@ -9776,11 +9825,24 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                 </span>
                 {!hasAnyCenterAgentOptions ? <span className={styles.centerAgentModeCount}>0</span> : null}
               </button>
+              {shouldFloatAgentModeMenu ? (
+                <button
+                  type="button"
+                  className={styles.centerAgentModeFloatingBackdrop}
+                  onClick={() => setOpenComposerMenu(null)}
+                  aria-label="Close Agent Mode"
+                />
+              ) : null}
               {openComposerMenu === "agent_mode" ? (
                 <div
-                  className={[styles.iconMenu, styles.centerAgentModeMenu].join(" ")}
+                  className={[
+                    styles.iconMenu,
+                    styles.centerAgentModeMenu,
+                    shouldFloatAgentModeMenu ? styles.centerAgentModeMenuFloating : "",
+                  ].filter(Boolean).join(" ")}
                   role="menu"
                   aria-label={`Agent Mode (${centerLegacyAgentBankLabel})`}
+                  style={floatingAgentModeMenuStyle}
                 >
                   <div className={styles.centerAgentModeSearch} role="search">
                     <span className={styles.centerAgentModeSearchGlyph} aria-hidden="true" />

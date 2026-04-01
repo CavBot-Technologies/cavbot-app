@@ -6415,6 +6415,23 @@
   box-shadow: none;
 }
 
+.centerAgentModeMenuFloating {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  z-index: 2147483400 !important;
+}
+
+.centerAgentModeFloatingBackdrop {
+  position: fixed;
+  inset: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  z-index: 2147483390;
+}
+
 .centerAgentModeSearch {
   position: relative;
   display: block;
