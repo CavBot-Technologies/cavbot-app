@@ -43,6 +43,12 @@ test("center composer quick actions render compact mode toggles with compact age
   assert.equal(source.includes("floatingComposerMenuAnchor?.menu === openComposerMenu"), true);
   assert.equal(source.includes("aria-label=\"Close composer menu\""), true);
   assert.equal(source.includes("document.addEventListener(\"visibilitychange\", onVisibilityChange);"), true);
+  assert.equal(source.includes("document.documentElement.style.overflow = \"hidden\";"), true);
+  assert.equal(source.includes("document.documentElement.style.overscrollBehaviorY = \"none\";"), true);
+  assert.equal(
+    source.includes("const showSignedOutMobileLegal = !overlay && isPhoneLayout && authProbeReady && isGuestPreviewMode && isEmptyThread;"),
+    true
+  );
   assert.equal(source.includes("Search agents"), true);
   assert.equal(source.includes("Competitor Intelligence"), true);
   assert.equal(source.includes("accessibility_auditor"), true);

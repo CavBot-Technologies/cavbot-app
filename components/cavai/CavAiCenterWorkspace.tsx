@@ -3662,13 +3662,20 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, []);
 
   useEffect(() => {
-    if (overlay || !isPhoneLayout || !mobileDrawerOpen || typeof document === "undefined") return;
-    const { overflow } = document.body.style;
+    if (overlay || !isPhoneLayout || typeof document === "undefined") return;
+    const { overflow: bodyOverflow, overscrollBehaviorY: bodyOverscrollBehaviorY } = document.body.style;
+    const { overflow: docOverflow, overscrollBehaviorY: docOverscrollBehaviorY } = document.documentElement.style;
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overscrollBehaviorY = "none";
+    document.documentElement.style.overscrollBehaviorY = "none";
     return () => {
-      document.body.style.overflow = overflow;
+      document.body.style.overflow = bodyOverflow;
+      document.documentElement.style.overflow = docOverflow;
+      document.body.style.overscrollBehaviorY = bodyOverscrollBehaviorY;
+      document.documentElement.style.overscrollBehaviorY = docOverscrollBehaviorY;
     };
-  }, [isPhoneLayout, mobileDrawerOpen, overlay]);
+  }, [isPhoneLayout, overlay]);
 
   useEffect(() => {
     if (overlay || !isPhoneLayout || typeof document === "undefined") return;
@@ -3887,7 +3894,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const sidebarCollapsedActive = !isPhoneLayout && sidebarCollapsed;
   const hasExistingThread = Boolean(sessionId || messages.length || currentSession || hasInlineEdit);
   const centerComposerInThread = !overlay && isEmptyThread && !isPhoneLayout;
-  const showSignedOutMobileLegal = !overlay && isPhoneLayout && isGuestPreviewMode && isEmptyThread;
+  const showSignedOutMobileLegal = !overlay && isPhoneLayout && authProbeReady && isGuestPreviewMode && isEmptyThread;
   const installedAgentIdSet = useMemo(
     () => new Set(installedAgentIds.map((id) => s(id).toLowerCase())),
     [installedAgentIds]
