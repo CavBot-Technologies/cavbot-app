@@ -3,6 +3,8 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { createPortal } from "react-dom";
 import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import { LockIcon } from "@/components/LockIcon";
 import { isReservedUsername, isValidUsername, normalizeUsername } from "@/lib/username";
@@ -3564,6 +3566,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const composerControlsRef = useRef<HTMLDivElement | null>(null);
+  const floatingComposerMenuRef = useRef<HTMLDivElement | null>(null);
   const quickActionsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const composerModelTriggerRef = useRef<HTMLButtonElement | null>(null);
   const composerReasoningTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -5452,9 +5455,13 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     if (!openComposerMenu) return;
     const onMouseDown = (event: MouseEvent) => {
       const root = composerControlsRef.current;
-      if (!root) return;
+      const floatingMenu = floatingComposerMenuRef.current;
+      if (!root && !floatingMenu) return;
       const target = event.target;
-      if (target instanceof Node && root.contains(target)) return;
+      if (target instanceof Node) {
+        if (root?.contains(target)) return;
+        if (floatingMenu?.contains(target)) return;
+      }
       setOpenComposerMenu(null);
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -9372,20 +9379,60 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     && openComposerMenu !== null
     && floatingComposerMenuAnchor?.menu === openComposerMenu
   );
-  const floatingComposerMenuStyle = shouldFloatComposerMenu && floatingComposerMenuAnchor
-    ? {
-        position: "fixed" as const,
-        left: `${floatingComposerMenuAnchor.left}px`,
-        bottom: `${floatingComposerMenuAnchor.bottom}px`,
-        width: `${floatingComposerMenuAnchor.width}px`,
-        minWidth: `${floatingComposerMenuAnchor.width}px`,
-        maxWidth: `${floatingComposerMenuAnchor.width}px`,
-        maxHeight: floatingComposerMenuAnchor.maxHeight > 0 ? `${floatingComposerMenuAnchor.maxHeight}px` : undefined,
-        zIndex: 2147483400,
-      }
-    : undefined;
+  const shouldPortalComposerMenu = isPhoneLayout && openComposerMenu !== null;
+  const floatingComposerMenuStyle = useMemo<CSSProperties | undefined>(() => {
+    if (!shouldFloatComposerMenu || !floatingComposerMenuAnchor) return undefined;
+    return {
+      position: "fixed",
+      left: `${floatingComposerMenuAnchor.left}px`,
+      bottom: `${floatingComposerMenuAnchor.bottom}px`,
+      width: `${floatingComposerMenuAnchor.width}px`,
+      minWidth: `${floatingComposerMenuAnchor.width}px`,
+      maxWidth: `${floatingComposerMenuAnchor.width}px`,
+      maxHeight: floatingComposerMenuAnchor.maxHeight > 0 ? `${floatingComposerMenuAnchor.maxHeight}px` : undefined,
+      zIndex: 2147483400,
+    };
+  }, [floatingComposerMenuAnchor, shouldFloatComposerMenu]);
   const shouldFloatAgentModeMenu = shouldFloatComposerMenu && openComposerMenu === "agent_mode";
-  const floatingAgentModeMenuStyle = shouldFloatAgentModeMenu ? floatingComposerMenuStyle : undefined;
+  const floatingAgentModeMenuStyle = useMemo<CSSProperties | undefined>(
+    () => (shouldFloatAgentModeMenu ? floatingComposerMenuStyle : undefined),
+    [floatingComposerMenuStyle, shouldFloatAgentModeMenu]
+  );
+  const renderComposerMenuLayer = useCallback((args: {
+    menu: Exclude<ComposerMenu, null>;
+    className: string;
+    ariaLabel: string;
+    children: ReactNode;
+    style?: CSSProperties;
+  }) => {
+    if (shouldPortalComposerMenu && args.menu !== openComposerMenu) return null;
+    if (shouldPortalComposerMenu && !shouldFloatComposerMenu) return null;
+    const menuNode = (
+      <>
+        {shouldFloatComposerMenu ? (
+          <button
+            type="button"
+            className={styles.centerAgentModeFloatingBackdrop}
+            onClick={() => setOpenComposerMenu(null)}
+            aria-label="Close composer menu"
+          />
+        ) : null}
+        <div
+          ref={shouldFloatComposerMenu ? floatingComposerMenuRef : undefined}
+          className={args.className}
+          role="menu"
+          aria-label={args.ariaLabel}
+          style={shouldFloatComposerMenu ? (args.style || floatingComposerMenuStyle) : undefined}
+        >
+          {args.children}
+        </div>
+      </>
+    );
+    if (shouldFloatComposerMenu && typeof document !== "undefined") {
+      return createPortal(menuNode, document.body);
+    }
+    return menuNode;
+  }, [floatingComposerMenuStyle, openComposerMenu, shouldFloatComposerMenu, shouldPortalComposerMenu]);
 
   const composerContent = (
     <>
@@ -9663,13 +9710,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                 <CenterPlusGlyph className={[styles.centerInlineGlyph, styles.centerInlineGlyph18].join(" ")} />
               </button>
               {openComposerMenu === "quick_actions" ? (
-                <div
-                  className={[styles.iconMenu, styles.centerQuickActionsMenu].join(" ")}
-                  role="menu"
-                  aria-label="Quick actions"
-                  style={floatingComposerMenuStyle}
-                >
-                  {quickActionItems.map((item) => (
+                renderComposerMenuLayer({
+                  menu: "quick_actions",
+                  className: [styles.iconMenu, styles.centerQuickActionsMenu].join(" "),
+                  ariaLabel: "Quick actions",
+                  children: quickActionItems.map((item) => (
                     <button
                       key={`quick-action-${item.id}`}
                       type="button"
@@ -9714,8 +9759,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                         </span>
                       ) : null}
                     </button>
-                  ))}
-                </div>
+                  )),
+                })
               ) : null}
             </div>
 
@@ -9734,8 +9779,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                   <CenterModelGlyph className={[styles.centerInlineGlyph, styles.centerInlineGlyph18].join(" ")} />
                 </button>
                 {openComposerMenu === "model" ? (
-                  <div className={styles.iconMenu} role="menu" aria-label="Model selector" style={floatingComposerMenuStyle}>
-                    {modelMenuOptions.map((option) => {
+                  renderComposerMenuLayer({
+                    menu: "model",
+                    className: styles.iconMenu,
+                    ariaLabel: "Model selector",
+                    children: modelMenuOptions.map((option) => {
                       const isOn = selectedModel === option.id;
                       const locked = option.locked === true;
                       return (
@@ -9767,8 +9815,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                           ) : null}
                         </button>
                       );
-                    })}
-                  </div>
+                    }),
+                  })
                 ) : null}
               </div>
             ) : null}
@@ -9788,8 +9836,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                   <CenterReasoningGlyph className={[styles.centerInlineGlyph, styles.centerInlineGlyph18].join(" ")} />
                 </button>
                 {openComposerMenu === "reasoning" ? (
-                  <div className={styles.iconMenu} role="menu" aria-label="Reasoning options" style={floatingComposerMenuStyle}>
-                    {reasoningMenuOptions.map((option) => {
+                  renderComposerMenuLayer({
+                    menu: "reasoning",
+                    className: styles.iconMenu,
+                    ariaLabel: "Reasoning options",
+                    children: reasoningMenuOptions.map((option) => {
                       const isOn = reasoningLevel === option.value;
                       const locked = option.locked === true;
                       const helper = toReasoningDisplayHelper(option.value);
@@ -9822,8 +9873,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                           ) : null}
                         </button>
                       );
-                    })}
-                  </div>
+                    }),
+                  })
                 ) : null}
               </div>
             ) : null}
@@ -9880,25 +9931,18 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                 </span>
                 {!hasAnyCenterAgentOptions ? <span className={styles.centerAgentModeCount}>0</span> : null}
               </button>
-              {shouldFloatComposerMenu ? (
-                <button
-                  type="button"
-                  className={styles.centerAgentModeFloatingBackdrop}
-                  onClick={() => setOpenComposerMenu(null)}
-                  aria-label="Close composer menu"
-                />
-              ) : null}
               {openComposerMenu === "agent_mode" ? (
-                <div
-                  className={[
+                renderComposerMenuLayer({
+                  menu: "agent_mode",
+                  className: [
                     styles.iconMenu,
                     styles.centerAgentModeMenu,
                     shouldFloatAgentModeMenu ? styles.centerAgentModeMenuFloating : "",
-                  ].filter(Boolean).join(" ")}
-                  role="menu"
-                  aria-label={`Agent Mode (${centerLegacyAgentBankLabel})`}
-                  style={floatingAgentModeMenuStyle}
-                >
+                  ].filter(Boolean).join(" "),
+                  ariaLabel: `Agent Mode (${centerLegacyAgentBankLabel})`,
+                  style: floatingAgentModeMenuStyle,
+                  children: (
+                    <>
                   <div className={styles.centerAgentModeSearch} role="search">
                     <span className={styles.centerAgentModeSearchGlyph} aria-hidden="true" />
                     <input
@@ -10481,7 +10525,9 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                     )}
                   </details>
                   </div>
-                </div>
+                    </>
+                  ),
+                })
               ) : null}
             </div>
 
@@ -10525,8 +10571,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                   <CenterAudioGlyph className={[styles.centerInlineGlyph, styles.centerInlineGlyph18].join(" ")} />
                 </button>
                 {openComposerMenu === "audio_model" ? (
-                  <div className={styles.iconMenu} role="menu" aria-label="Transcription model selector" style={floatingComposerMenuStyle}>
-                    {audioModelMenuOptions.map((option) => {
+                  renderComposerMenuLayer({
+                    menu: "audio_model",
+                    className: styles.iconMenu,
+                    ariaLabel: "Transcription model selector",
+                    children: audioModelMenuOptions.map((option) => {
                       const isOn = selectedAudioModel === option.id;
                       return (
                         <button
@@ -10543,8 +10592,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                           <span className={styles.iconMenuItemLabel}>{option.label}</span>
                         </button>
                       );
-                    })}
-                  </div>
+                    }),
+                  })
                 ) : null}
               </div>
             ) : null}

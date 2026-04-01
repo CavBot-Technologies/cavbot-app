@@ -12,7 +12,7 @@ test("center composer plus icon opens compact quick-action menu with required CT
 
   assert.equal(source.includes("prev === \"quick_actions\" ? null : \"quick_actions\""), true);
   assert.equal(source.includes("openComposerMenu === \"quick_actions\""), true);
-  assert.equal(source.includes("aria-label=\"Quick actions\""), true);
+  assert.equal(source.includes("ariaLabel: \"Quick actions\""), true);
   assert.equal(source.includes("Add photos & files"), true);
   assert.equal(source.includes("Recent files"), true);
   assert.equal(source.includes("Create image"), true);
