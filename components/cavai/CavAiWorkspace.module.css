@@ -3386,6 +3386,9 @@
   width: 18px;
   height: 18px;
   display: block;
+  object-fit: contain;
+  filter: brightness(0) saturate(100%) invert(100%);
+  opacity: 0.94;
 }
 
 .centerMainHeadCopy {
@@ -8016,9 +8019,30 @@
 }
 
 @media (max-width: 1020px) {
+  .centerPageRoot {
+    max-width: 100%;
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+  }
+
   .centerShellPage {
+    max-width: 100%;
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
+    overflow-x: hidden;
+  }
+
+  .centerMain,
+  .centerThread,
+  .centerThreadInner,
+  .centerComposer,
+  .centerComposerInputShell {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .centerComposerInput {
+    font-size: 16px;
   }
 
   .centerSidebar {
@@ -8163,18 +8187,18 @@
   }
 
   .centerComposer {
-    padding: 8px 9px calc(8px + env(safe-area-inset-bottom));
+    padding: 9px 9px calc(8px + env(safe-area-inset-bottom));
   }
 
   .centerComposerInput {
-    min-height: 44px;
-    max-height: 120px;
-    padding: 7px 10px 6px;
-    line-height: 1.4;
+    min-height: 70px;
+    max-height: 150px;
+    padding: 8px 10px 8px;
+    line-height: 1.45;
   }
 
   .centerComposerInputWithMedia {
-    min-height: 58px;
+    min-height: 82px;
   }
 
   .centerGuestMobilePrompt {
@@ -8226,7 +8250,7 @@
   }
 
   .centerComposerInputShell {
-    padding: 4px 0 1px;
+    padding: 5px 0 1px;
   }
 
   .centerAttachmentsRow {

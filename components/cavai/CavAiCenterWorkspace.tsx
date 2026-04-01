@@ -3456,7 +3456,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [isPhoneLayout, setIsPhoneLayout] = useState(false);
   const [chatsExpanded, setChatsExpanded] = useState(true);
-  const [drawerSearchVisible, setDrawerSearchVisible] = useState(false);
   const [images, setImages] = useState<CavAiImageAttachment[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<CavAiUploadedFileAttachment[]>([]);
   const [modelOptions, setModelOptions] = useState<CavAiModelOption[]>([]);
@@ -3628,10 +3627,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     const sync = () => {
       const nextIsPhone = media.matches;
       setIsPhoneLayout(nextIsPhone);
-      if (!nextIsPhone) {
-        setMobileDrawerOpen(false);
-        setDrawerSearchVisible(false);
-      }
+      if (!nextIsPhone) setMobileDrawerOpen(false);
     };
     sync();
     if (typeof media.addEventListener === "function") {
@@ -3650,6 +3646,18 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       document.body.style.overflow = overflow;
     };
   }, [isPhoneLayout, mobileDrawerOpen, overlay]);
+
+  useEffect(() => {
+    if (overlay || !isPhoneLayout || typeof document === "undefined") return;
+    const { overflowX: bodyOverflowX } = document.body.style;
+    const { overflowX: docOverflowX } = document.documentElement.style;
+    document.body.style.overflowX = "hidden";
+    document.documentElement.style.overflowX = "hidden";
+    return () => {
+      document.body.style.overflowX = bodyOverflowX;
+      document.documentElement.style.overflowX = docOverflowX;
+    };
+  }, [isPhoneLayout, overlay]);
 
   useEffect(() => {
     if (!mobileDrawerOpen) return;
@@ -4235,14 +4243,13 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     [availableReasoningLevels, isGuestPreviewMode]
   );
   const selectedModelLabel = useMemo(() => {
-    if (isGuestPreviewMode) return resolveAiModelLabel(ALIBABA_QWEN_FLASH_MODEL_ID);
     if (selectedModel === ALIBABA_QWEN_IMAGE_MODEL_ID) return "Image Studio";
     if (selectedModel === ALIBABA_QWEN_IMAGE_EDIT_MODEL_ID) return "Image Edit";
     const match = modelMenuOptions.find((option) => option.id === selectedModel);
     if (match) return match.label;
     if (selectedModel === CAVAI_AUTO_MODEL_ID) return resolveAiModelLabel(CAVAI_AUTO_MODEL_ID);
     return resolveAiModelLabel(selectedModel);
-  }, [isGuestPreviewMode, modelMenuOptions, selectedModel]);
+  }, [modelMenuOptions, selectedModel]);
   const selectedAudioModelLabel = useMemo(() => {
     return "Voice";
   }, []);
@@ -5642,18 +5649,13 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
   const closeMobileDrawer = useCallback(() => {
     setMobileDrawerOpen(false);
-    setDrawerSearchVisible(false);
     setAccountMenuOpen(false);
   }, []);
 
   const toggleMobileDrawer = useCallback(() => {
     if (!isPhoneLayout) return;
     setOpenHeaderModelMenu(false);
-    setMobileDrawerOpen((prev) => {
-      const next = !prev;
-      if (!next) setDrawerSearchVisible(false);
-      return next;
-    });
+    setMobileDrawerOpen((prev) => !prev);
   }, [isPhoneLayout]);
 
   const openGuestAuthPanel = useCallback((opts?: { stage?: GuestAuthStage; closeDrawer?: boolean }) => {
@@ -5685,7 +5687,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     setCopiedMessageToken("");
     setHistoryOpen(false);
     setMobileDrawerOpen(false);
-    setDrawerSearchVisible(false);
     stopReasoningContext();
   }, [stopReasoningContext]);
 
@@ -8817,7 +8818,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const onFocusSessionSearch = useCallback(() => {
     if (isPhoneLayout) {
       setChatsExpanded(true);
-      setDrawerSearchVisible(true);
       setMobileDrawerOpen(true);
     }
     const input = searchInputRef.current;
@@ -10768,7 +10768,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                     aria-current={item.active ? "page" : undefined}
                     aria-label={item.label}
                     title={item.description}
-                    onClick={closeMobileDrawer}
+                    onClick={() => setMobileDrawerOpen(false)}
                   >
                     <span className={[styles.centerSidebarNavGlyph, surfaceNavGlyphClass(item.surface)].join(" ")} aria-hidden="true" />
                     <span className={styles.centerSidebarNavLabel}>{item.label}</span>
@@ -10807,7 +10807,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
             {!sidebarCollapsedActive && chatsExpanded ? (
               <div id="cavai-your-chats-list" className={styles.centerSidebarBody}>
-                {isPhoneLayout && (drawerSearchVisible || s(sessionQuery).length > 0) ? (
+                {isPhoneLayout ? (
                   <input
                     ref={searchInputRef}
                     className={styles.centerSidebarSearchInput}
@@ -11153,11 +11153,15 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                 aria-expanded={mobileDrawerOpen}
                 aria-controls="cavai-mobile-drawer"
               >
-                <svg className={styles.centerMobileMenuSvg} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <circle cx="6" cy="12" r="1.8" fill="currentColor" />
-                  <circle cx="12" cy="12" r="1.8" fill="currentColor" />
-                  <circle cx="18" cy="12" r="1.8" fill="currentColor" />
-                </svg>
+                <Image
+                  src="/icons/menu-svgrepo-com.svg"
+                  alt=""
+                  width={18}
+                  height={18}
+                  className={styles.centerMobileMenuSvg}
+                  aria-hidden="true"
+                  unoptimized
+                />
               </button>
             </div>
           ) : null}
