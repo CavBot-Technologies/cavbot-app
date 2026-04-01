@@ -8072,6 +8072,20 @@
 }
 
 @media (max-width: 760px) {
+  .centerPageRoot {
+    min-height: 100dvh;
+    height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior-y: none;
+  }
+
+  .centerShell,
+  .centerShellPage,
+  .centerMain {
+    min-height: 100dvh;
+    height: 100dvh;
+  }
+
   .centerOverlayRoot {
     padding: 6px 6px 0;
   }
@@ -8085,6 +8099,7 @@
   .centerShellPage {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
+    overflow: hidden;
   }
 
   .centerMobileDrawerBackdrop {
@@ -8221,11 +8236,18 @@
   }
 
   .centerThread {
+    min-height: 0;
     padding: 11px 11px 10px;
   }
 
   .centerComposer {
     padding: 9px 9px calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .centerMain {
+    display: grid;
+    grid-template-rows: 56px minmax(0, 1fr) auto auto;
+    overflow: hidden;
   }
 
   .centerComposerInput {
@@ -8245,7 +8267,7 @@
 
   .centerGuestMobileLegal {
     display: block;
-    margin-top: 10px;
+    margin-top: 0;
   }
 
   .centerMessage,
