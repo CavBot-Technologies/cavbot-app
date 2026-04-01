@@ -38,6 +38,10 @@ test("center composer quick actions render compact mode toggles with compact age
   assert.equal(source.includes("selectAgentModeOption"), true);
   assert.equal(source.includes("toggleAgentInstalled"), true);
   assert.equal(source.includes("openComposerMenu !== \"agent_mode\""), true);
+  assert.equal(source.includes("window.visualViewport?.addEventListener(\"resize\", onViewportChange);"), true);
+  assert.equal(source.includes("window.visualViewport?.addEventListener(\"scroll\", onViewportChange);"), true);
+  assert.equal(source.includes("floatingComposerMenuAnchor?.menu === openComposerMenu"), true);
+  assert.equal(source.includes("aria-label=\"Close composer menu\""), true);
   assert.equal(source.includes("document.addEventListener(\"visibilitychange\", onVisibilityChange);"), true);
   assert.equal(source.includes("Search agents"), true);
   assert.equal(source.includes("Competitor Intelligence"), true);
@@ -45,7 +49,7 @@ test("center composer quick actions render compact mode toggles with compact age
   assert.equal(source.includes("Agent Bank"), true);
   assert.equal(source.includes("Locked"), true);
   assert.equal(source.includes("const hasCenterAgentOptions = installedCenterAgents.length > 0;"), true);
-  assert.equal(source.includes("const canUseDeepResearch = accountPlanId === \"premium\" || accountPlanId === \"premium_plus\";"), true);
+  assert.equal(source.includes("const canUseDeepResearch = !isGuestPreviewMode && (accountPlanId === \"premium\" || accountPlanId === \"premium_plus\");"), true);
   assert.equal(source.includes("composerQuickMode === \"create_image\""), true);
   assert.equal(source.includes("composerQuickMode === \"edit_image\""), true);
   assert.equal(source.includes("selectedModel === ALIBABA_QWEN_CHARACTER_MODEL_ID"), true);

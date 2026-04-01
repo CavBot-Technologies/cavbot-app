@@ -408,6 +408,13 @@ type CenterConfig = {
 
 type ReasoningLevel = "low" | "medium" | "high" | "extra_high";
 type ComposerMenu = "model" | "audio_model" | "reasoning" | "quick_actions" | "agent_mode" | null;
+type FloatingComposerMenuAnchor = {
+  menu: Exclude<ComposerMenu, null>;
+  left: number;
+  bottom: number;
+  width: number;
+  maxHeight: number;
+};
 type ComposerQuickActionId =
   | "add_files"
   | "upload_from_cavcloud"
@@ -576,6 +583,13 @@ const CAVAI_GUEST_PREVIEW_LOCK_MESSAGE = "Sign in to unlock uploads, image tools
 const CAVAI_MOBILE_LAYOUT_BREAKPOINT_PX = 760;
 const CAVAI_TERMS_OF_USE_HREF = "https://www.cavbot.io/terms-of-use";
 const CAVAI_PRIVACY_POLICY_HREF = "https://www.cavbot.io/privacy-policy";
+
+function resolveFloatingComposerMenuPreferredWidth(menu: Exclude<ComposerMenu, null>): number {
+  if (menu === "agent_mode") return 338;
+  if (menu === "quick_actions") return 244;
+  return 200;
+}
+
 const CAVAI_GUEST_PREVIEW_MODELS: CavAiSelectableOption[] = [
   {
     id: ALIBABA_QWEN_FLASH_MODEL_ID,
@@ -3508,7 +3522,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [copiedMessageToken, setCopiedMessageToken] = useState("");
   const [activeSessionMenuId, setActiveSessionMenuId] = useState("");
   const [activeSessionMenuAnchor, setActiveSessionMenuAnchor] = useState<{ top: number; right: number } | null>(null);
-  const [agentModeMenuAnchor, setAgentModeMenuAnchor] = useState<{ left: number; bottom: number; width: number } | null>(null);
+  const [floatingComposerMenuAnchor, setFloatingComposerMenuAnchor] = useState<FloatingComposerMenuAnchor | null>(null);
   const [sessionActionModal, setSessionActionModal] = useState<SessionActionModal | null>(null);
   const [sessionActionBusy, setSessionActionBusy] = useState(false);
   const [renameDraftTitle, setRenameDraftTitle] = useState("");
@@ -3550,6 +3564,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const composerControlsRef = useRef<HTMLDivElement | null>(null);
+  const quickActionsTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const composerModelTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const composerReasoningTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const composerAudioTriggerRef = useRef<HTMLButtonElement | null>(null);
   const agentModeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const headerModelMenuRef = useRef<HTMLDivElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
@@ -3661,36 +3679,61 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     };
   }, [isPhoneLayout, overlay]);
 
-  const syncAgentModeMenuAnchor = useCallback(() => {
-    if (typeof window === "undefined") return;
-    const trigger = agentModeTriggerRef.current;
-    if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    const composerShellRect = composerControlsRef.current?.parentElement?.getBoundingClientRect() ?? null;
-    const width = Math.min(338, Math.max(260, window.innerWidth - 20));
-    const left = Math.min(
-      Math.max(10, rect.left),
-      Math.max(10, window.innerWidth - width - 10)
-    );
-    const anchorTop = composerShellRect ? composerShellRect.top : rect.top;
-    const bottom = Math.max(88, window.innerHeight - anchorTop + 8);
-    setAgentModeMenuAnchor({ left, bottom, width });
+  const resolveFloatingComposerMenuTrigger = useCallback((menu: Exclude<ComposerMenu, null>) => {
+    if (menu === "quick_actions") return quickActionsTriggerRef.current;
+    if (menu === "model") return composerModelTriggerRef.current;
+    if (menu === "reasoning") return composerReasoningTriggerRef.current;
+    if (menu === "audio_model") return composerAudioTriggerRef.current;
+    return agentModeTriggerRef.current;
   }, []);
 
+  const syncFloatingComposerMenuAnchor = useCallback((menu: Exclude<ComposerMenu, null>) => {
+    if (typeof window === "undefined") return;
+    const trigger = resolveFloatingComposerMenuTrigger(menu);
+    if (!trigger) return;
+    const visualViewport = window.visualViewport;
+    const viewportLeft = visualViewport?.offsetLeft ?? 0;
+    const viewportTop = visualViewport?.offsetTop ?? 0;
+    const viewportWidth = visualViewport?.width ?? window.innerWidth;
+    const rect = trigger.getBoundingClientRect();
+    const composerShellRect = composerControlsRef.current?.parentElement?.getBoundingClientRect() ?? null;
+    const availableWidth = Math.max(120, Math.floor(viewportWidth - 20));
+    const width = Math.min(resolveFloatingComposerMenuPreferredWidth(menu), availableWidth);
+    const left = Math.min(
+      Math.max(viewportLeft + 10, rect.left + viewportLeft),
+      Math.max(viewportLeft + 10, viewportLeft + viewportWidth - width - 10)
+    );
+    const anchorTop = composerShellRect ? composerShellRect.top : rect.top;
+    const composerTopInLayoutViewport = anchorTop + viewportTop;
+    const bottom = Math.max(8, window.innerHeight - composerTopInLayoutViewport + 8);
+    const maxHeight = Math.max(0, Math.floor(anchorTop - 18));
+    setFloatingComposerMenuAnchor({
+      menu,
+      left: Math.round(left),
+      bottom: Math.round(bottom),
+      width,
+      maxHeight,
+    });
+  }, [resolveFloatingComposerMenuTrigger]);
+
   useEffect(() => {
-    if (openComposerMenu !== "agent_mode" || !isPhoneLayout) {
-      setAgentModeMenuAnchor(null);
+    if (!openComposerMenu || !isPhoneLayout) {
+      setFloatingComposerMenuAnchor(null);
       return;
     }
-    syncAgentModeMenuAnchor();
-    const onViewportChange = () => syncAgentModeMenuAnchor();
+    syncFloatingComposerMenuAnchor(openComposerMenu);
+    const onViewportChange = () => syncFloatingComposerMenuAnchor(openComposerMenu);
     window.addEventListener("resize", onViewportChange);
     window.addEventListener("scroll", onViewportChange, true);
+    window.visualViewport?.addEventListener("resize", onViewportChange);
+    window.visualViewport?.addEventListener("scroll", onViewportChange);
     return () => {
       window.removeEventListener("resize", onViewportChange);
       window.removeEventListener("scroll", onViewportChange, true);
+      window.visualViewport?.removeEventListener("resize", onViewportChange);
+      window.visualViewport?.removeEventListener("scroll", onViewportChange);
     };
-  }, [isPhoneLayout, openComposerMenu, syncAgentModeMenuAnchor]);
+  }, [isPhoneLayout, openComposerMenu, syncFloatingComposerMenuAnchor]);
 
   useEffect(() => {
     if (!mobileDrawerOpen) return;
@@ -7248,12 +7291,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     setOpenHeaderModelMenu(false);
     setOpenComposerMenu((prev) => (prev === "agent_mode" ? null : "agent_mode"));
     setAgentModeQuery("");
-    if (isPhoneLayout && typeof window !== "undefined") {
-      window.requestAnimationFrame(() => {
-        syncAgentModeMenuAnchor();
-      });
-    }
-  }, [isPhoneLayout, syncAgentModeMenuAnchor]);
+  }, []);
 
   const clearAgentModeSelection = useCallback(() => {
     setOpenComposerMenu(null);
@@ -9329,18 +9367,25 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     }
     return null;
   }, [accountPlanId, createModeActive, editModeActive, images.length]);
-  const shouldFloatAgentModeMenu = isPhoneLayout && openComposerMenu === "agent_mode" && Boolean(agentModeMenuAnchor);
-  const floatingAgentModeMenuStyle = shouldFloatAgentModeMenu && agentModeMenuAnchor
+  const shouldFloatComposerMenu = (
+    isPhoneLayout
+    && openComposerMenu !== null
+    && floatingComposerMenuAnchor?.menu === openComposerMenu
+  );
+  const floatingComposerMenuStyle = shouldFloatComposerMenu && floatingComposerMenuAnchor
     ? {
         position: "fixed" as const,
-        left: `${agentModeMenuAnchor.left}px`,
-        bottom: `${agentModeMenuAnchor.bottom}px`,
-        width: `${agentModeMenuAnchor.width}px`,
-        minWidth: `${agentModeMenuAnchor.width}px`,
-        maxWidth: `${agentModeMenuAnchor.width}px`,
+        left: `${floatingComposerMenuAnchor.left}px`,
+        bottom: `${floatingComposerMenuAnchor.bottom}px`,
+        width: `${floatingComposerMenuAnchor.width}px`,
+        minWidth: `${floatingComposerMenuAnchor.width}px`,
+        maxWidth: `${floatingComposerMenuAnchor.width}px`,
+        maxHeight: floatingComposerMenuAnchor.maxHeight > 0 ? `${floatingComposerMenuAnchor.maxHeight}px` : undefined,
         zIndex: 2147483400,
       }
     : undefined;
+  const shouldFloatAgentModeMenu = shouldFloatComposerMenu && openComposerMenu === "agent_mode";
+  const floatingAgentModeMenuStyle = shouldFloatAgentModeMenu ? floatingComposerMenuStyle : undefined;
 
   const composerContent = (
     <>
@@ -9603,6 +9648,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
           <div className={styles.centerComposerLeftTools}>
             <div className={styles.iconMenuWrap}>
               <button
+                ref={quickActionsTriggerRef}
                 type="button"
                 className={[styles.actionBtn, styles.iconActionBtn, styles.centerComposerIconBtn, styles.menuTriggerBtn].join(" ")}
                 onClick={() => {
@@ -9617,7 +9663,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                 <CenterPlusGlyph className={[styles.centerInlineGlyph, styles.centerInlineGlyph18].join(" ")} />
               </button>
               {openComposerMenu === "quick_actions" ? (
-                <div className={[styles.iconMenu, styles.centerQuickActionsMenu].join(" ")} role="menu" aria-label="Quick actions">
+                <div
+                  className={[styles.iconMenu, styles.centerQuickActionsMenu].join(" ")}
+                  role="menu"
+                  aria-label="Quick actions"
+                  style={floatingComposerMenuStyle}
+                >
                   {quickActionItems.map((item) => (
                     <button
                       key={`quick-action-${item.id}`}
@@ -9671,6 +9722,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
             {showComposerModelControl ? (
               <div className={styles.iconMenuWrap}>
                 <button
+                  ref={composerModelTriggerRef}
                   type="button"
                   className={[styles.actionBtn, styles.iconActionBtn, styles.centerComposerIconBtn, styles.menuTriggerBtn].join(" ")}
                   onClick={() => setOpenComposerMenu((prev) => (prev === "model" ? null : "model"))}
@@ -9682,7 +9734,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                   <CenterModelGlyph className={[styles.centerInlineGlyph, styles.centerInlineGlyph18].join(" ")} />
                 </button>
                 {openComposerMenu === "model" ? (
-                  <div className={styles.iconMenu} role="menu" aria-label="Model selector">
+                  <div className={styles.iconMenu} role="menu" aria-label="Model selector" style={floatingComposerMenuStyle}>
                     {modelMenuOptions.map((option) => {
                       const isOn = selectedModel === option.id;
                       const locked = option.locked === true;
@@ -9724,6 +9776,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
             {showComposerReasoningControl ? (
               <div className={styles.iconMenuWrap}>
                 <button
+                  ref={composerReasoningTriggerRef}
                   type="button"
                   className={[styles.actionBtn, styles.iconActionBtn, styles.centerComposerIconBtn, styles.menuTriggerBtn].join(" ")}
                   onClick={() => setOpenComposerMenu((prev) => (prev === "reasoning" ? null : "reasoning"))}
@@ -9735,7 +9788,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                   <CenterReasoningGlyph className={[styles.centerInlineGlyph, styles.centerInlineGlyph18].join(" ")} />
                 </button>
                 {openComposerMenu === "reasoning" ? (
-                  <div className={styles.iconMenu} role="menu" aria-label="Reasoning options">
+                  <div className={styles.iconMenu} role="menu" aria-label="Reasoning options" style={floatingComposerMenuStyle}>
                     {reasoningMenuOptions.map((option) => {
                       const isOn = reasoningLevel === option.value;
                       const locked = option.locked === true;
@@ -9827,12 +9880,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                 </span>
                 {!hasAnyCenterAgentOptions ? <span className={styles.centerAgentModeCount}>0</span> : null}
               </button>
-              {shouldFloatAgentModeMenu ? (
+              {shouldFloatComposerMenu ? (
                 <button
                   type="button"
                   className={styles.centerAgentModeFloatingBackdrop}
                   onClick={() => setOpenComposerMenu(null)}
-                  aria-label="Close Agent Mode"
+                  aria-label="Close composer menu"
                 />
               ) : null}
               {openComposerMenu === "agent_mode" ? (
@@ -10454,6 +10507,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
             ) : audioModelMenuOptions.length > 1 ? (
               <div className={[styles.iconMenuWrap, styles.centerComposerAudioMenuWrap].join(" ")}>
                 <button
+                  ref={composerAudioTriggerRef}
                   type="button"
                   className={[
                     styles.actionBtn,
@@ -10471,7 +10525,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                   <CenterAudioGlyph className={[styles.centerInlineGlyph, styles.centerInlineGlyph18].join(" ")} />
                 </button>
                 {openComposerMenu === "audio_model" ? (
-                  <div className={styles.iconMenu} role="menu" aria-label="Transcription model selector">
+                  <div className={styles.iconMenu} role="menu" aria-label="Transcription model selector" style={floatingComposerMenuStyle}>
                     {audioModelMenuOptions.map((option) => {
                       const isOn = selectedAudioModel === option.id;
                       return (
