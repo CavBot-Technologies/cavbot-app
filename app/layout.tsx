@@ -1,11 +1,23 @@
 // app/layout.tsx
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import appleTouchIcon120 from "@/public/favicons/apple-touch-icon-120x120.png";
+import appleTouchIcon152 from "@/public/favicons/apple-touch-icon-152x152.png";
+import appleTouchIcon180 from "@/public/favicons/apple-touch-icon.png";
+import favicon32 from "@/public/favicons/favicon-32x32.png";
+import favicon48 from "@/public/favicons/favicon-48x48.png";
+import favicon64 from "@/public/favicons/favicon-64x64.png";
+import favicon96 from "@/public/favicons/favicon-96x96.png";
+import metapropertyImage from "@/public/favicons/metaproperty.png";
+import mstile144 from "@/public/favicons/mstile-144x144.png";
+import ogImage from "@/public/favicons/ogimage.png";
+import safariPinnedTab from "@/public/favicons/safari-pinned-tab.svg";
 import "./globals.css";
 import "./workspace.css";
 import "@/components/LightToggle.css";
 
 const APP_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://app.cavbot.io";
+const assetUrl = (asset: { src: string } | string) => (typeof asset === "string" ? asset : asset.src);
 
 export const metadata: Metadata = {
   metadataBase: new URL(APP_ORIGIN),
@@ -29,8 +41,8 @@ export const metadata: Metadata = {
     description:
       "CavBot Console — site intelligence across SEO, performance, accessibility, UX, engagement, and events.",
     images: [
-      { url: "/ogimage.png", alt: "CavBot" },
-      { url: "/metaproperty.png", alt: "CavBot" },
+      { url: assetUrl(ogImage), alt: "CavBot" },
+      { url: assetUrl(metapropertyImage), alt: "CavBot" },
     ],
   },
   twitter: {
@@ -38,29 +50,29 @@ export const metadata: Metadata = {
     title: "CavBot",
     description:
       "CavBot Console — site intelligence across SEO, performance, accessibility, UX, engagement, and events.",
-    images: ["/metaproperty.png"],
+    images: [assetUrl(metapropertyImage)],
   },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
-      { url: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
-      { url: "/favicon-48x48.png", type: "image/png", sizes: "48x48" },
-      { url: "/favicon-64x64.png", type: "image/png", sizes: "64x64" },
-      { url: "/favicon-96x96.png", type: "image/png", sizes: "96x96" },
+      { url: assetUrl(favicon32), type: "image/png", sizes: "32x32" },
+      { url: assetUrl(favicon48), type: "image/png", sizes: "48x48" },
+      { url: assetUrl(favicon64), type: "image/png", sizes: "64x64" },
+      { url: assetUrl(favicon96), type: "image/png", sizes: "96x96" },
     ],
     shortcut: [{ url: "/favicon.ico" }],
     apple: [
-      { url: "/apple-touch-icon-120x120.png", type: "image/png", sizes: "120x120" },
-      { url: "/apple-touch-icon-152x152.png", type: "image/png", sizes: "152x152" },
-      { url: "/apple-touch-icon.png", type: "image/png", sizes: "180x180" },
+      { url: assetUrl(appleTouchIcon120), type: "image/png", sizes: "120x120" },
+      { url: assetUrl(appleTouchIcon152), type: "image/png", sizes: "152x152" },
+      { url: assetUrl(appleTouchIcon180), type: "image/png", sizes: "180x180" },
     ],
     other: [
-      { rel: "mask-icon", url: "/safari-pinned-tab.svg", color: "#01030f" },
+      { rel: "mask-icon", url: assetUrl(safariPinnedTab), color: "#01030f" },
     ],
   },
   other: {
     "msapplication-TileColor": "#01030f",
-    "msapplication-TileImage": "/mstile-144x144.png",
+    "msapplication-TileImage": assetUrl(mstile144),
   },
 };
 
