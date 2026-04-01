@@ -29,8 +29,8 @@ export const metadata: Metadata = {
     description:
       "CavBot Console — site intelligence across SEO, performance, accessibility, UX, engagement, and events.",
     images: [
-      { url: "/favicons/ogimage.png", alt: "CavBot" },
-      { url: "/favicons/metaproperty.png", alt: "CavBot" },
+      { url: "/ogimage.png", alt: "CavBot" },
+      { url: "/metaproperty.png", alt: "CavBot" },
     ],
   },
   twitter: {
@@ -38,29 +38,29 @@ export const metadata: Metadata = {
     title: "CavBot",
     description:
       "CavBot Console — site intelligence across SEO, performance, accessibility, UX, engagement, and events.",
-    images: ["/favicons/metaproperty.png"],
+    images: ["/metaproperty.png"],
   },
   icons: {
     icon: [
-      { url: "/favicons/favicon.ico", sizes: "any" },
-      { url: "/favicons/favicon-32x32.png", type: "image/png", sizes: "32x32" },
-      { url: "/favicons/favicon-48x48.png", type: "image/png", sizes: "48x48" },
-      { url: "/favicons/favicon-64x64.png", type: "image/png", sizes: "64x64" },
-      { url: "/favicons/favicon-96x96.png", type: "image/png", sizes: "96x96" },
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon-48x48.png", type: "image/png", sizes: "48x48" },
+      { url: "/favicon-64x64.png", type: "image/png", sizes: "64x64" },
+      { url: "/favicon-96x96.png", type: "image/png", sizes: "96x96" },
     ],
-    shortcut: [{ url: "/favicons/favicon.ico" }],
+    shortcut: [{ url: "/favicon.ico" }],
     apple: [
-      { url: "/favicons/apple-touch-icon-120x120.png", type: "image/png", sizes: "120x120" },
-      { url: "/favicons/apple-touch-icon-152x152.png", type: "image/png", sizes: "152x152" },
-      { url: "/favicons/apple-touch-icon.png", type: "image/png", sizes: "180x180" },
+      { url: "/apple-touch-icon-120x120.png", type: "image/png", sizes: "120x120" },
+      { url: "/apple-touch-icon-152x152.png", type: "image/png", sizes: "152x152" },
+      { url: "/apple-touch-icon.png", type: "image/png", sizes: "180x180" },
     ],
     other: [
-      { rel: "mask-icon", url: "/favicons/safari-pinned-tab.svg", color: "#01030f" },
+      { rel: "mask-icon", url: "/safari-pinned-tab.svg", color: "#01030f" },
     ],
   },
   other: {
     "msapplication-TileColor": "#01030f",
-    "msapplication-TileImage": "/favicons/mstile-144x144.png",
+    "msapplication-TileImage": "/mstile-144x144.png",
   },
 };
 

@@ -4,9 +4,6 @@ import type { ReactNode } from "react";
 import "./auth.css";
 
 export const metadata: Metadata = {
-  title: {
-    absolute: "CavBot · Sign up",
-  },
   description:
     "Create your CavBot workspace. Sign up with GitHub or Google, or use email. Access CavAI Console.",
   robots: { index: true, follow: true },
