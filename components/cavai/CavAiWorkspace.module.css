@@ -8118,10 +8118,10 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    padding: 0 8px;
+    padding: 0 10px;
     min-height: 56px;
     height: 56px;
-    gap: 6px;
+    gap: 8px;
   }
 
   .centerMobileHeaderLeft,
@@ -8132,41 +8132,47 @@
 
   .centerMobileMenuBtn {
     display: inline-flex;
-    width: 32px;
-    min-width: 32px;
-    height: 32px;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    padding: 0;
+  }
+
+  .centerMobileMenuSvg {
+    width: 20px;
+    height: 20px;
   }
 
   .centerMainHeadCopy {
-    width: 100%;
-    justify-self: center;
+    width: auto;
+    justify-self: start;
     display: inline-flex;
-    justify-content: center;
+    justify-content: flex-start;
   }
 
   .centerMainTitleRow {
-    width: 100%;
-    justify-content: center;
+    width: auto;
+    justify-content: flex-start;
   }
 
   .centerModelWrap {
-    width: 100%;
-    justify-content: center;
+    width: auto;
+    justify-content: flex-start;
   }
 
   .centerModelTrigger {
-    min-height: 34px;
-    padding: 0 10px;
+    min-height: 36px;
+    padding: 0 10px 0 4px;
   }
 
   .centerModelTriggerText {
-    max-width: 58vw;
-    text-align: center;
+    max-width: 46vw;
+    text-align: left;
   }
 
   .centerModelMenu {
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
+    transform: none;
     min-width: min(250px, calc(100vw - 20px));
     max-width: calc(100vw - 20px);
   }
@@ -8184,6 +8190,15 @@
     right: 10px;
     bottom: calc(10px + env(safe-area-inset-bottom));
     width: min(336px, calc(100vw - 20px));
+  }
+
+  .centerComposerFooter .centerAgentModeMenu {
+    left: clamp(-44px, -9vw, -24px);
+    bottom: calc(100% + 76px);
+    min-width: min(338px, calc(100vw - 20px));
+    max-width: min(338px, calc(100vw - 20px));
+    max-height: min(52vh, 420px);
+    z-index: 12090;
   }
 
   .centerThread {
@@ -8211,6 +8226,7 @@
 
   .centerGuestMobileLegal {
     display: block;
+    margin-top: 10px;
   }
 
   .centerMessage,
