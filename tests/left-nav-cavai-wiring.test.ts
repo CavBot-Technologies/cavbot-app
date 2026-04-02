@@ -76,3 +76,17 @@ test("ai metadata routes tolerate unavailable providers while execution remains 
   assert.equal(source.includes("fallbackReason: \"provider_unavailable_metadata_access\""), true);
   assert.equal(source.includes("allowUnavailableProviderFallback: !args.isExecution"), true);
 });
+
+test("module and AI account gates use authDb instead of prisma account lookups", () => {
+  const moduleGate = read("lib/moduleGate.server.ts");
+  const aiGuard = read("src/lib/ai/ai.guard.ts");
+  const authDb = read("lib/authDb.ts");
+
+  assert.equal(moduleGate.includes('from "@/lib/prisma"'), false);
+  assert.equal(moduleGate.includes("findAccountById"), true);
+  assert.equal(moduleGate.includes("clearExpiredTrialSeat"), true);
+  assert.equal(aiGuard.includes('from "@/lib/prisma"'), false);
+  assert.equal(aiGuard.includes("findAccountById"), true);
+  assert.equal(aiGuard.includes("findActiveProjectByIdForAccount"), true);
+  assert.equal(authDb.includes("export async function findActiveProjectByIdForAccount"), true);
+});

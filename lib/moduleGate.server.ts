@@ -5,7 +5,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireSession, requireAccountContext } from "@/lib/apiAuth";
-import { prisma } from "@/lib/prisma";
+import { clearExpiredTrialSeat, findAccountById, getAuthPool } from "@/lib/authDb";
 import { resolvePlanIdFromTier, hasModule, type ModuleId } from "@/lib/plans";
 
 export type GateMode = "screen" | "redirect";
@@ -46,16 +46,9 @@ export async function gateModuleAccess(
   requireAccountContext(sess);
 
   const accountId = sess.accountId!;
-  const account = await prisma.account.findFirst({
-    where: { id: accountId },
-    select: {
-      tier: true,
-
-      // TRIAL FIELDS (same as /api/auth/me)
-      trialSeatActive: true,
-      trialEndsAt: true,
-    },
-  });
+  const pool = getAuthPool();
+  await clearExpiredTrialSeat(pool, accountId);
+  const account = await findAccountById(pool, accountId);
 
   const tierEffective = computeTierEffective({
     tier: String(account?.tier || "FREE"),

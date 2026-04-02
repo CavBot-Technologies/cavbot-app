@@ -498,6 +498,20 @@ export async function findFirstProjectIdByAccount(queryable: Queryable, accountI
   return row ? { id: Number(row.id) } : null;
 }
 
+export async function findActiveProjectByIdForAccount(queryable: Queryable, accountId: string, projectId: number) {
+  const row = await queryOne<{ id: number }>(
+    queryable,
+    `SELECT "id"
+      FROM "Project"
+      WHERE "id" = $1
+        AND "accountId" = $2
+        AND "isActive" = true
+      LIMIT 1`,
+    [projectId, accountId],
+  );
+  return row ? { id: Number(row.id) } : null;
+}
+
 export async function findAuthTokenByHash(queryable: Queryable, tokenHash: string) {
   const row = await queryOne<RawAuthTokenRow>(
     queryable,

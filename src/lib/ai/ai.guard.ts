@@ -6,8 +6,13 @@ import {
   requireUser,
   type CavbotAccountSession,
 } from "@/lib/apiAuth";
+import {
+  clearExpiredTrialSeat,
+  findAccountById,
+  findActiveProjectByIdForAccount,
+  getAuthPool,
+} from "@/lib/authDb";
 import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
-import { prisma } from "@/lib/prisma";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
 import { AiServiceError, type AiSurface } from "@/src/lib/ai/ai.types";
 
@@ -28,14 +33,9 @@ function isTrialActive(trialSeatActive: boolean | null, trialEndsAt: Date | null
 }
 
 async function resolvePlanId(accountId: string): Promise<PlanId> {
-  const account = await prisma.account.findUnique({
-    where: { id: accountId },
-    select: {
-      tier: true,
-      trialSeatActive: true,
-      trialEndsAt: true,
-    },
-  });
+  const pool = getAuthPool();
+  await clearExpiredTrialSeat(pool, accountId);
+  const account = await findAccountById(pool, accountId);
   if (!account) {
     throw new AiServiceError("UNAUTHORIZED", "Account not found for authenticated session.", 401);
   }
@@ -54,14 +54,7 @@ function assertSurfacePlan(surface: AiSurface, planId: PlanId) {
 }
 
 async function assertProjectScope(accountId: string, projectId: number): Promise<void> {
-  const project = await prisma.project.findFirst({
-    where: {
-      id: projectId,
-      accountId,
-      isActive: true,
-    },
-    select: { id: true },
-  });
+  const project = await findActiveProjectByIdForAccount(getAuthPool(), accountId, projectId);
   if (!project?.id) {
     throw new AiServiceError(
       "PROJECT_SCOPE_DENIED",
