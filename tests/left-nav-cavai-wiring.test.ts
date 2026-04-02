@@ -73,6 +73,8 @@ test("ai metadata routes tolerate unavailable providers while execution remains 
   const source = read("src/lib/ai/ai.policy.ts");
 
   assert.equal(source.includes("allowUnavailableProviderFallback?: boolean"), true);
+  assert.equal(source.includes("defaultReasoningLevelForActionClass"), true);
+  assert.equal(source.includes("args.requestedReasoningLevel || defaultReasoningLevelForActionClass(actionClass)"), true);
   assert.equal(source.includes("fallbackReason: \"provider_unavailable_metadata_access\""), true);
   assert.equal(source.includes("allowUnavailableProviderFallback: !args.isExecution"), true);
 });
@@ -122,6 +124,10 @@ test("cavcode and center assist degrade safely if optional registry or memory wr
   assert.equal(aiService.includes("resolveInstalledCavCodeActionSafe"), true);
   assert.equal(aiService.includes("estimateContextTokensForSnapshotSafe"), true);
   assert.equal(aiService.includes("retrieveRelevantAiUserMemoryFactsSafe"), true);
+  assert.equal(aiService.includes("shouldAttemptSemanticRepair"), true);
+  assert.equal(aiService.includes("semantic_soft_fail_accepted"), true);
+  assert.equal(aiService.includes("shouldReturnSafeFallbackOnProviderFailure"), true);
+  assert.equal(aiService.includes("safe_fallback_response_generated"), true);
   assert.equal(aiService.includes("alibaba_qwen_coder_404_to_plus"), true);
   assert.equal(aiService.includes('from "@/src/lib/ai/qwen-coder-credits.server"'), false);
   assert.equal(aiService.includes('from "@/lib/cavcloud/storage.server"'), false);

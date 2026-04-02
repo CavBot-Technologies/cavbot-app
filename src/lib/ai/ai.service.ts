@@ -1050,7 +1050,7 @@ function buildSafeCenterFallbackResponse(args: {
     actionClass: args.actionClass,
   });
   const response: AiCenterAssistResponse = {
-    summary: "Safe fallback response delivered after semantic validation retry.",
+    summary: "Safe fallback response delivered to keep the request unblocked.",
     risk: "low",
     answer,
     recommendations: [
@@ -1058,7 +1058,7 @@ function buildSafeCenterFallbackResponse(args: {
       "Include any required constraints (tone, length, scope).",
     ],
     notes: [
-      "A semantic validation mismatch occurred; fallback mode avoided a blank/error response.",
+      "Fallback mode avoided a blank, failed, or low-confidence response.",
     ],
     followUpChecks: [
       "Retry with a more explicit target format if needed.",
@@ -1185,7 +1185,7 @@ function buildSafeCavCodeFallbackResponse(args: {
   }
 
   return {
-    summary: "Fallback CavCode response generated after semantic validation retry.",
+    summary: "Fallback CavCode response generated to keep the request unblocked.",
     risk: primaryDiagnostic ? "medium" : "low",
     changes: [
       `Focused the response on code for file ${filePath}.`,
@@ -1193,7 +1193,7 @@ function buildSafeCavCodeFallbackResponse(args: {
     ],
     proposedCode,
     notes: [
-      "Provider output failed semantic checks; deterministic code fallback was used.",
+      "Deterministic fallback was used to keep the coding request unblocked.",
       primaryDiagnostic ? `Primary diagnostic: ${primaryDiagnostic}` : "No diagnostic details were provided.",
     ],
     followUpChecks: [
@@ -1202,6 +1202,32 @@ function buildSafeCavCodeFallbackResponse(args: {
     ],
     targetFilePath: filePath,
   };
+}
+
+function shouldAttemptSemanticRepair(args: {
+  quality: ReturnType<typeof evaluateAiAnswerQuality>;
+  answerText: string;
+  startedAtMs: number;
+  maxExecutionTimeMs: number;
+  minimumUsefulChars: number;
+  force?: boolean;
+}): boolean {
+  if (args.force) return true;
+  if (args.quality.hardFail) return true;
+  const remainingMs = Math.max(0, args.maxExecutionTimeMs - (Date.now() - args.startedAtMs));
+  if (remainingMs < 12_000) return false;
+  return s(args.answerText).length < args.minimumUsefulChars;
+}
+
+function shouldReturnSafeFallbackOnProviderFailure(error: AiServiceError): boolean {
+  const code = s(error.code).toUpperCase();
+  return (
+    code === "INVALID_PROVIDER_JSON"
+    || code === "INVALID_PROVIDER_SHAPE"
+    || code.includes("TIMEOUT")
+    || code.includes("NETWORK_ERROR")
+    || error.status === 504
+  );
 }
 
 function buildExecutionMeta(args: {
@@ -3509,8 +3535,17 @@ export async function runCavCodeAssist(args: {
     let repairAttempted = false;
     let repairApplied = false;
     let fallbackApplied = false;
+    let softFailAccepted = false;
+    const shouldTryRepair = shouldAttemptSemanticRepair({
+      quality,
+      answerText: textFromStructuredOutput(data),
+      startedAtMs: startedAt,
+      maxExecutionTimeMs: policy.requestLimits.maxExecutionTimeMs,
+      minimumUsefulChars: isCavCodeWriteAction(effectiveAction) ? 120 : 72,
+      force: isCavCodeWriteAction(effectiveAction),
+    });
 
-    if (!quality.passed) {
+    if (!quality.passed && shouldTryRepair) {
       repairAttempted = true;
       checksPerformed.push("semantic_repair_pass");
       answerPath.push("repair_generation");
@@ -3579,28 +3614,36 @@ export async function runCavCodeAssist(args: {
     }
 
     if (!quality.passed) {
-      checksPerformed.push("semantic_fallback");
-      answerPath.push("fallback_generation");
-      const fallbackData = buildSafeCavCodeFallbackResponse({
-        input: effectiveInput,
-      });
-      const fallbackQuality = evaluateAiAnswerQuality({
-        prompt: userPrompt,
-        goal: args.input.goal || null,
-        answer: textFromStructuredOutput(fallbackData),
-        surface: "cavcode",
-        taskType,
-        contextSignals: contextPack.signalsUsed,
-      });
-      data = fallbackData;
-      quality = fallbackQuality;
-      repairApplied = true;
-      fallbackApplied = true;
+      const hasUsableCavCodeAnswer = s(textFromStructuredOutput(data)).length >= 72;
+      const shouldAcceptSoftFail = !quality.hardFail && !isCavCodeWriteAction(effectiveAction) && hasUsableCavCodeAnswer;
+      if (shouldAcceptSoftFail) {
+        checksPerformed.push("semantic_soft_fail_accepted");
+        answerPath.push("soft_fail_keep_model_output");
+        softFailAccepted = true;
+      } else {
+        checksPerformed.push("semantic_fallback");
+        answerPath.push("fallback_generation");
+        const fallbackData = buildSafeCavCodeFallbackResponse({
+          input: effectiveInput,
+        });
+        const fallbackQuality = evaluateAiAnswerQuality({
+          prompt: userPrompt,
+          goal: args.input.goal || null,
+          answer: textFromStructuredOutput(fallbackData),
+          surface: "cavcode",
+          taskType,
+          contextSignals: contextPack.signalsUsed,
+        });
+        data = fallbackData;
+        quality = fallbackQuality;
+        repairApplied = true;
+        fallbackApplied = true;
+      }
     }
 
     if (!quality.passed) {
       const hasConcreteCodeFallback = s(data.proposedCode).length > 0;
-      if (!fallbackApplied || !hasConcreteCodeFallback) {
+      if (!softFailAccepted && (!fallbackApplied || !hasConcreteCodeFallback)) {
         throw new AiServiceError(
           "AI_SEMANTIC_VALIDATION_FAILED",
           "AI response failed semantic relevance checks for this coding request.",
@@ -3860,6 +3903,119 @@ export async function runCavCodeAssist(args: {
     };
   } catch (error) {
     const mapped = mapProviderError(error);
+    const shouldReturnSafeFallback = shouldReturnSafeFallbackOnProviderFailure(mapped);
+
+    if (shouldReturnSafeFallback) {
+      const fallbackData = buildSafeCavCodeFallbackResponse({
+        input: effectiveInput,
+      });
+      let fallbackSessionId = sessionId || "";
+
+      try {
+        fallbackSessionId = await persistSessionTurn({
+          accountId: ctx.accountId,
+          userId: ctx.userId,
+          requestId: args.requestId,
+          action: actionForAudit,
+          surface: "cavcode",
+          sessionId: sessionId || null,
+          contextLabel: "CavCode context",
+          workspaceId: ctx.workspaceId,
+          projectId: ctx.projectId,
+          userText: userPrompt,
+          userJson: buildCavCodeRetryUserJson({
+            input: effectiveInput,
+            model: policy?.model || s(args.input.model) || null,
+            reasoningLevel: policy?.reasoningLevel || reasoningProfile.level,
+            queueEnabled,
+            imageAttachments: imageAttachmentsForRetry,
+            taskType,
+            contextPack,
+            context: inputContext,
+          }),
+          assistantText: fallbackData.summary,
+          assistantJson: {
+            ...fallbackData,
+            __cavAiMeta: {
+              fallbackMode: true,
+              fallbackReason: mapped.code,
+              fallbackMessage: mapped.message,
+            },
+          },
+          provider: providerId,
+          model: model || policy?.model || undefined,
+          status: "SUCCESS",
+          sessionContextJson: buildSessionContextJson(model || policy?.model || null),
+        });
+      } catch {
+        // Fallback response should still return even if persistence misses.
+      }
+
+      if (queueMessageId && fallbackSessionId) {
+        await settleCavCodeQueuedPromptSafe({
+          accountId: ctx.accountId,
+          sessionId: fallbackSessionId,
+          messageId: queueMessageId,
+          status: "PROCESSED",
+          result: {
+            summary: fallbackData.summary,
+            targetFilePath: fallbackData.targetFilePath || args.input.filePath,
+            requestId: args.requestId,
+          },
+        }).catch(() => undefined);
+      }
+
+      await writeAiUsageLog({
+        accountId: ctx.accountId,
+        userId: ctx.userId,
+        surface: "cavcode",
+        action: actionForAudit,
+        provider: providerId,
+        model: model || policy?.model || "unknown",
+        requestId: args.requestId,
+        runId: null,
+        workspaceId: ctx.workspaceId,
+        projectId: ctx.projectId,
+        inputChars: cavCodeUserPrompt(effectiveInput, contextPack, selectedCustomAgent, uploadedWorkspaceFiles).length,
+        outputChars: s(fallbackData.summary).length,
+        latencyMs: Date.now() - startedAt,
+        status: "SUCCESS",
+        promptTokens: null,
+        completionTokens: null,
+        totalTokens: null,
+      });
+
+      await writeAiAudit({
+        req: args.req,
+        accountId: ctx.accountId,
+        userId: ctx.userId,
+        requestId: args.requestId,
+        surface: "cavcode",
+        action: actionForAudit,
+        provider: providerId,
+        model: model || policy?.model || "unknown",
+        status: "SUCCESS",
+        workspaceId: ctx.workspaceId,
+        projectId: ctx.projectId,
+        memberRole: ctx.memberRole,
+        planId: ctx.planId,
+        actionClass: actionClassForAudit,
+        reasoningLevel: reasoningLevelForAudit,
+        weightedUsageUnits: policy?.weightedUsageUnits || 0,
+        latencyMs: Date.now() - startedAt,
+        scopePath: args.input.filePath,
+        outcome: "safe_fallback_response_generated",
+      });
+
+      return {
+        ok: true,
+        requestId: args.requestId,
+        providerId,
+        model: model || policy?.model || "unknown",
+        sessionId: fallbackSessionId || undefined,
+        data: fallbackData,
+      };
+    }
 
     if (sessionId || userPrompt) {
       try {
@@ -5404,8 +5560,16 @@ export async function runCenterAssist(args: {
     });
     let repairAttempted = false;
     let repairApplied = false;
+    const shouldTryRepair = shouldAttemptSemanticRepair({
+      quality,
+      answerText: textFromStructuredOutput(data),
+      startedAtMs: startedAt,
+      maxExecutionTimeMs: policy.requestLimits.maxExecutionTimeMs,
+      minimumUsefulChars: researchMode ? 180 : 96,
+      force: researchMode,
+    });
 
-    if (!quality.passed) {
+    if (!quality.passed && shouldTryRepair) {
       repairAttempted = true;
       checksPerformed.push("semantic_repair_pass");
       answerPath.push("repair_generation");
@@ -5712,7 +5876,7 @@ export async function runCenterAssist(args: {
     };
   } catch (error) {
     const mapped = mapProviderError(error);
-    const shouldReturnSafeJsonFallback = mapped.code === "INVALID_PROVIDER_JSON" || mapped.code === "INVALID_PROVIDER_SHAPE";
+    const shouldReturnSafeJsonFallback = shouldReturnSafeFallbackOnProviderFailure(mapped);
 
     if (shouldReturnSafeJsonFallback) {
       const fallbackResearchMode = policy?.researchMode || researchModeRequested;

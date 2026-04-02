@@ -66,6 +66,12 @@ function parseReasoningLevel(value: unknown): CavAiReasoningLevel {
   return "medium";
 }
 
+function defaultReasoningLevelForActionClass(actionClass: AiActionClass): CavAiReasoningLevel {
+  if (actionClass === "light" || actionClass === "companion_chat") return "low";
+  if (actionClass === "premium_plus_web_research") return "high";
+  return "medium";
+}
+
 function envBool(name: string): boolean {
   const raw = s(process.env[name]).toLowerCase();
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
@@ -1379,7 +1385,9 @@ export async function resolveAiExecutionPolicy(args: {
     });
   }
 
-  const requestedReasoningLevel = parseReasoningLevel(args.requestedReasoningLevel || "high");
+  const requestedReasoningLevel = parseReasoningLevel(
+    args.requestedReasoningLevel || defaultReasoningLevelForActionClass(actionClass)
+  );
   const maxReasoningLevel = maxReasoningFor({
     actionClass,
     planId: args.planId,
