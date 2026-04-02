@@ -16,7 +16,7 @@ export const DEFAULT_SIGNUP_WELCOME_MAIL_FROM =
   "Cavendish Pierre-Louis <cavendishpierrelouis@cavbot.io>";
 export const DEFAULT_SIGNUP_WELCOME_REPLY_TO =
   "CavBot Support <support@cavbot.io>";
-export const DEFAULT_SIGNUP_WELCOME_SUBJECT = "Welcome to CavBot";
+export const DEFAULT_SIGNUP_WELCOME_SUBJECT = "Welcome to CavBot!";
 const PROCESSING_STALE_WINDOW_MS = 10 * 60 * 1000;
 
 export type SignupWelcomeSendSource =
