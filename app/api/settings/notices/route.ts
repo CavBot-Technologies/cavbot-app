@@ -2,8 +2,12 @@ import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { isApiAuthError } from "@/lib/apiAuth";
-import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
+import {
+  isApiAuthError,
+  requireAccountContext,
+  requireSession,
+  requireUser,
+} from "@/lib/apiAuth";
 
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
@@ -32,7 +36,9 @@ export type NoticeRecord = {
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireSettingsOwnerSession(req);
+    const session = await requireSession(req);
+    requireUser(session);
+    requireAccountContext(session);
 
     const url = new URL(req.url);
     const rawLimit = Number(url.searchParams.get("limit") || 20);
@@ -61,6 +67,6 @@ export async function GET(req: NextRequest) {
   } catch (error: unknown) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
     console.error("Failed to load workspace notices", error);
-    return json({ ok: false, error: "Unable to load Command Center notices right now." }, 500);
+    return json({ ok: true, notices: [] }, 200);
   }
 }

@@ -1,16 +1,21 @@
 import crypto from "crypto";
 import { normalizeOriginStrict } from "@/originMatch";
 
-const SECRET =
-  process.env.CAVBOT_ARCADE_ASSET_SECRET ||
-  process.env.CAVBOT_EMBED_TOKEN_SECRET ||
-  process.env.CAVBOT_SESSION_SECRET ||
-  "";
+let arcadeSecretWarned = false;
 
-if (!SECRET) {
-  console.warn(
-    "[arcade/tokens] Missing CAVBOT_ARCADE_ASSET_SECRET/CAVBOT_EMBED_TOKEN_SECRET/CAVBOT_SESSION_SECRET; signed assets disabled."
-  );
+function readSecret() {
+  const secret =
+    process.env.CAVBOT_ARCADE_ASSET_SECRET ||
+    process.env.CAVBOT_EMBED_TOKEN_SECRET ||
+    process.env.CAVBOT_SESSION_SECRET ||
+    "";
+  if (!secret && !arcadeSecretWarned) {
+    arcadeSecretWarned = true;
+    console.warn(
+      "[arcade/tokens] Missing CAVBOT_ARCADE_ASSET_SECRET/CAVBOT_EMBED_TOKEN_SECRET/CAVBOT_SESSION_SECRET; signed assets disabled."
+    );
+  }
+  return secret;
 }
 
 const MIN_TTL_SECONDS = 60;
@@ -35,9 +40,9 @@ function base64UrlDecode(value: string) {
   return Buffer.from(padded.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf-8");
 }
 
-function hmac(value: string) {
+function hmac(value: string, secret: string) {
   return crypto
-    .createHmac("sha256", SECRET)
+    .createHmac("sha256", secret)
     .update(value)
     .digest("hex");
 }
@@ -61,7 +66,8 @@ export function mintArcadeAssetToken(options: {
   basePath: string;
   ttlSeconds?: number;
 }): string {
-  if (!SECRET) {
+  const secret = readSecret();
+  if (!secret) {
     throw new Error("Arcade asset secret is not configured.");
   }
 
@@ -73,21 +79,22 @@ export function mintArcadeAssetToken(options: {
   };
 
   const encoded = base64UrlEncode(JSON.stringify(payload));
-  const signature = hmac(encoded);
+  const signature = hmac(encoded, secret);
   return `${encoded}.${signature}`;
 }
 
 type VerifyResult = { ok: true; payload: ArcadeAssetTokenPayload } | { ok: false; reason: string };
 
 export function verifyArcadeAssetToken(token: string): VerifyResult {
-  if (!SECRET) {
+  const secret = readSecret();
+  if (!secret) {
     return { ok: false, reason: "SECRET_MISSING" };
   }
   const [encoded, signature] = token.split(".");
   if (!encoded || !signature) {
     return { ok: false, reason: "TOKEN_INVALID" };
   }
-  const expectedSig = hmac(encoded);
+  const expectedSig = hmac(encoded, secret);
   const expectedBuffer = Buffer.from(expectedSig, "utf-8");
   const providedBuffer = Buffer.from(signature, "utf-8");
   if (expectedBuffer.length !== providedBuffer.length || !crypto.timingSafeEqual(expectedBuffer, providedBuffer)) {

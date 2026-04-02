@@ -1,17 +1,22 @@
 import crypto from "crypto";
 import { normalizeOriginStrict } from "@/originMatch";
 
-const SECRET =
-  process.env.CAVBOT_ARCADE_ENT_ASSET_SECRET ||
-  process.env.CAVBOT_ARCADE_ASSET_SECRET ||
-  process.env.CAVBOT_EMBED_TOKEN_SECRET ||
-  process.env.CAVBOT_SESSION_SECRET ||
-  "";
+let entertainmentSecretWarned = false;
 
-if (!SECRET) {
-  console.warn(
-    "[arcade/entTokens] Missing CAVBOT_ARCADE_ENT_ASSET_SECRET; entertainment signed assets disabled."
-  );
+function readSecret() {
+  const secret =
+    process.env.CAVBOT_ARCADE_ENT_ASSET_SECRET ||
+    process.env.CAVBOT_ARCADE_ASSET_SECRET ||
+    process.env.CAVBOT_EMBED_TOKEN_SECRET ||
+    process.env.CAVBOT_SESSION_SECRET ||
+    "";
+  if (!secret && !entertainmentSecretWarned) {
+    entertainmentSecretWarned = true;
+    console.warn(
+      "[arcade/entTokens] Missing CAVBOT_ARCADE_ENT_ASSET_SECRET; entertainment signed assets disabled."
+    );
+  }
+  return secret;
 }
 
 const MIN_TTL_SECONDS = 60;
@@ -31,8 +36,8 @@ function base64UrlEncode(value: string) {
     .replace(/\//g, "_");
 }
 
-function hmac(value: string) {
-  return crypto.createHmac("sha256", SECRET).update(value).digest("hex");
+function hmac(value: string, secret: string) {
+  return crypto.createHmac("sha256", secret).update(value).digest("hex");
 }
 
 function normalizeBasePath(value: string) {
@@ -52,7 +57,8 @@ export function mintEntertainmentAssetToken(options: {
   basePath: string;
   ttlSeconds?: number;
 }): string {
-  if (!SECRET) {
+  const secret = readSecret();
+  if (!secret) {
     throw new Error("Entertainment asset secret is not configured.");
   }
 
@@ -64,7 +70,6 @@ export function mintEntertainmentAssetToken(options: {
   };
 
   const encoded = base64UrlEncode(JSON.stringify(payload));
-  const signature = hmac(encoded);
+  const signature = hmac(encoded, secret);
   return `${encoded}.${signature}`;
 }
-

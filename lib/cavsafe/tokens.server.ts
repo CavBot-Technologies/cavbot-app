@@ -3,11 +3,15 @@ import "server-only";
 import crypto from "crypto";
 import { normalizeOriginStrict } from "@/originMatch";
 
-const SECRET = process.env.CAVCLOUD_TOKEN_SECRET || "";
+let cavSafeTokenWarned = false;
 
-if (!SECRET) {
-  // Fail closed at runtime, but make misconfig visible in logs.
-  console.warn("[cavsafe/tokens] Missing CAVCLOUD_TOKEN_SECRET; CavSafe share tokens disabled.");
+function readSecret() {
+  const secret = process.env.CAVCLOUD_TOKEN_SECRET || "";
+  if (!secret && !cavSafeTokenWarned) {
+    cavSafeTokenWarned = true;
+    console.warn("[cavsafe/tokens] Missing CAVCLOUD_TOKEN_SECRET; CavSafe share tokens disabled.");
+  }
+  return secret;
 }
 
 const MIN_TTL_SECONDS = 60;
@@ -28,8 +32,8 @@ function base64UrlEncode(value: string) {
     .replace(/\//g, "_");
 }
 
-function hmacHex(value: string) {
-  return crypto.createHmac("sha256", SECRET).update(value).digest("hex");
+function hmacHex(value: string, secret: string) {
+  return crypto.createHmac("sha256", secret).update(value).digest("hex");
 }
 
 function clampTtlSeconds(ttlSeconds?: number) {
@@ -42,7 +46,8 @@ export function mintCavSafeObjectToken(options: {
   objectKey: string;
   ttlSeconds?: number;
 }): string {
-  if (!SECRET) {
+  const secret = readSecret();
+  if (!secret) {
     throw new Error("CavSafe token secret is not configured.");
   }
 
@@ -57,7 +62,7 @@ export function mintCavSafeObjectToken(options: {
   };
 
   const encoded = base64UrlEncode(JSON.stringify(payload));
-  const signature = hmacHex(encoded);
+  const signature = hmacHex(encoded, secret);
   // Worker supports payloadB64.hex(hmacBytes(payloadB64)).
   return `${encoded}.${signature}`;
 }
@@ -67,7 +72,8 @@ export function mintCavSafePrefixToken(options: {
   prefix: string;
   ttlSeconds?: number;
 }): string {
-  if (!SECRET) {
+  const secret = readSecret();
+  if (!secret) {
     throw new Error("CavSafe token secret is not configured.");
   }
 
@@ -82,6 +88,6 @@ export function mintCavSafePrefixToken(options: {
   };
 
   const encoded = base64UrlEncode(JSON.stringify(payload));
-  const signature = hmacHex(encoded);
+  const signature = hmacHex(encoded, secret);
   return `${encoded}.${signature}`;
 }

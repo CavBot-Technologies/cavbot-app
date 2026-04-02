@@ -956,9 +956,10 @@ function issueChips(row: A11yPageRow) {
 export default async function A11yPage({ searchParams }: PageProps) {
   noStore();
   const sp = await searchParams;
+  const requestHeaders = await headers();
 
   const req = new Request("https://cavbot.local/a11y", {
-    headers: new Headers(headers()),
+    headers: new Headers(requestHeaders),
   });
 
   const gate = await gateModuleAccess(req, "a11y");

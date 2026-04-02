@@ -4,13 +4,18 @@ import { ApiKeyStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { normalizeOriginStrict } from "@/originMatch";
 
-const SECRET =
-  process.env.CAVBOT_EMBED_TOKEN_SECRET || process.env.CAVBOT_SESSION_SECRET || "";
+let embedSecretWarned = false;
 
-if (!SECRET) {
-  console.warn(
-    "[embedToken] Missing CAVBOT_EMBED_TOKEN_SECRET/CAVBOT_SESSION_SECRET; token operations will fail."
-  );
+function readSecret() {
+  const secret =
+    process.env.CAVBOT_EMBED_TOKEN_SECRET || process.env.CAVBOT_SESSION_SECRET || "";
+  if (!secret && !embedSecretWarned) {
+    embedSecretWarned = true;
+    console.warn(
+      "[embedToken] Missing CAVBOT_EMBED_TOKEN_SECRET/CAVBOT_SESSION_SECRET; token operations will fail."
+    );
+  }
+  return secret;
 }
 
 const DEFAULT_TTL_SECONDS = 600;
@@ -61,9 +66,9 @@ function base64UrlDecode(value: string) {
   return Buffer.from(padded.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf-8");
 }
 
-function hmac(payload: string) {
+function hmac(payload: string, secret: string) {
   return crypto
-    .createHmac("sha256", SECRET)
+    .createHmac("sha256", secret)
     .update(payload)
     .digest("base64")
     .replace(/=+$/, "")
@@ -77,7 +82,8 @@ function normalizeScopes(scopes?: string[]) {
 }
 
 export function mintEmbedToken(options: EmbedTokenOptions) {
-  if (!SECRET) {
+  const secret = readSecret();
+  if (!secret) {
     throw new Error("Embed token secret is not configured.");
   }
 
@@ -104,7 +110,7 @@ export function mintEmbedToken(options: EmbedTokenOptions) {
 
   const encodedHeader = base64UrlEncode(JSON.stringify(header));
   const encodedPayload = base64UrlEncode(JSON.stringify(claims));
-  const signature = hmac(`${encodedHeader}.${encodedPayload}`);
+  const signature = hmac(`${encodedHeader}.${encodedPayload}`, secret);
 
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
@@ -154,7 +160,8 @@ type VerifyOptions = {
 };
 
 export async function verifyEmbedToken(options: VerifyOptions): Promise<EmbedTokenVerifyResult> {
-  if (!SECRET) {
+  const secret = readSecret();
+  if (!secret) {
     return { ok: false, status: 401, code: "TOKEN_DISABLED" };
   }
 
@@ -178,7 +185,7 @@ export async function verifyEmbedToken(options: VerifyOptions): Promise<EmbedTok
     return { ok: false, status: 401, code: "TOKEN_INVALID" };
   }
 
-  const expectedSig = hmac(`${encodedHeader}.${encodedPayload}`);
+  const expectedSig = hmac(`${encodedHeader}.${encodedPayload}`, secret);
   const expectedBuffer = Buffer.from(expectedSig, "utf-8");
   const providedBuffer = Buffer.from(signature, "utf-8");
   if (expectedBuffer.length !== providedBuffer.length) {

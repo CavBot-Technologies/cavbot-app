@@ -847,7 +847,9 @@ function CommandDeckPageInner() {
 
         if (!alive) return;
         if (!response.ok || !data?.ok || !Array.isArray(data.notices)) {
-          throw new Error(data?.error || "Failed to load notices.");
+          setServerNotices([]);
+          setNoticesError(null);
+          return;
         }
 
         setServerNotices(
@@ -862,7 +864,7 @@ function CommandDeckPageInner() {
         );
       } catch (loadError) {
         if (!alive) return;
-        setNoticesError(loadError instanceof Error ? loadError.message : "Unable to load notices.");
+        setNoticesError(null);
         setServerNotices([]);
       }
     })();

@@ -20,6 +20,7 @@ import type * as MonacoType from "monaco-editor";
 import type { WorkspaceNode } from "@/src/lib/cavTerminal";
 import CavBotLoadingScreen from "@/components/CavBotLoadingScreen";
 import CavMobileMenu from "@/components/CavMobileMenu";
+import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import { LockIcon } from "@/components/LockIcon";
 import CavAiCodeWorkspace, {
   type CavCodeDiagnostic,
@@ -13874,7 +13875,9 @@ export default function CavCodePage() {
                 <Image src="/icons/app/cavcode/split-cells-vertical-svgrepo-com.svg" alt="" width={17} height={17} aria-hidden="true" />
               </button>
               <Link className="cc-tabs-cavenLogo" aria-label="Open Workspace Command Center" href="/">
-                <Image src="/logo/cavbot-logomark.svg" alt="Caven AI" width={16} height={16} />
+                <span className="cb-badge cb-badge-inline cc-tabs-cavenBadge" aria-hidden="true">
+                  <CdnBadgeEyes trackingMode="eyeOnly" />
+                </span>
               </Link>
             </div>
           </div>

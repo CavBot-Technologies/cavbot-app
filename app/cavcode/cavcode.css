@@ -2132,16 +2132,19 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-tabs-cavenLogo{
-  width: 24px;
-  height: 24px;
+  min-width: 36px;
+  height: calc(var(--tabs-h) - 1px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 0 6px;
   margin-left: 2px;
   opacity: .88;
 }
 
-.cc-tabs-cavenLogo img{
+.cc-tabs-cavenBadge{
+  width: 32px;
+  height: 32px;
   filter: drop-shadow(0 3px 12px rgba(92, 185, 255, .28));
 }
 

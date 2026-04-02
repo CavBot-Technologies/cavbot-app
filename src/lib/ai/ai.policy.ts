@@ -963,6 +963,7 @@ function resolveModelForExecution(args: {
   planId: PlanId;
   surface: AiSurface | "center" | "audio";
   taskType?: AiTaskType | null;
+  allowUnavailableProviderFallback?: boolean;
 }): {
   model: string;
   manualModelSelected: boolean;
@@ -1100,6 +1101,14 @@ function resolveModelForExecution(args: {
     }
 
     if (validateModelKillSwitch(requested) || validateProviderKillSwitch(requested) || !isProviderReadyForModel(requested)) {
+      if (args.allowUnavailableProviderFallback) {
+        return {
+          model: requested,
+          manualModelSelected: true,
+          requestedModel: requested,
+          fallbackReason: "requested_model_provider_unavailable_metadata_access",
+        };
+      }
       if (failOpenSelection) {
         const fallbackModel = pickPlanFallbackModel({
           actionClass: args.actionClass,
@@ -1152,15 +1161,28 @@ function resolveModelForExecution(args: {
     ...(allowedModels.includes(preferred) ? [preferred] : []),
     ...allowedModels,
   ].filter((id, index, list) => list.indexOf(id) === index);
+  let metadataFallbackModel = "";
   for (const candidate of candidates) {
     if (candidate === ALIBABA_QWEN_MAX_MODEL_ID && !isQwenMaxEnabled()) continue;
     if (validateModelKillSwitch(candidate) || validateProviderKillSwitch(candidate)) continue;
-    if (!isProviderReadyForModel(candidate)) continue;
+    if (!isProviderReadyForModel(candidate)) {
+      if (!metadataFallbackModel) metadataFallbackModel = candidate;
+      continue;
+    }
     return {
       model: candidate,
       manualModelSelected: false,
       requestedModel: requested || null,
       fallbackReason: requested ? "requested_model_not_available_for_plan_or_provider" : null,
+    };
+  }
+
+  if (args.allowUnavailableProviderFallback && metadataFallbackModel) {
+    return {
+      model: metadataFallbackModel,
+      manualModelSelected: false,
+      requestedModel: requested || null,
+      fallbackReason: "provider_unavailable_metadata_access",
     };
   }
 
@@ -1411,6 +1433,7 @@ export async function resolveAiExecutionPolicy(args: {
     planId: args.planId,
     surface: args.surface,
     taskType: args.taskType,
+    allowUnavailableProviderFallback: !args.isExecution,
   });
   const model = modelSelection.model;
   const providerId = resolveProviderIdForModel(model);

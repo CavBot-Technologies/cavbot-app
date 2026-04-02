@@ -2,13 +2,18 @@ import "server-only";
 
 import crypto from "crypto";
 
-const SECRET =
-  String(process.env.CAVAI_SHARE_TOKEN_SECRET || "").trim()
-  || String(process.env.CAVCLOUD_TOKEN_SECRET || "").trim()
-  || String(process.env.CAVBOT_SESSION_SECRET || "").trim();
+let shareSecretWarned = false;
 
-if (!SECRET) {
-  console.warn("[cavai/share] Missing share token secret; external CavAi share links are disabled.");
+function readSecret() {
+  const secret =
+    String(process.env.CAVAI_SHARE_TOKEN_SECRET || "").trim()
+    || String(process.env.CAVCLOUD_TOKEN_SECRET || "").trim()
+    || String(process.env.CAVBOT_SESSION_SECRET || "").trim();
+  if (!secret && !shareSecretWarned) {
+    shareSecretWarned = true;
+    console.warn("[cavai/share] Missing share token secret; external CavAi share links are disabled.");
+  }
+  return secret;
 }
 
 const MIN_TTL_SECONDS = 60;
@@ -35,8 +40,8 @@ function b64UrlDecode(value: string): string {
   return Buffer.from(`${normalized}${pad}`, "base64").toString("utf-8");
 }
 
-function hmacHex(value: string) {
-  return crypto.createHmac("sha256", SECRET).update(value).digest("hex");
+function hmacHex(value: string, secret: string) {
+  return crypto.createHmac("sha256", secret).update(value).digest("hex");
 }
 
 function clampTtlSeconds(input?: number): number {
@@ -61,7 +66,8 @@ export function mintCavAiSessionShareToken(args: {
   sessionId: string;
   ttlSeconds?: number;
 }): string {
-  if (!SECRET) throw new Error("CavAi share token secret is not configured.");
+  const secret = readSecret();
+  if (!secret) throw new Error("CavAi share token secret is not configured.");
   const accountId = String(args.accountId || "").trim();
   const sessionId = String(args.sessionId || "").trim();
   if (!accountId || !sessionId) {
@@ -74,16 +80,17 @@ export function mintCavAiSessionShareToken(args: {
     expiresAt: Date.now() + clampTtlSeconds(args.ttlSeconds) * 1000,
   };
   const encoded = b64UrlEncode(JSON.stringify(payload));
-  const signature = hmacHex(encoded);
+  const signature = hmacHex(encoded, secret);
   return `${encoded}.${signature}`;
 }
 
 export function verifyCavAiSessionShareToken(token: string): CavAiSessionSharePayload | null {
-  if (!SECRET) return null;
+  const secret = readSecret();
+  if (!secret) return null;
   const raw = String(token || "").trim();
   const [encoded, signature] = raw.split(".");
   if (!encoded || !signature) return null;
-  const expected = hmacHex(encoded);
+  const expected = hmacHex(encoded, secret);
   if (!safeEqualHex(signature, expected)) return null;
   try {
     const parsed = JSON.parse(b64UrlDecode(encoded)) as Partial<CavAiSessionSharePayload>;

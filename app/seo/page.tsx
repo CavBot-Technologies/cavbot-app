@@ -584,9 +584,10 @@ function issueChips(row: SeoPageRow) {
 export default async function SeoPage({ searchParams }: PageProps) {
   noStore();
   const sp = await searchParams;
+  const requestHeaders = await headers();
 
   const req = new Request("https://cavbot.local/seo", {
-    headers: new Headers(headers()),
+    headers: new Headers(requestHeaders),
   });
 
   const gate = await gateModuleAccess(req, "seo");

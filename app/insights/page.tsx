@@ -1453,8 +1453,9 @@ function MissionControl({ items, forecast }: { items: MissionItem[]; forecast: M
 export default async function InsightsPage({ searchParams }: PageProps) {
   noStore();
   const sp = await searchParams;
-    const req = new Request("https://cavbot.local/insights", {
-    headers: new Headers(headers()),
+  const requestHeaders = await headers();
+  const req = new Request("https://cavbot.local/insights", {
+    headers: new Headers(requestHeaders),
   });
 
   const gate = await gateModuleAccess(req, "insights");

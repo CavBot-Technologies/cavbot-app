@@ -427,27 +427,26 @@ function svgLine(values: number[], w: number, h: number, pad: number, max: numbe
 export default async function ErrorsPage({ searchParams }: PageProps) {
   noStore();
   const sp = await searchParams;
- 
- const req = new Request("https://cavbot.local/errors", {
-  headers: new Headers(headers()),
-});
+  const requestHeaders = await headers();
+  const req = new Request("https://cavbot.local/errors", {
+    headers: new Headers(requestHeaders),
+  });
+
+  const gate = await gateModuleAccess(req, "errors");
 
 
-const gate = await gateModuleAccess(req, "errors");
 
-
-
- if (!gate.ok) {
-  return (
-    <AppShell title="Workspace" subtitle="Workspace command center">
-      <LockedModule
-        moduleName="Error Intelligence"
-        description="Track JS failures, API errors, broken routes, and stability risk across your monitored targets."
-        requiredPlanLabel="Premium"
-      />
-    </AppShell>
-  );
-}
+  if (!gate.ok) {
+    return (
+      <AppShell title="Workspace" subtitle="Workspace command center">
+        <LockedModule
+          moduleName="Error Intelligence"
+          description="Track JS failures, API errors, broken routes, and stability risk across your monitored targets."
+          requiredPlanLabel="Premium"
+        />
+      </AppShell>
+    );
+  }
 
 
 

@@ -55,3 +55,24 @@ test("metrics endpoint no longer returns hardcoded placeholder scores", () => {
   assert.equal(source.includes("recovered404Rate"), false);
   assert.equal(source.includes("INSUFFICIENT_DATA"), true);
 });
+
+test("module-gated pages await request headers before access checks", () => {
+  const errorsPage = read("app/errors/page.tsx");
+  const seoPage = read("app/seo/page.tsx");
+  const a11yPage = read("app/a11y/page.tsx");
+  const insightsPage = read("app/insights/page.tsx");
+
+  for (const source of [errorsPage, seoPage, a11yPage, insightsPage]) {
+    assert.equal(source.includes("const requestHeaders = await headers();"), true);
+    assert.equal(source.includes("headers: new Headers(requestHeaders)"), true);
+    assert.equal(source.includes("new Headers(headers())"), false);
+  }
+});
+
+test("ai metadata routes tolerate unavailable providers while execution remains gated", () => {
+  const source = read("src/lib/ai/ai.policy.ts");
+
+  assert.equal(source.includes("allowUnavailableProviderFallback?: boolean"), true);
+  assert.equal(source.includes("fallbackReason: \"provider_unavailable_metadata_access\""), true);
+  assert.equal(source.includes("allowUnavailableProviderFallback: !args.isExecution"), true);
+});
