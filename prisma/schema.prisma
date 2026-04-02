@@ -65,6 +65,7 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  signupWelcomeEmail             SignupWelcomeEmail?
   auditEvents                    AuditLog[]              @relation("AuditOperator")
   authTokens                     AuthToken[]
   invitesSent                    Invite[]                @relation("InvitesSent")
@@ -1418,6 +1419,30 @@ model AuthToken {
   @@index([userId])
   @@index([type])
   @@index([expiresAt])
+}
+
+model SignupWelcomeEmail {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  email               String
+  templateRef         String   @default("cavbot-sign-up") @db.VarChar(160)
+  status              String   @default("PENDING") @db.VarChar(24)
+  attemptCount        Int      @default(0)
+  lastAttemptedAt     DateTime?
+  processingStartedAt DateTime?
+  processingToken     String?  @db.VarChar(96)
+  sentAt              DateTime?
+  resendMessageId     String?  @db.VarChar(191)
+  failureReason       String?  @db.Text
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([sentAt])
+  @@index([lastAttemptedAt])
+  @@index([processingStartedAt])
 }
 
 model OAuthIdentity {

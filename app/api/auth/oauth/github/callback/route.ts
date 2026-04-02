@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { isReservedUsername, isValidUsername, normalizeUsername, USERNAME_MAX } from "@/lib/username";
 import { createUserSession, isApiAuthError, sessionCookieOptions } from "@/lib/apiAuth";
 import { createHash, randomBytes } from "crypto";
+import { sendSignupWelcomeEmail } from "@/lib/signupWelcomeEmail.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -210,6 +211,8 @@ export async function GET(req: NextRequest) {
 
     // 4) Resolve identity + user + workspace inside one transaction (bulletproof)
     const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      let createdUser = false;
+
       // A) Lookup identity first
       const identity = await tx.oAuthIdentity.findUnique({
         where: {
@@ -248,6 +251,7 @@ export async function GET(req: NextRequest) {
           },
           select: { id: true, email: true, username: true },
         });
+        createdUser = true;
       } else {
         // Update login stamp + displayName
         await tx.user.update({
@@ -407,7 +411,7 @@ export async function GET(req: NextRequest) {
         select: { id: true },
       });
 
-      return { user, active, firstProject };
+      return { user, active, firstProject, createdUser };
     });
 
     // 5) Mint official CavBot session
@@ -445,6 +449,14 @@ export async function GET(req: NextRequest) {
 
       res.cookies.set("cb_active_project_id", String(result.firstProject.id), pointerCookieOpts);
       res.cookies.set("cb_pid", String(result.firstProject.id), pointerCookieOpts);
+    }
+
+    if (result.createdUser) {
+      await sendSignupWelcomeEmail({
+        userId: result.user.id,
+        email: result.user.email,
+        source: "github_oauth",
+      });
     }
 
     return res;

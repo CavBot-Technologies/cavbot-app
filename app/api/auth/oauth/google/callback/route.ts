@@ -8,6 +8,7 @@ import {
   sessionCookieOptions,
 } from "@/lib/apiAuth";
 import { createHash, randomBytes } from "crypto";
+import { sendSignupWelcomeEmail } from "@/lib/signupWelcomeEmail.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -203,6 +204,8 @@ export async function GET(req: NextRequest) {
 
     // 3) Resolve/Upsert user + identity + workspace
     const result = await prisma.$transaction(async (tx) => {
+      let createdUser = false;
+
       // A) Find by OAuthIdentity OR by email
       const existingIdentity = await tx.oAuthIdentity.findUnique({
         where: {
@@ -242,6 +245,7 @@ export async function GET(req: NextRequest) {
           },
           select: { id: true, email: true, username: true },
         });
+        createdUser = true;
       } else {
         await tx.user.update({
           where: { id: user.id },
@@ -380,7 +384,7 @@ export async function GET(req: NextRequest) {
         select: { id: true },
       });
 
-      return { user, active, firstProject };
+      return { user, active, firstProject, createdUser };
     });
 
     // 4) Mint CavBot session
@@ -419,6 +423,14 @@ export async function GET(req: NextRequest) {
 
       res.cookies.set("cb_active_project_id", String(result.firstProject.id), pointerCookieOpts);
       res.cookies.set("cb_pid", String(result.firstProject.id), pointerCookieOpts);
+    }
+
+    if (result.createdUser) {
+      await sendSignupWelcomeEmail({
+        userId: result.user.id,
+        email: result.user.email,
+        source: "google_oauth",
+      });
     }
 
     return res;

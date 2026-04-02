@@ -21,6 +21,7 @@
     "lint": "eslint",
     "test:sdk": "node --import tsx --test tests/cavai-analytics-load-order.test.mjs tests/cloudfare-analytics-worker.test.mjs tests/cavbot-asset-policy.test.ts tests/appshell-navigation-regressions.test.ts tests/desktop-selection-helpers.test.ts tests/desktop-selection-regressions.test.ts tests/left-nav-cavai-wiring.test.ts",
     "check:no-localstorage": "node scripts/check-no-localstorage.mjs app/layout.tsx lib/cavbotAssetPolicy.ts lib/status/constants.ts",
+    "backfill:signup-welcome": "node --import tsx scripts/backfill-signup-welcome-email.ts",
     "purge:sites": "tsx scripts/purge-site-analytics.ts",
     "postinstall": "prisma generate"
   },

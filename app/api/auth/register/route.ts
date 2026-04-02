@@ -1,6 +1,5 @@
 // app/api/auth/register/route.ts
 import { NextResponse } from "next/server";
-import { sendEmail } from "@/lib/email/sendEmail";
 import { isReservedUsername, isValidUsername, normalizeUsername } from "@/lib/username";
 import {
   assertWriteOrigin,
@@ -28,6 +27,7 @@ import {
   pgUniqueViolationMentions,
   withAuthTransaction,
 } from "@/lib/authDb";
+import { sendSignupWelcomeEmail } from "@/lib/signupWelcomeEmail.server";
 
 import { createHash, randomBytes } from "crypto";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
@@ -450,26 +450,11 @@ export async function POST(req: Request) {
       res.cookies.set("cb_active_project_id", String(result.project.id), pointerCookieOpts);
       res.cookies.set("cb_pid", String(result.project.id), pointerCookieOpts);
 
-      try {
-        await sendEmail({
-          to: email,
-          subject: "Welcome to CavBot",
-          html: `
-            <div style="font-family: ui-sans-serif, system-ui; line-height:1.6;">
-              <h2 style="margin:0 0 10px;">Welcome to CavBot</h2>
-              <p style="margin:0 0 12px;">
-                Your workspace is ready. CavBot will map routes, watch failures, and surface recovery insights in real time.
-              </p>
-              <p style="margin:0 0 12px;">
-                You can sign in using your email or username anytime.
-              </p>
-              <p style="margin:12px 0 0; font-size:12px; color:rgba(234,240,255,0.7);">
-                If you didn’t create this account, reply to this email or contact support immediately.
-              </p>
-            </div>
-          `,
-        });
-      } catch {}
+      await sendSignupWelcomeEmail({
+        userId: result.user.id,
+        email,
+        source: "register",
+      });
 
       recordVerifyActionSuccess(req, { actionType: "signup", sessionIdHint: verifySessionHint });
       return res;
