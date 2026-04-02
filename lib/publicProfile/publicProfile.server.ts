@@ -901,7 +901,7 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
       where: { userId: user.id },
       orderBy: { createdAt: "asc" },
       select: { accountId: true },
-    });
+    }).catch(() => null);
     accountId = String(membership?.accountId || "").trim();
   }
 
