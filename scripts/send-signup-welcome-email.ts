@@ -19,11 +19,14 @@ function readArg(argv: string[], name: string) {
 
 async function main() {
   const to = String(readArg(process.argv.slice(2), "to") || "").trim().toLowerCase();
+  const nonce = String(readArg(process.argv.slice(2), "nonce") || "").trim();
   if (!to) {
     throw new Error("Missing --to email.");
   }
 
-  const result = await sendAdHocSignupWelcomeEmail(to);
+  const result = await sendAdHocSignupWelcomeEmail(to, {
+    nonce: nonce || undefined,
+  });
   console.log(JSON.stringify(result, null, 2));
 
   if (!result.ok) {

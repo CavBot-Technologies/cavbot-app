@@ -544,6 +544,7 @@ export async function sendAdHocSignupWelcomeEmail(
   options: {
     config?: SignupWelcomeMailConfig;
     transport?: (args: TransportArgs) => Promise<TransportResult>;
+    nonce?: string;
   } = {},
 ) {
   const config = options.config || resolveSignupWelcomeMailConfig();
@@ -563,7 +564,9 @@ export async function sendAdHocSignupWelcomeEmail(
       email: to,
       source: "adhoc_test",
     },
-    idempotencyKey: `signup-welcome-adhoc:${to.toLowerCase()}`,
+    idempotencyKey: options.nonce
+      ? `signup-welcome-adhoc:${to.toLowerCase()}:${options.nonce}`
+      : `signup-welcome-adhoc:${to.toLowerCase()}`,
   });
 }
 
