@@ -135,3 +135,14 @@ test("cavcode and center assist degrade safely if optional registry or memory wr
   assert.equal(aiService.includes("return requested.slice(0, MAX_UPLOADED_WORKSPACE_FILES);"), true);
   assert.equal(aiMemory.includes("Memory learning must not break live assist flows."), true);
 });
+
+test("caven workspace keeps a persistent CavBot badge outside the scrollable history/chat surface", () => {
+  const source = read("components/cavai/CavAiCodeWorkspace.tsx");
+  const styles = read("components/cavai/CavAiWorkspace.module.css");
+
+  assert.equal(source.includes('styles.titleBadge'), true);
+  assert.equal(source.includes("<span>CAVEN</span>"), true);
+  assert.equal(source.includes("<CdnBadgeEyes />"), true);
+  assert.equal(styles.includes(".titleBadge"), true);
+  assert.equal(styles.includes(".codePanelMode .titleBadge"), true);
+});

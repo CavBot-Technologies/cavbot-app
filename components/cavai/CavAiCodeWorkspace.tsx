@@ -4450,6 +4450,23 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       <header className={styles.header}>
         <div className={styles.titleWrap}>
           <div className={styles.title}>
+            <span
+              className={[
+                "cb-badge",
+                "cb-badge-inline",
+                styles.titleBadge,
+                badgeTone === "lime"
+                  ? "cavbot-auth-eye-watch"
+                  : badgeTone === "red"
+                    ? "cavbot-auth-eye-error"
+                    : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              aria-hidden="true"
+            >
+              <CdnBadgeEyes />
+            </span>
             <span>CAVEN</span>
           </div>
         </div>

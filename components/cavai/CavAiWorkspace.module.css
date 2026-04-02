@@ -102,6 +102,11 @@
   letter-spacing: 0.06em;
 }
 
+.codePanelMode .titleBadge {
+  width: 30px;
+  height: 30px;
+}
+
 .codePanelMode .heroWrap,
 .codePanelMode .composerWrap {
   margin-left: 10px;
@@ -323,6 +328,13 @@
   color: rgba(247, 251, 255, 0.98);
   line-height: 1.2;
   white-space: nowrap;
+}
+
+.titleBadge {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 4px 14px rgba(92, 185, 255, 0.24));
 }
 
 .subtitle {
