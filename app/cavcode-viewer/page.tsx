@@ -6,6 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 
 import "../../components/CavBotLoadingScreen.css";
 import CavBotLoadingScreen from "../../components/CavBotLoadingScreen";
@@ -722,9 +723,7 @@ export default function LivePage() {
   }, []);
 
   const publicProfileHref = useMemo(() => {
-    const handle = normalizeInitialUsernameSource(profileUsername).trim().toLowerCase();
-    if (!handle) return "";
-    return `/u/${encodeURIComponent(handle)}`;
+    return buildCanonicalPublicProfileHref(profileUsername);
   }, [profileUsername]);
   const profileMenuLabel = useMemo(() => {
     if (profilePublicEnabled === null) return "Profile";
@@ -734,7 +733,7 @@ export default function LivePage() {
   const onOpenAccountSettings = useCallback(() => {
     setAccountOpen(false);
     if (publicProfileHref) {
-      router.push(publicProfileHref);
+      openCanonicalPublicProfileWindow({ href: publicProfileHref, fallbackHref: "/settings?tab=account" });
       return;
     }
     router.push("/settings?tab=account");

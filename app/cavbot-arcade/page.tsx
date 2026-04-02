@@ -7,6 +7,7 @@ import CavBotLoadingScreen from "@/components/CavBotLoadingScreen";
 import "@/components/CavBotLoadingScreen.css";
 import "./arcade.css";
 import { DefaultAccountAvatarIcon } from "@/components/AppShell";
+import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 import EntertainmentOverlay from "./EntertainmentOverlay";
 
 const GREETINGS = [
@@ -1089,9 +1090,7 @@ const ArcadePage = () => {
     }
   }, [modalOpen]);
   const publicProfileHref = useMemo(() => {
-    const handle = String(profileUsername || "").trim().toLowerCase().replace(/^@+/, "");
-    if (!handle) return "";
-    return `/u/${encodeURIComponent(handle)}`;
+    return buildCanonicalPublicProfileHref(profileUsername);
   }, [profileUsername]);
   const profileMenuLabel = useMemo(() => {
     if (profilePublicEnabled === null) return "Profile";
@@ -1380,7 +1379,7 @@ const ArcadePage = () => {
                 role="menuitem"
                 onClick={() => {
                   setProfileMenuOpen(false);
-                  window.location.href = publicProfileHref || "/settings?tab=account";
+                  openCanonicalPublicProfileWindow({ href: publicProfileHref, fallbackHref: "/settings?tab=account" });
                 }}
               >
                 {profileMenuLabel}

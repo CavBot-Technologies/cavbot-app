@@ -34,6 +34,7 @@ import { CAV_GUARD_DECISION_EVENT, emitGuardDecisionFromPayload, readGuardDecisi
 import { normalizeGuardReturnPath } from "@/src/lib/cavguard/cavGuard.return";
 import type { CavGuardDecision } from "@/src/lib/cavguard/cavGuard.types";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
+import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 
 type WindowWithGlobals = Window & {
   __CB_NOTIF_SETTINGS__?: Record<string, unknown> | null;
@@ -1018,9 +1019,7 @@ export default function AppShell({
     [initials, profileFullName, profileUsername]
   );
   const publicProfileHref = useMemo(() => {
-    const handle = normalizeInitialUsernameSource(profileUsername).trim().toLowerCase();
-    if (!handle) return "";
-    return `/u/${encodeURIComponent(handle)}`;
+    return buildCanonicalPublicProfileHref(profileUsername);
   }, [profileUsername]);
   const planStarColor = useMemo(() => profileToneToAccentColor(profileTone), [profileTone]);
   const profileMenuLabel = profilePublicEnabled === null
@@ -1757,8 +1756,8 @@ export default function AppShell({
     } catch {}
     if (publicProfileHref) {
       recordClickIntent(publicProfileHref, "account-profile");
-      recordNavigationStart(publicProfileHref, "router.push");
-      router.push(publicProfileHref);
+      recordNavigationStart(publicProfileHref, "window.open");
+      openCanonicalPublicProfileWindow({ href: publicProfileHref, fallbackHref: "/settings?tab=account" });
       return;
     }
     recordClickIntent("/settings?tab=account", "account-profile-settings");

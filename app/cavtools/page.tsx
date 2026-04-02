@@ -11,6 +11,7 @@ import Link from "next/link";
 
 import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import CavMobileMenu from "@/components/CavMobileMenu";
+import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 
 type TabKey = "inspector" | "events" | "studio" | "settings";
 type Tone = "good" | "watch" | "bad";
@@ -1525,9 +1526,7 @@ function CavToolsPageInner() {
     [profileInitials, profileUsername, welcomeName]
   );
   const publicProfileHref = useMemo(() => {
-    const handle = normalizeInitialUsernameSource(profileUsername).trim().toLowerCase();
-    if (!handle) return "";
-    return `/u/${encodeURIComponent(handle)}`;
+    return buildCanonicalPublicProfileHref(profileUsername);
   }, [profileUsername]);
   const profileMenuLabel = useMemo(() => {
     if (profilePublicEnabled === null) return "Profile";
@@ -1537,7 +1536,7 @@ function CavToolsPageInner() {
   function onOpenAccount() {
     setAccountOpen(false);
     try {
-      window.location.href = publicProfileHref || "/settings?tab=account";
+      openCanonicalPublicProfileWindow({ href: publicProfileHref, fallbackHref: "/settings?tab=account" });
     } catch {}
   }
 

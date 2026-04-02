@@ -37,6 +37,7 @@ import { inferCenterActionFromPrompt } from "@/src/lib/ai/ai.center-routing";
 import { emitGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
 import { resolveUploadFileIcon } from "@/lib/cavai/uploadFileIcons";
+import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 import styles from "./CavAiWorkspace.module.css";
 
 export type AiCenterSurface = "general" | "workspace" | "console" | "cavcloud" | "cavsafe" | "cavpad" | "cavcode";
@@ -4389,9 +4390,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [accountProfileUsername, profileIdentity.fullName, profileIdentity.username]);
   const accountPlanLabel = useMemo(() => toPlanTierLabel(accountPlanId), [accountPlanId]);
   const publicProfileHref = useMemo(() => {
-    const handle = normalizeInitialUsernameSource(accountProfileUsername).trim().toLowerCase();
-    if (!handle) return "";
-    return `/u/${encodeURIComponent(handle)}`;
+    return buildCanonicalPublicProfileHref(accountProfileUsername);
   }, [accountProfileUsername]);
   const profileMenuLabel = useMemo(() => {
     if (accountProfilePublicEnabled === null) return "Profile";
@@ -5875,7 +5874,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         window.location.assign(CAVAI_GUEST_PREVIEW_LOGIN_HREF);
         return;
       }
-      window.location.assign(publicProfileHref || "/settings?tab=account");
+      openCanonicalPublicProfileWindow({ href: publicProfileHref, fallbackHref: "/settings?tab=account" });
     }
   }, [isGuestPreviewMode, publicProfileHref]);
 

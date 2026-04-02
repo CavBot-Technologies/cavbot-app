@@ -45,6 +45,7 @@ import {
   resolveAiModelLabel,
 } from "@/src/lib/ai/model-catalog";
 import { toReasoningDisplayHelper, toReasoningDisplayLabel } from "@/src/lib/ai/reasoning-display";
+import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 
 type MonacoApi = typeof import("monaco-editor");
 type MonacoDefaults = {
@@ -7644,9 +7645,7 @@ export default function CavCodePage() {
     [avatarInitials, profileFullName, profileUsername]
   );
   const publicProfileHref = useMemo(() => {
-    const handle = normalizeInitialUsernameSource(profileUsername).trim().toLowerCase();
-    if (!handle) return "";
-    return `/u/${encodeURIComponent(handle)}`;
+    return buildCanonicalPublicProfileHref(profileUsername);
   }, [profileUsername]);
   const profileMenuLabel = useMemo(() => {
     if (profilePublicEnabled === null) return "Profile";
@@ -12787,7 +12786,7 @@ export default function CavCodePage() {
                 onClick={() => {
                   setProfileOpen(false);
                   if (publicProfileHref) {
-                    router.push(publicProfileHref);
+                    openCanonicalPublicProfileWindow({ href: publicProfileHref, fallbackHref: "/settings?tab=account" });
                     return;
                   }
                   router.push("/settings?tab=account");

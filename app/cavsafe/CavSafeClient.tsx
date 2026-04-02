@@ -16,6 +16,7 @@ import { copyTextToClipboard } from "@/lib/clipboard";
 import { countDriveListingItems, debugDriveLog, getDriveDebugEnabled, useDriveChildren } from "@/lib/cavdrive/liveData.client";
 import { formatSnippetForThumbnail, getExtensionLabel, isTextLikeFile } from "@/lib/filePreview";
 import { selectDesktopItemMap, shouldClearDesktopSelectionFromTarget } from "@/lib/hooks/useDesktopSelection";
+import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 import "../cavcloud/cavcloud.css";
 const s = {
   default: Image
@@ -5980,7 +5981,7 @@ function ek() {
     a && ("file" !== mountQuickKind && setMountQuickKind("file"), mountQuickTargetId !== a.id && setMountQuickTargetId(a.id));
   }, [N?.path, quickMountFileOptions, mountQuickKind, mountQuickTargetId]);
   let profileHandle = resolveCavsafeInitialUsername(eH).trim().toLowerCase(),
-    publicProfileHref = profileHandle ? `/u/${encodeURIComponent(profileHandle)}` : "",
+    publicProfileHref = buildCanonicalPublicProfileHref(profileHandle),
     profileMenuLabel = "public" === profilePublicEnabled ? "Public Profile" : "private" === profilePublicEnabled ? "Private Profile" : "Profile",
     settingsTotalPages = 2,
     settingsPageSafe = Math.max(1, Math.min(settingsPage, settingsTotalPages));
@@ -6006,7 +6007,7 @@ function ek() {
               type: "button",
               role: "menuitem",
               onClick: e => {
-                e.preventDefault(), e.stopPropagation(), e.currentTarget.closest("details")?.removeAttribute("open"), publicProfileHref ? l.push(publicProfileHref) : l.push("/settings?tab=account");
+                e.preventDefault(), e.stopPropagation(), e.currentTarget.closest("details")?.removeAttribute("open"), openCanonicalPublicProfileWindow({ href: publicProfileHref, fallbackHref: "/settings?tab=account" });
               },
               children: profileMenuLabel
             }), t.jsx("button", {
