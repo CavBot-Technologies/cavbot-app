@@ -1,5 +1,8 @@
 import "server-only";
 
+import pg from "pg";
+
+import { getAuthPool, newDbId, withAuthTransaction } from "@/lib/authDb";
 import { prisma } from "@/lib/prisma";
 import { embedAlibabaQwenText, rerankAlibabaQwenDocuments } from "@/src/lib/ai/providers/alibaba-qwen";
 import { AiServiceError, type AiCenterSurface, type CavAiReasoningLevel } from "@/src/lib/ai/ai.types";
@@ -156,7 +159,169 @@ function summarizeSessionTitleFromPrompt(prompt: unknown): string {
   return capped.slice(0, 1).toUpperCase() + capped.slice(1);
 }
 
+type AiQueryable = Pick<pg.Pool, "query"> | Pick<pg.PoolClient, "query">;
 type SessionTitleDbClient = Pick<typeof prisma, "cavAiSession">;
+
+type AiSessionDbRow = {
+  id: string;
+  accountId?: string;
+  userId?: string;
+  surface: string;
+  title: string;
+  contextLabel: string | null;
+  contextJson?: unknown;
+  workspaceId: string | null;
+  projectId: number | null;
+  origin: string | null;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+  lastMessageAt?: string | Date | null;
+};
+
+type AiSessionSummaryDbRow = {
+  id: string;
+  surface: string;
+  title: string;
+  contextLabel: string | null;
+  workspaceId: string | null;
+  projectId: number | null;
+  origin: string | null;
+  updatedAt: string | Date;
+  createdAt: string | Date;
+  lastMessageAt: string | Date | null;
+  contextJson: unknown;
+  previewText: string | null;
+};
+
+type AiMessageDbRow = {
+  id: string;
+  role: string;
+  action: string | null;
+  contentText: string;
+  contentJson: unknown;
+  provider: string | null;
+  model: string | null;
+  requestId: string | null;
+  status: string | null;
+  errorCode: string | null;
+  createdAt: string | Date;
+};
+
+type AiFeedbackDbRow = {
+  messageId: string;
+  reaction: string | null;
+  copyCount: number;
+  shareCount: number;
+  retryCount: number;
+  updatedAt: string | Date | null;
+};
+
+function recordOrNull(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function toIso(value: string | Date | null | undefined): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function jsonParam(value: Record<string, unknown> | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
+}
+
+async function queryOne<T extends pg.QueryResultRow>(
+  queryable: AiQueryable,
+  text: string,
+  values: unknown[] = []
+): Promise<T | null> {
+  const result = await queryable.query<T>(text, values);
+  return result.rows[0] ?? null;
+}
+
+async function resolveUniqueSessionTitleQuery(args: {
+  queryable: AiQueryable;
+  accountId: string;
+  userId: string;
+  sessionId: string;
+  baseTitle: string;
+}): Promise<string> {
+  const accountId = s(args.accountId);
+  const userId = s(args.userId);
+  const sessionId = s(args.sessionId);
+  const baseTitleRaw = s(args.baseTitle).slice(0, SESSION_TITLE_MAX_CHARS);
+  const baseTitle = baseTitleRaw || "Untitled chat";
+  const baseKey = normalizeTitleKey(baseTitle);
+
+  const values: unknown[] = [accountId, userId];
+  const excludedIdClause = sessionId
+    ? (() => {
+        values.push(sessionId);
+        return ` AND "id" <> $${values.length}`;
+      })()
+    : "";
+  const result = await args.queryable.query<{ title: string }>(
+    `SELECT "title"
+      FROM "CavAiSession"
+      WHERE "accountId" = $1
+        AND "userId" = $2${excludedIdClause}
+      ORDER BY "updatedAt" DESC
+      LIMIT 500`,
+    values
+  );
+
+  const used = new Set(result.rows.map((row) => normalizeTitleKey(row.title)).filter(Boolean));
+  if (!used.has(baseKey)) return baseTitle;
+
+  for (let suffix = 2; suffix <= 999; suffix += 1) {
+    const suffixText = ` (${suffix})`;
+    const root = baseTitle.slice(0, Math.max(1, SESSION_TITLE_MAX_CHARS - suffixText.length)).trim();
+    const candidate = `${root}${suffixText}`;
+    if (!used.has(normalizeTitleKey(candidate))) {
+      return candidate;
+    }
+  }
+
+  const fallbackSuffix = ` (${Date.now().toString().slice(-4)})`;
+  const fallbackRoot = baseTitle.slice(0, Math.max(1, SESSION_TITLE_MAX_CHARS - fallbackSuffix.length)).trim();
+  return `${fallbackRoot}${fallbackSuffix}`;
+}
+
+async function readAiSessionRow(args: {
+  queryable: AiQueryable;
+  accountId: string;
+  sessionId: string;
+}): Promise<AiSessionDbRow | null> {
+  return queryOne<AiSessionDbRow>(
+    args.queryable,
+    `SELECT
+        "id",
+        "accountId",
+        "userId",
+        "surface",
+        "title",
+        "contextLabel",
+        "contextJson",
+        "workspaceId",
+        "projectId",
+        "origin",
+        "createdAt",
+        "updatedAt",
+        "lastMessageAt"
+      FROM "CavAiSession"
+      WHERE "id" = $1
+        AND "accountId" = $2
+      LIMIT 1`,
+    [s(args.sessionId), s(args.accountId)]
+  );
+}
 
 async function resolveUniqueSessionTitle(args: {
   db: SessionTitleDbClient;
@@ -286,30 +451,46 @@ export async function createAiSession(args: {
 }): Promise<{ id: string }> {
   const accountId = s(args.accountId);
   const userId = s(args.userId);
-  const baseTitle = s(args.title) || defaultTitle(args.surface, args.contextLabel);
-  const title = await resolveUniqueSessionTitle({
-    db: prisma,
-    accountId,
-    userId,
-    sessionId: "",
-    baseTitle,
-  });
-  const created = await prisma.cavAiSession.create({
-    data: {
+  return withAuthTransaction(async (tx) => {
+    const baseTitle = s(args.title) || defaultTitle(args.surface, args.contextLabel);
+    const title = await resolveUniqueSessionTitleQuery({
+      queryable: tx,
       accountId,
       userId,
-      surface: normalizeSurface(args.surface),
-      title: title.slice(0, SESSION_TITLE_MAX_CHARS),
-      contextLabel: s(args.contextLabel) || null,
-      workspaceId: s(args.workspaceId) || null,
-      projectId: toProjectId(args.projectId),
-      origin: s(args.origin) || null,
-      contextJson: args.contextJson ? (args.contextJson as unknown as object) : undefined,
-      lastMessageAt: null,
-    },
-    select: { id: true },
+      sessionId: "",
+      baseTitle,
+    });
+    const id = newDbId();
+    await tx.query(
+      `INSERT INTO "CavAiSession" (
+          "id",
+          "accountId",
+          "userId",
+          "surface",
+          "title",
+          "contextLabel",
+          "contextJson",
+          "workspaceId",
+          "projectId",
+          "origin",
+          "lastMessageAt"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11)`,
+      [
+        id,
+        accountId,
+        userId,
+        normalizeSurface(args.surface),
+        title.slice(0, SESSION_TITLE_MAX_CHARS),
+        s(args.contextLabel) || null,
+        jsonParam(args.contextJson),
+        s(args.workspaceId) || null,
+        toProjectId(args.projectId),
+        s(args.origin) || null,
+        null,
+      ]
+    );
+    return { id };
   });
-  return created;
 }
 
 export async function getAiSessionForAccount(args: {
@@ -323,19 +504,10 @@ export async function getAiSessionForAccount(args: {
   origin: string | null;
   contextLabel: string | null;
 }> {
-  const session = await prisma.cavAiSession.findFirst({
-    where: {
-      id: s(args.sessionId),
-      accountId: s(args.accountId),
-    },
-    select: {
-      id: true,
-      surface: true,
-      workspaceId: true,
-      projectId: true,
-      origin: true,
-      contextLabel: true,
-    },
+  const session = await readAiSessionRow({
+    queryable: getAuthPool(),
+    accountId: args.accountId,
+    sessionId: args.sessionId,
   });
 
   if (!session) {
@@ -364,20 +536,10 @@ export async function getAiSessionMetaForAccount(args: {
   origin: string | null;
   contextLabel: string | null;
 }> {
-  const session = await prisma.cavAiSession.findFirst({
-    where: {
-      id: s(args.sessionId),
-      accountId: s(args.accountId),
-    },
-    select: {
-      id: true,
-      title: true,
-      surface: true,
-      workspaceId: true,
-      projectId: true,
-      origin: true,
-      contextLabel: true,
-    },
+  const session = await readAiSessionRow({
+    queryable: getAuthPool(),
+    accountId: args.accountId,
+    sessionId: args.sessionId,
   });
 
   if (!session) {
@@ -404,40 +566,55 @@ export async function listAiSessions(args: {
   limit?: number;
 }): Promise<AiSessionSummary[]> {
   const limit = Math.max(1, Math.min(100, Math.trunc(Number(args.limit || 30))));
-  const rows = await prisma.cavAiSession.findMany({
-    where: {
-      accountId: s(args.accountId),
-      userId: s(args.userId),
-      ...(args.surface ? { surface: normalizeSurface(args.surface) } : {}),
-      ...(s(args.workspaceId) ? { workspaceId: s(args.workspaceId) } : {}),
-      ...(toProjectId(args.projectId) ? { projectId: toProjectId(args.projectId) } : {}),
-    },
-    orderBy: [{ updatedAt: "desc" }],
-    take: limit,
-    select: {
-      id: true,
-      surface: true,
-      title: true,
-      contextLabel: true,
-      workspaceId: true,
-      projectId: true,
-      origin: true,
-      updatedAt: true,
-      createdAt: true,
-      lastMessageAt: true,
-      contextJson: true,
-      messages: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: { contentText: true },
-      },
-    },
-  });
+  const values: unknown[] = [s(args.accountId), s(args.userId)];
+  const filters = [`s."accountId" = $1`, `s."userId" = $2`];
+
+  if (args.surface) {
+    values.push(normalizeSurface(args.surface));
+    filters.push(`s."surface" = $${values.length}`);
+  }
+  if (s(args.workspaceId)) {
+    values.push(s(args.workspaceId));
+    filters.push(`s."workspaceId" = $${values.length}`);
+  }
+  const projectId = toProjectId(args.projectId);
+  if (projectId) {
+    values.push(projectId);
+    filters.push(`s."projectId" = $${values.length}`);
+  }
+  values.push(limit);
+
+  const result = await getAuthPool().query<AiSessionSummaryDbRow>(
+    `SELECT
+        s."id",
+        s."surface",
+        s."title",
+        s."contextLabel",
+        s."workspaceId",
+        s."projectId",
+        s."origin",
+        s."updatedAt",
+        s."createdAt",
+        s."lastMessageAt",
+        s."contextJson",
+        latest."contentText" AS "previewText"
+      FROM "CavAiSession" s
+      LEFT JOIN LATERAL (
+        SELECT "contentText"
+        FROM "CavAiMessage"
+        WHERE "sessionId" = s."id"
+        ORDER BY "createdAt" DESC
+        LIMIT 1
+      ) latest ON TRUE
+      WHERE ${filters.join(" AND ")}
+      ORDER BY s."updatedAt" DESC
+      LIMIT $${values.length}`,
+    values
+  );
+  const rows = result.rows;
 
   return rows.map((row) => {
-    const context = row.contextJson && typeof row.contextJson === "object"
-      ? (row.contextJson as Record<string, unknown>)
-      : {};
+    const context = recordOrNull(row.contextJson) || {};
 
     return {
       id: row.id,
@@ -447,10 +624,10 @@ export async function listAiSessions(args: {
       workspaceId: row.workspaceId,
       projectId: row.projectId,
       origin: row.origin,
-      updatedAt: row.updatedAt.toISOString(),
-      createdAt: row.createdAt.toISOString(),
-      lastMessageAt: row.lastMessageAt ? row.lastMessageAt.toISOString() : null,
-      preview: s(row.messages?.[0]?.contentText).slice(0, 260) || null,
+      updatedAt: toIso(row.updatedAt) || new Date(0).toISOString(),
+      createdAt: toIso(row.createdAt) || new Date(0).toISOString(),
+      lastMessageAt: toIso(row.lastMessageAt),
+      preview: s(row.previewText).slice(0, 260) || null,
       model: s(context.model) || null,
       reasoningLevel: toReasoningLevel(context.reasoningLevel),
       queueEnabled: toOptionalBoolean(context.queueEnabled),
@@ -602,53 +779,53 @@ export async function listAiSessionMessages(args: {
     sessionId,
   });
 
-  // Session ownership is already verified above via getAiSessionForAccount(accountId, sessionId).
-  // Query by sessionId so legacy rows with drifted message.accountId still hydrate history.
-  const rows = await prisma.cavAiMessage.findMany({
-    where: {
-      sessionId,
-    },
-    orderBy: [{ createdAt: "asc" }],
-    take: limit,
-    select: {
-      id: true,
-      role: true,
-      action: true,
-      contentText: true,
-      contentJson: true,
-      provider: true,
-      model: true,
-      requestId: true,
-      status: true,
-      errorCode: true,
-      createdAt: true,
-    },
-  });
+  const rows = (
+    await getAuthPool().query<AiMessageDbRow>(
+      `SELECT
+          "id",
+          "role",
+          "action",
+          "contentText",
+          "contentJson",
+          "provider",
+          "model",
+          "requestId",
+          "status",
+          "errorCode",
+          "createdAt"
+        FROM "CavAiMessage"
+        WHERE "sessionId" = $1
+        ORDER BY "createdAt" ASC
+        LIMIT $2`,
+      [sessionId, limit]
+    )
+  ).rows;
 
   const feedbackByMessageId = new Map<string, AiMessageFeedbackState>();
   if (userId && rows.length) {
-    const feedbackRows = await prisma.cavAiMessageFeedback.findMany({
-      where: {
-        accountId,
-        userId,
-        messageId: { in: rows.map((row) => row.id) },
-      },
-      select: {
-        messageId: true,
-        reaction: true,
-        copyCount: true,
-        shareCount: true,
-        retryCount: true,
-        updatedAt: true,
-      },
-    });
+    const feedbackRows = (
+      await getAuthPool().query<AiFeedbackDbRow>(
+        `SELECT
+            "messageId",
+            "reaction",
+            "copyCount",
+            "shareCount",
+            "retryCount",
+            "updatedAt"
+          FROM "CavAiMessageFeedback"
+          WHERE "accountId" = $1
+            AND "userId" = $2
+            AND "messageId" = ANY($3::text[])`,
+        [accountId, userId, rows.map((row) => row.id)]
+      )
+    ).rows;
     for (const row of feedbackRows) {
       feedbackByMessageId.set(row.messageId, {
         reaction: toFeedbackReaction(row.reaction),
         copyCount: Math.max(0, Math.trunc(Number(row.copyCount || 0))),
         shareCount: Math.max(0, Math.trunc(Number(row.shareCount || 0))),
         retryCount: Math.max(0, Math.trunc(Number(row.retryCount || 0))),
-        updatedAt: row.updatedAt ? row.updatedAt.toISOString() : null,
+        updatedAt: toIso(row.updatedAt),
       });
     }
   }
@@ -658,13 +835,13 @@ export async function listAiSessionMessages(args: {
     role: row.role === "assistant" ? "assistant" : "user",
     action: row.action || null,
     contentText: row.contentText,
-    contentJson: row.contentJson ? (row.contentJson as Record<string, unknown>) : null,
+    contentJson: recordOrNull(row.contentJson),
     provider: row.provider || null,
     model: row.model || null,
     requestId: row.requestId || null,
     status: row.status || null,
     errorCode: row.errorCode || null,
-    createdAt: row.createdAt.toISOString(),
+    createdAt: toIso(row.createdAt) || new Date(0).toISOString(),
     feedback: feedbackByMessageId.get(row.id) || null,
   }));
 }
@@ -841,26 +1018,16 @@ export async function appendAiSessionTurn(args: {
     throw new AiServiceError("SESSION_REQUIRED", "sessionId is required for AI message persistence.", 400);
   }
 
-  await getAiSessionForAccount({
-    accountId,
-    sessionId,
-  });
-
   const now = new Date();
-  await prisma.$transaction(async (tx) => {
-    const session = await tx.cavAiSession.findFirst({
-      where: {
-        id: sessionId,
-        accountId,
-      },
-      select: {
-        id: true,
-        userId: true,
-        surface: true,
-        title: true,
-        contextLabel: true,
-      },
+  await withAuthTransaction(async (tx) => {
+    const session = await readAiSessionRow({
+      queryable: tx,
+      accountId,
+      sessionId,
     });
+    if (!session) {
+      throw new AiServiceError("SESSION_NOT_FOUND", "AI session was not found for this account scope.", 404);
+    }
 
     let nextAutoTitle = "";
     if (session) {
@@ -872,23 +1039,23 @@ export async function appendAiSessionTurn(args: {
           currentTitle: session.title,
         })
       ) {
-        const firstUserMessage = await tx.cavAiMessage.findFirst({
-          where: {
-            accountId,
-            sessionId,
-            role: "user",
-          },
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-          select: {
-            contentText: true,
-          },
-        });
+        const firstUserMessage = await queryOne<{ contentText: string }>(
+          tx,
+          `SELECT "contentText"
+            FROM "CavAiMessage"
+            WHERE "accountId" = $1
+              AND "sessionId" = $2
+              AND "role" = 'user'
+            ORDER BY "createdAt" ASC, "id" ASC
+            LIMIT 1`,
+          [accountId, sessionId]
+        );
 
         const seedPrompt = s(firstUserMessage?.contentText) || userText;
         const summarized = summarizeSessionTitleFromPrompt(seedPrompt);
         const baseTitle = summarized || defaultTitle(surface, session.contextLabel);
-        nextAutoTitle = await resolveUniqueSessionTitle({
-          db: tx,
+        nextAutoTitle = await resolveUniqueSessionTitleQuery({
+          queryable: tx,
           accountId,
           userId: s(session.userId) || userId,
           sessionId,
@@ -897,54 +1064,95 @@ export async function appendAiSessionTurn(args: {
       }
     }
 
-    await tx.cavAiMessage.create({
-      data: {
+    await tx.query(
+      `INSERT INTO "CavAiMessage" (
+          "id",
+          "accountId",
+          "sessionId",
+          "role",
+          "action",
+          "contentText",
+          "contentJson",
+          "requestId",
+          "status",
+          "workspaceId",
+          "projectId",
+          "origin",
+          "createdByUser"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13)`,
+      [
+        newDbId(),
         accountId,
         sessionId,
-        role: "user",
-        action: s(args.action).slice(0, 120) || null,
-        contentText: userText,
-        contentJson: args.userJson ? (args.userJson as unknown as object) : undefined,
-        requestId: s(args.requestId) || null,
-        status: s(args.status || "SUCCESS") || null,
-        workspaceId: s(args.workspaceId) || null,
-        projectId: toProjectId(args.projectId),
-        origin: s(args.origin) || null,
-        createdByUser: userId || null,
-      },
-    });
+        "user",
+        s(args.action).slice(0, 120) || null,
+        userText,
+        jsonParam(args.userJson),
+        s(args.requestId) || null,
+        s(args.status || "SUCCESS") || null,
+        s(args.workspaceId) || null,
+        toProjectId(args.projectId),
+        s(args.origin) || null,
+        userId || null,
+      ]
+    );
 
-    await tx.cavAiMessage.create({
-      data: {
+    await tx.query(
+      `INSERT INTO "CavAiMessage" (
+          "id",
+          "accountId",
+          "sessionId",
+          "role",
+          "action",
+          "contentText",
+          "contentJson",
+          "provider",
+          "model",
+          "requestId",
+          "status",
+          "errorCode",
+          "workspaceId",
+          "projectId",
+          "origin",
+          "createdByUser"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+      [
+        newDbId(),
         accountId,
         sessionId,
-        role: "assistant",
-        action: s(args.action).slice(0, 120) || null,
-        contentText: assistantText,
-        contentJson: args.assistantJson ? (args.assistantJson as unknown as object) : undefined,
-        provider: s(args.provider) || null,
-        model: s(args.model) || null,
-        requestId: s(args.requestId) || null,
-        status: s(args.status || "SUCCESS") || null,
-        errorCode: s(args.errorCode) || null,
-        workspaceId: s(args.workspaceId) || null,
-        projectId: toProjectId(args.projectId),
-        origin: s(args.origin) || null,
-        createdByUser: userId || null,
-      },
-    });
+        "assistant",
+        s(args.action).slice(0, 120) || null,
+        assistantText,
+        jsonParam(args.assistantJson),
+        s(args.provider) || null,
+        s(args.model) || null,
+        s(args.requestId) || null,
+        s(args.status || "SUCCESS") || null,
+        s(args.errorCode) || null,
+        s(args.workspaceId) || null,
+        toProjectId(args.projectId),
+        s(args.origin) || null,
+        userId || null,
+      ]
+    );
 
-    await tx.cavAiSession.update({
-      where: { id: sessionId },
-      data: {
-        lastMessageAt: now,
-        updatedAt: now,
-        ...(args.sessionContextJson
-          ? { contextJson: args.sessionContextJson as unknown as object }
-          : {}),
-        ...(nextAutoTitle ? { title: nextAutoTitle.slice(0, SESSION_TITLE_MAX_CHARS) } : {}),
-      },
-    });
+    await tx.query(
+      `UPDATE "CavAiSession"
+        SET "lastMessageAt" = $2,
+            "updatedAt" = $2,
+            "contextJson" = CASE
+              WHEN $3::jsonb IS NULL THEN "contextJson"
+              ELSE $3::jsonb
+            END,
+            "title" = COALESCE($4, "title")
+        WHERE "id" = $1`,
+      [
+        sessionId,
+        now,
+        jsonParam(args.sessionContextJson),
+        nextAutoTitle ? nextAutoTitle.slice(0, SESSION_TITLE_MAX_CHARS) : null,
+      ]
+    );
   });
 }
 
@@ -1980,25 +2188,29 @@ export async function learnAiUserMemoryFromPrompt(args: {
   userPrompt: string;
   sourceMessageId?: string | null;
 }) {
-  const setting = await getAiUserMemorySetting({
-    accountId: args.accountId,
-    userId: args.userId,
-  });
-  if (!setting.memoryEnabled) return;
-
-  const candidates = extractMemoryFactCandidates(args.userPrompt).slice(0, 4);
-  for (const row of candidates) {
-    await upsertAiUserMemoryFact({
+  try {
+    const setting = await getAiUserMemorySetting({
       accountId: args.accountId,
       userId: args.userId,
-      factKey: row.factKey,
-      factValue: row.factValue,
-      category: row.category,
-      confidence: row.confidence,
-      isSensitive: row.isSensitive === true,
-      sourceSessionId: args.sessionId || null,
-      sourceMessageId: args.sourceMessageId || null,
-      requestId: args.requestId || null,
     });
+    if (!setting.memoryEnabled) return;
+
+    const candidates = extractMemoryFactCandidates(args.userPrompt).slice(0, 4);
+    for (const row of candidates) {
+      await upsertAiUserMemoryFact({
+        accountId: args.accountId,
+        userId: args.userId,
+        factKey: row.factKey,
+        factValue: row.factValue,
+        category: row.category,
+        confidence: row.confidence,
+        isSensitive: row.isSensitive === true,
+        sourceSessionId: args.sessionId || null,
+        sourceMessageId: args.sourceMessageId || null,
+        requestId: args.requestId || null,
+      });
+    }
+  } catch {
+    // Memory learning must not break live assist flows.
   }
 }

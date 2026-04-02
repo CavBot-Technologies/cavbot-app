@@ -118,6 +118,7 @@ import {
   startImageJob,
   toImageStudioPlanTier,
 } from "@/lib/cavai/imageStudio.server";
+import type { PlanId } from "@/lib/plans";
 
 const DEFAULT_CAVBOT_TTS_INSTRUCTIONS = "Voice profile: Cavbot Ethan. Adult male baritone voice, low and grounded. Keep delivery direct, calm, and confident with a steady pace and crisp diction. Start exactly on the first spoken word with no pre-roll. Maintain one consistent masculine tone across the entire response, including long paragraphs. No audible inhale, exhale, mouth noise, lip smack, hiss, gasp, breath, or sudden loud bursts. Keep the style plainspoken and studio-clean. Avoid bright or airy tone, playful cadence, sing-song inflection, theatrical emphasis, or dramatic pitch swings.";
 const CAVBOT_ANSWER_QUALITY_DIRECTIVE = "Quality bar: answer the user's exact question directly, keep it relevant, avoid generic filler, and never invent facts, metrics, or citations.";
@@ -315,26 +316,39 @@ async function resolveUploadedWorkspaceFilesForAi(args: {
     )
   ).slice(0, MAX_UPLOADED_WORKSPACE_FILES);
 
-  const fileRows = await prisma.cavCloudFile.findMany({
-    where: {
-      accountId: args.accountId,
-      deletedAt: null,
-      status: "READY",
-      OR: [
-        ...(fileIds.length ? [{ id: { in: fileIds } }] : []),
-        ...(filePaths.length ? [{ path: { in: filePaths } }] : []),
-      ],
-    },
-    select: {
-      id: true,
-      name: true,
-      path: true,
-      mimeType: true,
-      bytes: true,
-      previewSnippet: true,
-      previewSnippetUpdatedAt: true,
-    },
-  });
+  let fileRows: Array<{
+    id: string;
+    name: string;
+    path: string;
+    mimeType: string;
+    bytes: number | bigint;
+    previewSnippet: string | null;
+    previewSnippetUpdatedAt: Date | null;
+  }> = [];
+  try {
+    fileRows = await prisma.cavCloudFile.findMany({
+      where: {
+        accountId: args.accountId,
+        deletedAt: null,
+        status: "READY",
+        OR: [
+          ...(fileIds.length ? [{ id: { in: fileIds } }] : []),
+          ...(filePaths.length ? [{ path: { in: filePaths } }] : []),
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        path: true,
+        mimeType: true,
+        bytes: true,
+        previewSnippet: true,
+        previewSnippetUpdatedAt: true,
+      },
+    });
+  } catch {
+    return requested.slice(0, MAX_UPLOADED_WORKSPACE_FILES);
+  }
 
   const byId = new Map<string, (typeof fileRows)[number]>();
   const byPath = new Map<string, (typeof fileRows)[number]>();
@@ -389,6 +403,41 @@ async function resolveUploadedWorkspaceFilesForAi(args: {
   }
 
   return resolved.slice(0, MAX_UPLOADED_WORKSPACE_FILES);
+}
+
+async function resolveInstalledCavenCustomAgentSafe(args: {
+  accountId: string;
+  userId: string;
+  runtimeSurface: "cavcode" | "center";
+  agentId?: string | null;
+  agentActionKey?: string | null;
+}): Promise<CavenCustomAgent | null> {
+  try {
+    return await resolveInstalledCavenCustomAgent(args);
+  } catch {
+    return null;
+  }
+}
+
+async function resolveInstalledCavCodeActionSafe(args: {
+  accountId: string;
+  userId: string;
+  planId?: PlanId;
+  requestedAction: string;
+}): Promise<{ action: string; downgraded: boolean }> {
+  try {
+    return await resolveInstalledCavCodeAction({
+      accountId: args.accountId,
+      userId: args.userId,
+      planId: args.planId,
+      requestedAction: args.requestedAction,
+    });
+  } catch {
+    return {
+      action: s(args.requestedAction).toLowerCase(),
+      downgraded: false,
+    };
+  }
 }
 
 function resolveRouteAwarenessContext(args: {
@@ -2550,7 +2599,7 @@ export async function runCavCodeAssist(args: {
   const queueEnabled = args.input.queueEnabled === true;
   const requestedAgentId = s(args.input.agentId).toLowerCase();
   const requestedAgentActionKey = s(args.input.agentActionKey).toLowerCase();
-  const selectedCustomAgent = await resolveInstalledCavenCustomAgent({
+  const selectedCustomAgent = await resolveInstalledCavenCustomAgentSafe({
     accountId: ctx.accountId,
     userId: ctx.userId,
     runtimeSurface: "cavcode",
@@ -2566,7 +2615,7 @@ export async function runCavCodeAssist(args: {
   }
   const installedActionResolution = selectedCustomAgent
     ? { action: args.input.action, downgraded: false }
-    : await resolveInstalledCavCodeAction({
+    : await resolveInstalledCavCodeActionSafe({
         accountId: ctx.accountId,
         userId: ctx.userId,
         planId: ctx.planId,
@@ -4382,7 +4431,7 @@ export async function runCenterAssist(args: {
 
   const requestedAgentId = s(args.input.agentId).toLowerCase();
   const requestedAgentActionKey = s(args.input.agentActionKey).toLowerCase();
-  const selectedCustomAgent = await resolveInstalledCavenCustomAgent({
+  const selectedCustomAgent = await resolveInstalledCavenCustomAgentSafe({
     accountId: ctx.accountId,
     userId: ctx.userId,
     runtimeSurface: "center",

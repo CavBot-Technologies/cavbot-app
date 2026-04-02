@@ -1,9 +1,9 @@
 import "server-only";
 
 import { type MemberRole } from "@/lib/apiAuth";
+import { getAuthPool } from "@/lib/authDb";
 import { getCavCloudCollabPolicy } from "@/lib/cavcloud/collabPolicy.server";
 import { type PlanId } from "@/lib/plans";
-import { prisma } from "@/lib/prisma";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
 import {
   ALIBABA_QWEN_ASR_REALTIME_MODEL_ID,
@@ -879,12 +879,14 @@ async function assertSessionDepth(args: {
   const sessionId = s(args.sessionId);
   if (!sessionId) return;
 
-  const count = await prisma.cavAiMessage.count({
-    where: {
-      accountId: s(args.accountId),
-      sessionId,
-    },
-  });
+  const result = await getAuthPool().query<{ count: string | number }>(
+    `SELECT COUNT(*)::int AS "count"
+      FROM "CavAiMessage"
+      WHERE "accountId" = $1
+        AND "sessionId" = $2`,
+    [s(args.accountId), sessionId]
+  );
+  const count = Math.max(0, Number(result.rows[0]?.count || 0));
   if (count <= args.maxSessionDepth) return;
 
   throwGuardedAiError({
@@ -904,15 +906,20 @@ async function assertSessionDepth(args: {
 async function readMonthlyWeightedUsageUnits(accountId: string): Promise<number> {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const grouped = await prisma.cavAiUsageLog.groupBy({
-    by: ["surface", "action"],
-    where: {
-      accountId: s(accountId),
-      createdAt: { gte: monthStart },
-      status: "SUCCESS",
-    },
-    _count: { _all: true },
-  });
+  const grouped = (
+    await getAuthPool().query<{ surface: string; action: string; count: string | number }>(
+      `SELECT
+          "surface",
+          "action",
+          COUNT(*)::int AS "count"
+        FROM "CavAiUsageLog"
+        WHERE "accountId" = $1
+          AND "createdAt" >= $2
+          AND "status" = 'SUCCESS'
+        GROUP BY "surface", "action"`,
+      [s(accountId), monthStart]
+    )
+  ).rows;
 
   let total = 0;
   for (const row of grouped) {
@@ -921,7 +928,7 @@ async function readMonthlyWeightedUsageUnits(accountId: string): Promise<number>
       action: row.action,
     });
     const weight = WEIGHTED_USAGE_UNITS[actionClass];
-    total += Number(row._count._all || 0) * weight;
+    total += Math.max(0, Number(row.count || 0)) * weight;
   }
   return total;
 }

@@ -90,3 +90,26 @@ test("module and AI account gates use authDb instead of prisma account lookups",
   assert.equal(aiGuard.includes("findActiveProjectByIdForAccount"), true);
   assert.equal(authDb.includes("export async function findActiveProjectByIdForAccount"), true);
 });
+
+test("ai hot paths use authDb-backed counters and session persistence on Cloudflare", () => {
+  const aiPolicy = read("src/lib/ai/ai.policy.ts");
+  const aiMemory = read("src/lib/ai/ai.memory.ts");
+
+  assert.equal(aiPolicy.includes('from "@/lib/prisma"'), false);
+  assert.equal(aiPolicy.includes("SELECT COUNT(*)::int AS \"count\""), true);
+  assert.equal(aiPolicy.includes('FROM "CavAiUsageLog"'), true);
+  assert.equal(aiMemory.includes('from "@/lib/authDb"'), true);
+  assert.equal(aiMemory.includes('FROM "CavAiSession"'), true);
+  assert.equal(aiMemory.includes('INSERT INTO "CavAiMessage"'), true);
+  assert.equal(aiMemory.includes('UPDATE "CavAiSession"'), true);
+});
+
+test("cavcode and center assist degrade safely if optional registry or memory writes fail", () => {
+  const aiService = read("src/lib/ai/ai.service.ts");
+  const aiMemory = read("src/lib/ai/ai.memory.ts");
+
+  assert.equal(aiService.includes("resolveInstalledCavenCustomAgentSafe"), true);
+  assert.equal(aiService.includes("resolveInstalledCavCodeActionSafe"), true);
+  assert.equal(aiService.includes("return requested.slice(0, MAX_UPLOADED_WORKSPACE_FILES);"), true);
+  assert.equal(aiMemory.includes("Memory learning must not break live assist flows."), true);
+});
