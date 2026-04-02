@@ -11,13 +11,20 @@ type Queryable = {
 };
 
 export const DEFAULT_SIGNUP_WELCOME_TEMPLATE_ALIAS = "cavbot-sign-up";
+export const DEFAULT_SIGNUP_WELCOME_TEMPLATE_ID = "59f44d4a-f71a-400e-89a2-fd0372b9d725";
+export const DEFAULT_SIGNUP_WELCOME_MAIL_FROM =
+  "Cavendish Pierre-Louis <cavendishpierrelouis@cavbot.io>";
+export const DEFAULT_SIGNUP_WELCOME_REPLY_TO =
+  "CavBot Support <support@cavbot.io>";
+export const DEFAULT_SIGNUP_WELCOME_SUBJECT = "Welcome to CavBot";
 const PROCESSING_STALE_WINDOW_MS = 10 * 60 * 1000;
 
 export type SignupWelcomeSendSource =
   | "register"
   | "google_oauth"
   | "github_oauth"
-  | "backfill";
+  | "backfill"
+  | "adhoc_test";
 
 export type SignupWelcomeRecipient = {
   userId: string;
@@ -27,10 +34,11 @@ export type SignupWelcomeRecipient = {
 
 export type SignupWelcomeMailConfig = {
   apiKey: string;
-  templateRef: string;
-  from: string | null;
-  replyTo: string | null;
-  subject: string | null;
+  templateAlias: string;
+  templateIdFallback: string;
+  from: string;
+  replyTo: string;
+  subject: string;
   staleWindowMs: number;
 };
 
@@ -57,6 +65,7 @@ export type SignupWelcomeSendResult =
       status: "sent";
       resendMessageId: string | null;
       templateRef: string;
+      templateId: string;
     }
   | {
       ok: true;
@@ -102,6 +111,8 @@ type TransportResult =
   | {
       ok: true;
       resendMessageId: string | null;
+      templateRef: string;
+      templateId: string;
     }
   | {
       ok: false;
@@ -114,6 +125,7 @@ export interface SignupWelcomeStore {
     userId: string;
     processingToken: string;
     resendMessageId: string | null;
+    templateRef: string;
   }): Promise<void>;
   markFailed(args: {
     userId: string;
@@ -144,10 +156,11 @@ export function resolveSignupWelcomeMailConfig(
 
   return {
     apiKey: envValue(source, "RESEND_SIGNUP_API_KEY"),
-    templateRef: templateAlias || templateId || DEFAULT_SIGNUP_WELCOME_TEMPLATE_ALIAS,
-    from: envValue(source, "CAVBOT_SIGNUP_MAIL_FROM") || null,
-    replyTo: envValue(source, "CAVBOT_SIGNUP_REPLY_TO") || null,
-    subject: envValue(source, "CAVBOT_SIGNUP_WELCOME_SUBJECT") || null,
+    templateAlias: templateAlias || DEFAULT_SIGNUP_WELCOME_TEMPLATE_ALIAS,
+    templateIdFallback: templateId || DEFAULT_SIGNUP_WELCOME_TEMPLATE_ID,
+    from: envValue(source, "CAVBOT_SIGNUP_MAIL_FROM") || DEFAULT_SIGNUP_WELCOME_MAIL_FROM,
+    replyTo: envValue(source, "CAVBOT_SIGNUP_REPLY_TO") || DEFAULT_SIGNUP_WELCOME_REPLY_TO,
+    subject: envValue(source, "CAVBOT_SIGNUP_WELCOME_SUBJECT") || DEFAULT_SIGNUP_WELCOME_SUBJECT,
     staleWindowMs: PROCESSING_STALE_WINDOW_MS,
   };
 }
@@ -176,36 +189,82 @@ function logSignupWelcome(level: "warn" | "error" | "info", message: string, met
 
 async function deliverSignupWelcomeViaResend(args: TransportArgs): Promise<TransportResult> {
   const resend = new Resend(args.config.apiKey);
+  const attempts: Array<{ templateId: string; templateRef: string; label: string }> = [];
+  const alias = args.config.templateAlias.trim();
+  const fallbackId = args.config.templateIdFallback.trim();
 
-  const response = await resend.emails.send(
-    {
-      to: args.recipient.email,
-      ...(args.config.from ? { from: args.config.from } : {}),
-      ...(args.config.replyTo ? { replyTo: args.config.replyTo } : {}),
-      ...(args.config.subject ? { subject: args.config.subject } : {}),
-      template: {
-        id: args.config.templateRef,
+  if (alias) {
+    try {
+      const template = await resend.templates.get(alias);
+      if (template.data?.id) {
+        attempts.push({
+          templateId: template.data.id,
+          templateRef: alias,
+          label: "alias_lookup",
+        });
+      }
+    } catch {}
+
+    attempts.push({
+      templateId: alias,
+      templateRef: alias,
+      label: "alias_direct",
+    });
+  }
+
+  if (fallbackId) {
+    attempts.push({
+      templateId: fallbackId,
+      templateRef: fallbackId,
+      label: "id_fallback",
+    });
+  }
+
+  const seen = new Set<string>();
+  const candidates = attempts.filter((entry) => {
+    const key = `${entry.templateId}:${entry.templateRef}`;
+    if (!entry.templateId || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const errors: string[] = [];
+
+  for (const candidate of candidates) {
+    const response = await resend.emails.send(
+      {
+        to: args.recipient.email,
+        from: args.config.from,
+        replyTo: args.config.replyTo,
+        subject: args.config.subject,
+        template: {
+          id: candidate.templateId,
+        },
+        tags: [
+          { name: "flow", value: "signup_welcome" },
+          { name: "source", value: args.recipient.source },
+        ],
       },
-      tags: [
-        { name: "flow", value: "signup_welcome" },
-        { name: "source", value: args.recipient.source },
-      ],
-    },
-    {
-      idempotencyKey: args.idempotencyKey,
-    },
-  );
+      {
+        idempotencyKey: args.idempotencyKey,
+      },
+    );
 
-  if (response.error) {
-    return {
-      ok: false,
-      error: `${response.error.name}:${response.error.message}`,
-    };
+    if (!response.error) {
+      return {
+        ok: true,
+        resendMessageId: response.data?.id ?? null,
+        templateRef: candidate.templateRef,
+        templateId: candidate.templateId,
+      };
+    }
+
+    errors.push(`${candidate.label}:${response.error.name}:${response.error.message}`);
   }
 
   return {
-    ok: true,
-    resendMessageId: response.data?.id ?? null,
+    ok: false,
+    error: errors.join(" | ") || "signup_welcome_send_failed",
   };
 }
 
@@ -299,6 +358,7 @@ export function createPgSignupWelcomeStore(queryable: Queryable = getAuthPool())
         `UPDATE "SignupWelcomeEmail"
           SET "status" = 'SENT',
               "sentAt" = COALESCE("sentAt", NOW()),
+              "templateRef" = COALESCE($4, "templateRef"),
               "resendMessageId" = COALESCE($3, "resendMessageId"),
               "failureReason" = NULL,
               "processingToken" = NULL,
@@ -306,7 +366,7 @@ export function createPgSignupWelcomeStore(queryable: Queryable = getAuthPool())
               "updatedAt" = NOW()
           WHERE "userId" = $1
             AND "processingToken" = $2`,
-        [args.userId, args.processingToken, args.resendMessageId],
+        [args.userId, args.processingToken, args.resendMessageId, args.templateRef],
       );
     },
 
@@ -376,7 +436,7 @@ export async function sendSignupWelcomeEmailWithStore(
   const begin = await store.beginAttempt({
     userId: recipient.userId,
     email: recipient.email,
-    templateRef: config.templateRef,
+    templateRef: config.templateAlias || config.templateIdFallback || DEFAULT_SIGNUP_WELCOME_TEMPLATE_ALIAS,
     staleWindowMs: config.staleWindowMs,
   });
 
@@ -435,13 +495,15 @@ export async function sendSignupWelcomeEmailWithStore(
       userId: recipient.userId,
       processingToken: begin.processingToken,
       resendMessageId: delivered.resendMessageId,
+      templateRef: delivered.templateRef,
     });
 
     return {
       ok: true,
       status: "sent",
       resendMessageId: delivered.resendMessageId,
-      templateRef: config.templateRef,
+      templateRef: delivered.templateRef,
+      templateId: delivered.templateId,
     };
   } catch (error) {
     const reason = toFailureReason(error);
@@ -475,6 +537,34 @@ export async function sendSignupWelcomeEmail(
     recipient,
     options,
   );
+}
+
+export async function sendAdHocSignupWelcomeEmail(
+  to: string,
+  options: {
+    config?: SignupWelcomeMailConfig;
+    transport?: (args: TransportArgs) => Promise<TransportResult>;
+  } = {},
+) {
+  const config = options.config || resolveSignupWelcomeMailConfig();
+  const transport = options.transport || deliverSignupWelcomeViaResend;
+
+  if (!config.apiKey) {
+    return {
+      ok: false as const,
+      error: "missing_signup_resend_api_key",
+    };
+  }
+
+  return transport({
+    config,
+    recipient: {
+      userId: `adhoc:${to.toLowerCase()}`,
+      email: to,
+      source: "adhoc_test",
+    },
+    idempotencyKey: `signup-welcome-adhoc:${to.toLowerCase()}`,
+  });
 }
 
 export async function backfillSignupWelcomeEmailsWithStore(

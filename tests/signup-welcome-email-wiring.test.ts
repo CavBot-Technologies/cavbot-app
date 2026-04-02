@@ -4,6 +4,10 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   DEFAULT_SIGNUP_WELCOME_TEMPLATE_ALIAS,
+  DEFAULT_SIGNUP_WELCOME_TEMPLATE_ID,
+  DEFAULT_SIGNUP_WELCOME_MAIL_FROM,
+  DEFAULT_SIGNUP_WELCOME_REPLY_TO,
+  DEFAULT_SIGNUP_WELCOME_SUBJECT,
   backfillSignupWelcomeEmailsWithStore,
   buildSignupWelcomeIdempotencyKey,
   resolveSignupWelcomeMailConfig,
@@ -146,26 +150,42 @@ test("signup welcome config uses the dedicated key and hosted template alias by 
   });
 
   assert.equal(config.apiKey, "signup_key");
-  assert.equal(config.templateRef, DEFAULT_SIGNUP_WELCOME_TEMPLATE_ALIAS);
+  assert.equal(config.templateAlias, DEFAULT_SIGNUP_WELCOME_TEMPLATE_ALIAS);
+  assert.equal(config.templateIdFallback, DEFAULT_SIGNUP_WELCOME_TEMPLATE_ID);
+  assert.equal(config.from, DEFAULT_SIGNUP_WELCOME_MAIL_FROM);
+  assert.equal(config.replyTo, DEFAULT_SIGNUP_WELCOME_REPLY_TO);
+  assert.equal(config.subject, DEFAULT_SIGNUP_WELCOME_SUBJECT);
 });
 
 test("signup welcome config supports a template id when alias is not set", () => {
   const config = resolveSignupWelcomeMailConfig({
     RESEND_SIGNUP_API_KEY: "signup_key",
+    RESEND_SIGNUP_TEMPLATE_ALIAS: "",
     RESEND_SIGNUP_TEMPLATE_ID: "tmpl_123",
   });
 
-  assert.equal(config.templateRef, "tmpl_123");
+  assert.equal(config.templateIdFallback, "tmpl_123");
 });
 
 test("signup welcome send is one-time and uses a stable idempotency key", async () => {
   const store = new InMemorySignupWelcomeStore();
   store.addUser("user_1", "person@example.com");
 
-  const sends: Array<{ templateRef: string; idempotencyKey: string }> = [];
+  const sends: Array<{
+    templateAlias: string;
+    templateIdFallback: string;
+    idempotencyKey: string;
+    from: string;
+    replyTo: string;
+    subject: string;
+  }> = [];
   const config = resolveSignupWelcomeMailConfig({
     RESEND_SIGNUP_API_KEY: "signup_key",
     RESEND_SIGNUP_TEMPLATE_ALIAS: "cavbot-sign-up",
+    RESEND_SIGNUP_TEMPLATE_ID: "tmpl_live",
+    CAVBOT_SIGNUP_MAIL_FROM: DEFAULT_SIGNUP_WELCOME_MAIL_FROM,
+    CAVBOT_SIGNUP_REPLY_TO: DEFAULT_SIGNUP_WELCOME_REPLY_TO,
+    CAVBOT_SIGNUP_WELCOME_SUBJECT: DEFAULT_SIGNUP_WELCOME_SUBJECT,
   });
 
   const transport = async (args: {
@@ -178,12 +198,18 @@ test("signup welcome send is one-time and uses a stable idempotency key", async 
     };
   }) => {
     sends.push({
-      templateRef: args.config.templateRef,
+      templateAlias: args.config.templateAlias,
+      templateIdFallback: args.config.templateIdFallback,
       idempotencyKey: args.idempotencyKey,
+      from: args.config.from,
+      replyTo: args.config.replyTo,
+      subject: args.config.subject,
     });
     return {
       ok: true as const,
       resendMessageId: "email_1",
+      templateRef: "cavbot-sign-up",
+      templateId: "tmpl_live",
     };
   };
 
@@ -213,8 +239,14 @@ test("signup welcome send is one-time and uses a stable idempotency key", async 
   assert.equal(second.status, "skipped");
   assert.equal(second.reason, "already_sent");
   assert.equal(sends.length, 1);
-  assert.equal(sends[0]?.templateRef, "cavbot-sign-up");
+  assert.equal(sends[0]?.templateAlias, "cavbot-sign-up");
+  assert.equal(sends[0]?.templateIdFallback, "tmpl_live");
+  assert.equal(sends[0]?.from, DEFAULT_SIGNUP_WELCOME_MAIL_FROM);
+  assert.equal(sends[0]?.replyTo, DEFAULT_SIGNUP_WELCOME_REPLY_TO);
+  assert.equal(sends[0]?.subject, DEFAULT_SIGNUP_WELCOME_SUBJECT);
   assert.equal(sends[0]?.idempotencyKey, buildSignupWelcomeIdempotencyKey("user_1"));
+  assert.equal(first.templateRef, "cavbot-sign-up");
+  assert.equal(first.templateId, "tmpl_live");
 });
 
 test("failed signup welcome sends can be backfilled once and remain idempotent", async () => {
@@ -237,6 +269,8 @@ test("failed signup welcome sends can be backfilled once and remain idempotent",
     return {
       ok: true as const,
       resendMessageId: "email_retry",
+      templateRef: "cavbot-sign-up",
+      templateId: DEFAULT_SIGNUP_WELCOME_TEMPLATE_ID,
     };
   };
 
@@ -275,6 +309,7 @@ test("register, oauth callbacks, and the backfill runner are wired to the dedica
   const googleRoute = fs.readFileSync(path.join(root, "app/api/auth/oauth/google/callback/route.ts"), "utf8");
   const githubRoute = fs.readFileSync(path.join(root, "app/api/auth/oauth/github/callback/route.ts"), "utf8");
   const backfillScript = fs.readFileSync(path.join(root, "scripts/backfill-signup-welcome-email.ts"), "utf8");
+  const testSendScript = fs.readFileSync(path.join(root, "scripts/send-signup-welcome-email.ts"), "utf8");
 
   assert.equal(registerRoute.includes('sendSignupWelcomeEmail({'), true);
   assert.equal(registerRoute.includes('source: "register"'), true);
@@ -288,4 +323,7 @@ test("register, oauth callbacks, and the backfill runner are wired to the dedica
 
   assert.equal(backfillScript.includes("backfillSignupWelcomeEmails"), true);
   assert.equal(backfillScript.includes('"dry-run"'), true);
+  assert.equal(testSendScript.includes("sendAdHocSignupWelcomeEmail"), true);
+  assert.equal(testSendScript.includes('readArg(process.argv.slice(2), "to")'), true);
+  assert.equal(testSendScript.includes("Missing --to email."), true);
 });

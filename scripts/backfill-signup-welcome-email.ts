@@ -3,6 +3,7 @@ import { backfillSignupWelcomeEmails } from "../lib/signupWelcomeEmail.server";
 
 loadEnv({ path: ".env" });
 loadEnv({ path: ".env.local", override: true });
+loadEnv({ path: ".env.production.local", override: true });
 
 type ParsedArgs = {
   limit: number;
