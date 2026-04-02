@@ -1,7 +1,7 @@
 // lib/apiAuth.ts
 import "server-only";
 
-import { pbkdf2 as nodePbkdf2, webcrypto as nodeCrypto } from "crypto";
+import { createHmac as nodeCreateHmac, pbkdf2 as nodePbkdf2, webcrypto as nodeCrypto } from "crypto";
 import {
   findMembershipsForUser,
   findUserAuth,
@@ -75,6 +75,7 @@ export function isApiAuthError(e: unknown): e is ApiAuthError {
 }
 
 const SESSION_TTL_SECONDS = 60 * 60 * 8; // 8 hours
+const CLOUDFLARE_PBKDF2_ITER_LIMIT = 100_000;
 
 function nowSec() {
   return Math.floor(Date.now() / 1000);
@@ -83,6 +84,18 @@ function nowSec() {
 function env(name: string) {
   const envRecord = process.env as Record<string, string | undefined>;
   return String(envRecord[name] || "").trim();
+}
+
+function isWorkerdRuntime() {
+  const versions = process.versions as NodeJS.ProcessVersions & { workerd?: string };
+  return Boolean(versions.workerd) || env("CF_PAGES") === "1";
+}
+
+function resolvePasswordHashIterations(requestedIters: number) {
+  if (isWorkerdRuntime() && requestedIters > CLOUDFLARE_PBKDF2_ITER_LIMIT) {
+    return CLOUDFLARE_PBKDF2_ITER_LIMIT;
+  }
+  return requestedIters;
 }
 
 const SESSION_COOKIE = env("CAVBOT_SESSION_COOKIE_NAME") || "cavbot_session";
@@ -316,7 +329,8 @@ export function requireSystemToken(req: Request) {
 
 export async function hashPassword(password: string) {
   const algo = "pbkdf2_sha256";
-  const iters = Number(env("CAVBOT_PBKDF2_ITERS") || 210_000);
+  const requestedIters = Number(env("CAVBOT_PBKDF2_ITERS") || 210_000);
+  const iters = resolvePasswordHashIterations(requestedIters);
 
   const c = getCrypto();
   const salt = c.getRandomValues(new Uint8Array(16));
@@ -352,7 +366,11 @@ async function pbkdf2Sha256Bits(password: string, salt: Uint8Array, iters: numbe
     });
     return derived.buffer.slice(derived.byteOffset, derived.byteOffset + derived.byteLength);
   } catch {
-    // Fall back to WebCrypto when Node PBKDF2 is unavailable.
+    // Fall back when Node PBKDF2 is unavailable or runtime-limited.
+  }
+
+  if (iters > CLOUDFLARE_PBKDF2_ITER_LIMIT) {
+    return pbkdf2Sha256BitsWithHmac(password, salt, iters, byteLen);
   }
 
   const c = getCrypto();
@@ -376,6 +394,36 @@ async function pbkdf2Sha256Bits(password: string, salt: Uint8Array, iters: numbe
   } as Pbkdf2Params;
 
   return await c.subtle.deriveBits(algo, key, byteLen * 8);
+}
+
+function pbkdf2Sha256BitsWithHmac(password: string, salt: Uint8Array, iters: number, byteLen: number) {
+  const blockSize = 32;
+  const blockCount = Math.ceil(byteLen / blockSize);
+  const derived = new Uint8Array(blockCount * blockSize);
+  const blockIndex = Buffer.alloc(4);
+
+  for (let block = 1; block <= blockCount; block++) {
+    blockIndex.writeUInt32BE(block, 0);
+
+    let u = Uint8Array.from(
+      nodeCreateHmac("sha256", password)
+        .update(Buffer.from(salt))
+        .update(blockIndex)
+        .digest()
+    );
+    const t = Uint8Array.from(u);
+
+    for (let iteration = 1; iteration < iters; iteration++) {
+      u = Uint8Array.from(nodeCreateHmac("sha256", password).update(u).digest());
+      for (let i = 0; i < t.length; i++) {
+        t[i] ^= u[i];
+      }
+    }
+
+    derived.set(t, (block - 1) * blockSize);
+  }
+
+  return derived.slice(0, byteLen).buffer;
 }
 
 /* ==========================
