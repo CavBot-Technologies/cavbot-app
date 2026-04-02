@@ -4,7 +4,6 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { createHash, createHmac } from "crypto";
 
-import { prisma } from "@/lib/prisma";
 import {
   assertWriteOrigin,
   createUserSession,
@@ -12,6 +11,16 @@ import {
   sessionCookieOptions,
 } from "@/lib/apiAuth";
 import { auditLogWrite } from "@/lib/audit";
+import {
+  findAuthTokenByHash,
+  findFirstProjectIdByAccount,
+  findMembershipsForUser,
+  findUserAuth,
+  findUserById,
+  getAuthPool,
+  markAuthTokenUsed,
+  pickPrimaryMembership,
+} from "@/lib/authDb";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -110,12 +119,6 @@ function verifyTotp(code: string, secretB32: string): boolean {
    ========================= */
 
 type Role = "OWNER" | "ADMIN" | "MEMBER";
-function roleRank(role: Role) {
-  if (role === "OWNER") return 3;
-  if (role === "ADMIN") return 2;
-  return 1;
-}
-
 function normalizeRole(value: string | null | undefined): Role {
   const normalized = String(value || "").toUpperCase();
   if (normalized === "OWNER") return "OWNER";
@@ -134,6 +137,7 @@ type AuthTokenMeta = {
 
 export async function POST(req: NextRequest) {
   try {
+    const pool = getAuthPool();
     assertWriteOrigin(req);
 
     const rawBody = await readSanitizedJson(req, null);
@@ -149,12 +153,11 @@ export async function POST(req: NextRequest) {
 
     const tokenHash = sha256Hex(challengeId);
 
-    const token = await prisma.authToken.findFirst({
-      where: { tokenHash, type: "EMAIL_RECOVERY" },
-      select: { id: true, userId: true, expiresAt: true, usedAt: true, metaJson: true },
-    });
+    const token = await findAuthTokenByHash(pool, tokenHash);
 
-    if (!token) return json({ ok: false, error: "CHALLENGE_NOT_FOUND", message: "Challenge not found." }, 404);
+    if (!token || token.type !== "EMAIL_RECOVERY") {
+      return json({ ok: false, error: "CHALLENGE_NOT_FOUND", message: "Challenge not found." }, 404);
+    }
     if (token.usedAt) return json({ ok: false, error: "CHALLENGE_USED", message: "This challenge was already used." }, 409);
     if (token.expiresAt && token.expiresAt.getTime() < Date.now()) {
       return json({ ok: false, error: "CHALLENGE_EXPIRED", message: "This code expired. Resend a new one." }, 410);
@@ -179,10 +182,7 @@ export async function POST(req: NextRequest) {
 
       // NOTE: This requires you to have stored a Base32 secret on UserAuth.
       // Field name expected: totpSecret (String?)
-      const auth = await prisma.userAuth.findUnique({
-        where: { userId: token.userId },
-      select: { totpSecret: true },
-    });
+      const auth = await findUserAuth(pool, token.userId);
 
       const secret = String(auth?.totpSecret || "").trim();
       if (!secret) return json({ ok: false, error: "2FA_NOT_CONFIGURED", message: "Authenticator 2FA is not configured." }, 409);
@@ -190,18 +190,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Resolve tenant context
-    const user = await prisma.user.findUnique({
-      where: { id: token.userId },
-      include: { memberships: true },
-    });
+    const user = await findUserById(pool, token.userId);
+    const memberships = user ? await findMembershipsForUser(pool, user.id) : [];
 
-    if (!user?.memberships?.length) return json({ ok: false, error: "NO_MEMBERSHIP", message: "No workspace membership found." }, 403);
+    if (!user || !memberships.length) {
+      return json({ ok: false, error: "NO_MEMBERSHIP", message: "No workspace membership found." }, 403);
+    }
 
-    const active = [...user.memberships].sort((a, b) => {
-      const rr = roleRank(normalizeRole(b.role)) - roleRank(normalizeRole(a.role));
-      if (rr !== 0) return rr;
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    })[0];
+    const active = pickPrimaryMembership(memberships);
+    if (!active) return json({ ok: false, error: "NO_MEMBERSHIP", message: "No workspace membership found." }, 403);
 
     // Mint real session cookie
     const memberRole = normalizeRole(active.role);
@@ -221,11 +218,7 @@ export async function POST(req: NextRequest) {
     res.cookies.set(name, sessionToken, cookieOpts);
 
     // pointer cookies
-    const firstProject = await prisma.project.findFirst({
-      where: { accountId: active.accountId, isActive: true },
-      orderBy: { createdAt: "asc" },
-      select: { id: true },
-    });
+    const firstProject = await findFirstProjectIdByAccount(pool, active.accountId);
 
     if (firstProject?.id) {
       const pointerCookieOpts = {
@@ -243,7 +236,7 @@ export async function POST(req: NextRequest) {
     const geo = readCloudflareGeo(req);
     const loc = String(meta.geoLabel || meta.location || geo.label || "").trim() || null;
 
-    await prisma.authToken.update({ where: { id: token.id }, data: { usedAt: new Date() } });
+    await markAuthTokenUsed(pool, token.id);
 
     await auditLogWrite({
       request: req,

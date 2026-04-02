@@ -2,11 +2,16 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { createHash, randomInt } from "crypto";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { assertWriteOrigin } from "@/lib/apiAuth";
 import { auditLogWrite } from "@/lib/audit";
+import {
+  findAuthTokenByHash,
+  findUserById,
+  getAuthPool,
+  updateAuthTokenRecord,
+} from "@/lib/authDb";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -56,6 +61,7 @@ function readCloudflareGeo(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const pool = getAuthPool();
     assertWriteOrigin(req);
 
     const body = (await readSanitizedJson(req, null)) as null | {
@@ -71,12 +77,11 @@ export async function POST(req: NextRequest) {
 
     const tokenHash = sha256Hex(challengeId);
 
-    const row = await prisma.authToken.findFirst({
-      where: { tokenHash, type: "EMAIL_RECOVERY" },
-      select: { id: true, userId: true, metaJson: true, usedAt: true, expiresAt: true },
-    });
+    const row = await findAuthTokenByHash(pool, tokenHash);
 
-    if (!row) return json({ ok: false, error: "CHALLENGE_NOT_FOUND", message: "Challenge not found." }, 404);
+    if (!row || row.type !== "EMAIL_RECOVERY") {
+      return json({ ok: false, error: "CHALLENGE_NOT_FOUND", message: "Challenge not found." }, 404);
+    }
     if (row.usedAt) return json({ ok: false, error: "CHALLENGE_USED", message: "This challenge was already used." }, 409);
 
     const meta = (row.metaJson || {}) as AuthTokenMeta;
@@ -90,7 +95,7 @@ export async function POST(req: NextRequest) {
       return json({ ok: false, error: "TOO_FAST", message: "Please wait a moment, then resend." }, 429);
     }
 
-    const user = await prisma.user.findUnique({ where: { id: row.userId }, select: { email: true } });
+    const user = await findUserById(pool, row.userId);
     if (!user?.email) return json({ ok: false, error: "USER_NOT_FOUND", message: "User not found." }, 404);
 
     const code = newEmailCode();
@@ -99,16 +104,14 @@ export async function POST(req: NextRequest) {
 
     const geo = readCloudflareGeo(req);
 
-    await prisma.authToken.update({
-      where: { id: row.id },
-      data: {
-        expiresAt,
-        metaJson: {
-          ...(meta || {}),
-          codeHash,
-          lastSentAt: new Date().toISOString(),
-          geoLabel: meta?.geoLabel || geo.label || null,
-        },
+    await updateAuthTokenRecord(pool, {
+      id: row.id,
+      expiresAt,
+      metaJson: {
+        ...(meta || {}),
+        codeHash,
+        lastSentAt: new Date().toISOString(),
+        geoLabel: meta?.geoLabel || geo.label || null,
       },
     });
 

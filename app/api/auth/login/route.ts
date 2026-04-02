@@ -1,6 +1,5 @@
 // app/api/auth/login/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import {
   assertWriteOrigin,
   createUserSession,
@@ -8,6 +7,17 @@ import {
   sessionCookieOptions,
   verifyPassword,
 } from "@/lib/apiAuth";
+import {
+  createAuthTokenRecord,
+  findFirstProjectIdByAccount,
+  findMembershipsForUser,
+  findUserAuth,
+  findUserByEmail,
+  findUserByUsername,
+  getAuthPool,
+  pickPrimaryMembership,
+  touchUserLastLogin,
+} from "@/lib/authDb";
 
 import { auditLogWrite } from "@/lib/audit";
 import {
@@ -100,12 +110,6 @@ async function readBody(req: Request): Promise<LoginBody> {
 
 
 type Role = "OWNER" | "ADMIN" | "MEMBER";
-function roleRank(role: Role) {
-  if (role === "OWNER") return 3;
-  if (role === "ADMIN") return 2;
-  return 1;
-}
-
 function normalizeRole(value: string | null | undefined): Role {
   const normalized = String(value || "").toUpperCase();
   if (normalized === "OWNER") return "OWNER";
@@ -204,20 +208,18 @@ async function createEmail2faChallenge(args: {
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
 
 
-  await prisma.authToken.create({
-    data: {
-      userId: args.userId,
-      type: "EMAIL_RECOVERY", // reuse existing enum to avoid schema churn
-      tokenHash: sha256Hex(challengeId),
-      expiresAt,
-      metaJson: {
-        purpose: "2fa_email",
-        codeHash,
-        accountId: args.accountId,
-        uaHash,
-        ipHash,
-        geoLabel: args.geoLabel || null,
-      },
+  await createAuthTokenRecord(getAuthPool(), {
+    userId: args.userId,
+    type: "EMAIL_RECOVERY",
+    tokenHash: sha256Hex(challengeId),
+    expiresAt,
+    metaJson: {
+      purpose: "2fa_email",
+      codeHash,
+      accountId: args.accountId,
+      uaHash,
+      ipHash,
+      geoLabel: args.geoLabel || null,
     },
   });
 
@@ -258,6 +260,7 @@ async function createEmail2faChallenge(args: {
 
 export async function POST(req: Request) {
   try {
+    const pool = getAuthPool();
     assertWriteOrigin(req);
 
 
@@ -293,36 +296,26 @@ export async function POST(req: Request) {
     if ((!email && !username) || !password) return reject({ ok: false, error: "missing_credentials" }, 400);
 
 
-    const user = email
-      ? await prisma.user.findUnique({
-        where: { email },
-        include: { auth: true, memberships: true },
-      })
-      : await prisma.user.findUnique({
-        where: { username },
-        include: { auth: true, memberships: true },
-      });
+    const user = email ? await findUserByEmail(pool, email) : await findUserByUsername(pool, username);
+    const userAuth = user ? await findUserAuth(pool, user.id) : null;
+    const memberships = user ? await findMembershipsForUser(pool, user.id) : [];
 
 
-    if (!user || !user.auth) return reject({ ok: false, error: "invalid_credentials" }, 401);
+    if (!user || !userAuth) return reject({ ok: false, error: "invalid_credentials" }, 401);
 
     const activeCandidate =
-      user.memberships?.length
-        ? [...user.memberships].sort((a, b) => {
-            const rr = roleRank(normalizeRole(b.role)) - roleRank(normalizeRole(a.role));
-            if (rr !== 0) return rr;
-            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-          })[0]
+      memberships.length
+        ? pickPrimaryMembership(memberships)
         : null;
     const geo = readCloudflareGeo(req);
 
 
-    const salt = String(user.auth.passwordSalt || "");
-    const hash = String(user.auth.passwordHash || "");
+    const salt = String(userAuth.passwordSalt || "");
+    const hash = String(userAuth.passwordHash || "");
     if (!salt || !hash) return json({ ok: false, error: "auth_record_invalid" }, 500);
 
 
-    const itersRaw = user.auth.passwordIters;
+    const itersRaw = userAuth.passwordIters;
     const itersCandidate = Number(itersRaw);
     const iters =
       Number.isFinite(itersCandidate) && itersCandidate > 0 ? itersCandidate : DEFAULT_PBKDF2_ITERS;
@@ -351,10 +344,10 @@ export async function POST(req: Request) {
     }
 
 
-    if (!user.memberships?.length) return reject({ ok: false, error: "no_account_membership" }, 403);
+    if (!memberships.length) return reject({ ok: false, error: "no_account_membership" }, 403);
 
 
-    const active = activeCandidate ?? user.memberships[0];
+    const active = activeCandidate ?? memberships[0];
 
 
     await auditLogWrite({
@@ -376,8 +369,8 @@ export async function POST(req: Request) {
 
 
     // If 2FA enabled -> Stage A returns challengeRequired (no session cookie)
-    const email2fa = Boolean(user.auth.twoFactorEmailEnabled);
-    const app2fa = Boolean(user.auth.twoFactorAppEnabled);
+    const email2fa = Boolean(userAuth.twoFactorEmailEnabled);
+    const app2fa = Boolean(userAuth.twoFactorAppEnabled);
 
 
   if (email2fa || app2fa) {
@@ -418,16 +411,14 @@ export async function POST(req: Request) {
     const challengeId = newChallengeId();
 
 
-    await prisma.authToken.create({
-      data: {
-        userId: user.id,
-        type: "EMAIL_RECOVERY", // reuse enum for now
-        tokenHash: sha256Hex(challengeId),
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-        metaJson: {
-          purpose: "2fa_app",
-          accountId: active.accountId,
-        },
+    await createAuthTokenRecord(pool, {
+      userId: user.id,
+      type: "EMAIL_RECOVERY",
+      tokenHash: sha256Hex(challengeId),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      metaJson: {
+        purpose: "2fa_app",
+        accountId: active.accountId,
       },
     });
 
@@ -455,7 +446,7 @@ export async function POST(req: Request) {
     });
 
 
-    prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }).catch(() => {});
+    touchUserLastLogin(pool, user.id).catch(() => {});
 
 
     const res = json({ ok: true, accountId: active.accountId, memberRole }, 200);
@@ -469,11 +460,7 @@ export async function POST(req: Request) {
     res.cookies.set(name, token, cookieOpts);
 
 
-    const firstProject = await prisma.project.findFirst({
-      where: { accountId: active.accountId, isActive: true },
-      orderBy: { createdAt: "asc" },
-      select: { id: true },
-    });
+    const firstProject = await findFirstProjectIdByAccount(pool, active.accountId);
 
 
     if (firstProject?.id) {

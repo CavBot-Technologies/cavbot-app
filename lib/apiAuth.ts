@@ -2,7 +2,13 @@
 import "server-only";
 
 import { webcrypto as nodeCrypto } from "crypto";
-import { prisma } from "@/lib/prisma";
+import {
+  findMembershipsForUser,
+  findUserAuth,
+  getAuthPool,
+  pickPrimaryMembership,
+  userHasOAuthIdentity,
+} from "@/lib/authDb";
 
 /**
  * CavBot Auth Model (Multi-tenant)
@@ -514,29 +520,16 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
   // DB-backed session invalidation for user sessions
   if (sess.systemRole === "user" && sess.sub && sess.sub !== "system") {
     const userId = String(sess.sub);
+    const pool = getAuthPool();
     if (!sess.accountId || !sess.memberRole) {
       try {
-        const memberships = await prisma.membership.findMany({
-          where: { userId },
-          select: { accountId: true, role: true, createdAt: true },
-        });
-        const roleRank = (role: string) => {
-          const normalized = String(role || "").toUpperCase();
-          if (normalized === "OWNER") return 3;
-          if (normalized === "ADMIN") return 2;
-          return 1;
-        };
-        const active = [...memberships].sort((a, b) => {
-          const rankDiff = roleRank(String(b.role)) - roleRank(String(a.role));
-          if (rankDiff !== 0) return rankDiff;
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        })[0];
+        const memberships = await findMembershipsForUser(pool, userId);
+        const active = pickPrimaryMembership(memberships);
 
         if (!active?.accountId) throw new ApiAuthError("UNAUTHORIZED", 401);
 
         sess.accountId = String(active.accountId);
-        const role = String(active.role || "").toUpperCase();
-        sess.memberRole = role === "OWNER" || role === "ADMIN" ? role : "MEMBER";
+        sess.memberRole = active.role;
       } catch {
         if (process.env.NODE_ENV !== "production") return sess;
         throw new ApiAuthError("UNAUTHORIZED", 401);
@@ -546,10 +539,7 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
     // Requires UserAuth.sessionVersion. In dev/bootstrap, schema may lag; don't brick the app.
     let auth: { sessionVersion: number | null } | null = null;
     try {
-      auth = await prisma.userAuth.findUnique({
-        where: { userId },
-        select: { sessionVersion: true },
-      });
+      auth = await findUserAuth(pool, userId);
     } catch {
       if (process.env.NODE_ENV !== "production") {
         return sess;
@@ -561,11 +551,7 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
       // OAuth-only users may not have a UserAuth row yet; allow signed session tokens
       // for those identities so protected APIs do not hard-fail.
       try {
-        const oauthIdentity = await prisma.oAuthIdentity.findFirst({
-          where: { userId },
-          select: { id: true },
-        });
-        if (oauthIdentity?.id) return sess;
+        if (await userHasOAuthIdentity(pool, userId)) return sess;
       } catch {
         if (process.env.NODE_ENV !== "production") return sess;
       }

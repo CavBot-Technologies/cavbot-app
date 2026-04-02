@@ -3,7 +3,6 @@ import "server-only";
 
 
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import {
   createSystemSession,
   createUserSession,
@@ -13,6 +12,13 @@ import {
   sessionCookieOptions,
 } from "@/lib/apiAuth";
 import type { CavbotSession } from "@/lib/apiAuth";
+import {
+  findMembershipsForUser,
+  findSessionMembership,
+  findUserByEmail,
+  getAuthPool,
+  pickPrimaryMembership,
+} from "@/lib/authDb";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
 
 
@@ -45,12 +51,6 @@ function clearSessionCookie(req: Request, res: NextResponse) {
 
 
 type Role = "OWNER" | "ADMIN" | "MEMBER";
-function roleRank(role: Role) {
-  if (role === "OWNER") return 3;
-  if (role === "ADMIN") return 2;
-  return 1;
-}
-
 function normalizeRole(value: string | null | undefined): Role {
   const normalized = String(value || "").toUpperCase();
   if (normalized === "OWNER") return "OWNER";
@@ -195,13 +195,7 @@ export async function GET(req: Request) {
 
 
     // Validate membership still exists (prevents stale cookies causing loops)
-    const membership = await prisma.membership.findUnique({
-      where: { accountId_userId: { accountId, userId } },
-      include: {
-        user: { select: { id: true, email: true, displayName: true } },
-        account: { select: { id: true, slug: true, tier: true, name: true } },
-      },
-    });
+    const membership = await findSessionMembership(getAuthPool(), userId, accountId);
 
 
     if (!membership) {
@@ -218,13 +212,18 @@ export async function GET(req: Request) {
         authed: true,
         mode: "user",
         session: {
-          userId: membership.user.id,
-          email: membership.user.email,
-          displayName: membership.user.displayName,
-          accountId: membership.account.id,
+          userId: membership.userId,
+          email: membership.userEmail,
+          displayName: membership.userDisplayName,
+          accountId: membership.accountId,
           memberRole: membership.role,
         },
-        account: membership.account,
+        account: {
+          id: membership.accountId,
+          slug: membership.accountSlug,
+          tier: membership.accountTier,
+          name: membership.accountName,
+        },
         client,
       },
       200
@@ -273,32 +272,28 @@ export async function POST(req: Request) {
     }
 
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-      include: { memberships: true },
-    });
+    const pool = getAuthPool();
+    const user = await findUserByEmail(pool, email);
+    const memberships = user ? await findMembershipsForUser(pool, user.id) : [];
 
 
-    if (!user?.memberships?.length) {
+    if (!user || !memberships.length) {
       return json({ ok: false, error: "user_not_found_or_no_membership" }, 404);
     }
 
 
-    let active = null as null | (typeof user.memberships)[number];
+    let active = null as null | (typeof memberships)[number];
 
 
     if (requestedAccountId) {
-      active = user.memberships.find((m) => String(m.accountId) === requestedAccountId) || null;
+      active = memberships.find((m) => String(m.accountId) === requestedAccountId) || null;
       if (!active) return json({ ok: false, error: "not_a_member_of_account" }, 403);
     } else {
-      // Choose highest role deterministically, then oldest membership
-      active = [...user.memberships].sort((a, b) => {
-        const rr = roleRank(normalizeRole(b.role)) - roleRank(normalizeRole(a.role));
-        if (rr !== 0) return rr;
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      })[0];
+      active = pickPrimaryMembership(memberships);
     }
 
+
+    if (!active) return json({ ok: false, error: "user_not_found_or_no_membership" }, 404);
 
     const memberRole = normalizeRole(active.role);
     const token = await createUserSession({

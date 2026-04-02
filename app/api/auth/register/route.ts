@@ -1,6 +1,5 @@
 // app/api/auth/register/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { isReservedUsername, isValidUsername, normalizeUsername } from "@/lib/username";
 import {
@@ -20,6 +19,15 @@ import {
   recordVerifyActionFailure,
   recordVerifyActionSuccess,
 } from "@/lib/auth/cavbotVerify";
+import {
+  findUserByEmail,
+  findUserByUsername,
+  getAuthPool,
+  isPgUniqueViolation,
+  newDbId,
+  pgUniqueViolationMentions,
+  withAuthTransaction,
+} from "@/lib/authDb";
 
 import { createHash, randomBytes } from "crypto";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
@@ -140,27 +148,26 @@ async function readBody(req: Request): Promise<RegisterBody> {
   };
 }
 
-async function findAvailableAccountSlug(requested: string) {
+type Queryable = {
+  query: <T extends Record<string, unknown> = Record<string, unknown>>(
+    text: string,
+    values?: unknown[],
+  ) => Promise<{ rows: T[] }>;
+};
+
+async function findAvailableAccountSlug(queryable: Queryable, requested: string) {
   let slug = requested;
 
   for (let i = 0; i < 10; i++) {
-    const exists = await prisma.account.findUnique({ where: { slug } });
-    if (!exists) return slug;
+    const exists = await queryable.query<{ slug: string }>(
+      `SELECT "slug" FROM "Account" WHERE "slug" = $1 LIMIT 1`,
+      [slug],
+    );
+    if (!exists.rows[0]) return slug;
     slug = `${requested}-${randomToken(3)}`;
   }
 
   return `${requested}-${randomToken(6)}`;
-}
-
-type PrismaUniqueError = {
-  code?: string;
-  meta?: {
-    target?: string | string[];
-  };
-};
-
-function isPrismaUniqueError(error: unknown): error is PrismaUniqueError {
-  return Boolean(error && typeof error === "object" && "code" in error);
 }
 
 /* =========================
@@ -191,6 +198,7 @@ function readCloudflareGeo(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const pool = getAuthPool();
     assertWriteOrigin(req);
 
     if (env("CAVBOT_PUBLIC_SIGNUP") !== "1") {
@@ -247,10 +255,10 @@ export async function POST(req: Request) {
       return reject({ ok: false, error: "weak_password", message: "Use 10+ characters." }, 400);
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const existingUser = await findUserByEmail(pool, email);
     if (existingUser) return reject({ ok: false, error: "email_in_use" }, 409);
 
-    const existingUsername = await prisma.user.findUnique({ where: { username: usernameNorm } });
+    const existingUsername = await findUserByUsername(pool, usernameNorm);
     if (existingUsername) return reject({ ok: false, error: "username_in_use" }, 409);
 
     const displayName = displayNameRaw && displayNameRaw.length > 64 ? displayNameRaw.slice(0, 64) : displayNameRaw;
@@ -263,7 +271,7 @@ export async function POST(req: Request) {
     const requestedSlug =
       body?.accountSlug != null && String(body.accountSlug).trim() ? toSlug(body.accountSlug) : toSlug(accountName);
 
-    const accountSlug = await findAvailableAccountSlug(requestedSlug);
+    const accountSlug = await findAvailableAccountSlug(pool, requestedSlug);
 
     const pass = await hashPassword(password);
 
@@ -278,95 +286,114 @@ export async function POST(req: Request) {
     const geo = readCloudflareGeo(req);
 
       try {
-        const result = await prisma.$transaction(async (tx) => {
-        const username = usernameNorm;
+        const result = await withAuthTransaction(async (tx) => {
+          const username = usernameNorm;
+          const userId = newDbId();
+          const accountId = newDbId();
 
-        const user = await tx.user.create({
-          data: {
-            email,
-            username,
-            displayName: displayName || undefined,
-            lastLoginAt: now,
-          },
+          await tx.query(
+            `INSERT INTO "User" (
+                "id",
+                "email",
+                "username",
+                "displayName",
+                "lastLoginAt",
+                "updatedAt"
+              ) VALUES ($1, $2, $3, $4, $5, NOW())`,
+            [userId, email, username, displayName || null, now],
+          );
+
+          await tx.query(
+            `INSERT INTO "UserAuth" (
+                "userId",
+                "passwordAlgo",
+                "passwordIters",
+                "passwordSalt",
+                "passwordHash",
+                "updatedAt"
+              ) VALUES ($1, $2, $3, $4, $5, NOW())`,
+            [userId, pass.algo, pass.iters, pass.salt, pass.hash],
+          );
+
+          await tx.query(
+            `INSERT INTO "Account" (
+                "id",
+                "name",
+                "slug",
+                "tier",
+                "trialSeatActive",
+                "trialStartedAt",
+                "trialEndsAt",
+                "trialEverUsed",
+                "updatedAt"
+              ) VALUES ($1, $2, $3, 'FREE'::"PlanTier", true, $4, $5, true, NOW())`,
+            [accountId, accountName, accountSlug, now, trialEndsAt],
+          );
+
+          await tx.query(
+            `INSERT INTO "Membership" (
+                "id",
+                "accountId",
+                "userId",
+                "role"
+              ) VALUES ($1, $2, $3, 'OWNER'::"MemberRole")`,
+            [newDbId(), accountId, userId],
+          );
+
+          await tx.query(
+            `INSERT INTO "Subscription" (
+                "id",
+                "accountId",
+                "status",
+                "tier",
+                "currentPeriodStart",
+                "currentPeriodEnd",
+                "updatedAt"
+              ) VALUES ($1, $2, 'TRIALING'::"SubscriptionStatus", 'FREE'::"PlanTier", $3, $4, NOW())`,
+            [newDbId(), accountId, now, trialEndsAt],
+          );
+
+          const projectInsert = await tx.query<{ id: number; slug: string }>(
+            `INSERT INTO "Project" (
+                "accountId",
+                "name",
+                "slug",
+                "serverKeyHash",
+                "serverKeyLast4",
+                "isActive",
+                "updatedAt"
+              ) VALUES ($1, $2, 'primary', $3, $4, true, NOW())
+              RETURNING "id", "slug"`,
+            [accountId, "Primary Project", serverKeyHash, serverKeyLast4],
+          );
+
+          const project = {
+            id: Number(projectInsert.rows[0]?.id || 0),
+            slug: String(projectInsert.rows[0]?.slug || "primary"),
+          };
+
+          await tx.query(
+            `INSERT INTO "ProjectGuardrails" (
+                "projectId",
+                "updatedAt"
+              ) VALUES ($1, NOW())`,
+            [project.id],
+          );
+
+          await tx.query(
+            `INSERT INTO "ProjectGeoPolicy" (
+                "projectId",
+                "updatedAt"
+              ) VALUES ($1, NOW())`,
+            [project.id],
+          );
+
+          return {
+            user: { id: userId, email, username },
+            account: { id: accountId, slug: accountSlug },
+            project,
+          };
         });
-
-        await tx.userAuth.create({
-          data: {
-            userId: user.id,
-            passwordAlgo: pass.algo,
-            passwordIters: pass.iters,
-            passwordSalt: pass.salt,
-            passwordHash: pass.hash,
-          },
-        });
-
-        const account = await tx.account.create({
-          data: {
-            name: accountName,
-            slug: accountSlug,
-            tier: "FREE",
-            trialSeatActive: true,
-            trialStartedAt: now,
-            trialEndsAt,
-            trialEverUsed: true,
-          },
-        });
-
-        await tx.membership.create({
-          data: {
-            accountId: account.id,
-            userId: user.id,
-            role: "OWNER",
-          },
-        });
-
-        await tx.subscription.create({
-          data: {
-            accountId: account.id,
-            status: "TRIALING",
-            tier: "FREE",
-            currentPeriodStart: now,
-            currentPeriodEnd: trialEndsAt,
-          },
-        });
-
-        const project = await tx.project.create({
-          data: {
-            accountId: account.id,
-            name: "Primary Project",
-            slug: "primary",
-            serverKeyHash,
-            serverKeyLast4,
-            isActive: true,
-          },
-        });
-
-        await tx.projectGuardrails.create({
-          data: {
-            projectId: project.id,
-            blockUnknownOrigins: true,
-            enforceAllowlist: true,
-            alertOn404Spike: true,
-            alertOnJsSpike: true,
-            strictDeletion: true,
-          },
-        });
-
-        await tx.projectGeoPolicy.create({
-          data: {
-            projectId: project.id,
-            enabled: true,
-            captureLevel: "COUNTRY",
-            storeContinent: true,
-            storeCountry: true,
-            storeSubdivision: false,
-            storeCity: false,
-            includeInDashboard: true,
-          },
-        });
-
-      return { user, account, project };
-    });
 
     if (result.account.id) {
       await auditLogWrite({
@@ -447,13 +474,10 @@ export async function POST(req: Request) {
       recordVerifyActionSuccess(req, { actionType: "signup", sessionIdHint: verifySessionHint });
       return res;
       } catch (error) {
-        if (isPrismaUniqueError(error) && error.code === "P2002") {
-          const target = Array.isArray(error.meta?.target)
-            ? error.meta.target.join(",")
-            : String(error.meta?.target || "");
-          if (target.includes("email")) return reject({ ok: false, error: "email_in_use" }, 409);
-          if (target.includes("username")) return reject({ ok: false, error: "username_in_use" }, 409);
-          if (target.includes("slug")) return reject({ ok: false, error: "account_slug_in_use" }, 409);
+        if (isPgUniqueViolation(error)) {
+          if (pgUniqueViolationMentions(error, "email")) return reject({ ok: false, error: "email_in_use" }, 409);
+          if (pgUniqueViolationMentions(error, "username")) return reject({ ok: false, error: "username_in_use" }, 409);
+          if (pgUniqueViolationMentions(error, "slug")) return reject({ ok: false, error: "account_slug_in_use" }, 409);
           return reject({ ok: false, error: "conflict" }, 409);
         }
         throw error;

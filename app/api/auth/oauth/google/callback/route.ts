@@ -43,6 +43,10 @@ function appBase(req: NextRequest) {
   return req.nextUrl.origin.replace(/\/+$/, "");
 }
 
+function normalizeMode(mode: string | null | undefined) {
+  return mode === "login" ? "login" : "signup";
+}
+
 function withNoStore(res: NextResponse) {
   for (const [k, v] of Object.entries(NO_STORE_HEADERS)) res.headers.set(k, v);
   return res;
@@ -163,12 +167,14 @@ export async function GET(req: NextRequest) {
 
     const cookieState = req.cookies.get("cb_google_oauth_state")?.value || "";
     const next = req.cookies.get("cb_google_oauth_next")?.value || "/";
+    const mode = normalizeMode(req.cookies.get("cb_google_oauth_mode")?.value);
     const safeNext = next.startsWith("/") ? next : "/";
+    const authPath = (error: string) => `/auth?mode=${mode}&error=${error}`;
 
-    if (!code) return redirectTo(req, "/auth?mode=login&error=google_missing_code");
+    if (!code) return redirectTo(req, authPath("google_missing_code"));
 
     if (!state || !cookieState || state !== cookieState) {
-      return redirectTo(req, "/auth?mode=login&error=google_state_mismatch");
+      return redirectTo(req, authPath("google_state_mismatch"));
     }
 
     // 1) Exchange code -> token
@@ -186,11 +192,11 @@ export async function GET(req: NextRequest) {
         .slice(0, 64) || undefined;
 
     if (!googleId) {
-      return redirectTo(req, "/auth?mode=login&error=google_id_missing");
+      return redirectTo(req, authPath("google_id_missing"));
     }
 
     if (!email) {
-      return redirectTo(req, "/auth?mode=login&error=google_email_missing");
+      return redirectTo(req, authPath("google_email_missing"));
     }
 
     const now = new Date();
@@ -391,6 +397,7 @@ export async function GET(req: NextRequest) {
     // Clear oauth cookies
     clearCookie(res, "cb_google_oauth_state");
     clearCookie(res, "cb_google_oauth_next");
+    clearCookie(res, "cb_google_oauth_mode");
 
     // Session cookie
     const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
@@ -417,8 +424,9 @@ export async function GET(req: NextRequest) {
     return res;
   } catch (error) {
     if (isApiAuthError(error)) {
-      return redirectTo(req, "/auth?mode=login&error=auth_error");
+      return redirectTo(req, `/auth?mode=${normalizeMode(req.cookies.get("cb_google_oauth_mode")?.value)}&error=auth_error`);
     }
-    return redirectTo(req, "/auth?mode=login&error=oauth_failed");
+    console.error("[auth][oauth][google][callback]", error);
+    return redirectTo(req, `/auth?mode=${normalizeMode(req.cookies.get("cb_google_oauth_mode")?.value)}&error=oauth_failed`);
   }
 }

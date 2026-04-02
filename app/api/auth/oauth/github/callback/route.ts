@@ -32,6 +32,10 @@ function appBase(req: NextRequest) {
   return req.nextUrl.origin.replace(/\/+$/, "");
 }
 
+function normalizeMode(mode: string | null | undefined) {
+  return mode === "login" ? "login" : "signup";
+}
+
 function withNoStore(res: NextResponse) {
   for (const [k, v] of Object.entries(NO_STORE_HEADERS)) res.headers.set(k, v);
   return res;
@@ -169,11 +173,13 @@ export async function GET(req: NextRequest) {
 
     const cookieState = req.cookies.get("cb_oauth_state")?.value || "";
     const nextCookie = req.cookies.get("cb_oauth_next")?.value || "/";
+    const mode = normalizeMode(req.cookies.get("cb_oauth_mode")?.value);
     const safeNext = safeNextPath(nextCookie);
+    const authPath = (error: string) => `/auth?mode=${mode}&error=${error}`;
 
-    if (!code) return redirectTo(req, "/auth?mode=login&error=github_missing_code");
+    if (!code) return redirectTo(req, authPath("github_missing_code"));
     if (!state || !cookieState || state !== cookieState) {
-      return redirectTo(req, "/auth?mode=login&error=github_state_mismatch");
+      return redirectTo(req, authPath("github_state_mismatch"));
     }
 
     // 1) Exchange code -> token
@@ -189,7 +195,7 @@ export async function GET(req: NextRequest) {
         .trim()
         .slice(0, 64) || undefined;
 
-    if (!githubId) return redirectTo(req, "/auth?mode=login&error=github_id_missing");
+    if (!githubId) return redirectTo(req, authPath("github_id_missing"));
 
     // 3) Fetch email (required for your User model)
     let email = "";
@@ -198,7 +204,7 @@ export async function GET(req: NextRequest) {
     } catch {
       email = "";
     }
-    if (!email) return redirectTo(req, "/auth?mode=login&error=github_email_missing");
+    if (!email) return redirectTo(req, authPath("github_email_missing"));
 
     const now = new Date();
 
@@ -417,6 +423,7 @@ export async function GET(req: NextRequest) {
     // clear oauth cookies
     clearCookie(res, "cb_oauth_state");
     clearCookie(res, "cb_oauth_next");
+    clearCookie(res, "cb_oauth_mode");
 
     // session cookie (matches your login/register routes)
     const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
@@ -443,8 +450,9 @@ export async function GET(req: NextRequest) {
     return res;
   } catch (error: unknown) {
     if (isApiAuthError(error)) {
-      return redirectTo(req, "/auth?mode=login&error=auth_error");
+      return redirectTo(req, `/auth?mode=${normalizeMode(req.cookies.get("cb_oauth_mode")?.value)}&error=auth_error`);
     }
-    return redirectTo(req, "/auth?mode=login&error=oauth_failed");
+    console.error("[auth][oauth][github][callback]", error);
+    return redirectTo(req, `/auth?mode=${normalizeMode(req.cookies.get("cb_oauth_mode")?.value)}&error=oauth_failed`);
   }
 }

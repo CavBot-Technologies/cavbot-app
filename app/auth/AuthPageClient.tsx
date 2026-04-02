@@ -21,6 +21,15 @@ type VerifyResult = {
   verificationGrantToken?: string;
   sessionId?: string;
 };
+type OAuthProviders = {
+  github: boolean;
+  google: boolean;
+};
+type AuthPageClientProps = {
+  authErrorCode?: string;
+  oauthProviders?: OAuthProviders;
+  queryMode?: Mode;
+};
 
 const VERIFY_GRANT_HEADER = "x-cavbot-verify-grant";
 const VERIFY_SESSION_HEADER = "x-cavbot-verify-session";
@@ -62,19 +71,39 @@ function parseVerifyStepUp(payload: Record<string, unknown>) {
   };
 }
 
-export default function AuthPageClient() {
+function authErrorMessage(code: string) {
+  const value = String(code || "").trim().toLowerCase();
+  if (!value) return "";
+  if (value === "github_oauth_unavailable") return "GitHub sign-in is unavailable right now. Use email instead.";
+  if (value === "google_oauth_unavailable") return "Google sign-in is unavailable right now. Use email instead.";
+  if (value === "oauth_failed") return "Single sign-on failed. Try again or use email instead.";
+  if (value === "github_email_missing" || value === "google_email_missing") {
+    return "We could not read an email address from your provider. Use email sign up instead.";
+  }
+  if (value.startsWith("github_")) return "GitHub sign-in failed. Try email sign up instead.";
+  if (value.startsWith("google_")) return "Google sign-in failed. Try email sign up instead.";
+  if (value === "auth_error") return "Authentication failed. Please retry.";
+  return "";
+}
+
+export default function AuthPageClient({
+  authErrorCode = "",
+  oauthProviders = { github: true, google: true },
+  queryMode,
+}: AuthPageClientProps) {
   return (
     <Suspense fallback={null}>
-      <AuthPageInner />
+      <AuthPageInner authErrorCode={authErrorCode} oauthProviders={oauthProviders} queryMode={queryMode} />
     </Suspense>
   );
 }
 
-function AuthPageInner() {
+function AuthPageInner(props: AuthPageClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = safeNextPath(searchParams.get("next"));
-  const queryMode = normalizeMode(searchParams.get("mode"));
+  const queryMode = normalizeMode(searchParams.get("mode")) ?? props.queryMode ?? "signup";
+  const globalAuthError = authErrorMessage(props.authErrorCode || String(searchParams.get("error") || ""));
 
   // ------------------------------------------------------------
   // MODE (tabs)
@@ -89,6 +118,7 @@ function AuthPageInner() {
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       url.searchParams.set("mode", next);
+      url.searchParams.delete("error");
 
       // keep URL clean (no hash dependency)
       url.hash = "";
@@ -257,9 +287,9 @@ const clearError = useCallback((fieldId: string) => {
       clearError("su-email");
     }
 
-    if (suPass.length < 8) {
+    if (suPass.length < 10) {
       ok = false;
-      setError("su-password", "Password must be at least 8 characters.");
+      setError("su-password", "Password must be at least 10 characters.");
     } else {
       clearError("su-password");
     }
@@ -449,7 +479,23 @@ const clearError = useCallback((fieldId: string) => {
   // SSO
   // ------------------------------------------------------------
   function sso(provider: "github" | "google") {
-    const qs = nextPath && nextPath !== "/" ? `?next=${encodeURIComponent(nextPath)}` : "";
+    const providerEnabled = provider === "github" ? props.oauthProviders?.github : props.oauthProviders?.google;
+    if (!providerEnabled) {
+      flashErrorEyes();
+      setErrors((prev) => ({
+        ...prev,
+        "auth-global":
+          provider === "github"
+            ? "GitHub sign-in is unavailable right now. Use email instead."
+            : "Google sign-in is unavailable right now. Use email instead.",
+      }));
+      return;
+    }
+
+    const params = new URLSearchParams();
+    if (nextPath && nextPath !== "/") params.set("next", nextPath);
+    params.set("mode", mode);
+    const qs = params.size ? `?${params.toString()}` : "";
     if (provider === "github") {
       window.location.href = `/api/auth/oauth/github/start${qs}`;
       return;
@@ -582,57 +628,71 @@ const clearError = useCallback((fieldId: string) => {
 
             </div>
 
+            {globalAuthError || errors["auth-global"] ? (
+              <div className="auth-alert" role="status" aria-live="polite">
+                {globalAuthError || errors["auth-global"]}
+              </div>
+            ) : null}
+
             <br />
 
             {/* SSO */}
             <div className="auth-sso" role="group" aria-label="Single sign-on options">
-              <button
-                type="button"
-                className="auth-sso-btn"
-                data-provider="github"
-                aria-label="Continue with GitHub"
-                onClick={() => sso("github")}
-              >
-                <span className="auth-sso-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="18" height="18" focusable="false" aria-hidden="true">
-                    <path
-                      fill="currentColor"
-                      d="M12 .5C5.73.5.75 5.63.75 12c0 5.1 3.29 9.42 7.86 10.95.57.11.78-.25.78-.56 0-.28-.01-1.02-.02-2-3.2.71-3.88-1.58-3.88-1.58-.52-1.36-1.28-1.72-1.28-1.72-1.05-.74.08-.73.08-.73 1.16.08 1.77 1.22 1.77 1.22 1.03 1.8 2.7 1.28 3.36.98.1-.77.4-1.28.72-1.58-2.55-.3-5.23-1.3-5.23-5.8 0-1.28.45-2.33 1.18-3.15-.12-.3-.51-1.53.11-3.18 0 0 .97-.32 3.18 1.2a10.7 10.7 0 0 1 2.9-.4c.98 0 1.97.14 2.9.4 2.21-1.52 3.18-1.2 3.18-1.2.62 1.65.23 2.88.11 3.18.74.82 1.18 1.87 1.18 3.15 0 4.51-2.69 5.5-5.25 5.79.41.36.78 1.08.78 2.18 0 1.58-.01 2.85-.01 3.23 0 .31.2.67.79.56A11.28 11.28 0 0 0 23.25 12C23.25 5.63 18.27.5 12 .5Z"
-                    />
-                  </svg>
-                </span>
-                <span className="auth-sso-text">Continue with GitHub</span>
-              </button>
+              {props.oauthProviders?.github ? (
+                <button
+                  type="button"
+                  className="auth-sso-btn"
+                  data-provider="github"
+                  aria-label="Continue with GitHub"
+                  onClick={() => sso("github")}
+                >
+                  <span className="auth-sso-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="18" height="18" focusable="false" aria-hidden="true">
+                      <path
+                        fill="currentColor"
+                        d="M12 .5C5.73.5.75 5.63.75 12c0 5.1 3.29 9.42 7.86 10.95.57.11.78-.25.78-.56 0-.28-.01-1.02-.02-2-3.2.71-3.88-1.58-3.88-1.58-.52-1.36-1.28-1.72-1.28-1.72-1.05-.74.08-.73.08-.73 1.16.08 1.77 1.22 1.77 1.22 1.03 1.8 2.7 1.28 3.36.98.1-.77.4-1.28.72-1.58-2.55-.3-5.23-1.3-5.23-5.8 0-1.28.45-2.33 1.18-3.15-.12-.3-.51-1.53.11-3.18 0 0 .97-.32 3.18 1.2a10.7 10.7 0 0 1 2.9-.4c.98 0 1.97.14 2.9.4 2.21-1.52 3.18-1.2 3.18-1.2.62 1.65.23 2.88.11 3.18.74.82 1.18 1.87 1.18 3.15 0 4.51-2.69 5.5-5.25 5.79.41.36.78 1.08.78 2.18 0 1.58-.01 2.85-.01 3.23 0 .31.2.67.79.56A11.28 11.28 0 0 0 23.25 12C23.25 5.63 18.27.5 12 .5Z"
+                      />
+                    </svg>
+                  </span>
+                  <span className="auth-sso-text">Continue with GitHub</span>
+                </button>
+              ) : (
+                <div className="auth-sso-unavailable">GitHub sign-in unavailable</div>
+              )}
 
-              <button
-                type="button"
-                className="auth-sso-btn"
-                data-provider="google"
-                aria-label="Continue with Google"
-                onClick={() => sso("google")}
-              >
-                <span className="auth-sso-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="18" height="18" focusable="false" aria-hidden="true">
-                    <path
-                      fill="#EA4335"
-                      d="M12 10.2v3.9h5.5c-.2 1.3-1.6 3.8-5.5 3.8-3.3 0-6-2.7-6-6.1S8.7 5.7 12 5.7c1.9 0 3.2.8 3.9 1.6l2.6-2.5C16.9 3.3 14.7 2 12 2 6.9 2 2.8 6.1 2.8 11.8S6.9 21.6 12 21.6c6.9 0 8.6-4.9 8.6-7.4 0-.5-.1-1-.1-1.4H12Z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M3.6 7.3l3.2 2.3C7.7 7.4 9.7 5.7 12 5.7c1.9 0 3.2.8 3.9 1.6l2.6-2.5C16.9 3.3 14.7 2 12 2 8.4 2 5.2 4 3.6 7.3Z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M12 21.6c2.7 0 5-1 6.7-2.6l-3.1-2.4c-.8.6-2 1.3-3.6 1.3-2.3 0-4.3-1.5-5.1-3.7l-3.3 2.5c1.6 3 4.7 4.9 8.4 4.9Z"
-                    />
-                    <path
-                      fill="#4285F4"
-                      d="M20.5 11.8c0-.5-.1-1-.1-1.4H12v3.9h5.5c-.3 1.4-1.2 2.6-2.6 3.4l3.1 2.4c1.8-1.7 2.5-4.2 2.5-6.3Z"
-                    />
-                  </svg>
-                </span>
-                <span className="auth-sso-text">Continue with Google</span>
-              </button>
+              {props.oauthProviders?.google ? (
+                <button
+                  type="button"
+                  className="auth-sso-btn"
+                  data-provider="google"
+                  aria-label="Continue with Google"
+                  onClick={() => sso("google")}
+                >
+                  <span className="auth-sso-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="18" height="18" focusable="false" aria-hidden="true">
+                      <path
+                        fill="#EA4335"
+                        d="M12 10.2v3.9h5.5c-.2 1.3-1.6 3.8-5.5 3.8-3.3 0-6-2.7-6-6.1S8.7 5.7 12 5.7c1.9 0 3.2.8 3.9 1.6l2.6-2.5C16.9 3.3 14.7 2 12 2 6.9 2 2.8 6.1 2.8 11.8S6.9 21.6 12 21.6c6.9 0 8.6-4.9 8.6-7.4 0-.5-.1-1-.1-1.4H12Z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M3.6 7.3l3.2 2.3C7.7 7.4 9.7 5.7 12 5.7c1.9 0 3.2.8 3.9 1.6l2.6-2.5C16.9 3.3 14.7 2 12 2 8.4 2 5.2 4 3.6 7.3Z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M12 21.6c2.7 0 5-1 6.7-2.6l-3.1-2.4c-.8.6-2 1.3-3.6 1.3-2.3 0-4.3-1.5-5.1-3.7l-3.3 2.5c1.6 3 4.7 4.9 8.4 4.9Z"
+                      />
+                      <path
+                        fill="#4285F4"
+                        d="M20.5 11.8c0-.5-.1-1-.1-1.4H12v3.9h5.5c-.3 1.4-1.2 2.6-2.6 3.4l3.1 2.4c1.8-1.7 2.5-4.2 2.5-6.3Z"
+                      />
+                    </svg>
+                  </span>
+                  <span className="auth-sso-text">Continue with Google</span>
+                </button>
+              ) : (
+                <div className="auth-sso-unavailable">Google sign-in unavailable</div>
+              )}
             </div>
 
             <br />

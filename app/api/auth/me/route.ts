@@ -1,9 +1,24 @@
 // app/api/auth/me/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getSession, isApiAuthError } from "@/lib/apiAuth";
 import type { CavbotSession } from "@/lib/apiAuth";
-import { getCavCloudCollabPolicy, DEFAULT_CAVCLOUD_COLLAB_POLICY } from "@/lib/cavcloud/collabPolicy.server";
+import {
+  clearExpiredTrialSeat,
+  findAccountById,
+  findSessionMembership,
+  findUserById,
+  getAuthPool,
+} from "@/lib/authDb";
+
+const DEFAULT_CAVCLOUD_COLLAB_POLICY = {
+  allowAdminsManageCollaboration: false,
+  allowMembersEditFiles: false,
+  allowMembersCreateUpload: false,
+  allowAdminsPublishArtifacts: false,
+  allowAdminsViewAccessLogs: false,
+  enableContributorLinks: false,
+  allowTeamAiAccess: false,
+};
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -98,6 +113,7 @@ function computeEffectiveTier(account: PrismaAccount) {
 
 export async function GET(req: Request) {
   try {
+    const pool = getAuthPool();
     const sess: CavbotSession | null = await getSession(req);
 
     // Not logged in -> always 200
@@ -113,22 +129,7 @@ export async function GET(req: Request) {
 
     if (!userId) return json({ ok: true, authenticated: false }, 200);
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        usernameChangeCount: true,
-        lastUsernameChangeAt: true,
-        displayName: true,
-        publicProfileEnabled: true,
-        avatarImage: true,
-        avatarTone: true,
-        createdAt: true,
-        lastLoginAt: true,
-      },
-    });
+    const user = await findUserById(pool, userId);
 
     if (!user) return json({ ok: true, authenticated: false }, 200);
 
@@ -140,49 +141,25 @@ export async function GET(req: Request) {
     let collabPolicy = { ...DEFAULT_CAVCLOUD_COLLAB_POLICY };
 
     if (accountId) {
-      const membershipRecord = (await prisma.membership.findUnique({
-        where: { accountId_userId: { accountId, userId } },
-        select: { role: true, createdAt: true, accountId: true, userId: true },
-      })) as MembershipRecord | null;
+      const membershipRecord = await findSessionMembership(pool, userId, accountId);
 
-      membership = membershipRecord;
+      membership = membershipRecord
+        ? {
+            role: membershipRecord.role,
+            createdAt: membershipRecord.createdAt,
+            accountId: membershipRecord.accountId,
+            userId: membershipRecord.userId,
+          }
+        : null;
 
       if (!membership) return json({ ok: true, authenticated: false }, 200);
 
-      const accountRecord = (await prisma.account.findUnique({
-        where: { id: accountId },
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          tier: true,
-          createdAt: true,
-
-          // TRIAL FIELDS (THIS IS WHAT WAS MISSING)
-          trialSeatActive: true,
-          trialStartedAt: true,
-          trialEndsAt: true,
-          trialEverUsed: true,
-        },
-      })) as PrismaAccount | null;
+      await clearExpiredTrialSeat(pool, accountId);
+      const accountRecord = await findAccountById(pool, accountId);
 
       if (!accountRecord) return json({ ok: true, authenticated: false }, 200);
 
       account = accountRecord;
-
-      // Auto-expire trial seat if end date passed (keeps DB clean)
-      if (account.trialSeatActive && account.trialEndsAt) {
-        const ends = new Date(account.trialEndsAt).getTime();
-        if (Number.isFinite(ends) && ends <= Date.now()) {
-          try {
-            await prisma.account.update({
-              where: { id: account.id },
-              data: { trialSeatActive: false },
-            });
-            account = { ...account, trialSeatActive: false };
-          } catch {}
-        }
-      }
 
       // Compute effective tier for UI + gates
       const eff = computeEffectiveTier(account);
@@ -193,11 +170,7 @@ export async function GET(req: Request) {
         trialDaysLeft: eff.daysLeft,
       };
 
-      try {
-        collabPolicy = await getCavCloudCollabPolicy(accountId);
-      } catch {
-        collabPolicy = { ...DEFAULT_CAVCLOUD_COLLAB_POLICY };
-      }
+      collabPolicy = { ...DEFAULT_CAVCLOUD_COLLAB_POLICY };
     }
 
     return json(
