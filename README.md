@@ -18,16 +18,17 @@ Primary deploy target is Cloudflare via OpenNext.
 
 ### Production deploy policy
 
-- Primary path: GitHub Pages build on `main`.
+- Primary path: GitHub Actions deploy on `main` via `.github/workflows/deploy-cloudflare.yml`.
+- Cloudflare Pages source-triggered deploys are disabled on purpose so repo-transfer metadata cannot trigger stale builds.
 - Secondary emergency path: local ad-hoc deploy with `npm run deploy:cloudflare`.
 - Guardrails for ad-hoc production deploys:
   - worktree must be clean
   - `HEAD` must already be in `origin/main`
   - deploy metadata is pinned to git (`branch=main`, exact `commit_hash`, `commit_dirty=false`)
 
-### GitHub Actions Deploy Fallback (recommended)
+### GitHub Actions Production Deploy
 
-If Cloudflare's Git integration returns an internal installation error, deploy via GitHub Actions.
+GitHub Actions is the authoritative production deployment path.
 
 1. In GitHub repo secrets, set:
    - `CLOUDFLARE_API_TOKEN`

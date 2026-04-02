@@ -48,5 +48,6 @@ run("wrangler", [
   metadata.commitHash,
   "--commit-message",
   metadata.commitMessage,
-  "--commit-dirty=false"
+  "--commit-dirty=false",
+  "--no-bundle"
 ]);

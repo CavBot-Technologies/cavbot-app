@@ -65,4 +65,4 @@ jobs:
           ls -la .open-next/pages-deploy | sed -n '1,80p'
 
       - name: Deploy To Cloudflare Pages
-        run: npx -y wrangler@3.114.0 pages deploy .open-next/pages-deploy --project-name cavbot-app --branch main --commit-dirty=true --no-bundle
+        run: npx -y wrangler@3.114.0 pages deploy .open-next/pages-deploy --project-name cavbot-app --branch main --commit-dirty=false --no-bundle
