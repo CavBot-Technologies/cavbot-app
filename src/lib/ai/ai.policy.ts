@@ -2,7 +2,7 @@ import "server-only";
 
 import { type MemberRole } from "@/lib/apiAuth";
 import { getAuthPool } from "@/lib/authDb";
-import { getCavCloudCollabPolicy } from "@/lib/cavcloud/collabPolicy.server";
+import type { CavCloudCollabPolicy } from "@/lib/cavcloud/collabPolicy.server";
 import { type PlanId } from "@/lib/plans";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
 import {
@@ -24,13 +24,19 @@ import {
 import { CAVAI_REASONING_LEVEL_SCHEMA, type CavAiReasoningLevel, type AiSurface, type AiTaskType, AiServiceError } from "@/src/lib/ai/ai.types";
 import { buildGuardDecisionPayload } from "@/src/lib/cavguard/cavGuard.server";
 import { getAiModelCatalog, getAiProviderStatus, resolveProviderIdForModel, type AiProviderToolId } from "@/src/lib/ai/providers";
-import {
-  estimateQwenCoderCost,
-  getQwenCoderEntitlement,
-  reserveQwenCoderCredits,
-  type QwenCoderEntitlement,
-  type QwenCoderReservation,
-} from "@/src/lib/ai/qwen-coder-credits.server";
+import type { QwenCoderEntitlement, QwenCoderReservation } from "@/src/lib/ai/qwen-coder-credits.server";
+
+type QwenCreditsModule = typeof import("@/src/lib/ai/qwen-coder-credits.server");
+
+const DEFAULT_CAVCLOUD_COLLAB_POLICY: CavCloudCollabPolicy = {
+  allowAdminsManageCollaboration: false,
+  allowMembersEditFiles: false,
+  allowMembersCreateUpload: false,
+  allowAdminsPublishArtifacts: false,
+  allowAdminsViewAccessLogs: false,
+  enableContributorLinks: false,
+  allowTeamAiAccess: false,
+};
 
 function s(value: unknown): string {
   return String(value ?? "").trim();
@@ -87,6 +93,86 @@ function envCsv(name: string): Set<string> {
       .map((item) => s(item).toLowerCase())
       .filter(Boolean)
   );
+}
+
+function qwenPlanLabel(planId: PlanId): "Premium" | "Premium+" | "Free" {
+  if (planId === "premium_plus") return "Premium+";
+  if (planId === "premium") return "Premium";
+  return "Free";
+}
+
+function utcMonthWindow(now = new Date()): { start: Date; end: Date } {
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
+  return { start, end };
+}
+
+async function getCavCloudCollabPolicySafe(accountId: string): Promise<CavCloudCollabPolicy> {
+  try {
+    const { getCavCloudCollabPolicy } = await import("@/lib/cavcloud/collabPolicy.server");
+    return await getCavCloudCollabPolicy(accountId);
+  } catch {
+    return { ...DEFAULT_CAVCLOUD_COLLAB_POLICY };
+  }
+}
+
+function buildQwenCoderEntitlementFallback(planId: PlanId): QwenCoderEntitlement {
+  const now = new Date();
+  const cycle = utcMonthWindow(now);
+  const selectable = planId === "premium" || planId === "premium_plus";
+  const totalCredits = selectable ? 999_999 : 0;
+  return {
+    state: selectable ? "available" : "locked_free",
+    selectable,
+    planId,
+    planLabel: qwenPlanLabel(planId),
+    creditsUsed: 0,
+    creditsRemaining: totalCredits,
+    totalAvailable: totalCredits,
+    totalRemaining: totalCredits,
+    percentUsed: 0,
+    percentRemaining: selectable ? 100 : 0,
+    stage: null,
+    billingCycleStart: cycle.start,
+    billingCycleEnd: cycle.end,
+    resetAt: cycle.end,
+    cooldownEndsAt: null,
+    warningLevel: null,
+    nextActionId: selectable ? null : "AI_QWEN_CODER_UNLOCK_REQUIRED",
+  };
+}
+
+async function getQwenCoderEntitlementSafe(
+  args: Parameters<QwenCreditsModule["getQwenCoderEntitlement"]>[0]
+): Promise<Awaited<ReturnType<QwenCreditsModule["getQwenCoderEntitlement"]>> | null> {
+  try {
+    const { getQwenCoderEntitlement } = await import("@/src/lib/ai/qwen-coder-credits.server");
+    return await getQwenCoderEntitlement(args);
+  } catch {
+    return null;
+  }
+}
+
+async function estimateQwenCoderCostSafe(
+  args: Parameters<QwenCreditsModule["estimateQwenCoderCost"]>[0]
+): Promise<ReturnType<QwenCreditsModule["estimateQwenCoderCost"]> | null> {
+  try {
+    const { estimateQwenCoderCost } = await import("@/src/lib/ai/qwen-coder-credits.server");
+    return estimateQwenCoderCost(args);
+  } catch {
+    return null;
+  }
+}
+
+async function reserveQwenCoderCreditsSafe(
+  args: Parameters<QwenCreditsModule["reserveQwenCoderCredits"]>[0]
+): Promise<Awaited<ReturnType<QwenCreditsModule["reserveQwenCoderCredits"]>> | null> {
+  try {
+    const { reserveQwenCoderCredits } = await import("@/src/lib/ai/qwen-coder-credits.server");
+    return await reserveQwenCoderCredits(args);
+  } catch {
+    return null;
+  }
 }
 
 function uploadedWorkspaceFileCountFromContext(context: Record<string, unknown> | null | undefined): number {
@@ -1260,7 +1346,7 @@ export async function resolveAiExecutionPolicy(args: {
   const researchModeRequested = isResearchActionClass(actionClass);
   const requestedResearchToolBundle = resolveResearchToolBundle(actionClass);
 
-  const collabPolicy = await getCavCloudCollabPolicy(args.accountId);
+  const collabPolicy = await getCavCloudCollabPolicySafe(args.accountId);
   const allowTeamAiAccess = Boolean(collabPolicy.allowTeamAiAccess);
   if (role === "ANON") {
     throwGuardedAiError({
@@ -1452,11 +1538,13 @@ export async function resolveAiExecutionPolicy(args: {
   let qwenCoderReservation: QwenCoderReservation | null = null;
 
   if (model === ALIBABA_QWEN_CODER_MODEL_ID) {
-    const entitlementResult = await getQwenCoderEntitlement({
+    const entitlementResult = await getQwenCoderEntitlementSafe({
       accountId: args.accountId,
       userId: args.userId,
       planId: args.planId,
-    });
+    }) || {
+      entitlement: buildQwenCoderEntitlementFallback(args.planId),
+    };
     qwenCoderEntitlement = entitlementResult.entitlement;
 
     if (args.isExecution) {
@@ -1475,7 +1563,7 @@ export async function resolveAiExecutionPolicy(args: {
         });
       }
 
-      const estimate = estimateQwenCoderCost({
+      const estimate = await estimateQwenCoderCostSafe({
         actionClass,
         taskType: args.taskType || null,
         promptText,
@@ -1486,18 +1574,20 @@ export async function resolveAiExecutionPolicy(args: {
         filesTouched: asInt((args.context as Record<string, unknown> | null)?.filesTouchedCount || 0),
         toolCount: actionClass === "premium_plus_heavy_coding" ? 2 : 1,
       });
-      const reservation = await reserveQwenCoderCredits({
-        accountId: args.accountId,
-        userId: args.userId,
-        planId: args.planId,
-        requestId: s(args.requestId) || crypto.randomUUID(),
-        modelName: model,
-        conversationId: s(args.sessionId) || null,
-        taskId: s(args.taskType) || null,
-        estimate,
-      });
+      const reservation = estimate
+        ? await reserveQwenCoderCreditsSafe({
+            accountId: args.accountId,
+            userId: args.userId,
+            planId: args.planId,
+            requestId: s(args.requestId) || crypto.randomUUID(),
+            modelName: model,
+            conversationId: s(args.sessionId) || null,
+            taskId: s(args.taskType) || null,
+            estimate,
+          })
+        : null;
 
-      if (!reservation.ok) {
+      if (reservation && !reservation.ok) {
         const guard = qwenGuardForEntitlement(reservation.entitlement);
         const code = reservation.code === "INSUFFICIENT_CREDITS"
           ? "AI_QWEN_CODER_INSUFFICIENT_CREDITS"
@@ -1513,12 +1603,14 @@ export async function resolveAiExecutionPolicy(args: {
           planId: args.planId,
           details: {
             qwenCoderEntitlement: reservation.entitlement,
-            estimatedCredits: estimate.finalCredits,
+            estimatedCredits: estimate?.finalCredits || 0,
           },
         });
       }
-      qwenCoderReservation = reservation.reservation;
-      qwenCoderEntitlement = reservation.entitlement;
+      if (reservation?.ok) {
+        qwenCoderReservation = reservation.reservation;
+        qwenCoderEntitlement = reservation.entitlement;
+      }
 
     }
   }

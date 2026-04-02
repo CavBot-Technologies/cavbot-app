@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { PlanId } from "@/lib/plans";
+import { getAuthPool } from "@/lib/authDb";
 import {
   AI_CENTER_ASSIST_RESPONSE_SCHEMA,
   AI_AUDIO_TRANSCRIPTION_RESPONSE_SCHEMA,
@@ -94,31 +96,16 @@ import {
   generateAlibabaQwenImage,
   transcribeAlibabaQwenAudio,
 } from "@/src/lib/ai/providers/alibaba-qwen";
-import {
-  captureQwenCoderContextSnapshot,
-  estimateContextTokensForSnapshot,
-  finalizeQwenCoderCharge,
-  refundOrAdjustQwenCoderCharge,
-} from "@/src/lib/ai/qwen-coder-credits.server";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
-import { resolveInstalledCavenCustomAgent, type CavenCustomAgent } from "@/lib/cavai/cavenSettings.server";
-import { resolveInstalledCavCodeAction } from "@/lib/cavai/agentRegistry.server";
-import { listCavAiRouteManifestSnapshots } from "@/lib/cavai/routeManifest.server";
-import { getLatestWebsiteKnowledgeGraph, summarizeWebsiteKnowledgeForAiContext } from "@/lib/cavai/websiteKnowledge.server";
-import { getOrCreateFilePreviewSnippets } from "@/lib/cavcloud/storage.server";
-import { prisma } from "@/lib/prisma";
-import {
-  appendUserImageHistory,
-  buildImageStudioPrompt,
-  completeImageJob,
-  createImageAsset,
-  failImageJob,
-  getImagePresetById,
-  resolveDataUrlForAsset,
-  startImageJob,
-  toImageStudioPlanTier,
-} from "@/lib/cavai/imageStudio.server";
-import type { PlanId } from "@/lib/plans";
+import type { CavenCustomAgent } from "@/lib/cavai/cavenSettings.server";
+
+type QwenCreditsModule = typeof import("@/src/lib/ai/qwen-coder-credits.server");
+type CavenSettingsModule = typeof import("@/lib/cavai/cavenSettings.server");
+type AgentRegistryModule = typeof import("@/lib/cavai/agentRegistry.server");
+type RouteManifestModule = typeof import("@/lib/cavai/routeManifest.server");
+type WebsiteKnowledgeModule = typeof import("@/lib/cavai/websiteKnowledge.server");
+type CavCloudStorageModule = typeof import("@/lib/cavcloud/storage.server");
+type ImageStudioModule = typeof import("@/lib/cavai/imageStudio.server");
 
 const DEFAULT_CAVBOT_TTS_INSTRUCTIONS = "Voice profile: Cavbot Ethan. Adult male baritone voice, low and grounded. Keep delivery direct, calm, and confident with a steady pace and crisp diction. Start exactly on the first spoken word with no pre-roll. Maintain one consistent masculine tone across the entire response, including long paragraphs. No audible inhale, exhale, mouth noise, lip smack, hiss, gasp, breath, or sudden loud bursts. Keep the style plainspoken and studio-clean. Avoid bright or airy tone, playful cadence, sing-song inflection, theatrical emphasis, or dramatic pitch swings.";
 const CAVBOT_ANSWER_QUALITY_DIRECTIVE = "Quality bar: answer the user's exact question directly, keep it relevant, avoid generic filler, and never invent facts, metrics, or citations.";
@@ -235,6 +222,142 @@ function firstNonEmptyString(...values: unknown[]): string {
   return "";
 }
 
+async function getQwenCreditsModule(): Promise<QwenCreditsModule> {
+  return import("@/src/lib/ai/qwen-coder-credits.server");
+}
+
+async function estimateContextTokensForSnapshotSafe(payload: unknown): Promise<number> {
+  try {
+    const { estimateContextTokensForSnapshot } = await getQwenCreditsModule();
+    return estimateContextTokensForSnapshot(payload);
+  } catch {
+    return 0;
+  }
+}
+
+async function finalizeQwenCoderChargeSafe(
+  args: Parameters<QwenCreditsModule["finalizeQwenCoderCharge"]>[0]
+) {
+  const { finalizeQwenCoderCharge } = await getQwenCreditsModule();
+  return finalizeQwenCoderCharge(args);
+}
+
+async function refundOrAdjustQwenCoderChargeSafe(
+  args: Parameters<QwenCreditsModule["refundOrAdjustQwenCoderCharge"]>[0]
+) {
+  const { refundOrAdjustQwenCoderCharge } = await getQwenCreditsModule();
+  return refundOrAdjustQwenCoderCharge(args);
+}
+
+async function captureQwenCoderContextSnapshotSafe(
+  args: Parameters<QwenCreditsModule["captureQwenCoderContextSnapshot"]>[0]
+) {
+  const { captureQwenCoderContextSnapshot } = await getQwenCreditsModule();
+  return captureQwenCoderContextSnapshot(args);
+}
+
+async function getImageStudioModule(): Promise<ImageStudioModule> {
+  return import("@/lib/cavai/imageStudio.server");
+}
+
+async function toImageStudioPlanTierSafe(planId: PlanId) {
+  const { toImageStudioPlanTier } = await getImageStudioModule();
+  return toImageStudioPlanTier(planId);
+}
+
+async function getImagePresetByIdSafe(
+  args: Parameters<ImageStudioModule["getImagePresetById"]>[0]
+) {
+  const { getImagePresetById } = await getImageStudioModule();
+  return getImagePresetById(args);
+}
+
+async function buildImageStudioPromptSafe(
+  args: Parameters<ImageStudioModule["buildImageStudioPrompt"]>[0]
+) {
+  const { buildImageStudioPrompt } = await getImageStudioModule();
+  return buildImageStudioPrompt(args);
+}
+
+async function resolveDataUrlForAssetSafe(
+  args: Parameters<ImageStudioModule["resolveDataUrlForAsset"]>[0]
+) {
+  const { resolveDataUrlForAsset } = await getImageStudioModule();
+  return resolveDataUrlForAsset(args);
+}
+
+async function startImageJobSafe(
+  args: Parameters<ImageStudioModule["startImageJob"]>[0]
+) {
+  const { startImageJob } = await getImageStudioModule();
+  return startImageJob(args);
+}
+
+async function createImageAssetSafe(
+  args: Parameters<ImageStudioModule["createImageAsset"]>[0]
+) {
+  const { createImageAsset } = await getImageStudioModule();
+  return createImageAsset(args);
+}
+
+async function appendUserImageHistorySafe(
+  args: Parameters<ImageStudioModule["appendUserImageHistory"]>[0]
+) {
+  const { appendUserImageHistory } = await getImageStudioModule();
+  return appendUserImageHistory(args);
+}
+
+async function completeImageJobSafe(
+  args: Parameters<ImageStudioModule["completeImageJob"]>[0]
+) {
+  const { completeImageJob } = await getImageStudioModule();
+  return completeImageJob(args);
+}
+
+async function failImageJobSafe(
+  args: Parameters<ImageStudioModule["failImageJob"]>[0]
+) {
+  const { failImageJob } = await getImageStudioModule();
+  return failImageJob(args);
+}
+
+async function getOrCreateFilePreviewSnippetsSafe(
+  args: Parameters<CavCloudStorageModule["getOrCreateFilePreviewSnippets"]>[0]
+) {
+  const { getOrCreateFilePreviewSnippets } = await import("@/lib/cavcloud/storage.server");
+  return getOrCreateFilePreviewSnippets(args);
+}
+
+async function retrieveRelevantAiUserMemoryFactsSafe(
+  args: Parameters<typeof retrieveRelevantAiUserMemoryFacts>[0]
+) {
+  try {
+    return await retrieveRelevantAiUserMemoryFacts(args);
+  } catch {
+    return [];
+  }
+}
+
+async function learnAiUserMemoryFromPromptSafe(
+  args: Parameters<typeof learnAiUserMemoryFromPrompt>[0]
+) {
+  try {
+    await learnAiUserMemoryFromPrompt(args);
+  } catch {
+    // Memory persistence is best-effort on Cloudflare.
+  }
+}
+
+async function settleCavCodeQueuedPromptSafe(
+  args: Parameters<typeof settleCavCodeQueuedPrompt>[0]
+) {
+  try {
+    await settleCavCodeQueuedPrompt(args);
+  } catch {
+    // Queue settlement is best-effort on Cloudflare.
+  }
+}
+
 type UploadedWorkspaceFileContext = {
   id: string;
   cavcloudFileId: string | null;
@@ -326,26 +449,47 @@ async function resolveUploadedWorkspaceFilesForAi(args: {
     previewSnippetUpdatedAt: Date | null;
   }> = [];
   try {
-    fileRows = await prisma.cavCloudFile.findMany({
-      where: {
-        accountId: args.accountId,
-        deletedAt: null,
-        status: "READY",
-        OR: [
-          ...(fileIds.length ? [{ id: { in: fileIds } }] : []),
-          ...(filePaths.length ? [{ path: { in: filePaths } }] : []),
-        ],
-      },
-      select: {
-        id: true,
-        name: true,
-        path: true,
-        mimeType: true,
-        bytes: true,
-        previewSnippet: true,
-        previewSnippetUpdatedAt: true,
-      },
-    });
+    const values: unknown[] = [args.accountId];
+    const selectors: string[] = [];
+    if (fileIds.length) {
+      values.push(fileIds);
+      selectors.push(`"id" = ANY($${values.length}::text[])`);
+    }
+    if (filePaths.length) {
+      values.push(filePaths);
+      selectors.push(`"path" = ANY($${values.length}::text[])`);
+    }
+    if (!selectors.length) {
+      return requested.slice(0, MAX_UPLOADED_WORKSPACE_FILES);
+    }
+    const result = await getAuthPool().query<{
+      id: string;
+      name: string;
+      path: string;
+      mimeType: string;
+      bytes: number | string;
+      previewSnippet: string | null;
+      previewSnippetUpdatedAt: Date | null;
+    }>(
+      `SELECT
+          "id",
+          "name",
+          "path",
+          "mimeType",
+          "bytes",
+          "previewSnippet",
+          "previewSnippetUpdatedAt"
+        FROM "CavCloudFile"
+        WHERE "accountId" = $1
+          AND "deletedAt" IS NULL
+          AND "status" = 'READY'
+          AND (${selectors.join(" OR ")})`,
+      values
+    );
+    fileRows = result.rows.map((row) => ({
+      ...row,
+      bytes: Number(row.bytes || 0),
+    }));
   } catch {
     return requested.slice(0, MAX_UPLOADED_WORKSPACE_FILES);
   }
@@ -386,7 +530,7 @@ async function resolveUploadedWorkspaceFilesForAi(args: {
 
   if (missingSnippetFileIds.length) {
     try {
-      const snippetMap = await getOrCreateFilePreviewSnippets({
+      const snippetMap = await getOrCreateFilePreviewSnippetsSafe({
         accountId: args.accountId,
         fileIds: missingSnippetFileIds,
         maxBatch: MAX_UPLOADED_WORKSPACE_FILES,
@@ -413,6 +557,7 @@ async function resolveInstalledCavenCustomAgentSafe(args: {
   agentActionKey?: string | null;
 }): Promise<CavenCustomAgent | null> {
   try {
+    const { resolveInstalledCavenCustomAgent } = await import("@/lib/cavai/cavenSettings.server");
     return await resolveInstalledCavenCustomAgent(args);
   } catch {
     return null;
@@ -426,6 +571,7 @@ async function resolveInstalledCavCodeActionSafe(args: {
   requestedAction: string;
 }): Promise<{ action: string; downgraded: boolean }> {
   try {
+    const { resolveInstalledCavCodeAction } = await import("@/lib/cavai/agentRegistry.server");
     return await resolveInstalledCavCodeAction({
       accountId: args.accountId,
       userId: args.userId,
@@ -519,6 +665,10 @@ async function loadWebsiteKnowledgeContext(args: {
   const projectId = Number.isFinite(Number(args.projectId)) ? Number(args.projectId) : null;
   const routeContext = safeRecord(args.routeAwareContext);
   const siteIdFromRoute = firstNonEmptyString(routeContext.siteId, routeContext.routeParams && safeRecord(routeContext.routeParams).siteId);
+  const {
+    getLatestWebsiteKnowledgeGraph,
+    summarizeWebsiteKnowledgeForAiContext,
+  } = await import("@/lib/cavai/websiteKnowledge.server");
   const latest = await getLatestWebsiteKnowledgeGraph({
     accountId: args.accountId,
     projectId,
@@ -538,6 +688,7 @@ async function loadRouteManifestCoverageContext(args: {
   workspaceId?: string | null;
   projectId?: number | null;
 }): Promise<Record<string, unknown> | null> {
+  const { listCavAiRouteManifestSnapshots } = await import("@/lib/cavai/routeManifest.server");
   const rows = await listCavAiRouteManifestSnapshots({
     accountId: args.accountId,
     workspaceId: s(args.workspaceId) || null,
@@ -2081,7 +2232,7 @@ async function resolveAttachmentFile(args: {
 
   const assetId = s(args.attachment.assetId) || s(args.attachment.id);
   if (!assetId) return null;
-  const resolved = await resolveDataUrlForAsset({
+  const resolved = await resolveDataUrlForAssetSafe({
     accountId: args.accountId,
     userId: args.userId,
     assetId,
@@ -2681,7 +2832,7 @@ export async function runCavCodeAssist(args: {
     goal: args.input.goal || null,
   });
   const initialSessionId = s(args.input.sessionId) || null;
-  const memoryFacts = await retrieveRelevantAiUserMemoryFacts({
+  const memoryFacts = await retrieveRelevantAiUserMemoryFactsSafe({
     accountId: ctx.accountId,
     userId: ctx.userId,
     prompt: userPrompt,
@@ -2741,7 +2892,7 @@ export async function runCavCodeAssist(args: {
         : null,
     },
   });
-  const qwenContextTokens = estimateContextTokensForSnapshot({
+  const qwenContextTokens = await estimateContextTokensForSnapshotSafe({
     contextPack,
     selectedCode: args.input.selectedCode || null,
     diagnostics: args.input.diagnostics || [],
@@ -2864,8 +3015,8 @@ export async function runCavCodeAssist(args: {
       const mode: "studio" | "edit" = effectiveAction === "app_screenshot_enhancer" ? "edit" : "studio";
       const imagePromptInput = [s(args.input.prompt), s(args.input.goal)].filter(Boolean).join("\n\n") || userPrompt;
       const imageStudioContext = parseImageStudioRequestContext(inputContext);
-      const imageStudioPlanTier = toImageStudioPlanTier(ctx.planId);
-      const preset = await getImagePresetById({
+      const imageStudioPlanTier = await toImageStudioPlanTierSafe(ctx.planId);
+      const preset = await getImagePresetByIdSafe({
         presetId: imageStudioContext.presetId,
         slug: imageStudioContext.presetSlug,
         planTier: imageStudioPlanTier,
@@ -2883,7 +3034,7 @@ export async function runCavCodeAssist(args: {
         presetLabel: preset?.label || null,
       });
 
-      const resolvedImagePrompt = buildImageStudioPrompt({
+      const resolvedImagePrompt = await buildImageStudioPromptSafe({
         mode: mode === "edit" ? "edit" : "generate",
         userPrompt: imagePromptResolution.effectivePrompt,
         preset,
@@ -2902,7 +3053,7 @@ export async function runCavCodeAssist(args: {
           }
         | null = null;
       if (mode === "edit" && imageStudioContext.sourceAssetId) {
-        const resolved = await resolveDataUrlForAsset({
+        const resolved = await resolveDataUrlForAssetSafe({
           accountId: ctx.accountId,
           userId: ctx.userId,
           assetId: imageStudioContext.sourceAssetId,
@@ -2919,7 +3070,7 @@ export async function runCavCodeAssist(args: {
 
       let imageJobId = "";
       try {
-        imageJobId = await startImageJob({
+        imageJobId = await startImageJobSafe({
           accountId: ctx.accountId,
           userId: ctx.userId,
           sessionId: sessionId || null,
@@ -3008,7 +3159,7 @@ export async function runCavCodeAssist(args: {
           const mimeType = "image/png";
           const nowTs = Date.now();
           const fileName = `${mode === "edit" ? "cavbot-edit" : "cavbot-image"}-${nowTs}-${index + 1}.png`;
-          const assetId = await createImageAsset({
+          const assetId = await createImageAssetSafe({
             accountId: ctx.accountId,
             userId: ctx.userId,
             jobId: imageJobId,
@@ -3033,7 +3184,7 @@ export async function runCavCodeAssist(args: {
             },
           });
 
-          await appendUserImageHistory({
+          await appendUserImageHistorySafe({
             accountId: ctx.accountId,
             userId: ctx.userId,
             jobId: imageJobId,
@@ -3056,7 +3207,7 @@ export async function runCavCodeAssist(args: {
           });
         }
 
-        await completeImageJob({
+        await completeImageJobSafe({
           jobId: imageJobId,
           accountId: ctx.accountId,
           userId: ctx.userId,
@@ -3189,7 +3340,7 @@ export async function runCavCodeAssist(args: {
           answerPath: ["image_model_generation"],
         });
 
-        await learnAiUserMemoryFromPrompt({
+        await learnAiUserMemoryFromPromptSafe({
           accountId: ctx.accountId,
           userId: ctx.userId,
           sessionId,
@@ -3199,7 +3350,7 @@ export async function runCavCodeAssist(args: {
         });
 
         if (queueMessageId && sessionId) {
-          await settleCavCodeQueuedPrompt({
+          await settleCavCodeQueuedPromptSafe({
             accountId: ctx.accountId,
             sessionId,
             messageId: queueMessageId,
@@ -3265,7 +3416,7 @@ export async function runCavCodeAssist(args: {
         };
       } catch (error) {
         if (imageJobId) {
-          await failImageJob({
+          await failImageJobSafe({
             jobId: imageJobId,
             accountId: ctx.accountId,
             userId: ctx.userId,
@@ -3580,7 +3731,7 @@ export async function runCavCodeAssist(args: {
       answerPath,
     });
 
-    await learnAiUserMemoryFromPrompt({
+    await learnAiUserMemoryFromPromptSafe({
       accountId: ctx.accountId,
       userId: ctx.userId,
       sessionId,
@@ -3590,7 +3741,7 @@ export async function runCavCodeAssist(args: {
     });
 
     if (queueMessageId && sessionId) {
-      await settleCavCodeQueuedPrompt({
+      await settleCavCodeQueuedPromptSafe({
         accountId: ctx.accountId,
         sessionId,
         messageId: queueMessageId,
@@ -3646,7 +3797,7 @@ export async function runCavCodeAssist(args: {
     if (policy.qwenCoderReservation && model === ALIBABA_QWEN_CODER_MODEL_ID) {
       const runtimeSeconds = Math.max(1, Math.ceil((Date.now() - startedAt) / 1000));
       const diffGenerated = Boolean(s(data.proposedCode));
-      await finalizeQwenCoderCharge({
+      await finalizeQwenCoderChargeSafe({
         accountId: ctx.accountId,
         userId: ctx.userId,
         requestId: args.requestId,
@@ -3671,7 +3822,7 @@ export async function runCavCodeAssist(args: {
         // Billing reconciliation is best-effort; reservation remains authoritative.
       });
 
-      await captureQwenCoderContextSnapshot({
+      await captureQwenCoderContextSnapshotSafe({
         accountId: ctx.accountId,
         userId: ctx.userId,
         sessionId: sessionId || null,
@@ -3735,7 +3886,7 @@ export async function runCavCodeAssist(args: {
     const queueSessionId = sessionId || s(args.input.sessionId);
     if (queueMessageId && queueSessionId) {
       try {
-        await settleCavCodeQueuedPrompt({
+        await settleCavCodeQueuedPromptSafe({
           accountId: ctx.accountId,
           sessionId: queueSessionId,
           messageId: queueMessageId,
@@ -3799,7 +3950,7 @@ export async function runCavCodeAssist(args: {
       const isWriteActionForFailure = isCavCodeWriteAction(effectiveAction);
       const runtimeSeconds = Math.max(0, Math.ceil((Date.now() - startedAt) / 1000));
       const failedEarly = runtimeSeconds <= 2 && latestPromptTokens <= 0 && latestCompletionTokens <= 0;
-      await refundOrAdjustQwenCoderCharge({
+      await refundOrAdjustQwenCoderChargeSafe({
         accountId: ctx.accountId,
         userId: ctx.userId,
         requestId: args.requestId,
@@ -3822,7 +3973,7 @@ export async function runCavCodeAssist(args: {
         },
       }).catch(() => {});
 
-      await captureQwenCoderContextSnapshot({
+      await captureQwenCoderContextSnapshotSafe({
         accountId: ctx.accountId,
         userId: ctx.userId,
         sessionId: sessionId || null,
@@ -3886,7 +4037,7 @@ export async function runSurfaceAssist(args: {
     workspaceId: args.input.workspaceId || null,
     projectId: args.input.projectId || null,
   });
-  const memoryFacts = await retrieveRelevantAiUserMemoryFacts({
+  const memoryFacts = await retrieveRelevantAiUserMemoryFactsSafe({
     accountId: ctx.accountId,
     userId: ctx.userId,
     prompt: userPrompt || action,
@@ -4259,7 +4410,7 @@ export async function runSurfaceAssist(args: {
       answerPath,
     });
 
-    await learnAiUserMemoryFromPrompt({
+    await learnAiUserMemoryFromPromptSafe({
       accountId: ctx.accountId,
       userId: ctx.userId,
       sessionId,
@@ -4552,7 +4703,7 @@ export async function runCenterAssist(args: {
     sessionId: initialSessionId,
     maxMessages: 10,
   });
-  const memoryFacts = await retrieveRelevantAiUserMemoryFacts({
+  const memoryFacts = await retrieveRelevantAiUserMemoryFactsSafe({
     accountId: ctx.accountId,
     userId: ctx.userId,
     prompt: args.input.prompt,
@@ -4679,8 +4830,8 @@ export async function runCenterAssist(args: {
     if (policy.model === ALIBABA_QWEN_IMAGE_MODEL_ID || policy.model === ALIBABA_QWEN_IMAGE_EDIT_MODEL_ID) {
       const mode: "studio" | "edit" = policy.model === ALIBABA_QWEN_IMAGE_EDIT_MODEL_ID ? "edit" : "studio";
       const imageStudioContext = parseImageStudioRequestContext(inputContext);
-      const imageStudioPlanTier = toImageStudioPlanTier(ctx.planId);
-      const preset = await getImagePresetById({
+      const imageStudioPlanTier = await toImageStudioPlanTierSafe(ctx.planId);
+      const preset = await getImagePresetByIdSafe({
         presetId: imageStudioContext.presetId,
         slug: imageStudioContext.presetSlug,
         planTier: imageStudioPlanTier,
@@ -4699,7 +4850,7 @@ export async function runCenterAssist(args: {
         presetLabel: preset?.label || null,
       });
 
-      const resolvedImagePrompt = buildImageStudioPrompt({
+      const resolvedImagePrompt = await buildImageStudioPromptSafe({
         mode: mode === "edit" ? "edit" : "generate",
         userPrompt: imagePromptResolution.effectivePrompt,
         preset,
@@ -4718,7 +4869,7 @@ export async function runCenterAssist(args: {
           }
         | null = null;
       if (mode === "edit" && imageStudioContext.sourceAssetId) {
-        const resolved = await resolveDataUrlForAsset({
+        const resolved = await resolveDataUrlForAssetSafe({
           accountId: ctx.accountId,
           userId: ctx.userId,
           assetId: imageStudioContext.sourceAssetId,
@@ -4735,7 +4886,7 @@ export async function runCenterAssist(args: {
 
       let imageJobId = "";
       try {
-        imageJobId = await startImageJob({
+        imageJobId = await startImageJobSafe({
           accountId: ctx.accountId,
           userId: ctx.userId,
           sessionId: sessionId || null,
@@ -4828,7 +4979,7 @@ export async function runCenterAssist(args: {
           const mimeType = "image/png";
           const nowTs = Date.now();
           const fileName = `${mode === "edit" ? "cavbot-edit" : "cavbot-image"}-${nowTs}-${index + 1}.png`;
-          const assetId = await createImageAsset({
+          const assetId = await createImageAssetSafe({
             accountId: ctx.accountId,
             userId: ctx.userId,
             jobId: imageJobId,
@@ -4853,7 +5004,7 @@ export async function runCenterAssist(args: {
             },
           });
 
-          await appendUserImageHistory({
+          await appendUserImageHistorySafe({
             accountId: ctx.accountId,
             userId: ctx.userId,
             jobId: imageJobId,
@@ -4873,7 +5024,7 @@ export async function runCenterAssist(args: {
           });
         }
 
-        await completeImageJob({
+        await completeImageJobSafe({
           jobId: imageJobId,
           accountId: ctx.accountId,
           userId: ctx.userId,
@@ -5015,7 +5166,7 @@ export async function runCenterAssist(args: {
           answerPath: ["image_model_generation"],
         });
 
-        await learnAiUserMemoryFromPrompt({
+        await learnAiUserMemoryFromPromptSafe({
           accountId: ctx.accountId,
           userId: ctx.userId,
           sessionId,
@@ -5100,7 +5251,7 @@ export async function runCenterAssist(args: {
         };
       } catch (error) {
         if (imageJobId) {
-          await failImageJob({
+          await failImageJobSafe({
             jobId: imageJobId,
             accountId: ctx.accountId,
             userId: ctx.userId,
@@ -5450,7 +5601,7 @@ export async function runCenterAssist(args: {
       answerPath,
     });
 
-    await learnAiUserMemoryFromPrompt({
+    await learnAiUserMemoryFromPromptSafe({
       accountId: ctx.accountId,
       userId: ctx.userId,
       sessionId,

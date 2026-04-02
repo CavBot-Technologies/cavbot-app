@@ -94,14 +94,23 @@ test("module and AI account gates use authDb instead of prisma account lookups",
 test("ai hot paths use authDb-backed counters and session persistence on Cloudflare", () => {
   const aiPolicy = read("src/lib/ai/ai.policy.ts");
   const aiMemory = read("src/lib/ai/ai.memory.ts");
+  const aiAudit = read("src/lib/ai/ai.audit.ts");
 
   assert.equal(aiPolicy.includes('from "@/lib/prisma"'), false);
+  assert.equal(aiPolicy.includes('import type { CavCloudCollabPolicy } from "@/lib/cavcloud/collabPolicy.server"'), true);
+  assert.equal(aiPolicy.includes('import type { QwenCoderEntitlement, QwenCoderReservation } from "@/src/lib/ai/qwen-coder-credits.server"'), true);
   assert.equal(aiPolicy.includes("SELECT COUNT(*)::int AS \"count\""), true);
   assert.equal(aiPolicy.includes('FROM "CavAiUsageLog"'), true);
   assert.equal(aiMemory.includes('from "@/lib/authDb"'), true);
+  assert.equal(aiMemory.includes('from "@/lib/prisma"'), false);
+  assert.equal(aiMemory.includes('import("@/lib/prisma")'), true);
   assert.equal(aiMemory.includes('FROM "CavAiSession"'), true);
   assert.equal(aiMemory.includes('INSERT INTO "CavAiMessage"'), true);
   assert.equal(aiMemory.includes('UPDATE "CavAiSession"'), true);
+  assert.equal(aiAudit.includes('from "@/lib/prisma"'), false);
+  assert.equal(aiAudit.includes('from "@/lib/audit"'), false);
+  assert.equal(aiAudit.includes('import("@/lib/prisma")'), true);
+  assert.equal(aiAudit.includes('import("@/lib/audit")'), true);
 });
 
 test("cavcode and center assist degrade safely if optional registry or memory writes fail", () => {
@@ -110,6 +119,11 @@ test("cavcode and center assist degrade safely if optional registry or memory wr
 
   assert.equal(aiService.includes("resolveInstalledCavenCustomAgentSafe"), true);
   assert.equal(aiService.includes("resolveInstalledCavCodeActionSafe"), true);
+  assert.equal(aiService.includes("estimateContextTokensForSnapshotSafe"), true);
+  assert.equal(aiService.includes("retrieveRelevantAiUserMemoryFactsSafe"), true);
+  assert.equal(aiService.includes('from "@/src/lib/ai/qwen-coder-credits.server"'), false);
+  assert.equal(aiService.includes('from "@/lib/cavcloud/storage.server"'), false);
+  assert.equal(aiService.includes('from "@/lib/cavai/imageStudio.server"'), false);
   assert.equal(aiService.includes("return requested.slice(0, MAX_UPLOADED_WORKSPACE_FILES);"), true);
   assert.equal(aiMemory.includes("Memory learning must not break live assist flows."), true);
 });

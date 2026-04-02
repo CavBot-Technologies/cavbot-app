@@ -1,8 +1,9 @@
 import "server-only";
 
-import { auditLogWrite } from "@/lib/audit";
-import { prisma } from "@/lib/prisma";
 import type { AiSurface, AiUsageStatus } from "@/src/lib/ai/ai.types";
+
+type PrismaClient = typeof import("@/lib/prisma")["prisma"];
+type AuditLogWrite = typeof import("@/lib/audit")["auditLogWrite"];
 
 function s(value: unknown): string {
   return String(value ?? "").trim();
@@ -12,6 +13,23 @@ function normalizeInt(value: unknown): number | null {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) return null;
   return Math.trunc(parsed);
+}
+
+let prismaClientPromise: Promise<PrismaClient> | null = null;
+let auditLogWritePromise: Promise<AuditLogWrite> | null = null;
+
+async function getPrismaClient(): Promise<PrismaClient> {
+  if (!prismaClientPromise) {
+    prismaClientPromise = import("@/lib/prisma").then((mod) => mod.prisma);
+  }
+  return prismaClientPromise;
+}
+
+async function getAuditLogWrite(): Promise<AuditLogWrite> {
+  if (!auditLogWritePromise) {
+    auditLogWritePromise = import("@/lib/audit").then((mod) => mod.auditLogWrite);
+  }
+  return auditLogWritePromise;
 }
 
 export type AiUsageLogInput = {
@@ -38,6 +56,7 @@ export type AiUsageLogInput = {
 
 export async function writeAiUsageLog(input: AiUsageLogInput) {
   try {
+    const prisma = await getPrismaClient();
     await prisma.cavAiUsageLog.create({
       data: {
         accountId: s(input.accountId),
@@ -97,6 +116,7 @@ export async function writeAiAudit(args: {
   outcome?: string | null;
 }) {
   try {
+    const auditLogWrite = await getAuditLogWrite();
     await auditLogWrite({
       accountId: s(args.accountId),
       operatorUserId: s(args.userId) || null,
@@ -159,6 +179,7 @@ export async function persistAiNarration(args: {
   origin?: string | null;
 }) {
   try {
+    const prisma = await getPrismaClient();
     await prisma.cavAiNarration.create({
       data: {
         accountId: s(args.accountId),
@@ -195,6 +216,7 @@ export async function persistAiFixPlan(args: {
   origin?: string | null;
 }) {
   try {
+    const prisma = await getPrismaClient();
     await prisma.cavAiFixPlan.create({
       data: {
         accountId: s(args.accountId),
@@ -244,6 +266,7 @@ export async function persistAiReasoningTrace(args: {
   answerPath?: string[] | null;
 }) {
   try {
+    const prisma = await getPrismaClient();
     await prisma.cavAiReasoningTrace.create({
       data: {
         accountId: s(args.accountId),
@@ -289,6 +312,7 @@ export async function persistAiToolCallTrace(args: {
   errorCode?: string | null;
 }) {
   try {
+    const prisma = await getPrismaClient();
     await prisma.cavAiToolCall.create({
       data: {
         accountId: s(args.accountId),
@@ -326,6 +350,7 @@ export async function persistAiRetryEvent(args: {
   contextJson?: Record<string, unknown> | null;
 }) {
   try {
+    const prisma = await getPrismaClient();
     await prisma.cavAiRetryEvent.create({
       data: {
         accountId: s(args.accountId),
@@ -366,6 +391,7 @@ export async function persistAiModelSelectionEvent(args: {
   fallbackReason?: string | null;
 }) {
   try {
+    const prisma = await getPrismaClient();
     await prisma.cavAiModelSelectionEvent.create({
       data: {
         accountId: s(args.accountId),

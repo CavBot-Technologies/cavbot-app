@@ -3,7 +3,6 @@ import "server-only";
 import pg from "pg";
 
 import { getAuthPool, newDbId, withAuthTransaction } from "@/lib/authDb";
-import { prisma } from "@/lib/prisma";
 import { embedAlibabaQwenText, rerankAlibabaQwenDocuments } from "@/src/lib/ai/providers/alibaba-qwen";
 import { AiServiceError, type AiCenterSurface, type CavAiReasoningLevel } from "@/src/lib/ai/ai.types";
 
@@ -160,7 +159,21 @@ function summarizeSessionTitleFromPrompt(prompt: unknown): string {
 }
 
 type AiQueryable = Pick<pg.Pool, "query"> | Pick<pg.PoolClient, "query">;
-type SessionTitleDbClient = Pick<typeof prisma, "cavAiSession">;
+type SessionTitleDbClient = {
+  cavAiSession: {
+    findMany: (args: {
+      where: {
+        accountId: string;
+        userId: string;
+        id: { not: string };
+      };
+      orderBy: Array<{ updatedAt: "desc" }>;
+      take: number;
+      select: { title: true };
+    }) => Promise<Array<{ title: string }>>;
+  };
+};
+type PrismaClient = typeof import("@/lib/prisma")["prisma"];
 
 type AiSessionDbRow = {
   id: string;
@@ -215,6 +228,15 @@ type AiFeedbackDbRow = {
   retryCount: number;
   updatedAt: string | Date | null;
 };
+
+let prismaClientPromise: Promise<PrismaClient> | null = null;
+
+async function getPrismaClient(): Promise<PrismaClient> {
+  if (!prismaClientPromise) {
+    prismaClientPromise = import("@/lib/prisma").then((mod) => mod.prisma);
+  }
+  return prismaClientPromise;
+}
 
 function recordOrNull(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -649,6 +671,7 @@ export async function renameAiSessionForAccount(args: {
     throw new AiServiceError("INVALID_INPUT", "accountId, sessionId, and title are required.", 400);
   }
   await getAiSessionForAccount({ accountId, sessionId });
+  const prisma = await getPrismaClient();
   const updated = await prisma.cavAiSession.update({
     where: { id: sessionId },
     data: {
@@ -678,6 +701,7 @@ export async function deleteAiSessionForAccount(args: {
     throw new AiServiceError("INVALID_INPUT", "accountId and sessionId are required.", 400);
   }
   await getAiSessionForAccount({ accountId, sessionId });
+  const prisma = await getPrismaClient();
   await prisma.cavAiSession.delete({
     where: { id: sessionId },
   });
@@ -705,6 +729,7 @@ export async function rewindAiSessionFromMessage(args: {
     accountId,
     sessionId,
   });
+  const prisma = await getPrismaClient();
 
   // Session ownership is already verified above via getAiSessionForAccount(accountId, sessionId).
   // Query by sessionId so rewind works even when legacy message.accountId drifted.
@@ -891,6 +916,7 @@ export async function updateAiMessageFeedback(args: {
     sessionId,
   });
 
+  const prisma = await getPrismaClient();
   const message = await prisma.cavAiMessage.findFirst({
     where: {
       id: messageId,
@@ -1278,6 +1304,7 @@ export async function enqueueCavCodePrompt(args: {
   });
 
   const prompt = s(args.prompt);
+  const prisma = await getPrismaClient();
   const created = await prisma.$transaction(async (tx) => {
     const session = await tx.cavAiSession.findFirst({
       where: {
@@ -1387,6 +1414,7 @@ export async function listCavCodeQueuedPrompts(args: {
   });
 
   const limit = Math.max(1, Math.min(120, Math.trunc(Number(args.limit || 40))));
+  const prisma = await getPrismaClient();
   const rows = await prisma.cavAiMessage.findMany({
     where: {
       accountId: s(args.accountId),
@@ -1420,6 +1448,7 @@ export async function claimNextCavCodeQueuedPrompt(args: {
     sessionId,
   });
 
+  const prisma = await getPrismaClient();
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const candidate = await prisma.cavAiMessage.findFirst({
       where: {
@@ -1482,6 +1511,7 @@ export async function editCavCodeQueuedPrompt(args: {
     sessionId,
   });
 
+  const prisma = await getPrismaClient();
   const existing = await prisma.cavAiMessage.findFirst({
     where: {
       id: messageId,
@@ -1548,6 +1578,7 @@ export async function cancelCavCodeQueuedPrompt(args: {
     sessionId,
   });
 
+  const prisma = await getPrismaClient();
   const existing = await prisma.cavAiMessage.findFirst({
     where: {
       id: messageId,
@@ -1598,6 +1629,7 @@ export async function settleCavCodeQueuedPrompt(args: {
   const messageId = s(args.messageId);
   if (!sessionId || !messageId) return;
 
+  const prisma = await getPrismaClient();
   const existing = await prisma.cavAiMessage.findFirst({
     where: {
       id: messageId,
@@ -1656,6 +1688,7 @@ export async function getAiUserMemorySetting(args: {
   accountId: string;
   userId: string;
 }): Promise<{ memoryEnabled: boolean; updatedAt: string | null }> {
+  const prisma = await getPrismaClient();
   const row = await prisma.cavAiUserMemorySetting.findUnique({
     where: {
       accountId_userId: {
@@ -1690,6 +1723,7 @@ async function writeMemoryEvent(args: {
   metaJson?: Record<string, unknown> | null;
 }) {
   try {
+    const prisma = await getPrismaClient();
     await prisma.cavAiUserMemoryEvent.create({
       data: {
         accountId: s(args.accountId),
@@ -1711,6 +1745,7 @@ export async function setAiUserMemoryEnabled(args: {
   userId: string;
   memoryEnabled: boolean;
 }) {
+  const prisma = await getPrismaClient();
   const updated = await prisma.cavAiUserMemorySetting.upsert({
     where: {
       accountId_userId: {
@@ -1752,6 +1787,7 @@ export async function listAiUserMemoryFacts(args: {
   userId: string;
   limit?: number;
 }): Promise<AiUserMemoryFact[]> {
+  const prisma = await getPrismaClient();
   const rows = await prisma.cavAiUserMemoryFact.findMany({
     where: {
       accountId: s(args.accountId),
@@ -1802,6 +1838,7 @@ export async function upsertAiUserMemoryFact(args: {
     throw new AiServiceError("INVALID_INPUT", "factKey and factValue are required.", 400);
   }
 
+  const prisma = await getPrismaClient();
   const row = await prisma.cavAiUserMemoryFact.upsert({
     where: {
       accountId_userId_factKey: {
@@ -1875,6 +1912,7 @@ export async function deleteAiUserMemoryFact(args: {
   userId: string;
   factId: string;
 }) {
+  const prisma = await getPrismaClient();
   const existing = await prisma.cavAiUserMemoryFact.findFirst({
     where: {
       id: s(args.factId),
@@ -1962,6 +2000,7 @@ export async function retrieveRelevantAiUserMemoryFacts(args: {
   if (!setting.memoryEnabled) return [];
 
   const query = `${s(args.prompt)} ${s(args.goal)}`;
+  const prisma = await getPrismaClient();
   const rows = await prisma.cavAiUserMemoryFact.findMany({
     where: {
       accountId: s(args.accountId),
