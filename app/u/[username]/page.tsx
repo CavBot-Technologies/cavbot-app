@@ -12,6 +12,7 @@ export const revalidate = 0;
 
 import { LockIcon } from "@/components/LockIcon";
 import { getSession } from "@/lib/apiAuth";
+import { findPublicProfileUserByUsername, getAuthPool } from "@/lib/authDb";
 import { prisma } from "@/lib/prisma";
 import { isBasicUsername, isReservedUsername, normalizeUsername, RESERVED_ROUTE_SLUGS } from "@/lib/username";
 import { buildPublicProfileViewModel } from "@/lib/publicProfile/publicProfile.server";
@@ -486,22 +487,31 @@ export default async function PublicCavbotProfilePage({
       };
     }
     try {
+      const authPool = (() => {
+        try {
+          return getAuthPool();
+        } catch {
+          return null;
+        }
+      })();
       try {
-        const owner = await prisma.user.findUnique({
-          where: { username },
-          select: {
-            id: true,
-            showStatusOnPublicProfile: true,
-            userStatus: true,
-            userStatusNote: true,
-            userStatusUpdatedAt: true,
-            // Back-compat during rollout
-            publicStatusEnabled: true,
-            publicStatusMode: true,
-            publicStatusNote: true,
-            publicStatusUpdatedAt: true,
-          },
-        });
+        const owner =
+          (authPool ? await findPublicProfileUserByUsername(authPool, username).catch(() => null) : null) ??
+          (await prisma.user.findUnique({
+            where: { username },
+            select: {
+              id: true,
+              showStatusOnPublicProfile: true,
+              userStatus: true,
+              userStatusNote: true,
+              userStatusUpdatedAt: true,
+              // Back-compat during rollout
+              publicStatusEnabled: true,
+              publicStatusMode: true,
+              publicStatusNote: true,
+              publicStatusUpdatedAt: true,
+            },
+          }).catch(() => null));
         const ok = Boolean(owner?.id) && owner!.id === viewerUserId;
         const showStatusOnPublicProfile =
           typeof (owner as { showStatusOnPublicProfile?: unknown })?.showStatusOnPublicProfile === "boolean"
@@ -527,7 +537,9 @@ export default async function PublicCavbotProfilePage({
         };
       } catch {
         // Bootstrap safety: if status columns don't exist yet, still allow owner edit UI.
-        const owner = await prisma.user.findUnique({ where: { username }, select: { id: true } }).catch(() => null);
+        const owner =
+          (authPool ? await findPublicProfileUserByUsername(authPool, username).catch(() => null) : null) ??
+          (await prisma.user.findUnique({ where: { username }, select: { id: true } }).catch(() => null));
         const ok = Boolean(owner?.id) && owner!.id === viewerUserId;
         return {
           cta: ok ? ({ href: "/settings?tab=account", label: "Manage profile" } as const) : null,

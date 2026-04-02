@@ -35,6 +35,39 @@ type RawUserRow = {
   emailVerifiedAt: string | Date | null;
 };
 
+type RawPublicProfileUserRow = RawUserRow & {
+  fullName: string | null;
+  bio: string | null;
+  companyName: string | null;
+  companySubcategory: string | null;
+  country: string | null;
+  region: string | null;
+  githubUrl: string | null;
+  instagramUrl: string | null;
+  linkedinUrl: string | null;
+  customLinkUrl: string | null;
+  showCavbotProfileLink: boolean | null;
+  publicShowReadme: boolean | null;
+  publicShowWorkspaceSnapshot: boolean | null;
+  publicShowHealthOverview: boolean | null;
+  publicShowCapabilities: boolean | null;
+  publicShowArtifacts: boolean | null;
+  publicShowPlanTier: boolean | null;
+  publicShowBio: boolean | null;
+  publicShowIdentityLinks: boolean | null;
+  publicShowIdentityLocation: boolean | null;
+  publicShowIdentityEmail: boolean | null;
+  publicWorkspaceId: string | null;
+  publicStatusEnabled: boolean | null;
+  publicStatusMode: string | null;
+  publicStatusNote: string | null;
+  publicStatusUpdatedAt: string | Date | null;
+  showStatusOnPublicProfile: boolean | null;
+  userStatus: string | null;
+  userStatusNote: string | null;
+  userStatusUpdatedAt: string | Date | null;
+};
+
 type RawUserAuthRow = {
   userId: string;
   passwordAlgo: string;
@@ -91,6 +124,39 @@ export type AuthUser = {
   createdAt: Date;
   lastLoginAt: Date | null;
   emailVerifiedAt: Date | null;
+};
+
+export type AuthPublicProfileUser = AuthUser & {
+  fullName: string | null;
+  bio: string | null;
+  companyName: string | null;
+  companySubcategory: string | null;
+  country: string | null;
+  region: string | null;
+  githubUrl: string | null;
+  instagramUrl: string | null;
+  linkedinUrl: string | null;
+  customLinkUrl: string | null;
+  showCavbotProfileLink: boolean;
+  publicShowReadme: boolean;
+  publicShowWorkspaceSnapshot: boolean;
+  publicShowHealthOverview: boolean;
+  publicShowCapabilities: boolean;
+  publicShowArtifacts: boolean;
+  publicShowPlanTier: boolean;
+  publicShowBio: boolean;
+  publicShowIdentityLinks: boolean;
+  publicShowIdentityLocation: boolean;
+  publicShowIdentityEmail: boolean;
+  publicWorkspaceId: string | null;
+  publicStatusEnabled: boolean;
+  publicStatusMode: string | null;
+  publicStatusNote: string | null;
+  publicStatusUpdatedAt: Date | null;
+  showStatusOnPublicProfile: boolean;
+  userStatus: string | null;
+  userStatusNote: string | null;
+  userStatusUpdatedAt: Date | null;
 };
 
 export type AuthUserAuth = {
@@ -187,6 +253,43 @@ function mapUser(row: RawUserRow): AuthUser {
     createdAt: asDate(row.createdAt) || new Date(0),
     lastLoginAt: asDate(row.lastLoginAt),
     emailVerifiedAt: asDate(row.emailVerifiedAt),
+  };
+}
+
+function mapPublicProfileUser(row: RawPublicProfileUserRow): AuthPublicProfileUser {
+  const base = mapUser(row);
+  return {
+    ...base,
+    fullName: row.fullName,
+    bio: row.bio,
+    companyName: row.companyName,
+    companySubcategory: row.companySubcategory,
+    country: row.country,
+    region: row.region,
+    githubUrl: row.githubUrl,
+    instagramUrl: row.instagramUrl,
+    linkedinUrl: row.linkedinUrl,
+    customLinkUrl: row.customLinkUrl,
+    showCavbotProfileLink: Boolean(row.showCavbotProfileLink),
+    publicShowReadme: Boolean(row.publicShowReadme),
+    publicShowWorkspaceSnapshot: Boolean(row.publicShowWorkspaceSnapshot),
+    publicShowHealthOverview: Boolean(row.publicShowHealthOverview),
+    publicShowCapabilities: Boolean(row.publicShowCapabilities),
+    publicShowArtifacts: Boolean(row.publicShowArtifacts),
+    publicShowPlanTier: Boolean(row.publicShowPlanTier),
+    publicShowBio: Boolean(row.publicShowBio),
+    publicShowIdentityLinks: Boolean(row.publicShowIdentityLinks),
+    publicShowIdentityLocation: Boolean(row.publicShowIdentityLocation),
+    publicShowIdentityEmail: Boolean(row.publicShowIdentityEmail),
+    publicWorkspaceId: row.publicWorkspaceId,
+    publicStatusEnabled: Boolean(row.publicStatusEnabled),
+    publicStatusMode: row.publicStatusMode,
+    publicStatusNote: row.publicStatusNote,
+    publicStatusUpdatedAt: asDate(row.publicStatusUpdatedAt),
+    showStatusOnPublicProfile: Boolean(row.showStatusOnPublicProfile),
+    userStatus: row.userStatus,
+    userStatusNote: row.userStatusNote,
+    userStatusUpdatedAt: asDate(row.userStatusUpdatedAt),
   };
 }
 
@@ -364,6 +467,60 @@ export async function findUserById(queryable: Queryable, userId: string) {
     [userId],
   );
   return row ? mapUser(row) : null;
+}
+
+export async function findPublicProfileUserByUsername(queryable: Queryable, username: string) {
+  const row = await queryOne<RawPublicProfileUserRow>(
+    queryable,
+    `SELECT
+        "id",
+        "email",
+        "username",
+        "displayName",
+        "usernameChangeCount",
+        "lastUsernameChangeAt",
+        "publicProfileEnabled",
+        "avatarImage",
+        "avatarTone",
+        "createdAt",
+        "lastLoginAt",
+        "emailVerifiedAt",
+        "fullName",
+        "bio",
+        "companyName",
+        "companySubcategory",
+        "country",
+        "region",
+        "githubUrl",
+        "instagramUrl",
+        "linkedinUrl",
+        "customLinkUrl",
+        "showCavbotProfileLink",
+        "publicShowReadme",
+        "publicShowWorkspaceSnapshot",
+        "publicShowHealthOverview",
+        "publicShowCapabilities",
+        "publicShowArtifacts",
+        "publicShowPlanTier",
+        "publicShowBio",
+        "publicShowIdentityLinks",
+        "publicShowIdentityLocation",
+        "publicShowIdentityEmail",
+        "publicWorkspaceId",
+        "publicStatusEnabled",
+        "publicStatusMode",
+        "publicStatusNote",
+        "publicStatusUpdatedAt",
+        "showStatusOnPublicProfile",
+        "userStatus",
+        "userStatusNote",
+        "userStatusUpdatedAt"
+      FROM "User"
+      WHERE "username" = $1
+      LIMIT 1`,
+    [username],
+  );
+  return row ? mapPublicProfileUser(row) : null;
 }
 
 export async function findUserAuth(queryable: Queryable, userId: string) {

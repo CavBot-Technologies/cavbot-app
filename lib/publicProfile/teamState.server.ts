@@ -1,5 +1,14 @@
 import "server-only";
 
+import {
+  findAccountById,
+  findActiveProjectByIdForAccount,
+  findMembershipsForUser,
+  findPublicProfileUserByUsername,
+  findUserById,
+  getAuthPool,
+  pickPrimaryMembership,
+} from "@/lib/authDb";
 import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { isBasicUsername, isReservedUsername, normalizeUsername, RESERVED_ROUTE_SLUGS } from "@/lib/username";
@@ -88,7 +97,16 @@ export async function resolvePublicProfileWorkspaceContext(usernameRaw: string):
   const username = normalizeUsername(usernameRaw);
   if (!username) return null;
 
-  const user = await prisma.user.findUnique({
+  const authPool = (() => {
+    try {
+      return getAuthPool();
+    } catch {
+      return null;
+    }
+  })();
+
+  const authUser = authPool ? await findPublicProfileUserByUsername(authPool, username).catch(() => null) : null;
+  const user = authUser ?? (await prisma.user.findUnique({
     where: { username },
     select: {
       id: true,
@@ -96,7 +114,7 @@ export async function resolvePublicProfileWorkspaceContext(usernameRaw: string):
       companyName: true,
       publicWorkspaceId: true,
     },
-  }).catch(() => null);
+  }).catch(() => null));
   if (!user?.id || !user.username) return null;
 
   const preferredProjectId = parseWorkspaceProjectId(user.publicWorkspaceId);
@@ -144,7 +162,25 @@ export async function resolvePublicProfileWorkspaceContext(usernameRaw: string):
         },
       }).catch(() => null);
 
-  const accountId = preferredAccountId || s(ownerMembership?.accountId) || s(fallbackMembership?.accountId);
+  let accountId = preferredAccountId || s(ownerMembership?.accountId) || s(fallbackMembership?.accountId);
+  if (!accountId && authPool) {
+    const memberships = await findMembershipsForUser(authPool, s(user.id)).catch(() => []);
+
+    if (preferredProjectId != null) {
+      for (const membership of memberships) {
+        const project = await findActiveProjectByIdForAccount(authPool, membership.accountId, preferredProjectId).catch(() => null);
+        if (project?.id) {
+          accountId = membership.accountId;
+          break;
+        }
+      }
+    }
+
+    if (!accountId) {
+      const primaryMembership = pickPrimaryMembership(memberships);
+      accountId = s(primaryMembership?.accountId);
+    }
+  }
   const account = accountId
     ? await prisma.account.findUnique({
         where: { id: accountId },
@@ -155,19 +191,20 @@ export async function resolvePublicProfileWorkspaceContext(usernameRaw: string):
         },
       }).catch(() => null)
     : null;
+  const authAccount = !account && accountId && authPool ? await findAccountById(authPool, accountId).catch(() => null) : null;
 
   const workspaceId = s(account?.id) || null;
   const workspaceName = resolveWorkspaceDisplayName({
-    companyName: user.companyName,
+    companyName: "companyName" in user ? user.companyName : null,
     username: user.username || username,
-    accountName: account?.name,
+    accountName: account?.name || authAccount?.name,
   });
-  const planId = resolvePlanIdFromTier(s(account?.tier) || "FREE");
+  const planId = resolvePlanIdFromTier(s(account?.tier || authAccount?.tier) || "FREE");
 
   return {
     username: s(user.username) || username,
     profileUserId: s(user.id),
-    workspaceId,
+    workspaceId: workspaceId || s(authAccount?.id) || null,
     workspaceName,
     planId,
   };
@@ -209,13 +246,22 @@ export async function resolvePublicProfileViewerTeamState(args: {
     };
   }
 
-  const viewer = await prisma.user.findUnique({
+  const authPool = (() => {
+    try {
+      return getAuthPool();
+    } catch {
+      return null;
+    }
+  })();
+
+  const authViewer = authPool ? await findUserById(authPool, viewerUserId).catch(() => null) : null;
+  const viewer = authViewer ?? (await prisma.user.findUnique({
     where: { id: viewerUserId },
     select: {
       id: true,
       email: true,
     },
-  }).catch(() => null);
+  }).catch(() => null));
   const viewerEmail = s(viewer?.email).toLowerCase() || null;
 
   const canInviteFromCurrentAccount = (() => {
@@ -248,8 +294,11 @@ export async function resolvePublicProfileViewerTeamState(args: {
       role: true,
     },
   }).catch(() => null);
+  const authMembership = !membership && authPool
+    ? (await findMembershipsForUser(authPool, viewerUserId).catch(() => [])).find((row) => row.accountId === workspaceId) ?? null
+    : null;
 
-  const workspaceRoleRaw = s(membership?.role).toUpperCase();
+  const workspaceRoleRaw = s(membership?.role || authMembership?.role).toUpperCase();
   const workspaceRole = workspaceRoleRaw === "OWNER" || workspaceRoleRaw === "ADMIN" || workspaceRoleRaw === "MEMBER"
     ? (workspaceRoleRaw as "OWNER" | "ADMIN" | "MEMBER")
     : null;

@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { unstable_noStore as noStore } from "next/cache";
 
+import { findUserByUsername, getAuthPool } from "@/lib/authDb";
 import { prisma } from "@/lib/prisma";
 import { isBasicUsername, isReservedUsername, normalizeUsername, RESERVED_ROUTE_SLUGS } from "@/lib/username";
 
@@ -48,6 +49,11 @@ export async function GET(req: Request) {
     }
 
     try {
+      const authUser = await findUserByUsername(getAuthPool(), username).catch(() => null);
+      if (authUser?.id) {
+        return jsonNoStore({ ok: true, exists: true }, { status: 200 });
+      }
+
       const user = await prisma.user.findUnique({
         where: { username },
         select: { id: true },

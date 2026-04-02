@@ -1,6 +1,14 @@
 import "server-only";
 
 import { unstable_cache } from "next/cache";
+import {
+  findAccountById,
+  findActiveProjectByIdForAccount,
+  findMembershipsForUser,
+  findPublicProfileUserByUsername,
+  getAuthPool,
+  pickPrimaryMembership,
+} from "@/lib/authDb";
 import { prisma } from "@/lib/prisma";
 import { getProjectSummaryForTenant, getProjectSummary } from "@/lib/cavbotApi.server";
 import { resolvePlanIdFromTier, hasModule } from "@/lib/plans";
@@ -88,6 +96,34 @@ type PublicUserRow = {
   userStatusNote?: string | null;
   userStatusUpdatedAt?: Date | string | null;
 };
+
+function publicProfileSettingsFromUserRow(row: PublicUserRow | null): PublicProfileSettings {
+  return {
+    publicProfileEnabled: typeof row?.publicProfileEnabled === "boolean" ? Boolean(row.publicProfileEnabled) : true,
+    publicShowReadme:
+      typeof (row as { publicShowReadme?: unknown } | null)?.publicShowReadme === "boolean"
+        ? Boolean((row as { publicShowReadme?: unknown }).publicShowReadme)
+        : true,
+    publicShowWorkspaceSnapshot:
+      typeof row?.publicShowWorkspaceSnapshot === "boolean" ? Boolean(row.publicShowWorkspaceSnapshot) : true,
+    publicShowHealthOverview:
+      typeof row?.publicShowHealthOverview === "boolean" ? Boolean(row.publicShowHealthOverview) : true,
+    publicShowCapabilities:
+      typeof row?.publicShowCapabilities === "boolean" ? Boolean(row.publicShowCapabilities) : true,
+    publicShowArtifacts:
+      typeof row?.publicShowArtifacts === "boolean" ? Boolean(row.publicShowArtifacts) : true,
+    publicShowPlanTier:
+      typeof row?.publicShowPlanTier === "boolean" ? Boolean(row.publicShowPlanTier) : true,
+    publicShowBio: typeof row?.publicShowBio === "boolean" ? Boolean(row.publicShowBio) : true,
+    publicShowIdentityLinks:
+      typeof row?.publicShowIdentityLinks === "boolean" ? Boolean(row.publicShowIdentityLinks) : true,
+    publicShowIdentityLocation:
+      typeof row?.publicShowIdentityLocation === "boolean" ? Boolean(row.publicShowIdentityLocation) : true,
+    publicShowIdentityEmail:
+      typeof row?.publicShowIdentityEmail === "boolean" ? Boolean(row.publicShowIdentityEmail) : false,
+    publicWorkspaceId: row?.publicWorkspaceId != null ? String(row.publicWorkspaceId) : null,
+  };
+}
 
 export type PublicProfilePosture = {
   label: string;
@@ -696,6 +732,13 @@ function routingPosture(summary: unknown): PublicProfilePosture {
 async function buildPublicProfileUncached(username: string): Promise<PublicProfileViewModel | null> {
   let user: PublicUserRow | null = null;
   let settings: PublicProfileSettings = { ...DEFAULT_PUBLIC_PROFILE_SETTINGS };
+  const authPool = (() => {
+    try {
+      return getAuthPool();
+    } catch {
+      return null;
+    }
+  })();
   const readUserWithPublicSettings = async (opts: { includeLinkedin: boolean; includeCustomLink: boolean }) => {
     // NOTE: keep this `select` non-literal to avoid TS breakage if Prisma types are stale.
     const select: Record<string, boolean> = {
@@ -744,95 +787,79 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
       where: { username },
       select,
     })) as unknown as PublicUserRow | null;
-
-    const s: PublicProfileSettings = {
-      // Public is the default posture unless explicitly disabled.
-      publicProfileEnabled: typeof row?.publicProfileEnabled === "boolean" ? Boolean(row.publicProfileEnabled) : true,
-      publicShowReadme: typeof (row as { publicShowReadme?: unknown })?.publicShowReadme === "boolean" ? Boolean((row as { publicShowReadme?: unknown }).publicShowReadme) : true,
-      publicShowWorkspaceSnapshot:
-        typeof row?.publicShowWorkspaceSnapshot === "boolean" ? Boolean(row.publicShowWorkspaceSnapshot) : true,
-      publicShowHealthOverview:
-        typeof row?.publicShowHealthOverview === "boolean" ? Boolean(row.publicShowHealthOverview) : true,
-      publicShowCapabilities:
-        typeof row?.publicShowCapabilities === "boolean" ? Boolean(row.publicShowCapabilities) : true,
-      publicShowArtifacts:
-        typeof row?.publicShowArtifacts === "boolean" ? Boolean(row.publicShowArtifacts) : true,
-      publicShowPlanTier:
-        typeof row?.publicShowPlanTier === "boolean" ? Boolean(row.publicShowPlanTier) : true,
-      publicShowBio: typeof row?.publicShowBio === "boolean" ? Boolean(row.publicShowBio) : true,
-      publicShowIdentityLinks:
-        typeof row?.publicShowIdentityLinks === "boolean" ? Boolean(row.publicShowIdentityLinks) : true,
-      publicShowIdentityLocation:
-        typeof row?.publicShowIdentityLocation === "boolean" ? Boolean(row.publicShowIdentityLocation) : true,
-      // Email is always opt-in.
-      publicShowIdentityEmail:
-        typeof row?.publicShowIdentityEmail === "boolean" ? Boolean(row.publicShowIdentityEmail) : false,
-      publicWorkspaceId: row?.publicWorkspaceId != null ? String(row.publicWorkspaceId) : null,
-    };
-
-    return { row, settings: s };
+    return { row, settings: publicProfileSettingsFromUserRow(row) };
   };
 
-  try {
-    const res = await readUserWithPublicSettings({ includeLinkedin: true, includeCustomLink: true });
-    user = res.row;
-    settings = res.settings;
-  } catch {
-    // Migration safety: if the DB is missing one of the optional columns, retry without it.
+  if (authPool) {
+    const authUser = await findPublicProfileUserByUsername(authPool, username).catch(() => null);
+    if (authUser?.id && authUser.username) {
+      user = authUser as unknown as PublicUserRow;
+      settings = publicProfileSettingsFromUserRow(user);
+    }
+  }
+
+  if (!user?.id || !user.username) {
     try {
-      const res = await readUserWithPublicSettings({ includeLinkedin: true, includeCustomLink: false });
+      const res = await readUserWithPublicSettings({ includeLinkedin: true, includeCustomLink: true });
       user = res.row;
       settings = res.settings;
     } catch {
+      // Migration safety: if the DB is missing one of the optional columns, retry without it.
       try {
-        const res = await readUserWithPublicSettings({ includeLinkedin: false, includeCustomLink: true });
+        const res = await readUserWithPublicSettings({ includeLinkedin: true, includeCustomLink: false });
         user = res.row;
         settings = res.settings;
       } catch {
         try {
-          const res = await readUserWithPublicSettings({ includeLinkedin: false, includeCustomLink: false });
+          const res = await readUserWithPublicSettings({ includeLinkedin: false, includeCustomLink: true });
           user = res.row;
           settings = res.settings;
         } catch {
-          // Dev bootstrap: DB public profile columns may not exist yet. Read settings from fallback store.
-          const basicSelect: Record<string, boolean> = {
-            id: true,
-            username: true,
-            email: true,
-            displayName: true,
-            fullName: true,
-            bio: true,
-            companySubcategory: true,
-            country: true,
-            region: true,
-            githubUrl: true,
-            instagramUrl: true,
-            showCavbotProfileLink: true,
-            avatarTone: true,
-            avatarImage: true,
-          };
+          try {
+            const res = await readUserWithPublicSettings({ includeLinkedin: false, includeCustomLink: false });
+            user = res.row;
+            settings = res.settings;
+          } catch {
+            // Dev bootstrap: DB public profile columns may not exist yet. Read settings from fallback store.
+            const basicSelect: Record<string, boolean> = {
+              id: true,
+              username: true,
+              email: true,
+              displayName: true,
+              fullName: true,
+              bio: true,
+              companySubcategory: true,
+              country: true,
+              region: true,
+              githubUrl: true,
+              instagramUrl: true,
+              showCavbotProfileLink: true,
+              avatarTone: true,
+              avatarImage: true,
+            };
 
-          const basicSelectWithLinkedin: Record<string, boolean> = { ...basicSelect, linkedinUrl: true };
+            const basicSelectWithLinkedin: Record<string, boolean> = { ...basicSelect, linkedinUrl: true };
 
-          const basicWithLinkedin = await prisma.user
-            .findUnique({
-              where: { username },
-              select: basicSelectWithLinkedin,
-            })
-            .catch(() => null);
-
-          const basic = (basicWithLinkedin ??
-            (await prisma.user
+            const basicWithLinkedin = await prisma.user
               .findUnique({
                 where: { username },
-                select: basicSelect,
+                select: basicSelectWithLinkedin,
               })
-              .catch(() => null))) as unknown as PublicUserRow | null;
+              .catch(() => null);
 
-          if (!basic?.id || !basic.username) return null;
+            const basic = (basicWithLinkedin ??
+              (await prisma.user
+                .findUnique({
+                  where: { username },
+                  select: basicSelect,
+                })
+                .catch(() => null))) as unknown as PublicUserRow | null;
 
-          settings = await readPublicProfileSettingsFallback(prisma as unknown as RawDb, String(basic.id));
-          user = basic as unknown as PublicUserRow;
+            if (!basic?.id || !basic.username) return null;
+
+            settings = await readPublicProfileSettingsFallback(prisma as unknown as RawDb, String(basic.id));
+            user = basic as unknown as PublicUserRow;
+          }
         }
       }
     }
@@ -878,6 +905,28 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
     accountId = String(membership?.accountId || "").trim();
   }
 
+  if (!accountId && authPool) {
+    const memberships = await findMembershipsForUser(authPool, user.id).catch(() => []);
+
+    if (preferredProjectId != null) {
+      for (const membership of memberships) {
+        const project = await findActiveProjectByIdForAccount(authPool, membership.accountId, preferredProjectId).catch(() => null);
+        if (project?.id) {
+          accountId = membership.accountId;
+          break;
+        }
+      }
+    }
+
+    if (!accountId) {
+      const ownerMembership = memberships
+        .filter((membership) => membership.role === "OWNER")
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0] ?? null;
+      const primaryMembership = pickPrimaryMembership(memberships);
+      accountId = String(ownerMembership?.accountId || primaryMembership?.accountId || "").trim();
+    }
+  }
+
   let account: { name: string; tier: string } | null = null;
   let subscriptionTier: string | null = null;
   if (accountId) {
@@ -902,6 +951,15 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
           return tier || null;
         })
         .catch(() => null)) || null;
+  }
+  if (!account && accountId && authPool) {
+    const authAccount = await findAccountById(authPool, accountId).catch(() => null);
+    if (authAccount) {
+      account = {
+        name: authAccount.name,
+        tier: authAccount.tier,
+      };
+    }
   }
   const planTierToken = String(subscriptionTier || account?.tier || "FREE").trim() || "FREE";
   const planId = resolvePlanIdFromTier(planTierToken);
