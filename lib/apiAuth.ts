@@ -1,7 +1,7 @@
 // lib/apiAuth.ts
 import "server-only";
 
-import { webcrypto as nodeCrypto } from "crypto";
+import { pbkdf2 as nodePbkdf2, webcrypto as nodeCrypto } from "crypto";
 import {
   findMembershipsForUser,
   findUserAuth,
@@ -340,6 +340,21 @@ export async function verifyPassword(password: string, saltB64: string, iters: n
 }
 
 async function pbkdf2Sha256Bits(password: string, salt: Uint8Array, iters: number, byteLen: number) {
+  // Prefer Node's PBKDF2 implementation under nodejs_compat. Cloudflare's WebCrypto
+  // PBKDF2 currently rejects iteration counts above 100000, but existing CavBot auth
+  // records and env defaults can legitimately exceed that.
+  try {
+    const derived = await new Promise<Buffer>((resolve, reject) => {
+      nodePbkdf2(password, Buffer.from(salt), iters, byteLen, "sha256", (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      });
+    });
+    return derived.buffer.slice(derived.byteOffset, derived.byteOffset + derived.byteLength);
+  } catch {
+    // Fall back to WebCrypto when Node PBKDF2 is unavailable.
+  }
+
   const c = getCrypto();
 
   const key = await c.subtle.importKey(
