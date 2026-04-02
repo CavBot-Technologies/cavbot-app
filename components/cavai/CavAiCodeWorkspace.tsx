@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import {
   CAVAI_SAFE_FALLBACK_LINE,
   pickAndRememberCavAiLine,
@@ -4450,23 +4449,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       <header className={styles.header}>
         <div className={styles.titleWrap}>
           <div className={styles.title}>
-            <span
-              className={[
-                "cb-badge",
-                "cb-badge-inline",
-                styles.titleBadge,
-                badgeTone === "lime"
-                  ? "cavbot-auth-eye-watch"
-                  : badgeTone === "red"
-                    ? "cavbot-auth-eye-error"
-                    : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              aria-hidden="true"
-            >
-              <CdnBadgeEyes />
-            </span>
             <span>CAVEN</span>
           </div>
         </div>
@@ -4667,24 +4649,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
           {viewMode === "history" ? (
             <div className={styles.sessionsList}>
               {!filteredSessions.length ? (
-                <div className={styles.historyEmpty}>
-                  <div className={styles.historyBadgeOnly}>
-                    <div className="cb-badge-left" aria-label="CavBot">
-                      <div
-                        className={`cb-badge cb-badge-inline ${
-                          badgeTone === "lime"
-                            ? "cavbot-auth-eye-watch"
-                            : badgeTone === "red"
-                              ? "cavbot-auth-eye-error"
-                              : ""
-                        }`}
-                        aria-hidden="true"
-                      >
-                        <CdnBadgeEyes />
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <div className={styles.historyEmpty} />
               ) : null}
 
               {filteredSessions.map((item) => {
