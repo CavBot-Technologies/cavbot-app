@@ -2122,6 +2122,23 @@ async function runProviderJson(args: {
       });
       resolvedProviderId = fallbackProviderId;
       resolvedModel = fallbackModel;
+    } else if (
+      error instanceof AiProviderError
+      && error.code === "ALIBABA_QWEN_REQUEST_FAILED"
+      && providerId === "alibaba_qwen"
+      && resolvedModel === ALIBABA_QWEN_CODER_MODEL_ID
+      && error.status === 404
+    ) {
+      const fallbackModel = ALIBABA_QWEN_PLUS_MODEL_ID;
+      response = await provider.generate({
+        model: fallbackModel,
+        ...requestBase,
+        metadata: {
+          ...(requestBase.metadata || {}),
+          providerFallback: "alibaba_qwen_coder_404_to_plus",
+        },
+      });
+      resolvedModel = fallbackModel;
     } else {
       throw error;
     }

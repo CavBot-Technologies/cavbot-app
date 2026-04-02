@@ -106,6 +106,7 @@ test("ai hot paths use authDb-backed counters and session persistence on Cloudfl
   assert.equal(aiMemory.includes('import("@/lib/prisma")'), true);
   assert.equal(aiMemory.includes('FROM "CavAiSession"'), true);
   assert.equal(aiMemory.includes('INSERT INTO "CavAiMessage"'), true);
+  assert.equal(aiMemory.includes('"updatedAt"'), true);
   assert.equal(aiMemory.includes('UPDATE "CavAiSession"'), true);
   assert.equal(aiAudit.includes('from "@/lib/prisma"'), false);
   assert.equal(aiAudit.includes('from "@/lib/audit"'), false);
@@ -121,6 +122,7 @@ test("cavcode and center assist degrade safely if optional registry or memory wr
   assert.equal(aiService.includes("resolveInstalledCavCodeActionSafe"), true);
   assert.equal(aiService.includes("estimateContextTokensForSnapshotSafe"), true);
   assert.equal(aiService.includes("retrieveRelevantAiUserMemoryFactsSafe"), true);
+  assert.equal(aiService.includes("alibaba_qwen_coder_404_to_plus"), true);
   assert.equal(aiService.includes('from "@/src/lib/ai/qwen-coder-credits.server"'), false);
   assert.equal(aiService.includes('from "@/lib/cavcloud/storage.server"'), false);
   assert.equal(aiService.includes('from "@/lib/cavai/imageStudio.server"'), false);

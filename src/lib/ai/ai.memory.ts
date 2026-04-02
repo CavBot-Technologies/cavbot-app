@@ -483,6 +483,7 @@ export async function createAiSession(args: {
       baseTitle,
     });
     const id = newDbId();
+    const now = new Date();
     await tx.query(
       `INSERT INTO "CavAiSession" (
           "id",
@@ -495,8 +496,10 @@ export async function createAiSession(args: {
           "workspaceId",
           "projectId",
           "origin",
+          "createdAt",
+          "updatedAt",
           "lastMessageAt"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13)`,
       [
         id,
         accountId,
@@ -508,6 +511,8 @@ export async function createAiSession(args: {
         s(args.workspaceId) || null,
         toProjectId(args.projectId),
         s(args.origin) || null,
+        now,
+        now,
         null,
       ]
     );
