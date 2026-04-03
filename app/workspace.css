@@ -1063,6 +1063,10 @@ body.cb-home-delete-open .cb-main{
 }
 
 @media (max-width: 520px){
+  .cb-home .cb-card-scanner .cb-scan-head-cta{
+    margin-top: -10px;
+  }
+
   .cb-home .cb-card-cavcloud{
     border-radius: 18px;
   }
@@ -1081,13 +1085,17 @@ body.cb-home-delete-open .cb-main{
     min-height: 58px;
     padding: 8px 6px;
     border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.06);
-    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(7,12,30,0.88);
     justify-content: center;
   }
 
   .cb-home .cb-cavcloud-metric + .cb-cavcloud-metric{
     border-left: none;
+  }
+
+  .cb-home .cb-cavcloud-metrics{
+    gap: 8px;
   }
 
   .cb-home .cb-cavcloud-metric-k{
@@ -1114,7 +1122,8 @@ body.cb-home-delete-open .cb-main{
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 10px 8px;
-    padding-top: 12px;
+    margin: 0 -14px;
+    padding: 12px 14px 0;
   }
 
   .cb-home .cb-cavcloud-type{
