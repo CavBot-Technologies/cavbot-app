@@ -24,7 +24,7 @@
     "backfill:signup-welcome": "node --import tsx scripts/backfill-signup-welcome-email.ts",
     "send:signup-welcome": "node --import tsx scripts/send-signup-welcome-email.ts",
     "purge:sites": "tsx scripts/purge-site-analytics.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "node scripts/apply-vendor-patches.mjs && prisma generate"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.962.0",

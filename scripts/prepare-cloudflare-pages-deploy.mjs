@@ -13,6 +13,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { applyVendorPatches } from "./apply-vendor-patches.mjs";
 
 const MAX_PAGES_FILE_BYTES = 25 * 1024 * 1024;
 const EXTERNAL_PREBUNDLE_MODULES = [
@@ -32,6 +33,8 @@ const rootDir = process.cwd();
 const openNextDir = path.join(rootDir, ".open-next");
 const deployDir = path.join(openNextDir, "pages-deploy");
 const excludedDir = path.join(openNextDir, "pages-deploy-excluded");
+
+await applyVendorPatches(rootDir);
 
 const requiredPaths = [
   path.join(openNextDir, "assets"),
@@ -79,6 +82,14 @@ await writeFile(
   ),
   "utf8",
 );
+
+const sanitizedCloudflareInitSource = (
+  await readFile(cloudflareInitPath, "utf8")
+).replace(
+  /^\s*import\.meta\.url \?\?= "file:\/\/\/worker\.js";\r?\n/m,
+  "",
+);
+await writeFile(cloudflareInitPath, sanitizedCloudflareInitSource, "utf8");
 
 async function splitOversizedHandlerIfNeeded() {
   const handlerDir = path.join(deployDir, "server-functions", "default");

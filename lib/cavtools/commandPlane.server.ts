@@ -9074,9 +9074,9 @@ async function runCavcodeWorkspaceDiagnostics(
     const compilerOptions: ts.CompilerOptions = {
       ...defaultCompilerOptions,
       ...configuredCompilerOptions,
-      noEmit: true,
-      skipLibCheck: true,
     };
+    compilerOptions.noEmit = true;
+    compilerOptions.skipLibCheck = true;
 
     const caseSensitive = ts.sys.useCaseSensitiveFileNames;
     const toCanonical = (fileName: string) => (caseSensitive ? fileName : fileName.toLowerCase());
