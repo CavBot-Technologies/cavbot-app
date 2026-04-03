@@ -4,7 +4,13 @@ import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/apiAuth";
-import { isBasicUsername, isReservedUsername, normalizeUsername, RESERVED_ROUTE_SLUGS } from "@/lib/username";
+import {
+  isAllowedReservedPublicUsername,
+  isBasicUsername,
+  isReservedUsername,
+  normalizeUsername,
+  RESERVED_ROUTE_SLUGS,
+} from "@/lib/username";
 import { readPublicProfileSettingsFallback } from "@/lib/publicProfile/publicProfileSettingsStore.server";
 import { hasRequestIntegrityHeader } from "@/lib/security/requestIntegrity";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -135,7 +141,7 @@ export async function GET(req: Request) {
     if (!username) return json({ ok: true, markdown: null, updatedAt: null, revision: 0 }, { status: 200 });
     if (!isBasicUsername(username)) return json({ ok: true, markdown: null, updatedAt: null, revision: 0 }, { status: 200 });
     if ((RESERVED_ROUTE_SLUGS as readonly string[]).includes(username)) return json({ ok: true, markdown: null, updatedAt: null, revision: 0 }, { status: 200 });
-    if (isReservedUsername(username) && (!OWNER_USERNAME || username !== OWNER_USERNAME)) {
+    if (isReservedUsername(username) && !isAllowedReservedPublicUsername(username, OWNER_USERNAME)) {
       return json({ ok: true, markdown: null, updatedAt: null, revision: 0 }, { status: 200 });
     }
 

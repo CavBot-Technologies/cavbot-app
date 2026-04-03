@@ -14,7 +14,13 @@ import { LockIcon } from "@/components/LockIcon";
 import { getSession } from "@/lib/apiAuth";
 import { findPublicProfileUserByUsername, getAuthPool } from "@/lib/authDb";
 import { prisma } from "@/lib/prisma";
-import { isBasicUsername, isReservedUsername, normalizeUsername, RESERVED_ROUTE_SLUGS } from "@/lib/username";
+import {
+  isAllowedReservedPublicUsername,
+  isBasicUsername,
+  isReservedUsername,
+  normalizeUsername,
+  RESERVED_ROUTE_SLUGS,
+} from "@/lib/username";
 import { buildPublicProfileViewModel } from "@/lib/publicProfile/publicProfile.server";
 import {
   resolvePublicProfileViewerTeamState,
@@ -465,7 +471,7 @@ export default async function PublicCavbotProfilePage({
   if (!username) notFound();
 
   if ((RESERVED_ROUTE_SLUGS as readonly string[]).includes(username)) notFound();
-  if (isReservedUsername(username) && (!OWNER_USERNAME || username !== OWNER_USERNAME)) notFound();
+  if (isReservedUsername(username) && !isAllowedReservedPublicUsername(username, OWNER_USERNAME)) notFound();
   if (!isBasicUsername(username)) notFound();
 
   const vm = await buildPublicProfileViewModel(username);

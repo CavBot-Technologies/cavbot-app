@@ -92,6 +92,14 @@ export function isReservedUsername(username: string): boolean {
   return RESERVED_PREFIXES.some((p) => u.startsWith(p) || compact.startsWith(p));
 }
 
+export function isAllowedReservedPublicUsername(username: string, ownerUsername?: string | null): boolean {
+  const normalized = normalizeUsername(username);
+  if (!normalized) return false;
+
+  const configuredOwner = normalizeUsername(ownerUsername || "");
+  return normalized === "cavbot" || (configuredOwner ? normalized === configuredOwner : false);
+}
+
 function matchesBasicPattern(u: string) {
   return /^[a-z][a-z0-9_]*$/.test(u);
 }

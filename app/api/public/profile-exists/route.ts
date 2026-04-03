@@ -4,7 +4,13 @@ import { unstable_noStore as noStore } from "next/cache";
 
 import { findUserByUsername, getAuthPool } from "@/lib/authDb";
 import { prisma } from "@/lib/prisma";
-import { isBasicUsername, isReservedUsername, normalizeUsername, RESERVED_ROUTE_SLUGS } from "@/lib/username";
+import {
+  isAllowedReservedPublicUsername,
+  isBasicUsername,
+  isReservedUsername,
+  normalizeUsername,
+  RESERVED_ROUTE_SLUGS,
+} from "@/lib/username";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,7 +50,7 @@ export async function GET(req: Request) {
     // Never allow route slugs to be claimed by the public profile rewrite.
     if ((RESERVED_ROUTE_SLUGS as readonly string[]).includes(username)) return jsonNoStore({ ok: true, exists: false }, { status: 200 });
     // Allow the configured owner username even if reserved by brand rules.
-    if (isReservedUsername(username) && (!OWNER_USERNAME || username !== OWNER_USERNAME)) {
+    if (isReservedUsername(username) && !isAllowedReservedPublicUsername(username, OWNER_USERNAME)) {
       return jsonNoStore({ ok: true, exists: false }, { status: 200 });
     }
 

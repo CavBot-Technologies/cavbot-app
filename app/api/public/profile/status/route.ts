@@ -5,7 +5,13 @@ import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireUser, isApiAuthError } from "@/lib/apiAuth";
-import { isBasicUsername, isReservedUsername, normalizeUsername, RESERVED_ROUTE_SLUGS } from "@/lib/username";
+import {
+  isAllowedReservedPublicUsername,
+  isBasicUsername,
+  isReservedUsername,
+  normalizeUsername,
+  RESERVED_ROUTE_SLUGS,
+} from "@/lib/username";
 import { containsEmoji, isPublicStatusMode, normalizePublicStatusNote } from "@/lib/publicProfile/publicStatus";
 import { withAuditLogUserIdField } from "@/lib/auditModelCompat";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -54,7 +60,7 @@ export async function GET(req: Request) {
     if (!username) return jsonNoStore({ ok: true, enabled: false, mode: null, note: null, updatedAtISO: null }, { status: 200 });
     if (!isBasicUsername(username)) return jsonNoStore({ ok: true, enabled: false, mode: null, note: null, updatedAtISO: null }, { status: 200 });
     if ((RESERVED_ROUTE_SLUGS as readonly string[]).includes(username)) return jsonNoStore({ ok: true, enabled: false, mode: null, note: null, updatedAtISO: null }, { status: 200 });
-    if (isReservedUsername(username) && (!OWNER_USERNAME || username !== OWNER_USERNAME)) {
+    if (isReservedUsername(username) && !isAllowedReservedPublicUsername(username, OWNER_USERNAME)) {
       return jsonNoStore({ ok: true, enabled: false, mode: null, note: null, updatedAtISO: null }, { status: 200 });
     }
 

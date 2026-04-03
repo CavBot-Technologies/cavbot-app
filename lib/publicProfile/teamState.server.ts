@@ -11,7 +11,13 @@ import {
 } from "@/lib/authDb";
 import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
-import { isBasicUsername, isReservedUsername, normalizeUsername, RESERVED_ROUTE_SLUGS } from "@/lib/username";
+import {
+  isAllowedReservedPublicUsername,
+  isBasicUsername,
+  isReservedUsername,
+  normalizeUsername,
+  RESERVED_ROUTE_SLUGS,
+} from "@/lib/username";
 import type { CavbotSession } from "@/lib/apiAuth";
 
 const OWNER_USERNAME = normalizeUsername(process.env.CAVBOT_OWNER_USERNAME || "");
@@ -61,7 +67,7 @@ function canUseUsername(raw: string) {
   const username = normalizeUsername(raw);
   if (!username || !isBasicUsername(username)) return false;
   if ((RESERVED_ROUTE_SLUGS as readonly string[]).includes(username)) return false;
-  if (isReservedUsername(username) && (!OWNER_USERNAME || username !== OWNER_USERNAME)) return false;
+  if (isReservedUsername(username) && !isAllowedReservedPublicUsername(username, OWNER_USERNAME)) return false;
   return true;
 }
 

@@ -5,7 +5,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/apiAuth";
 import { getPublicArtifactViewCountsByPath } from "@/lib/publicProfile/publicArtifactViews.server";
 import { prisma } from "@/lib/prisma";
-import { isBasicUsername, isReservedUsername, normalizeUsername, RESERVED_ROUTE_SLUGS } from "@/lib/username";
+import {
+  isAllowedReservedPublicUsername,
+  isBasicUsername,
+  isReservedUsername,
+  normalizeUsername,
+  RESERVED_ROUTE_SLUGS,
+} from "@/lib/username";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,7 +77,7 @@ export async function GET(req: NextRequest) {
     if (!username) return json({ ok: true, items: [] }, 200);
     if (!isBasicUsername(username)) return json({ ok: true, items: [] }, 200);
     if ((RESERVED_ROUTE_SLUGS as readonly string[]).includes(username)) return json({ ok: true, items: [] }, 200);
-    if (isReservedUsername(username) && (!OWNER_USERNAME || username !== OWNER_USERNAME)) {
+    if (isReservedUsername(username) && !isAllowedReservedPublicUsername(username, OWNER_USERNAME)) {
       return json({ ok: true, items: [] }, 200);
     }
 

@@ -1,6 +1,12 @@
 // middleware.ts
 import { NextResponse, type NextRequest } from "next/server";
-import { isBasicUsername, isReservedUsername, normalizeUsername, RESERVED_ROUTE_SLUGS } from "@/lib/username";
+import {
+  isAllowedReservedPublicUsername,
+  isBasicUsername,
+  isReservedUsername,
+  normalizeUsername,
+  RESERVED_ROUTE_SLUGS,
+} from "@/lib/username";
 import { isUnsafePathname, sanitizeQueryParamValue } from "@/lib/security/userInput";
 
 /**
@@ -134,7 +140,7 @@ function isRoutablePublicUsernameCandidate(raw: string, candidate: string) {
     Boolean(candidate) &&
     isBasicUsername(candidate) &&
     !((RESERVED_ROUTE_SLUGS as readonly string[]).includes(candidate)) &&
-    (!isReservedUsername(candidate) || (OWNER_USERNAME && candidate === OWNER_USERNAME)) &&
+    (!isReservedUsername(candidate) || isAllowedReservedPublicUsername(candidate, OWNER_USERNAME)) &&
     !raw.includes(".") &&
     !raw.includes("/") &&
     !raw.includes("\\")
