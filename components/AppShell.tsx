@@ -2717,7 +2717,7 @@ export default function AppShell({
                   aria-hidden="true"
                   style={{
                       background: profileAvatar
-                        ? "rgba(0,0,0,0.24)"
+                        ? "transparent"
                         : profileTone === "transparent"
                         ? "transparent"
                         : profileTone === "violet"
@@ -2755,8 +2755,8 @@ export default function AppShell({
                   </span>
 
 
-                  <span className="cb-account-caret" aria-hidden="true">
-                    ▾
+                  <span className={`cb-account-caret ${accountOpen ? "is-open" : ""}`} aria-hidden="true">
+                    <IconChevronRight />
                   </span>
                 </button>
 
@@ -2839,6 +2839,20 @@ function IconBell() {
       priority
       unoptimized
     />
+  );
+}
+
+function IconChevronRight() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+      <path
+        d="M9 6l6 6-6 6"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

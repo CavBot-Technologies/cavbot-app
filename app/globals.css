@@ -717,6 +717,37 @@ a:focus{
   justify-content:flex-end;
 }
 
+.cb-topbar .cb-icon-btn-top,
+.cb-topbar .cb-account{
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.cb-topbar .cb-icon-btn-top:hover,
+.cb-topbar .cb-account:hover{
+  border-color: transparent;
+  background: transparent;
+}
+
+.cb-topbar .cb-account{
+  padding: 0;
+  gap: 6px;
+}
+
+.cb-topbar .cb-account-caret{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.78;
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+
+.cb-topbar .cb-account-caret.is-open{
+  transform: rotate(90deg);
+  opacity: 1;
+}
+
 .cb-menu-btn{
   width:40px;
   height:40px;
