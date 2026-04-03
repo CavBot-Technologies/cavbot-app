@@ -2040,17 +2040,9 @@ export function CavPadPanel({
   const [folders, setFolders] = React.useState<CavPadNoteFolder[]>([]);
   const [activeFolderId, setActiveFolderId] = React.useState<string>("all");
   const [view, setView] = React.useState<CavPadView>("cavpad");
-  React.useEffect(() => {
-    closeHandlerRef.current = () => {
-      if (view !== "cavpad") {
-        setView("cavpad");
-        return;
-      }
-      onClose();
-    };
-  }, [view, onClose, closeHandlerRef]);
   const [viewMenuOpen, setViewMenuOpen] = React.useState(false);
   const [isNarrow, setIsNarrow] = React.useState(false);
+  const [narrowViewportReady, setNarrowViewportReady] = React.useState(false);
   const [isPhone, setIsPhone] = React.useState(false);
   const isPhoneWriteView = isPhone && view === "cavpad";
   const [mobileView, setMobileView] = React.useState<"list" | "editor">("list");
@@ -2087,6 +2079,7 @@ export function CavPadPanel({
   const [searchQuery, setSearchQuery] = React.useState("");
   const [directoryViewFolderId, setDirectoryViewFolderId] = React.useState<string>(CAVPAD_DIRECTORY_ROOT);
   const [directorySection, setDirectorySection] = React.useState<CavPadDirectorySection>("cloud");
+  const mobileLandingInitializedRef = React.useRef(false);
   const [selectedDirectoryIds, setSelectedDirectoryIds] = React.useState<string[]>([]);
   const [selectedDirectoryNoteIds, setSelectedDirectoryNoteIds] = React.useState<string[]>([]);
   const [selectedLibraryNoteIds, setSelectedLibraryNoteIds] = React.useState<string[]>([]);
@@ -2143,6 +2136,37 @@ export function CavPadPanel({
   const videoInputRef = React.useRef<HTMLInputElement | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const uploadButtonRef = React.useRef<HTMLButtonElement | null>(null);
+
+  React.useEffect(() => {
+    closeHandlerRef.current = () => {
+      if (isNarrow) {
+        const atCavPadHome =
+          view === "directories" &&
+          directoryViewFolderId === CAVPAD_DIRECTORY_ROOT &&
+          directorySection === "cloud";
+        if (atCavPadHome) {
+          onClose();
+          return;
+        }
+        setViewMenuOpen(false);
+        setGlobalSearchOpen(false);
+        setDirectoryActionsMenuOpen(false);
+        setSelectedDirectoryIds([]);
+        setSelectedDirectoryNoteIds([]);
+        setDirectoryViewFolderId(CAVPAD_DIRECTORY_ROOT);
+        setActiveFolderId("all");
+        setDirectorySection("cloud");
+        setMobileView("list");
+        setView("directories");
+        return;
+      }
+      if (view !== "cavpad") {
+        setView("cavpad");
+        return;
+      }
+      onClose();
+    };
+  }, [view, onClose, closeHandlerRef, isNarrow, directoryViewFolderId, directorySection]);
   const uploadMenuRef = React.useRef<HTMLDivElement | null>(null);
   const cavAiControlsRef = React.useRef<HTMLDivElement | null>(null);
   const cavAiDraftMenuRef = React.useRef<HTMLDivElement | null>(null);
@@ -2506,7 +2530,10 @@ export function CavPadPanel({
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia("(max-width: 980px)");
-    const onChange = () => setIsNarrow(mq.matches);
+    const onChange = () => {
+      setIsNarrow(mq.matches);
+      setNarrowViewportReady(true);
+    };
     onChange();
     mq.addEventListener?.("change", onChange);
     return () => mq.removeEventListener?.("change", onChange);
@@ -2520,6 +2547,22 @@ export function CavPadPanel({
     mq.addEventListener?.("change", onChange);
     return () => mq.removeEventListener?.("change", onChange);
   }, []);
+
+  React.useEffect(() => {
+    if (!narrowViewportReady || mobileLandingInitializedRef.current) return;
+    mobileLandingInitializedRef.current = true;
+    if (!isNarrow) return;
+    setViewMenuOpen(false);
+    setGlobalSearchOpen(false);
+    setDirectoryActionsMenuOpen(false);
+    setSelectedDirectoryIds([]);
+    setSelectedDirectoryNoteIds([]);
+    setDirectoryViewFolderId(CAVPAD_DIRECTORY_ROOT);
+    setActiveFolderId("all");
+    setDirectorySection("cloud");
+    setMobileView("list");
+    setView("directories");
+  }, [isNarrow, narrowViewportReady]);
 
   React.useEffect(() => {
     if (linkModalOpen) {
@@ -7253,7 +7296,7 @@ export function CavPadPanel({
                       : directorySection === "files"
                         ? "No files here yet"
                         : normalizedDirectoryViewFolderId === CAVPAD_DIRECTORY_ROOT
-                          ? "Your workspace is ready"
+                          ? "No folders or files here yet"
                           : "This directory is empty"}
                   </div>
                   <div className="cb-cavpad-directories-emptysub">
@@ -7262,7 +7305,7 @@ export function CavPadPanel({
                       : directorySection === "files"
                         ? "Create a note in this folder, or switch views to browse the rest of your files."
                         : normalizedDirectoryViewFolderId === CAVPAD_DIRECTORY_ROOT
-                          ? "Create a folder or note to start building this workspace."
+                          ? "Create a folder or note to start."
                           : "Create a folder or note here, or move through the path above to another location."}
                   </div>
                 </div>
