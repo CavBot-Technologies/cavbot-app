@@ -7,6 +7,16 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+const DEFAULT_CAVPAD_SETTINGS = {
+  syncToCavcloud: false,
+  syncToCavsafe: false,
+  allowSharing: true,
+  defaultSharePermission: "VIEW" as const,
+  defaultShareExpiryDays: 0 as const,
+  noteExpiryDays: 0 as const,
+  trashRetentionDays: 30 as const,
+};
+
 type PatchSettingsBody = {
   syncToCavcloud?: unknown;
   syncToCavsafe?: unknown;
@@ -43,12 +53,16 @@ export async function GET(req: Request) {
     requireUser(sess);
     requireAccountContext(sess);
 
-    const settings = await getCavPadSettings({
-      accountId: String(sess.accountId || ""),
-      userId: String(sess.sub || ""),
-    });
+    try {
+      const settings = await getCavPadSettings({
+        accountId: String(sess.accountId || ""),
+        userId: String(sess.sub || ""),
+      });
 
-    return jsonNoStore({ ok: true, settings }, 200);
+      return jsonNoStore({ ok: true, settings }, 200);
+    } catch {
+      return jsonNoStore({ ok: true, degraded: true, settings: DEFAULT_CAVPAD_SETTINGS }, 200);
+    }
   } catch (err) {
     return cavcloudErrorResponse(err, "Failed to load CavPad settings.");
   }
@@ -65,18 +79,27 @@ export async function PATCH(req: Request) {
       return jsonNoStore({ ok: false, error: "BAD_REQUEST", message: "Invalid JSON body." }, 400);
     }
 
-    const settings = await updateCavPadSettings({
-      accountId: String(sess.accountId || ""),
-      userId: String(sess.sub || ""),
-      syncToCavcloud: parseOptionalBoolean(body.syncToCavcloud),
-      syncToCavsafe: parseOptionalBoolean(body.syncToCavsafe),
-      allowSharing: parseOptionalBoolean(body.allowSharing),
-      defaultSharePermission: body.defaultSharePermission == null ? undefined : parsePermission(body.defaultSharePermission),
-      defaultShareExpiryDays: body.defaultShareExpiryDays == null ? undefined : parseDayValue(body.defaultShareExpiryDays),
-      noteExpiryDays: body.noteExpiryDays == null ? undefined : parseDayValue(body.noteExpiryDays),
-    });
+    try {
+      const settings = await updateCavPadSettings({
+        accountId: String(sess.accountId || ""),
+        userId: String(sess.sub || ""),
+        syncToCavcloud: parseOptionalBoolean(body.syncToCavcloud),
+        syncToCavsafe: parseOptionalBoolean(body.syncToCavsafe),
+        allowSharing: parseOptionalBoolean(body.allowSharing),
+        defaultSharePermission: body.defaultSharePermission == null ? undefined : parsePermission(body.defaultSharePermission),
+        defaultShareExpiryDays: body.defaultShareExpiryDays == null ? undefined : parseDayValue(body.defaultShareExpiryDays),
+        noteExpiryDays: body.noteExpiryDays == null ? undefined : parseDayValue(body.noteExpiryDays),
+      });
 
-    return jsonNoStore({ ok: true, settings }, 200);
+      return jsonNoStore({ ok: true, settings }, 200);
+    } catch {
+      const settings = await getCavPadSettings({
+        accountId: String(sess.accountId || ""),
+        userId: String(sess.sub || ""),
+      }).catch(() => DEFAULT_CAVPAD_SETTINGS);
+
+      return jsonNoStore({ ok: true, degraded: true, settings }, 200);
+    }
   } catch (err) {
     return cavcloudErrorResponse(err, "Failed to update CavPad settings.");
   }

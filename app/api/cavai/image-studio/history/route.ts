@@ -31,21 +31,34 @@ export async function GET(req: Request) {
     });
     const url = new URL(req.url);
     const view = parseView(url.searchParams.get("view"));
-    const limit = toLimit(url.searchParams.get("limit"));
-    const rows = await readImageHistory({
-      accountId: ctx.accountId,
-      userId: ctx.userId,
-      view,
-      limit,
-    });
-    return jsonNoStore(
-      {
-        ok: true,
+
+    try {
+      const limit = toLimit(url.searchParams.get("limit"));
+      const rows = await readImageHistory({
+        accountId: ctx.accountId,
+        userId: ctx.userId,
         view,
-        rows,
-      },
-      200
-    );
+        limit,
+      });
+      return jsonNoStore(
+        {
+          ok: true,
+          view,
+          rows,
+        },
+        200
+      );
+    } catch {
+      return jsonNoStore(
+        {
+          ok: true,
+          degraded: true,
+          view,
+          rows: [],
+        },
+        200
+      );
+    }
   } catch (err) {
     return cavcloudErrorResponse(err, "Failed to load Image Studio history.");
   }

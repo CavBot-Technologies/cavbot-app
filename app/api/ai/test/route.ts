@@ -93,9 +93,6 @@ function json(payload: unknown, init?: number | ResponseInit) {
 
 export async function GET(req: NextRequest) {
   const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
-  if (!aiTestRoutesEnabled()) {
-    return json({ ok: false, requestId, error: "NOT_FOUND" }, 404);
-  }
 
   try {
     const url = new URL(req.url);

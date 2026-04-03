@@ -887,6 +887,7 @@ function CommandDeckPageInner() {
     (async () => {
       try {
         const res = await fetch(AUTH_SESSION_ENDPOINT, { method: "GET", credentials: "include", cache: "no-store" });
+        const data = await res.json().catch(() => null);
 
 
         if (!alive) return;
@@ -900,8 +901,14 @@ function CommandDeckPageInner() {
 
 
         if (res.ok) {
-          const data = await res.json().catch(() => null);
-          setAuth({ status: "authed", session: data });
+          if ((data as { authed?: unknown } | null)?.authed === true) {
+            setAuth({ status: "authed", session: data });
+            return;
+          }
+
+          setAuth({ status: "guest", session: null });
+          const next = encodeURIComponent(pathname || "/");
+          router.replace(`${AUTH_LOGIN_PATH}?next=${next}`);
           return;
         }
 
@@ -918,7 +925,8 @@ function CommandDeckPageInner() {
         const next = encodeURIComponent(pathname || "/");
         router.replace(`${AUTH_LOGIN_PATH}?next=${next}`);
       } catch {
-        setAuth({ status: "authed", session: null });
+        if (!alive) return;
+        setAuth({ status: "guest", session: null });
       }
     })();
 

@@ -665,6 +665,7 @@ export default function AppShell({
   const [planTier, setPlanTier] = useState<PlanTier>(bootSnapshot?.planTier || "FREE");
   const [memberRole, setMemberRole] = useState<MemberRole>(bootSnapshot?.memberRole || null);
   const [planResolved, setPlanResolved] = useState<boolean>(Boolean(bootSnapshot));
+  const [authPlanVerified, setAuthPlanVerified] = useState(false);
   const [, setPlanResolveError] = useState<string>("");
 
 
@@ -986,7 +987,7 @@ export default function AppShell({
 
   useEffect(() => {
     function onOpenCavPadFromPriority() {
-      if (!showCavPad) return;
+      if (!(showCavPad && authPlanVerified && memberRole)) return;
       setCavPadOpen(true);
     }
 
@@ -1000,7 +1001,7 @@ export default function AppShell({
         onOpenCavPadFromPriority as EventListener
       );
     };
-  }, [showCavPad]);
+  }, [authPlanVerified, memberRole, showCavPad]);
 
   useEffect(() => {
     const warmRoutes = [
@@ -1389,6 +1390,7 @@ export default function AppShell({
 
       const data = await res.json().catch(() => ({}));
       if (signal?.aborted) return;
+      setAuthPlanVerified(true);
 
       // Initials: full name (first two names) -> username first letter.
       const nextFullName = String(data?.user?.displayName || "").trim();
@@ -1461,6 +1463,7 @@ export default function AppShell({
       });
     } catch {
       if (signal?.aborted) return;
+      setAuthPlanVerified(false);
       const cached = readShellPlanSnapshot();
       if (cached) {
         setPlanTier(cached.planTier);
@@ -1594,7 +1597,9 @@ export default function AppShell({
     openCavGuardByAction("SETTINGS_OWNER_ONLY", { flags: { settingsSurface: "CavBot" } });
   }
 
-  const notificationsOwnerAllowed = memberRole === "OWNER";
+  const authenticatedWorkspaceUser = authPlanVerified && Boolean(memberRole);
+  const notificationsOwnerAllowed = authPlanVerified && memberRole === "OWNER";
+  const shouldMountCavPad = showCavPad && authenticatedWorkspaceUser;
 
   function onNotificationsToggle() {
     if (notificationsOwnerAllowed) {
@@ -2123,7 +2128,7 @@ export default function AppShell({
         />
       ) : null}
 
-      {showCavPad ? (
+      {shouldMountCavPad ? (
         <CavPadDock
           open={cavPadOpen}
           onClose={() => setCavPadOpen(false)}
@@ -2468,7 +2473,7 @@ export default function AppShell({
                 />
               ) : null}
 
-              {showCavPad ? (
+              {shouldMountCavPad ? (
                 <button
                   className="cb-icon-btn-top"
                   type="button"
