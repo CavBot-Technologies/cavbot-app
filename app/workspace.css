@@ -1129,7 +1129,7 @@ body.cb-home-delete-open .cb-main{
     justify-items: center;
     gap: 10px 8px;
     width: calc(100% + 28px);
-    margin: 0 -14px;
+    margin: 20px -14px 0;
     padding: 12px 14px 0;
   }
 
