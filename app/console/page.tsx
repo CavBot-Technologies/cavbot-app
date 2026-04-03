@@ -4,13 +4,14 @@
 
 import "./console.css";
 import Link from "next/link";
-import { headers } from "next/headers";
+import { cookies } from "next/headers";
 import AppShell from "@/components/AppShell";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
 import DashboardToolsControls from "@/components/DashboardToolsControls";
 import { COUNTRY_TERRITORY_ISO } from "@/geo/countries";
 import { REGION_GROUPED } from "@/geo/regions";
 import { getSession } from "@/lib/apiAuth";
+import { findUserById, getAuthPool } from "@/lib/authDb";
 import { getProjectSummary } from "@/lib/cavbotApi.server";
 import type { SummaryRange } from "@/lib/cavbotApi.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
@@ -739,8 +740,7 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
     accentColor: profileToneToAccentColor("lime"),
   };
   try {
-    const h = headers();
-    const cookie = String(h.get("cookie") || "").trim();
+    const cookie = cookies().toString().trim();
     if (!cookie) return fallback;
 
     // getSession() only needs incoming cookies; use a fixed internal URL.
@@ -754,15 +754,20 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
     const userId = String(sess.sub || "").trim();
     if (!userId || userId === "system") return fallback;
 
-    const profile = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { fullName: true, username: true, avatarTone: true },
-    });
+    const [profile, authUser] = await Promise.all([
+      prisma.user
+        .findUnique({
+          where: { id: userId },
+          select: { displayName: true, fullName: true, username: true, avatarTone: true },
+        })
+        .catch(() => null),
+      findUserById(getAuthPool(), userId).catch(() => null),
+    ]);
 
-    const accentColor = profileToneToAccentColor(String(profile?.avatarTone || ""));
-    const fullName = String(profile?.fullName || "").trim();
-    if (fullName) {
-      const ownerLabel = `${fullName}'s`;
+    const accentColor = profileToneToAccentColor(String(profile?.avatarTone || authUser?.avatarTone || ""));
+    const preferredName = String(profile?.fullName || profile?.displayName || authUser?.displayName || "").trim();
+    if (preferredName) {
+      const ownerLabel = `${preferredName}'s`;
       return {
         appShellTitle: `${ownerLabel} Dashboard`,
         ownerLabel,
@@ -770,7 +775,7 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
       };
     }
 
-    const username = String(profile?.username || "").trim().replace(/^@+/, "");
+    const username = String(profile?.username || authUser?.username || "").trim().replace(/^@+/, "");
     if (username) {
       const initial = firstInitialFromUsername(username) || "U";
       const ownerLabel = `${initial}'s`;

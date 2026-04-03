@@ -1,4 +1,4 @@
-import { requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
+import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import { createCavPadDirectory, listCavPadDirectories } from "@/lib/cavpad/server";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -13,18 +13,27 @@ type CreateDirectoryBody = {
   pinnedAtISO?: unknown;
 };
 
+function degradedDirectoriesResponse() {
+  return jsonNoStore({ ok: true, degraded: true, directories: [] }, 200);
+}
+
 export async function GET(req: Request) {
   try {
     const sess = await requireSession(req);
     requireUser(sess);
     requireAccountContext(sess);
 
-    const directories = await listCavPadDirectories({
-      accountId: String(sess.accountId || ""),
-      userId: String(sess.sub || ""),
-    });
+    try {
+      const directories = await listCavPadDirectories({
+        accountId: String(sess.accountId || ""),
+        userId: String(sess.sub || ""),
+      });
 
-    return jsonNoStore({ ok: true, directories }, 200);
+      return jsonNoStore({ ok: true, directories }, 200);
+    } catch (err) {
+      if (err instanceof ApiAuthError) throw err;
+      return degradedDirectoriesResponse();
+    }
   } catch (err) {
     return cavcloudErrorResponse(err, "Failed to load CavPad directories.");
   }

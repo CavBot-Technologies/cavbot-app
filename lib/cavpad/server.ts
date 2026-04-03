@@ -2206,26 +2206,52 @@ export async function listCavPadDirectories(args: {
   const userId = s(args.userId);
   if (!accountId || !userId) throw new ApiAuthError("UNAUTHORIZED", 401);
 
-  const rows = await prismaAny.cavPadDirectory.findMany({
-    where: {
-      accountId,
-    },
-    orderBy: [{ pinnedAt: "desc" }, { updatedAt: "desc" }, { createdAt: "desc" }],
-    select: {
-      id: true,
-      name: true,
-      parentId: true,
-      pinnedAt: true,
-      createdAt: true,
-      updatedAt: true,
-      _count: {
-        select: {
-          notes: true,
-          children: true,
+  let rows: any[] = [];
+  try {
+    rows = await prismaAny.cavPadDirectory.findMany({
+      where: {
+        accountId,
+      },
+      orderBy: [{ pinnedAt: "desc" }, { updatedAt: "desc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        name: true,
+        parentId: true,
+        pinnedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            notes: true,
+            children: true,
+          },
         },
       },
-    },
-  });
+    });
+  } catch (err) {
+    if (
+      !isSchemaMismatchError(err, {
+        tables: ["CavPadDirectory", "CavPadNote"],
+      })
+    ) {
+      throw err;
+    }
+
+    rows = await prismaAny.cavPadDirectory.findMany({
+      where: {
+        accountId,
+      },
+      orderBy: [{ pinnedAt: "desc" }, { updatedAt: "desc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        name: true,
+        parentId: true,
+        pinnedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
 
   return rows.map((row: any) => ({
     id: s(row.id),

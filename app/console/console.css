@@ -86,6 +86,35 @@
   }
 }
 
+@media (max-width: 720px){
+  .cb-console .cb-pagehead-row{
+    justify-items: center;
+  }
+
+  .cb-console .cb-pagehead{
+    text-align: center;
+  }
+
+  .cb-console .cb-pagehead-title{
+    text-align: center;
+  }
+
+  .cb-console .cb-pagehead-controls{
+    width: 100%;
+    justify-content: center;
+  }
+
+  .cb-console .cb-pagehead-controls .console-controls{
+    width: 100%;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .cb-console .console-range{
+    justify-content: center;
+  }
+}
+
 /* ---------- console scope bar (sites + dashboard summary) ---------- */
 .cb-consolebar{
   display: grid;
