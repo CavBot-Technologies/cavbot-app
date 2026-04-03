@@ -7253,17 +7253,17 @@ export function CavPadPanel({
                       : directorySection === "files"
                         ? "No files here yet"
                         : normalizedDirectoryViewFolderId === CAVPAD_DIRECTORY_ROOT
-                          ? "No folders or files here yet"
+                          ? "Your workspace is ready"
                           : "This directory is empty"}
                   </div>
                   <div className="cb-cavpad-directories-emptysub">
                     {directorySection === "folders"
-                      ? "Create a directory or open another folder from the breadcrumb path."
+                      ? "Create a folder to start organizing this space, or open another one from the path above."
                       : directorySection === "files"
-                        ? "Create a note in this directory or switch to Cloud to browse all items."
+                        ? "Create a note in this folder, or switch views to browse the rest of your files."
                         : normalizedDirectoryViewFolderId === CAVPAD_DIRECTORY_ROOT
-                      ? "Create directories and notes, then double-click folders to open deeper levels."
-                      : "Open another folder from the breadcrumb path or create new items here."}
+                          ? "Create a folder or note to start building this workspace."
+                          : "Create a folder or note here, or move through the path above to another location."}
                   </div>
                 </div>
               ) : (
