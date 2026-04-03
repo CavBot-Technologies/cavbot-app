@@ -173,27 +173,6 @@ body {
   justify-content: center;
 }
 
-.arcade-header-badge .cavbot-dm-avatar {
-  width: 42px;
-  height: 42px;
-}
-
-.arcade-header-badge .cavbot-dm-avatar .cavbot-eye,
-.arcade-header-badge .cavbot-dm-avatar .cavbot-eye-inner,
-.arcade-header-badge .cavbot-dm-avatar .cavbot-eye-track,
-.arcade-header-badge .cavbot-dm-avatar .cavbot-eye-pupil {
-  animation: none !important;
-}
-
-.arcade-header-badge .cavbot-dm-avatar .cavbot-eye-pupil {
-  background: radial-gradient(circle at 30% 20%, #ffffff 0%, #a2ccff 30%, #0080ff 65%, #00387a 100%) !important;
-  box-shadow: none !important;
-}
-
-.arcade-header-badge .cavbot-dm-avatar .cavbot-eye-glow {
-  opacity: 0 !important;
-}
-
 .arcade-profile-menu {
   position: absolute;
   top: calc(100% + 12px);

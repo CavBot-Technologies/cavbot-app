@@ -52,6 +52,22 @@
   transform: translate3d(0, 0, 0) scale(1);
 }
 
+.surfaceCard {
+  width: min(560px, 92vw);
+  opacity: 1;
+  transform: none;
+  transition: none;
+}
+
+.surfaceCard .brSpacer {
+  height: 24px;
+}
+
+.surfaceCard .body {
+  min-height: 0;
+  padding-block: 18px;
+}
+
 .glowTop,
 .glowBottom {
   display: none;
@@ -209,7 +225,14 @@
 .footer {
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
   margin-top: 32px;
+}
+
+.surfaceFooter {
+  justify-content: center;
+  margin-top: 20px;
 }
 
 .actionBtn {

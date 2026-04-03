@@ -19,7 +19,7 @@ import type { DiffEditorProps, EditorProps } from "@monaco-editor/react";
 import type * as MonacoType from "monaco-editor";
 import type { WorkspaceNode } from "@/src/lib/cavTerminal";
 import CavBotLoadingScreen from "@/components/CavBotLoadingScreen";
-import CavMobileMenu from "@/components/CavMobileMenu";
+import { CavGuardCard } from "@/components/CavGuardCard";
 import { LockIcon } from "@/components/LockIcon";
 import CavAiCodeWorkspace, {
   type CavCodeDiagnostic,
@@ -12094,17 +12094,26 @@ export default function CavCodePage() {
         ) : null}
 
         <div className="cc-mobile">
-          <div className="cc-mobile-card">
-            <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
-              <CavMobileMenu />
-            </div>
-            <div className="cc-mobile-title">CavCode is desktop-only</div>
-            <div className="cc-mobile-sub">This is a full IDE surface. Open on a desktop or widen your viewport.</div>
-            <div className="cc-mobile-pills">
-              <span className="cc-chip"><b>Monaco</b> editor</span>
-              <span className="cc-chip"><b>Explorer</b> workspace</span>
-              <span className="cc-chip"><b>Problems</b> panel</span>
-            </div>
+          <div role="status" aria-live="polite">
+            <CavGuardCard
+              variant="surface"
+              headline="Desktop viewport required."
+              request="CavCode is CavGuarded to desktop-class screens because the full editor, explorer, and runtime workspace need a wide protected surface."
+              reason="Open on desktop or widen your viewport to restore the guarded IDE."
+              actions={[
+                { label: "COMMAND CENTER", href: "/" },
+                {
+                  label: "REFRESH",
+                  onClick: () => {
+                    try {
+                      window.location.reload();
+                    } catch {
+                      // noop
+                    }
+                  },
+                },
+              ]}
+            />
           </div>
         </div>
       </div>

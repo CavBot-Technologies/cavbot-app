@@ -10,6 +10,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import CdnBadgeEyes from "@/components/CdnBadgeEyes";
+import { CavGuardCard } from "@/components/CavGuardCard";
 import CavMobileMenu from "@/components/CavMobileMenu";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 
@@ -1876,33 +1877,26 @@ function CavToolsPageInner() {
     <div className="cb-cavtools-root">
       {!isDesktop ? (
         <div className="cb-cavtools-mobile" role="main">
-          <div className="cb-cavtools-mobile-card" role="status" aria-live="polite">
-            <div className="cb-cavtools-mobile-top">
-              <div className="cb-cavtools-mobile-badge" aria-hidden="true">
-                <CdnBadgeEyes />
-              </div>
-              <div className="cb-cavtools-mobile-title">CavTools</div>
-            </div>
-            <div className="cb-cavtools-mobile-sub" style={{ marginTop: 10 }}>
-              Desktop-only operator surface for secure command execution and multi-namespace resource control.
-            </div>
-          </div>
-
-          <div className="cb-cavtools-mobile-actions">
-            <div className="cb-cavtools-mobile-hint">Open CavTools on a desktop device.</div>
-            <button
-              className="cb-cavtools-mobile-btn"
-              type="button"
-              onClick={() => {
-                try {
-                  window.location.reload();
-                } catch {
-                  // noop
-                }
-              }}
-            >
-              Retry
-            </button>
+          <div role="status" aria-live="polite">
+            <CavGuardCard
+              variant="surface"
+              headline="Desktop operator surface required."
+              request="CavTools is CavGuarded to desktop-class screens because secure command execution and multi-namespace controls require a full operator viewport."
+              reason="Open on desktop or widen your viewport to re-enter the guarded surface."
+              actions={[
+                { label: "COMMAND CENTER", href: "/" },
+                {
+                  label: "REFRESH",
+                  onClick: () => {
+                    try {
+                      window.location.reload();
+                    } catch {
+                      // noop
+                    }
+                  },
+                },
+              ]}
+            />
           </div>
         </div>
       ) : (

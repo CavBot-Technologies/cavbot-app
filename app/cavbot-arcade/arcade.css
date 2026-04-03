@@ -13,6 +13,9 @@
   --panel-radius: 22px;
   --panel-radius-sm: 14px;
   --panel-radius-xl: 40px;
+  --arcade-stack-md: clamp(18px, 3vw, 28px);
+  --arcade-stack-lg: clamp(28px, 5vw, 44px);
+  --arcade-stack-xl: clamp(40px, 7vw, 72px);
   --shadow-strong: 0 24px 60px rgba(0, 0, 0, 0.65);
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -51,7 +54,7 @@ body {
 }
 
 .gallery {
-  margin-top: 24px;
+  margin-top: var(--arcade-stack-xl);
 }
 
 .gallery-grid {
@@ -66,7 +69,7 @@ body {
 .faq,
 .signals,
 .cta {
-  margin-top: 32px;
+  margin-top: var(--arcade-stack-xl);
 }
 
 .hero-card {
@@ -168,27 +171,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.arcade-header-badge .cavbot-dm-avatar {
-  width: 42px;
-  height: 42px;
-}
-
-.arcade-header-badge .cavbot-dm-avatar .cavbot-eye,
-.arcade-header-badge .cavbot-dm-avatar .cavbot-eye-inner,
-.arcade-header-badge .cavbot-dm-avatar .cavbot-eye-track,
-.arcade-header-badge .cavbot-dm-avatar .cavbot-eye-pupil {
-  animation: none !important;
-}
-
-.arcade-header-badge .cavbot-dm-avatar .cavbot-eye-pupil {
-  background: radial-gradient(circle at 30% 20%, #ffffff 0%, #a2ccff 30%, #0080ff 65%, #00387a 100%) !important;
-  box-shadow: none !important;
-}
-
-.arcade-header-badge .cavbot-dm-avatar .cavbot-eye-glow {
-  opacity: 0 !important;
 }
 
 .arcade-profile-menu {
@@ -424,6 +406,21 @@ body {
   flex-wrap: wrap;
 }
 
+.gallery-header > div,
+.devices > header,
+.faq > header,
+.cta > header {
+  display: grid;
+  gap: 14px;
+}
+
+.gallery-header h2,
+.devices > header h2,
+.faq > header h2,
+.cta > header h2 {
+  margin: 0;
+}
+
 .gallery-header-featured {
   display: flex;
   flex-direction: column;
@@ -507,7 +504,7 @@ body {
 }
 
 .gallery-grid {
-  margin-top: 24px;
+  margin-top: var(--arcade-stack-lg);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
@@ -742,16 +739,16 @@ body {
 .faq,
 .signals,
 .cta {
-  margin-top: 40px;
+  margin-top: var(--arcade-stack-xl);
 }
 
 .powered {
   padding: 12px 24px;
-  margin-top: 2px;
+  margin-top: var(--arcade-stack-xl);
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: nowrap;
   color: var(--ink-muted);
   font-family: "Inconsolata", "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -770,6 +767,8 @@ body {
   letter-spacing: 0.35em;
   text-transform: uppercase;
   white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
 }
 .powered-label {
   color: rgba(197, 206, 231, 0.8);
@@ -789,7 +788,7 @@ body {
   border: none;
   box-shadow: none;
   width: 140px;
-  flex-shrink: 0;
+  flex: 0 0 auto;
 }
 .powered-logotype svg {
   width: 140px;
@@ -803,42 +802,43 @@ body {
   gap: 12px;
   margin-left: auto;
   white-space: nowrap;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 @media (max-width: 720px) {
   .powered {
     padding: 12px 12px calc(14px + env(safe-area-inset-bottom));
-    justify-content: center;
-    gap: 10px 12px;
-    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px;
     border-radius: 14px;
   }
 
   .powered-branding {
-    width: 100%;
     margin-left: 0;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 8px 12px;
-    white-space: normal;
+    justify-content: flex-end;
+    gap: 8px;
+    white-space: nowrap;
   }
 
   .powered-phrase {
-    justify-content: center;
-    letter-spacing: 0.24em;
+    justify-content: flex-start;
+    gap: 0.36em;
   }
 
   .powered-label {
-    font-size: 0.54rem;
+    font-size: 0.5rem;
+    letter-spacing: 0.18em;
   }
 
   .powered-mark {
-    font-size: 0.66rem;
-    letter-spacing: 0.28em;
+    font-size: 0.58rem;
+    letter-spacing: 0.22em;
   }
 
   .powered-logotype {
-    width: min(118px, 42vw);
+    width: min(104px, 29vw);
   }
 
   .powered-logotype svg {
@@ -846,13 +846,14 @@ body {
   }
 
   .gallery-footer-return {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
   }
 
   .gallery-footer-icon-art {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
   }
 }
 
@@ -867,19 +868,19 @@ body {
 
   .powered {
     padding: 10px 10px calc(12px + env(safe-area-inset-bottom));
-    gap: 8px 10px;
+    gap: 7px;
   }
 
   .powered-phrase {
-    width: 100%;
+    gap: 0.3em;
   }
 
   .powered-branding {
-    gap: 6px 10px;
+    gap: 7px;
   }
 
   .powered-logotype {
-    width: min(110px, 40vw);
+    width: min(96px, 30vw);
   }
 }
 
@@ -978,7 +979,7 @@ body {
 }
 
 .device-grid {
-  margin-top: 20px;
+  margin-top: var(--arcade-stack-lg);
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
@@ -1030,20 +1031,53 @@ body {
   opacity: 0.92;
 }
 
+.faq-list {
+  display: grid;
+  gap: 12px;
+  margin-top: var(--arcade-stack-lg);
+}
+
 .faq-list details {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--panel-radius-sm);
   padding: 12px 14px;
-  margin-top: 12px;
+  margin-top: 0;
   background: rgba(255, 255, 255, 0.01);
 }
 
 .faq-list summary {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 12px;
   cursor: pointer;
   font-size: 14px;
   letter-spacing: 0.08em;
+  list-style: none;
+}
+
+.faq-list summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-list summary::marker {
+  display: none;
+  content: "";
+}
+
+.faq-summary-caret {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  opacity: 0.9;
+  background-color: rgba(220, 229, 244, 0.9);
+  -webkit-mask: url("/icons/app/cavcode/arrow-down-svgrepo-com.svg") center / contain no-repeat;
+  mask: url("/icons/app/cavcode/arrow-down-svgrepo-com.svg") center / contain no-repeat;
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+
+.faq-list details[open] .faq-summary-caret {
+  transform: rotate(180deg);
 }
 
 .faq-list p {
@@ -1067,13 +1101,13 @@ body {
 }
 
 .cta-actions {
-  margin-top: 18px;
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
 }
 
 .section-description {
+  margin: 0;
   color: var(--ink-muted);
   max-width: 520px;
   line-height: 1.8;

@@ -1,8 +1,6 @@
 "use client";
 
-import Image from "next/image";
-import Link from "next/link";
-
+import { CavGuardCard } from "./CavGuardCard";
 import styles from "./CavGuardModal.module.css";
 import type { CavGuardDecision } from "@/src/lib/cavguard/cavGuard.types";
 
@@ -30,60 +28,21 @@ export function CavGuardModal(props: CavGuardModalProps) {
       aria-hidden={!modalOpen}
     >
       <div
-        className={styles.card}
         role="dialog"
         aria-modal={modalOpen ? "true" : undefined}
         aria-labelledby="cb-cavguard-title"
-        onClick={(event) => event.stopPropagation()}
       >
-        <span className={styles.glowTop} aria-hidden="true" />
-        <span className={styles.glowBottom} aria-hidden="true" />
-
-        <div className={styles.header}>
-          <div className={styles.brand}>
-            <div className={styles.emblem} aria-hidden="true">
-              <Image
-                src="/logo/cavbot-logomark.svg"
-                alt=""
-                width={38}
-                height={38}
-                className={styles.mark}
-                priority
-                unoptimized
-              />
-              <span className={styles.shield}>
-                <span className={styles.shieldIcon} />
-              </span>
-            </div>
-
-            <div className={styles.brandMeta}>
-              <h2 className={styles.title} id="cb-cavguard-title">
-                CavGuard
-              </h2>
-            </div>
-          </div>
-        </div>
-
-        <div className={styles.brSpacer} aria-hidden="true" />
-
-        <div className={styles.body}>
-          <h3 className={styles.headline}>{headline}</h3>
-          <div className={styles.copyBlock}>
-            <p className={styles.copyLine}>{request}</p>
-            <p className={styles.copyLine}>{reason}</p>
-          </div>
-        </div>
-
-        <div className={styles.footer}>
-          {cta ? (
-            <Link href={cta.href} className={styles.actionBtn} onClick={onCtaClick}>
-              {cta.label.toUpperCase()}
-            </Link>
-          ) : null}
-          <button type="button" className={styles.actionBtn} onClick={onClose}>
-            DISMISS
-          </button>
-        </div>
+        <CavGuardCard
+          titleId="cb-cavguard-title"
+          headline={headline}
+          request={request}
+          reason={reason}
+          onClick={(event) => event.stopPropagation()}
+          actions={[
+            ...(cta ? [{ label: cta.label.toUpperCase(), href: cta.href, onClick: onCtaClick }] : []),
+            { label: "DISMISS", onClick: onClose },
+          ]}
+        />
       </div>
     </div>
   );

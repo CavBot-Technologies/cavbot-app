@@ -7,6 +7,7 @@ import CavBotLoadingScreen from "@/components/CavBotLoadingScreen";
 import "@/components/CavBotLoadingScreen.css";
 import "./arcade.css";
 import { DefaultAccountAvatarIcon } from "@/components/AppShell";
+import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 import EntertainmentOverlay from "./EntertainmentOverlay";
 
@@ -1304,36 +1305,8 @@ const ArcadePage = () => {
         <main className="arcade-main">
           <header className="arcade-header arcade-header--avatar">
             <div className="arcade-header-badge">
-              <div
-                className={`cb-badge cb-badge-inline ${getBadgeToneClass(profileTone)}`}
-                aria-hidden="true"
-              >
-                <div className="cavbot-dm-avatar">
-                  <div className="cavbot-dm-avatar-core">
-                    <div className="cavbot-dm-face">
-                      <div className="cavbot-eyes-row">
-                        <div className="cavbot-eye">
-                          <div className="cavbot-eye-inner">
-                            <div className="cavbot-eye-track">
-                              <div className="cavbot-eye-pupil"></div>
-                            </div>
-                          </div>
-                          <div className="cavbot-eye-glow"></div>
-                          <div className="cavbot-blink"></div>
-                        </div>
-                        <div className="cavbot-eye">
-                          <div className="cavbot-eye-inner">
-                            <div className="cavbot-eye-track">
-                              <div className="cavbot-eye-pupil"></div>
-                            </div>
-                          </div>
-                          <div className="cavbot-eye-glow"></div>
-                          <div className="cavbot-blink"></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div className={`cb-badge cb-badge-inline ${getBadgeToneClass(profileTone)}`} aria-hidden="true">
+                <CdnBadgeEyes trackingMode="eyeOnly" />
               </div>
             </div>
             <button
@@ -1466,16 +1439,13 @@ const ArcadePage = () => {
 		              </div>
 		            </div>
 		          </section>
-            <br /><br /><br /><br />
 	          <section className="gallery">
 	            <header className="gallery-header">
 	              <div>
 	                <h2>Featured Games</h2>
                 <p className="section-description">
                   Jump in. Play a round. Have fun.
-
-
-                </p><br />
+                </p>
               </div>
               <div className="gallery-header-featured">
                 <Link
@@ -1503,7 +1473,7 @@ const ArcadePage = () => {
                   />
                   <div className="game-body">
                     <div className="game-actions">
-                   <br />   <button type="button" className="btn btn-primary" onClick={() => handlePlayClick(game)}>
+                      <button type="button" className="btn btn-primary" onClick={() => handlePlayClick(game)}>
                         Play Now
                       </button>
                       <button
@@ -1519,13 +1489,12 @@ const ArcadePage = () => {
               ))}
             </div>
           </section>
-<br /><br />
           <section className="devices">
             <header>
               <h2>Anytime. Anywhere. Any device.</h2>
               <p className="section-description">
                 Ready when you are.
-              </p><br /><br />
+              </p>
             </header>
             <div className="device-grid">
               {[
@@ -1561,11 +1530,10 @@ const ArcadePage = () => {
               ))}
             </div>
           </section>
-<br /><br />
           <section className="faq">
             <header>
               <h2>CavBot Arcade FAQ</h2>
-              <p className="section-description">Simple answers to common questions.</p><br /><br />
+              <p className="section-description">Simple answers to common questions.</p>
             </header>
             <div className="faq-list">
               {[{
@@ -1589,7 +1557,7 @@ All games are fully playable without audio, with sound designed as a subtle enha
                 <details key={item.question}>
                   <summary>
                     <span>{item.question}</span>
-                    <span aria-hidden="true">▾</span>
+                    <span className="faq-summary-caret" aria-hidden="true" />
                   </summary>
                   <p>{item.answer}</p>
                 </details>
@@ -1600,13 +1568,15 @@ All games are fully playable without audio, with sound designed as a subtle enha
             <header>
               <p className="eyebrow">Next</p>
               <h2>Make your 404 experience intentional</h2>
-              <p className="section-description">Turn broken routes into moments worth staying for.<br />
-                Interactive 404 games designed to engage, recover, and move visitors forward.</p>
+              <p className="section-description">
+                Turn broken routes into moments worth staying for. Interactive 404 games designed to engage, recover,
+                and move visitors forward.
+              </p>
             </header>
             <div className="cta-actions">
-            <Link className="btn btn-primary btn-cta" href="/settings/integrations">
-              Install on your site
-            </Link>
+              <Link className="btn btn-primary btn-cta" href="/settings/integrations">
+                Install on your site
+              </Link>
             </div>
           </section>
         </main>

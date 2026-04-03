@@ -7,6 +7,7 @@ import CavBotLoadingScreen from "@/components/CavBotLoadingScreen";
 import "@/components/CavBotLoadingScreen.css";
 import "./gallery.css";
 import { DefaultAccountAvatarIcon } from "@/components/AppShell";
+import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 import EntertainmentOverlay from "../EntertainmentOverlay";
 
@@ -1364,36 +1365,8 @@ const ArcadePage = () => {
         <main className="arcade-main">
           <header className="arcade-header arcade-header--avatar">
             <div className="arcade-header-badge">
-              <div
-                className={`cb-badge cb-badge-inline ${getBadgeToneClass(profileTone)}`}
-                aria-hidden="true"
-              >
-                <div className="cavbot-dm-avatar">
-                  <div className="cavbot-dm-avatar-core">
-                    <div className="cavbot-dm-face">
-                      <div className="cavbot-eyes-row">
-                        <div className="cavbot-eye">
-                          <div className="cavbot-eye-inner">
-                            <div className="cavbot-eye-track">
-                              <div className="cavbot-eye-pupil"></div>
-                            </div>
-                          </div>
-                          <div className="cavbot-eye-glow"></div>
-                          <div className="cavbot-blink"></div>
-                        </div>
-                        <div className="cavbot-eye">
-                          <div className="cavbot-eye-inner">
-                            <div className="cavbot-eye-track">
-                              <div className="cavbot-eye-pupil"></div>
-                            </div>
-                          </div>
-                          <div className="cavbot-eye-glow"></div>
-                          <div className="cavbot-blink"></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div className={`cb-badge cb-badge-inline ${getBadgeToneClass(profileTone)}`} aria-hidden="true">
+                <CdnBadgeEyes trackingMode="eyeOnly" />
               </div>
             </div>
             <button
