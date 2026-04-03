@@ -6232,9 +6232,15 @@ export function CavPadPanel({
               ) : null}
 
               <button className="cb-notes-newbtn" type="button" onClick={openCreateChooser} aria-label="Create" title="Create">
-                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                  <path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z" />
-                </svg>
+                <Image
+                  src="/icons/cavpad/edit-ui-svgrepo-com.svg"
+                  alt=""
+                  width={16}
+                  height={16}
+                  className="cb-notes-newbtn-icon"
+                  aria-hidden="true"
+                  unoptimized
+                />
               </button>
             </div>
           </div>

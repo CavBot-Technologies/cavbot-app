@@ -469,11 +469,18 @@
 .cb-cavpad-modal-footer-badge{
   display: none;
   align-items: center;
+  flex: 0 0 auto;
+  overflow: visible;
 }
 
 .cb-cavpad-modal-footer-badge .cb-badge{
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 42px;
+}
+
+.cb-cavpad-modal-footer-badge .cb-badge-left{
+  padding-right: 2px;
+  overflow: visible;
 }
 
 /* ===== Theme variables ===== */
@@ -823,7 +830,13 @@
   display:grid;
   place-items:center;
 }
-:is(.cb-home, .cb-shell) .cb-notes-newbtn svg{ display:block; }
+:is(.cb-home, .cb-shell) .cb-notes-newbtn-icon{
+  width: 16px;
+  height: 16px;
+  display: block;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
 :is(.cb-home, .cb-shell) .cb-notes-newbtn:hover{
   border-color: var(--cavpad-accent-glow);
   background: var(--cavpad-accent-soft);
