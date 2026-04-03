@@ -17,6 +17,7 @@ import { getCavcloudObjectStream } from "@/lib/cavcloud/r2.server";
 import { upsertTextFile as upsertCavsafeTextFile } from "@/lib/cavsafe/storage.server";
 import { notifyCavCloudCollabSignal } from "@/lib/cavcloud/notifications.server";
 import { createDirectUserShares, parseExpiresInDays } from "@/lib/cavcloud/userShares.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { CAVCLOUD_NOTIFICATION_KINDS } from "@/lib/notificationKinds";
 import { prisma } from "@/lib/prisma";
 
@@ -740,6 +741,37 @@ function mapCavPadSettingsRow(
   };
 }
 
+function defaultCavPadSettingsRow(
+  overrides?: Partial<Pick<CavPadSettingsRow, "syncToCavcloud" | "syncToCavsafe" | "allowSharing" | "defaultSharePermission" | "defaultShareExpiryDays" | "noteExpiryDays">>
+): CavPadSettingsRow {
+  return {
+    syncToCavcloud: Boolean(overrides?.syncToCavcloud ?? CAVPAD_LEGACY_SYNC_DEFAULT),
+    syncToCavsafe: Boolean(overrides?.syncToCavsafe ?? CAVPAD_LEGACY_SYNC_DEFAULT),
+    allowSharing: overrides?.allowSharing == null ? true : Boolean(overrides.allowSharing),
+    defaultSharePermission: overrides?.defaultSharePermission === "EDIT" ? "EDIT" : "VIEW",
+    defaultShareExpiryDays: normalizeExpiryDays(overrides?.defaultShareExpiryDays, 0),
+    noteExpiryDays: parseNoteExpiryDays(overrides?.noteExpiryDays, 0),
+    trashRetentionDays: CAVPAD_TRASH_RETENTION_DAYS,
+  };
+}
+
+function isCavPadSettingsSchemaMismatchError(err: unknown): boolean {
+  return (
+    isUnknownCavPadSettingsSyncFieldError(err) ||
+    isSchemaMismatchError(err, {
+      tables: ["CavPadSettings"],
+      columns: [
+        "syncToCavcloud",
+        "syncToCavsafe",
+        "allowSharing",
+        "defaultSharePermission",
+        "defaultShareExpiryDays",
+        "noteExpiryDays",
+      ],
+    })
+  );
+}
+
 function isRetryableWriteConflictError(err: unknown): boolean {
   const code = String((err as { code?: unknown })?.code || "").toUpperCase();
   if (code === "P2034") return true;
@@ -1105,71 +1137,77 @@ async function purgeExpiredCavPadTrash(accountId: string, operatorUserId: string
 }
 
 async function getOrCreateCavPadSettings(accountId: string, userId: string): Promise<CavPadSettingsRow> {
-  if (cavPadSettingsSupportsSyncFields !== false) {
-    try {
-      const settings = await prismaAny.cavPadSettings.upsert({
-        where: {
-          accountId_userId: {
+  try {
+    if (cavPadSettingsSupportsSyncFields !== false) {
+      try {
+        const settings = await prismaAny.cavPadSettings.upsert({
+          where: {
+            accountId_userId: {
+              accountId,
+              userId,
+            },
+          },
+          create: {
             accountId,
             userId,
+            syncToCavcloud: false,
+            syncToCavsafe: false,
+            allowSharing: true,
+            defaultSharePermission: "VIEW",
+            defaultShareExpiryDays: 0,
+            noteExpiryDays: 0,
           },
-        },
-        create: {
+          update: {},
+          select: {
+            syncToCavcloud: true,
+            syncToCavsafe: true,
+            allowSharing: true,
+            defaultSharePermission: true,
+            defaultShareExpiryDays: true,
+            noteExpiryDays: true,
+          },
+        });
+        cavPadSettingsSupportsSyncFields = true;
+        return mapCavPadSettingsRow(settings);
+      } catch (err) {
+        if (!isUnknownCavPadSettingsSyncFieldError(err)) throw err;
+        cavPadSettingsSupportsSyncFields = false;
+      }
+    }
+
+    const settings = await prismaAny.cavPadSettings.upsert({
+      where: {
+        accountId_userId: {
           accountId,
           userId,
-          syncToCavcloud: false,
-          syncToCavsafe: false,
-          allowSharing: true,
-          defaultSharePermission: "VIEW",
-          defaultShareExpiryDays: 0,
-          noteExpiryDays: 0,
         },
-        update: {},
-        select: {
-          syncToCavcloud: true,
-          syncToCavsafe: true,
-          allowSharing: true,
-          defaultSharePermission: true,
-          defaultShareExpiryDays: true,
-          noteExpiryDays: true,
-        },
-      });
-      cavPadSettingsSupportsSyncFields = true;
-      return mapCavPadSettingsRow(settings);
-    } catch (err) {
-      if (!isUnknownCavPadSettingsSyncFieldError(err)) throw err;
-      cavPadSettingsSupportsSyncFields = false;
-    }
-  }
-
-  const settings = await prismaAny.cavPadSettings.upsert({
-    where: {
-      accountId_userId: {
+      },
+      create: {
         accountId,
         userId,
+        allowSharing: true,
+        defaultSharePermission: "VIEW",
+        defaultShareExpiryDays: 0,
+        noteExpiryDays: 0,
       },
-    },
-    create: {
-      accountId,
-      userId,
-      allowSharing: true,
-      defaultSharePermission: "VIEW",
-      defaultShareExpiryDays: 0,
-      noteExpiryDays: 0,
-    },
-    update: {},
-    select: {
-      allowSharing: true,
-      defaultSharePermission: true,
-      defaultShareExpiryDays: true,
-      noteExpiryDays: true,
-    },
-  });
+      update: {},
+      select: {
+        allowSharing: true,
+        defaultSharePermission: true,
+        defaultShareExpiryDays: true,
+        noteExpiryDays: true,
+      },
+    });
 
-  return mapCavPadSettingsRow(settings, {
-    syncToCavcloud: CAVPAD_LEGACY_SYNC_DEFAULT,
-    syncToCavsafe: CAVPAD_LEGACY_SYNC_DEFAULT,
-  });
+    return mapCavPadSettingsRow(settings, {
+      syncToCavcloud: CAVPAD_LEGACY_SYNC_DEFAULT,
+      syncToCavsafe: CAVPAD_LEGACY_SYNC_DEFAULT,
+    });
+  } catch (err) {
+    if (!isCavPadSettingsSchemaMismatchError(err)) throw err;
+    cavPadSettingsSupportsSyncFields = false;
+    return defaultCavPadSettingsRow();
+  }
 }
 
 export async function assertCavPadSyncTargetEnabled(args: {
@@ -2475,85 +2513,98 @@ export async function updateCavPadSettings(args: {
   const normalizedNoteExpiryDays =
     args.noteExpiryDays === undefined ? undefined : parseNoteExpiryDays(args.noteExpiryDays, 0);
 
-  if (cavPadSettingsSupportsSyncFields !== false) {
-    try {
-      const next = await prismaAny.cavPadSettings.upsert({
-        where: {
-          accountId_userId: {
+  try {
+    if (cavPadSettingsSupportsSyncFields !== false) {
+      try {
+        const next = await prismaAny.cavPadSettings.upsert({
+          where: {
+            accountId_userId: {
+              accountId,
+              userId,
+            },
+          },
+          create: {
             accountId,
             userId,
+            syncToCavcloud: Boolean(args.syncToCavcloud),
+            syncToCavsafe: Boolean(args.syncToCavsafe),
+            allowSharing: args.allowSharing !== false,
+            defaultSharePermission: normalizedSharePermission ?? "VIEW",
+            defaultShareExpiryDays: normalizedShareExpiryDays ?? 0,
+            noteExpiryDays: normalizedNoteExpiryDays ?? 0,
           },
-        },
-        create: {
+          update: {
+            ...(args.syncToCavcloud === undefined ? {} : { syncToCavcloud: Boolean(args.syncToCavcloud) }),
+            ...(args.syncToCavsafe === undefined ? {} : { syncToCavsafe: Boolean(args.syncToCavsafe) }),
+            ...(args.allowSharing === undefined ? {} : { allowSharing: Boolean(args.allowSharing) }),
+            ...(normalizedSharePermission === undefined ? {} : { defaultSharePermission: normalizedSharePermission }),
+            ...(normalizedShareExpiryDays === undefined ? {} : { defaultShareExpiryDays: normalizedShareExpiryDays }),
+            ...(normalizedNoteExpiryDays === undefined ? {} : { noteExpiryDays: normalizedNoteExpiryDays }),
+          },
+          select: {
+            syncToCavcloud: true,
+            syncToCavsafe: true,
+            allowSharing: true,
+            defaultSharePermission: true,
+            defaultShareExpiryDays: true,
+            noteExpiryDays: true,
+          },
+        });
+        cavPadSettingsSupportsSyncFields = true;
+        return mapCavPadSettingsRow(next);
+      } catch (err) {
+        if (!isUnknownCavPadSettingsSyncFieldError(err)) throw err;
+        cavPadSettingsSupportsSyncFields = false;
+      }
+    }
+
+    const next = await prismaAny.cavPadSettings.upsert({
+      where: {
+        accountId_userId: {
           accountId,
           userId,
-          syncToCavcloud: Boolean(args.syncToCavcloud),
-          syncToCavsafe: Boolean(args.syncToCavsafe),
-          allowSharing: args.allowSharing !== false,
-          defaultSharePermission: normalizedSharePermission ?? "VIEW",
-          defaultShareExpiryDays: normalizedShareExpiryDays ?? 0,
-          noteExpiryDays: normalizedNoteExpiryDays ?? 0,
         },
-        update: {
-          ...(args.syncToCavcloud === undefined ? {} : { syncToCavcloud: Boolean(args.syncToCavcloud) }),
-          ...(args.syncToCavsafe === undefined ? {} : { syncToCavsafe: Boolean(args.syncToCavsafe) }),
-          ...(args.allowSharing === undefined ? {} : { allowSharing: Boolean(args.allowSharing) }),
-          ...(normalizedSharePermission === undefined ? {} : { defaultSharePermission: normalizedSharePermission }),
-          ...(normalizedShareExpiryDays === undefined ? {} : { defaultShareExpiryDays: normalizedShareExpiryDays }),
-          ...(normalizedNoteExpiryDays === undefined ? {} : { noteExpiryDays: normalizedNoteExpiryDays }),
-        },
-        select: {
-          syncToCavcloud: true,
-          syncToCavsafe: true,
-          allowSharing: true,
-          defaultSharePermission: true,
-          defaultShareExpiryDays: true,
-          noteExpiryDays: true,
-        },
-      });
-      cavPadSettingsSupportsSyncFields = true;
-      return mapCavPadSettingsRow(next);
-    } catch (err) {
-      if (!isUnknownCavPadSettingsSyncFieldError(err)) throw err;
-      cavPadSettingsSupportsSyncFields = false;
-    }
-  }
-
-  const next = await prismaAny.cavPadSettings.upsert({
-    where: {
-      accountId_userId: {
+      },
+      create: {
         accountId,
         userId,
+        allowSharing: args.allowSharing !== false,
+        defaultSharePermission: normalizedSharePermission ?? "VIEW",
+        defaultShareExpiryDays: normalizedShareExpiryDays ?? 0,
+        noteExpiryDays: normalizedNoteExpiryDays ?? 0,
       },
-    },
-    create: {
-      accountId,
-      userId,
-      allowSharing: args.allowSharing !== false,
-      defaultSharePermission: normalizedSharePermission ?? "VIEW",
-      defaultShareExpiryDays: normalizedShareExpiryDays ?? 0,
-      noteExpiryDays: normalizedNoteExpiryDays ?? 0,
-    },
-    update: {
-      ...(args.allowSharing === undefined ? {} : { allowSharing: Boolean(args.allowSharing) }),
-      ...(normalizedSharePermission === undefined ? {} : { defaultSharePermission: normalizedSharePermission }),
-      ...(normalizedShareExpiryDays === undefined ? {} : { defaultShareExpiryDays: normalizedShareExpiryDays }),
-      ...(normalizedNoteExpiryDays === undefined ? {} : { noteExpiryDays: normalizedNoteExpiryDays }),
-    },
-    select: {
-      allowSharing: true,
-      defaultSharePermission: true,
-      defaultShareExpiryDays: true,
-      noteExpiryDays: true,
-    },
-  });
+      update: {
+        ...(args.allowSharing === undefined ? {} : { allowSharing: Boolean(args.allowSharing) }),
+        ...(normalizedSharePermission === undefined ? {} : { defaultSharePermission: normalizedSharePermission }),
+        ...(normalizedShareExpiryDays === undefined ? {} : { defaultShareExpiryDays: normalizedShareExpiryDays }),
+        ...(normalizedNoteExpiryDays === undefined ? {} : { noteExpiryDays: normalizedNoteExpiryDays }),
+      },
+      select: {
+        allowSharing: true,
+        defaultSharePermission: true,
+        defaultShareExpiryDays: true,
+        noteExpiryDays: true,
+      },
+    });
 
-  return mapCavPadSettingsRow(next, {
-    syncToCavcloud:
-      args.syncToCavcloud === undefined ? CAVPAD_LEGACY_SYNC_DEFAULT : Boolean(args.syncToCavcloud),
-    syncToCavsafe:
-      args.syncToCavsafe === undefined ? CAVPAD_LEGACY_SYNC_DEFAULT : Boolean(args.syncToCavsafe),
-  });
+    return mapCavPadSettingsRow(next, {
+      syncToCavcloud:
+        args.syncToCavcloud === undefined ? CAVPAD_LEGACY_SYNC_DEFAULT : Boolean(args.syncToCavcloud),
+      syncToCavsafe:
+        args.syncToCavsafe === undefined ? CAVPAD_LEGACY_SYNC_DEFAULT : Boolean(args.syncToCavsafe),
+    });
+  } catch (err) {
+    if (!isCavPadSettingsSchemaMismatchError(err)) throw err;
+    cavPadSettingsSupportsSyncFields = false;
+    return defaultCavPadSettingsRow({
+      syncToCavcloud: args.syncToCavcloud,
+      syncToCavsafe: args.syncToCavsafe,
+      allowSharing: args.allowSharing,
+      defaultSharePermission: normalizedSharePermission,
+      defaultShareExpiryDays: normalizedShareExpiryDays,
+      noteExpiryDays: normalizedNoteExpiryDays,
+    });
+  }
 }
 
 export async function exportCavPadNote(args: {

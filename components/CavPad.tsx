@@ -1317,6 +1317,25 @@ export function CavPadDock({
     const site = sites.find((row) => String(row.id || "") === activeId);
     return String(site?.label || "").trim();
   }, [activeSiteId, sites]);
+  const serverSettingsPayload = React.useMemo(
+    () => ({
+      syncToCavcloud: settings.syncToCavcloud,
+      syncToCavsafe: cavsafeEnabled ? settings.syncToCavsafe : false,
+      allowSharing: settings.allowSharing,
+      defaultSharePermission: settings.defaultSharePermission,
+      defaultShareExpiryDays: settings.defaultShareExpiryDays,
+      noteExpiryDays: settings.noteExpiryDays,
+    }),
+    [
+      cavsafeEnabled,
+      settings.allowSharing,
+      settings.defaultShareExpiryDays,
+      settings.defaultSharePermission,
+      settings.noteExpiryDays,
+      settings.syncToCavcloud,
+      settings.syncToCavsafe,
+    ]
+  );
 
   React.useEffect(() => {
     if (!pid) {
@@ -1532,6 +1551,10 @@ export function CavPadDock({
   React.useEffect(() => {
     if (!pid || !syncSettingsReady) return;
     saveSettingsLocal(pid, settings);
+  }, [pid, settings, syncSettingsReady]);
+
+  React.useEffect(() => {
+    if (!pid || !syncSettingsReady) return;
     if (cavpadSettingsSyncTimerRef.current) {
       window.clearTimeout(cavpadSettingsSyncTimerRef.current);
       cavpadSettingsSyncTimerRef.current = null;
@@ -1542,14 +1565,7 @@ export function CavPadDock({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          syncToCavcloud: settings.syncToCavcloud,
-          syncToCavsafe: cavsafeEnabled ? settings.syncToCavsafe : false,
-          allowSharing: settings.allowSharing,
-          defaultSharePermission: settings.defaultSharePermission,
-          defaultShareExpiryDays: settings.defaultShareExpiryDays,
-          noteExpiryDays: settings.noteExpiryDays,
-        }),
+        body: JSON.stringify(serverSettingsPayload),
       }).catch(() => {});
     }, 220);
     return () => {
@@ -1558,7 +1574,7 @@ export function CavPadDock({
         cavpadSettingsSyncTimerRef.current = null;
       }
     };
-  }, [pid, settings, cavsafeEnabled, syncSettingsReady]);
+  }, [pid, serverSettingsPayload, syncSettingsReady]);
 
   React.useEffect(() => {
     if (cavsafeEnabled) return;
