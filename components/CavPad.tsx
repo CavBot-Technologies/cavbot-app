@@ -2044,6 +2044,7 @@ export function CavPadPanel({
   }, [view, onClose, closeHandlerRef]);
   const [viewMenuOpen, setViewMenuOpen] = React.useState(false);
   const [isNarrow, setIsNarrow] = React.useState(false);
+  const [isPhone, setIsPhone] = React.useState(false);
   const [mobileView, setMobileView] = React.useState<"list" | "editor">("list");
   const [editorEmpty, setEditorEmpty] = React.useState(true);
   const [colorOpen, setColorOpen] = React.useState(false);
@@ -2498,6 +2499,15 @@ export function CavPadPanel({
     if (typeof window === "undefined") return;
     const mq = window.matchMedia("(max-width: 980px)");
     const onChange = () => setIsNarrow(mq.matches);
+    onChange();
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 640px)");
+    const onChange = () => setIsPhone(mq.matches);
     onChange();
     mq.addEventListener?.("change", onChange);
     return () => mq.removeEventListener?.("change", onChange);
@@ -4400,6 +4410,12 @@ export function CavPadPanel({
     if (activeDocId) setMobileView("editor");
   }, [isNarrow, activeDocId]);
 
+  React.useEffect(() => {
+    if (!isPhone) return;
+    if (view !== "cavpad") return;
+    setMobileView("editor");
+  }, [isPhone, view]);
+
   function resetEditorHistoryForNote(noteId: string, html: string) {
     editorHistoryNoteIdRef.current = String(noteId || "");
     editorHistoryLastHtmlRef.current = String(html || "");
@@ -5621,8 +5637,49 @@ export function CavPadPanel({
         : view === "trash"
           ? "Recently deleted"
           : view === "details"
-            ? "Details"
+          ? "Details"
             : "Settings";
+
+  function renderColorPicker(variant: "top" | "toolbar") {
+    return (
+      <div
+        className={`cb-notes-colorpicker cb-notes-colorpicker-${variant} ${colorOpen ? "is-open" : ""}`}
+        role="group"
+        aria-label="Text color"
+      >
+        <button
+          type="button"
+          className="cb-notes-colortrigger"
+          aria-haspopup="dialog"
+          aria-expanded={colorOpen}
+          onClick={() => setColorOpen((v) => !v)}
+        >
+          <span className="cb-notes-colorA">A</span>
+          <span className="cb-notes-colorline" style={{ background: settings.fontColor }} />
+        </button>
+        {colorOpen ? (
+          <div className="cb-notes-colorpanel" role="dialog" aria-label="Text color">
+            {CAVPAD_COLORS.map((c) => (
+              <button
+                key={c.value}
+                type="button"
+                className={`cb-notes-colorchip ${settings.fontColor === c.value ? "is-on" : ""}`}
+                onClick={() => {
+                  setSettings({ ...settings, fontColor: c.value });
+                  setColorOpen(false);
+                }}
+                aria-label={c.label}
+                title={c.label}
+              >
+                <span className="cb-notes-colorchip-line" style={{ background: c.value }} />
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   const trashNoticeRows = React.useMemo(
     () =>
       trash
@@ -6025,42 +6082,74 @@ export function CavPadPanel({
             </div>
 
             <div className="cb-notes-actions-right">
-                <div className="cb-notes-viewmenu">
-                  <button
-                    type="button"
-                    className="cb-notes-viewbtn"
-                    aria-haspopup="menu"
-                    aria-expanded={viewMenuOpen}
-                    onClick={() => setViewMenuOpen((s) => !s)}
-                  >
-                    {viewLabel}
-                    <span aria-hidden="true">▾</span>
-                  </button>
-                  {viewMenuOpen ? (
-                    <div className="cb-notes-viewmenu-pop" role="menu" aria-label="Views">
-                      <button type="button" role="menuitem" onClick={openDirectoryRoot}>
-                        CavPad
-                      </button>
-                      <button type="button" role="menuitem" onClick={() => setView("cavpad")}>
-                        Write a note
-                      </button>
-                      <button type="button" role="menuitem" onClick={() => setView("notes")}>
-                        Notes
-                      </button>
-                      <button type="button" role="menuitem" onClick={openCavPadSettings}>
-                        Settings
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="cb-notes-viewmenu-trash"
-                        onClick={() => setView("trash")}
-                      >
-                        Recently deleted
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
+              <div className="cb-notes-viewmenu">
+                <button
+                  type="button"
+                  className="cb-notes-viewbtn"
+                  aria-haspopup="menu"
+                  aria-expanded={viewMenuOpen}
+                  onClick={() => setViewMenuOpen((s) => !s)}
+                >
+                  {viewLabel}
+                  <span aria-hidden="true">▾</span>
+                </button>
+                {viewMenuOpen ? (
+                  <div className="cb-notes-viewmenu-pop" role="menu" aria-label="Views">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setViewMenuOpen(false);
+                        openDirectoryRoot();
+                      }}
+                    >
+                      CavPad
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setViewMenuOpen(false);
+                        setView("cavpad");
+                        if (isNarrow) setMobileView("editor");
+                      }}
+                    >
+                      Write a note
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setViewMenuOpen(false);
+                        setView("notes");
+                      }}
+                    >
+                      Notes
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setViewMenuOpen(false);
+                        openCavPadSettings();
+                      }}
+                    >
+                      Settings
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="cb-notes-viewmenu-trash"
+                      onClick={() => {
+                        setViewMenuOpen(false);
+                        setView("trash");
+                      }}
+                    >
+                      Recently deleted
+                    </button>
+                  </div>
+                ) : null}
+              </div>
 
             {view !== "cavpad" ? (
               <button
@@ -6077,17 +6166,6 @@ export function CavPadPanel({
               </button>
             ) : null}
 
-            {isNarrow && view === "cavpad" ? (
-              <button
-                className="cb-notes-mobiletoggle"
-                type="button"
-                onClick={() => setMobileView(mobileView === "list" ? "editor" : "list")}
-                aria-label="Toggle list"
-                title="Toggle list"
-              >
-                {mobileView === "list" ? "Editor" : "List"}
-              </button>
-            ) : null}
             <div className="cb-notes-header-search" data-cavpad-search-wrap="true">
               <input
                 className="cb-notes-header-search-input"
@@ -7423,32 +7501,49 @@ export function CavPadPanel({
                     </select>
                   ) : null}
 
-                  <input
-                    className="cb-notes-titleinput"
-                    value={draftTitle}
-                    onChange={(e) => {
-                      const nextTitle = String(e.target.value || "").slice(0, 80);
-                      setDraftTitle(nextTitle);
-                      if (activeDocId) queueSave(undefined, nextTitle);
-                    }}
-                    onFocus={(e) => {
-                      const current = String(e.currentTarget.value || "").trim().toLowerCase();
-                      if (current === "untitled") {
-                        setDraftTitle("");
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter" || e.repeat || e.nativeEvent.isComposing) return;
-                      if (activeDocId) return;
-                      const seededTitle = clampStr(draftTitle, 80).trim();
-                      if (!seededTitle) return;
-                      e.preventDefault();
-                      createNote(seededTitle);
-                    }}
-                    placeholder="Untitled"
-                    aria-label="Note title"
-                    autoComplete="off"
-                  />
+                  <div className="cb-notes-titlebar">
+                    <input
+                      className="cb-notes-titleinput"
+                      value={draftTitle}
+                      onChange={(e) => {
+                        const nextTitle = String(e.target.value || "").slice(0, 80);
+                        setDraftTitle(nextTitle);
+                        if (activeDocId) queueSave(undefined, nextTitle);
+                      }}
+                      onFocus={(e) => {
+                        const current = String(e.currentTarget.value || "").trim().toLowerCase();
+                        if (current === "untitled") {
+                          setDraftTitle("");
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter" || e.repeat || e.nativeEvent.isComposing) return;
+                        if (activeDocId) return;
+                        const seededTitle = clampStr(draftTitle, 80).trim();
+                        if (!seededTitle) return;
+                        e.preventDefault();
+                        createNote(seededTitle);
+                      }}
+                      placeholder="Untitled"
+                      aria-label="Note title"
+                      autoComplete="off"
+                    />
+                    {isPhone && activeDoc?.id ? (
+                      <button
+                        type="button"
+                        className="cb-notes-trash cb-notes-trash-inline"
+                        onClick={() => deleteNote(activeDoc.id)}
+                        aria-label="Delete note"
+                        title="Delete note"
+                      >
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+                          <path d="M20.5 6H3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                          <path d="M18.8332 8.5L18.3732 15.3991C18.1962 18.054 18.1077 19.3815 17.2427 20.1907C16.3777 21 15.0473 21 12.3865 21H11.6132C8.95235 21 7.62195 21 6.75694 20.1907C5.89194 19.3815 5.80344 18.054 5.62644 15.3991L5.1665 8.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                          <path d="M6.5 6C6.55588 6 6.58382 6 6.60915 5.99936C7.43259 5.97849 8.15902 5.45491 8.43922 4.68032C8.44784 4.65649 8.45667 4.62999 8.47434 4.57697L8.57143 4.28571C8.65431 4.03708 8.69575 3.91276 8.75071 3.8072C8.97001 3.38607 9.37574 3.09364 9.84461 3.01877C9.96213 3 10.0932 3 10.3553 3H13.6447C13.9068 3 14.0379 3 14.1554 3.01877C14.6243 3.09364 15.03 3.38607 15.2493 3.8072C15.3043 3.91276 15.3457 4.03708 15.4286 4.28571L15.5257 4.57697C15.5433 4.62992 15.5522 4.65651 15.5608 4.68032C15.841 5.45491 16.5674 5.97849 17.3909 5.99936C17.4162 6 17.4441 6 17.5 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    ) : null}
+                  </div>
 
                   <select
                     className="cb-notes-fontselect"
@@ -7479,37 +7574,7 @@ export function CavPadPanel({
                     ))}
                   </select>
 
-                  <div className={`cb-notes-colorpicker ${colorOpen ? "is-open" : ""}`} role="group" aria-label="Text color">
-                    <button
-                      type="button"
-                      className="cb-notes-colortrigger"
-                      aria-haspopup="dialog"
-                      aria-expanded={colorOpen}
-                      onClick={() => setColorOpen((v) => !v)}
-                    >
-                      <span className="cb-notes-colorA">A</span>
-                      <span className="cb-notes-colorline" style={{ background: settings.fontColor }} />
-                    </button>
-                    {colorOpen ? (
-                      <div className="cb-notes-colorpanel" role="dialog" aria-label="Text color">
-                        {CAVPAD_COLORS.map((c) => (
-                          <button
-                            key={c.value}
-                            type="button"
-                            className={`cb-notes-colorchip ${settings.fontColor === c.value ? "is-on" : ""}`}
-                            onClick={() => {
-                              setSettings({ ...settings, fontColor: c.value });
-                              setColorOpen(false);
-                            }}
-                            aria-label={c.label}
-                            title={c.label}
-                          >
-                            <span className="cb-notes-colorchip-line" style={{ background: c.value }} />
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
+                  {!isPhone ? renderColorPicker("top") : null}
 
                   {activeDoc?.id && !activeDoc.pendingCreate ? (
                     <button
@@ -7549,10 +7614,10 @@ export function CavPadPanel({
                     />
                   </button>
 
-                  {activeDoc?.id ? (
+                  {!isPhone && activeDoc?.id ? (
                     <button
                       type="button"
-                      className="cb-notes-trash"
+                      className="cb-notes-trash cb-notes-trash-standalone"
                       onClick={() => deleteNote(activeDoc.id)}
                       aria-label="Delete note"
                       title="Delete note"
@@ -7622,6 +7687,8 @@ export function CavPadPanel({
                       />
                     </svg>
                   </button>
+
+                  {isPhone ? renderColorPicker("toolbar") : null}
 
                   <span className="cb-notes-toolsep" aria-hidden="true" />
 
