@@ -147,7 +147,8 @@
   }
 
   .err-head-right{
-    justify-content: flex-end;
+    width: 100%;
+    justify-content: center;
     gap: 10px;
     padding-top: 10px;
   }
@@ -257,6 +258,12 @@
   padding: 0 8px;
   font-size: 12px;
   outline: none;
+}
+
+@media (max-width: 640px){
+  .seo-range{
+    justify-content: center;
+  }
 }
 
 /* Chips */

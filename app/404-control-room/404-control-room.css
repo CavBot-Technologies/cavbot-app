@@ -1146,14 +1146,24 @@
   .crg-chip b{ max-width: 160px; }
 
   .crg-head-right{
-    justify-content: flex-end;
+    width: 100%;
+    justify-content: center;
     gap: 10px;
     padding-top: 10px;
   }
 
+  .crg-controls{
+    width: 100%;
+    justify-content: center;
+  }
+
+  .crg-range{
+    justify-content: center;
+  }
+
   .cb-seg{
     width: auto;
-    justify-content:flex-end;
+    justify-content:center;
   }
 
   .crg-mini-split{ grid-template-columns: 1fr; }

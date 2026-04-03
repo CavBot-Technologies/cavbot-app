@@ -713,14 +713,24 @@
   .routes-chip b{ max-width: 160px; }
 
   .routes-head-right{
-    justify-content: flex-end;
+    width: 100%;
+    justify-content: center;
     gap: 10px;
     padding-top: 10px;
   }
 
+  .routes-controls{
+    width: 100%;
+    justify-content: center;
+  }
+
+  .routes-range{
+    justify-content: center;
+  }
+
   .cb-seg{
     width: auto;
-    justify-content:flex-end;
+    justify-content:center;
   }
 
   .cb-tool-pill{ margin-left: 0; }

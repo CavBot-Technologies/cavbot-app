@@ -1529,20 +1529,22 @@ body.cb-modal-open{
   .seo-meta{ justify-content: center; }
   .seo-chip b{ max-width: 160px; }
 
-  /* keep the control cluster RIGHT like Routes / 404 */
   .seo-head-right{
-    justify-content: flex-end;
+    width: 100%;
+    justify-content: center;
     gap: 10px;
     padding-top: 10px;
   }
 
-  /* IMPORTANT: do NOT stretch the range pills into a big capsule */
   .cb-seg{
     width: auto;
-    justify-content:flex-end;
+    justify-content:center;
   }
 
-  /* Tools stays right beside/under, never centered */
+  .seo-range{
+    justify-content: center;
+  }
+
   .cb-tool-pill{
     margin-left: 0;
   }

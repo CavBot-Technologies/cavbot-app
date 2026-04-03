@@ -816,14 +816,15 @@ body.cb-modal-open{ overflow: hidden; }
   .a11y-chip b{ max-width: 160px; }
 
   .a11y-head-right{
-    justify-content: flex-end;
+    width: 100%;
+    justify-content: center;
     gap: 10px;
     padding-top: 10px;
   }
 
   .seo-range{
     width: auto;
-    justify-content:flex-end;
+    justify-content:center;
   }
 
   .cb-tool-pill{ margin-left: 0; }
