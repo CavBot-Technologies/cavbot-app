@@ -6913,22 +6913,39 @@ export function CavPadPanel({
                       />
                     </button>
                   ) : null}
-                  <select
-                    className="cb-notes-folderselect cb-notes-directoryfilter cb-cavpad-directory-section-select"
-                    value={directorySection}
-                    onChange={(event) => setDirectorySection(event.currentTarget.value as CavPadDirectorySection)}
-                    aria-label="Choose directory section"
-                  >
-                    {CAVPAD_DIRECTORY_SECTION_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="cb-notes-iconselect cb-notes-iconselect-filter cb-cavpad-directory-section-filter">
+                    <Image
+                      src="/icons/app/filter-svgrepo-com.svg"
+                      alt=""
+                      width={16}
+                      height={16}
+                      className="cb-notes-iconselect-glyph"
+                      aria-hidden="true"
+                      unoptimized
+                    />
+                    <select
+                      className="cb-notes-select-overlay cb-cavpad-directory-section-select"
+                      value={directorySection}
+                      onChange={(event) => setDirectorySection(event.currentTarget.value as CavPadDirectorySection)}
+                      aria-label="Choose directory section"
+                      title="Choose directory section"
+                    >
+                      {CAVPAD_DIRECTORY_SECTION_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 <span className="cb-cavpad-directory-toolbar-meta" aria-live="polite">
-                  <span className="cb-cavpad-directory-toolbar-name">{directoryCurrentLabel}</span>
-                  <span className="cb-cavpad-directory-toolbar-counts">{directoryCountsLabel}</span>
+                  <span
+                    className="cb-cavpad-directory-toolbar-counts"
+                    aria-label={`${directoryCurrentLabel} ${directoryCountsLabel}`}
+                    title={directoryCurrentLabel}
+                  >
+                    {directoryCountsLabel}
+                  </span>
                 </span>
               </div>
               {directoryBreadcrumbs.length > 1 ? (
@@ -7566,34 +7583,38 @@ export function CavPadPanel({
                     ) : null}
                   </div>
 
-                  <select
-                    className="cb-notes-fontselect"
-                    value={settings.font || "Inter"}
-                    onChange={(e) => handleFontChange(e.currentTarget.value)}
-                    aria-label="Font"
-                  >
-                    {CAVPAD_FONTS.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
+                  {!isPhone ? (
+                    <select
+                      className="cb-notes-fontselect"
+                      value={settings.font || "Inter"}
+                      onChange={(e) => handleFontChange(e.currentTarget.value)}
+                      aria-label="Font"
+                    >
+                      {CAVPAD_FONTS.map((f) => (
+                        <option key={f} value={f}>
+                          {f}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
 
-                  <select
-                    className="cb-notes-formatselect"
-                    value={formatMode}
-                    onChange={(e) => applyFormat(e.currentTarget.value)}
-                    aria-label="Format"
-                  >
-                    <option value="format" disabled>
-                      Format
-                    </option>
-                    {FORMAT_PRESETS.map((preset) => (
-                      <option key={preset.value} value={preset.value}>
-                        {preset.label}
+                  {!isPhone ? (
+                    <select
+                      className="cb-notes-formatselect"
+                      value={formatMode}
+                      onChange={(e) => applyFormat(e.currentTarget.value)}
+                      aria-label="Format"
+                    >
+                      <option value="format" disabled>
+                        Format
                       </option>
-                    ))}
-                  </select>
+                      {FORMAT_PRESETS.map((preset) => (
+                        <option key={preset.value} value={preset.value}>
+                          {preset.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
 
                   {!isPhone ? renderColorPicker("top") : null}
 
@@ -7708,6 +7729,63 @@ export function CavPadPanel({
                       />
                     </svg>
                   </button>
+
+                  {isPhone ? (
+                    <div className="cb-notes-iconselect cb-notes-iconselect-toolbar cb-notes-iconselect-font">
+                      <Image
+                        src="/icons/cavpad/font-case-svgrepo-com.svg"
+                        alt=""
+                        width={16}
+                        height={16}
+                        className="cb-notes-iconselect-glyph"
+                        aria-hidden="true"
+                        unoptimized
+                      />
+                      <select
+                        className="cb-notes-select-overlay"
+                        value={settings.font || "Inter"}
+                        onChange={(e) => handleFontChange(e.currentTarget.value)}
+                        aria-label="Font"
+                        title="Font"
+                      >
+                        {CAVPAD_FONTS.map((f) => (
+                          <option key={f} value={f}>
+                            {f}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+
+                  {isPhone ? (
+                    <div className="cb-notes-iconselect cb-notes-iconselect-toolbar cb-notes-iconselect-format">
+                      <Image
+                        src="/icons/cavpad/format-text-direction-svgrepo-com.svg"
+                        alt=""
+                        width={16}
+                        height={16}
+                        className="cb-notes-iconselect-glyph"
+                        aria-hidden="true"
+                        unoptimized
+                      />
+                      <select
+                        className="cb-notes-select-overlay"
+                        value={formatMode}
+                        onChange={(e) => applyFormat(e.currentTarget.value)}
+                        aria-label="Format"
+                        title="Format"
+                      >
+                        <option value="format" disabled>
+                          Format
+                        </option>
+                        {FORMAT_PRESETS.map((preset) => (
+                          <option key={preset.value} value={preset.value}>
+                            {preset.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
 
                   {isPhone ? renderColorPicker("toolbar") : null}
 

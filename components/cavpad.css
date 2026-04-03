@@ -1356,6 +1356,66 @@
   font-family: var(--font-sans);
 }
 
+:is(.cb-home, .cb-shell) .cb-notes-iconselect{
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--cavpad-ink);
+}
+
+:is(.cb-home, .cb-shell) .cb-notes-select-overlay{
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+}
+
+:is(.cb-home, .cb-shell) .cb-notes-iconselect-glyph{
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  max-width: 16px;
+  max-height: 16px;
+  display: block;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+  pointer-events: none;
+}
+
+:is(.cb-home, .cb-shell) .cb-notes-iconselect-filter{
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--cavpad-border);
+  background: rgba(0,0,0,0.12);
+}
+
+:is(.cb-home, .cb-shell) .cb-notes-iconselect-filter:is(:hover, :focus-within){
+  border-color: rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.04);
+}
+
+:is(.cb-home, .cb-shell) .cb-notes-iconselect-toolbar{
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: transparent;
+}
+
+:is(.cb-home, .cb-shell) .cb-notes-iconselect-toolbar:is(:hover, :focus-within){
+  color: var(--cavpad-accent-strong);
+}
+
 @media (max-width: 640px){
 .cb-notes-folderselect,
 .cb-notes-movefolder{ max-width: 160px; }
@@ -2898,16 +2958,19 @@
   min-width: 0;
 }
 :is(.cb-home, .cb-shell) .cb-cavpad-directory-section-select{
-  max-width: min(190px, 42vw);
-  min-width: 118px;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
 }
 :is(.cb-home, .cb-shell) .cb-cavpad-directory-toolbar-meta{
   margin-left: auto;
   display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+  flex-wrap: nowrap;
   white-space: nowrap;
+  text-align: right;
 }
 :is(.cb-home, .cb-shell) .cb-cavpad-directory-toolbar-name{
   color: rgba(247,251,255,0.96);
@@ -2921,6 +2984,10 @@
   font-size: 11px;
   font-weight: 520;
   letter-spacing: 0.01em;
+}
+:is(.cb-home, .cb-shell) .cb-cavpad-directory-section-filter{
+  width: 34px;
+  height: 34px;
 }
 :is(.cb-home, .cb-shell) .cb-cavpad-directory-pathbar{
   width: 100%;
@@ -4099,6 +4166,12 @@
     align-items: stretch;
   }
 
+  :is(.cb-home, .cb-shell) .cb-notes-iconselect-toolbar{
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+  }
+
   :is(.cb-home, .cb-shell) .cb-notes-colorpicker-toolbar .cb-notes-colortrigger{
     min-width: 40px;
     height: 40px;
@@ -4174,11 +4247,9 @@
   }
 
   :is(.cb-home, .cb-shell) .cb-cavpad-directory-section-select{
-    width: auto;
-    max-width: 118px;
+    width: 100%;
+    max-width: none;
     min-width: 0;
-    font-size: 10px;
-    letter-spacing: 0.04em;
   }
 
   :is(.cb-home, .cb-shell) .cb-cavpad-directory-toolbar-meta{
@@ -4186,10 +4257,12 @@
     flex: 1 1 auto;
     min-width: 0;
     flex-direction: row;
-    align-items: baseline;
-    gap: 6px;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0;
     white-space: nowrap;
     overflow: hidden;
+    text-align: right;
   }
 
   :is(.cb-home, .cb-shell) .cb-cavpad-directory-toolbar-name{
@@ -4200,7 +4273,15 @@
 
   :is(.cb-home, .cb-shell) .cb-cavpad-directory-toolbar-counts{
     flex: 0 0 auto;
-    font-size: 10px;
+    margin-left: auto;
+    font-size: 9px;
+    letter-spacing: 0.02em;
+  }
+
+  :is(.cb-home, .cb-shell) .cb-cavpad-directory-section-filter{
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
   }
 
   :is(.cb-home, .cb-shell) .cb-cavpad-desktop-grid{
