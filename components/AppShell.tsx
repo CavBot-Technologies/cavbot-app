@@ -1105,6 +1105,7 @@ export default function AppShell({
   useEffect(() => {
     const warmRoutes = [
       "/",
+      "/command-center",
       "/console",
       "/errors",
       "/seo",
@@ -1427,7 +1428,7 @@ export default function AppShell({
 
   const nav: NavItem[] = useMemo(
     () => [
-      { href: "/", label: "Command Center", hint: "Notifications + Manage URLs", required: "FREE" },
+      { href: "/command-center", label: "Command Center", hint: "Notifications + Manage URLs", required: "FREE" },
       { href: "/console", label: "Dashboard", hint: "Overall health + events", required: "FREE" },
 
 
