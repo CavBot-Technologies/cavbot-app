@@ -9369,6 +9369,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     && Boolean(selectedImagePresetActivationLine)
     && normalizeImageStudioActivationLine(prompt) === normalizeImageStudioActivationLine(selectedImagePresetActivationLine)
   );
+  const shouldSuppressComposerPlaceholder = showComposerPresetInlineLearnMore
+    || (isGuestPreviewMode && isEmptyThread && !s(prompt));
   useEffect(() => {
     if (!lockImageStudioPromptLine || !selectedImagePresetActivationLine) return;
     setPrompt((prev) => {
@@ -9654,6 +9656,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
               styles.centerComposerInput,
               showComposerAttachmentChips ? styles.centerComposerInputWithMedia : "",
               showComposerPresetInlineLearnMore ? styles.centerComposerInputActivationOverlayMode : "",
+              shouldSuppressComposerPlaceholder ? styles.centerComposerInputPlaceholderSuppressed : "",
             ].filter(Boolean).join(" ")}
             value={prompt}
             onChange={(event) => {
@@ -9708,7 +9711,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
               }
               onComposerKeyDown(event);
             }}
-            placeholder={promptPlaceholder}
+            placeholder={shouldSuppressComposerPlaceholder ? "" : promptPlaceholder}
           />
           {showComposerPresetInlineLearnMore ? (
             <span className={styles.centerComposerPromptInlineLearnMoreAnchor}>

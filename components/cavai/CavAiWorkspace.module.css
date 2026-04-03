@@ -7115,6 +7115,11 @@
   opacity: 1;
 }
 
+.centerComposerInputPlaceholderSuppressed::placeholder {
+  color: transparent;
+  opacity: 0;
+}
+
 .centerComposerInput:focus {
   outline: none;
 }
