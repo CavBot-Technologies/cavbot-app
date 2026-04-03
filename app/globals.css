@@ -916,6 +916,16 @@ a:focus{
   0%,100%{ opacity:.4; transform:scale(1); }
   50%{ opacity:1; transform:scale(1.15); }
 }
+@keyframes cavbotBlink{
+  0%, 43%, 46.5%, 48%, 100%{
+    transform: scaleY(0);
+    opacity: 0;
+  }
+  44.2%, 47.2%{
+    transform: scaleY(1);
+    opacity: 0.98;
+  }
+}
 
 .cb-controls-row{
   display:flex;

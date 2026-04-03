@@ -573,8 +573,6 @@ export default function AppShell({
   sidebarRenderCountRef.current += 1;
 
   const [badgeTone, setBadgeTone] = useState<"default" | "lime" | "red">("default");
-  const eyesMountLoggedRef = useRef(false);
-  const badgeEyesRootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -585,104 +583,6 @@ export default function AppShell({
     window.addEventListener("cb:eye-tone", handler);
     return () => window.removeEventListener("cb:eye-tone", handler);
   }, []);
-
-  useEffect(() => {
-    if (process.env.NODE_ENV === "production") return;
-    if (eyesMountLoggedRef.current) return;
-    eyesMountLoggedRef.current = true;
-    console.debug("[AppShell][diag] CavBot eyes mounted");
-  }, []);
-
-  useEffect(() => {
-    if (!clientMounted || hideTopbar) return;
-    const root = badgeEyesRootRef.current;
-    if (!root) return;
-
-    const pupils = Array.from(root.querySelectorAll<HTMLElement>(".cavbot-eye-pupil"))
-      .filter((pupil) => Boolean(pupil.closest(".cavbot-eye-inner")));
-    if (!pupils.length) return;
-
-    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-    const MAX_SHIFT_X = 2.1;
-    const MAX_SHIFT_Y = 1.55;
-    const EASE = 0.24;
-    const IDLE_X = 0.45;
-    const IDLE_Y = -0.15;
-
-    let rafId = 0;
-    let currentX = 0;
-    let currentY = 0;
-    let targetX = IDLE_X;
-    let targetY = IDLE_Y;
-
-    const apply = () => {
-      rafId = 0;
-      currentX += (targetX - currentX) * EASE;
-      currentY += (targetY - currentY) * EASE;
-
-      for (const pupil of pupils) {
-        pupil.style.transform = `translate(${currentX.toFixed(2)}px, ${currentY.toFixed(2)}px)`;
-      }
-
-      const settling = Math.abs(targetX - currentX) > 0.01 || Math.abs(targetY - currentY) > 0.01;
-      if (settling) {
-        rafId = window.requestAnimationFrame(apply);
-      }
-    };
-
-    const queue = () => {
-      if (rafId) return;
-      rafId = window.requestAnimationFrame(apply);
-    };
-
-    const driveFromPoint = (clientX: number, clientY: number) => {
-      const rect = root.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      const dx = clientX - cx;
-      const dy = clientY - cy;
-      const dist = Math.hypot(dx, dy) || 1;
-      const nx = dx / dist;
-      const ny = dy / dist;
-      const pull = clamp(dist / 120, 0, 1);
-      targetX = clamp(nx * MAX_SHIFT_X * pull, -MAX_SHIFT_X, MAX_SHIFT_X);
-      targetY = clamp(ny * MAX_SHIFT_Y * pull, -MAX_SHIFT_Y, MAX_SHIFT_Y);
-      queue();
-    };
-
-    const onPointerMove = (event: PointerEvent | MouseEvent) => {
-      driveFromPoint(event.clientX, event.clientY);
-    };
-
-    const onTouchMove = (event: TouchEvent) => {
-      const touch = event.touches?.[0];
-      if (!touch) return;
-      driveFromPoint(touch.clientX, touch.clientY);
-    };
-
-    const onPointerLeave = () => {
-      targetX = IDLE_X;
-      targetY = IDLE_Y;
-      queue();
-    };
-
-    window.addEventListener("pointermove", onPointerMove, { passive: true });
-    window.addEventListener("mousemove", onPointerMove, { passive: true });
-    window.addEventListener("touchmove", onTouchMove, { passive: true });
-    window.addEventListener("pointerleave", onPointerLeave, { passive: true });
-    window.addEventListener("blur", onPointerLeave);
-
-    queue();
-
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("mousemove", onPointerMove);
-      window.removeEventListener("touchmove", onTouchMove);
-      window.removeEventListener("pointerleave", onPointerLeave);
-      window.removeEventListener("blur", onPointerLeave);
-      if (rafId) window.cancelAnimationFrame(rafId);
-    };
-  }, [clientMounted, hideTopbar, pathname]);
 
   // ===== Sidebar (mobile drawer) =====
   const [navOpen, setNavOpen] = useState(false);
@@ -2540,7 +2440,6 @@ export default function AppShell({
                       ? "cavbot-auth-eye-error"
                       : ""
                 }`}
-                ref={badgeEyesRootRef}
                 aria-hidden="true"
               >
                 <CdnBadgeEyes trackingMode="eyeOnly" />

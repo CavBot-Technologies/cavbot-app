@@ -188,10 +188,6 @@ button{touch-action:manipulation}
   will-change: transform;
 }
 
-.auth-badge.cb-badge .cavbot-blink{
-  display: none !important;
-}
-
 /* Toggle pill */
 .auth-toggle{
   position:relative;

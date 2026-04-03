@@ -6,6 +6,7 @@ import "./globals.css";
 import "./workspace.css";
 import "@/components/LightToggle.css";
 import BrowserStoreBoot from "./_components/BrowserStoreBoot";
+import CavbotBadgeMotion from "./_components/CavbotBadgeMotion";
 import GlobalFooterMount from "./_components/GlobalFooterMount";
 import IconWarmup from "./_components/IconWarmup";
 import RouteLifecycle from "./_components/RouteLifecycle";
@@ -103,6 +104,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
         </Suspense>
         <Suspense fallback={null}>
           <RouteLifecycle />
+        </Suspense>
+        <Suspense fallback={null}>
+          <CavbotBadgeMotion />
         </Suspense>
         <Suspense fallback={null}>
           <IconWarmup />

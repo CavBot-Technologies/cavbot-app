@@ -3947,20 +3947,7 @@ export function CavPadPanel({
     return filtered.sort(comparePinnedRows);
   }, [notes, pid, searchQuery]);
 
-  const visibleNotes = React.useMemo(() => {
-    const base = notes.filter((n) => n.projectId === pid);
-    const folderScoped =
-      activeFolderId === "all" ? base : base.filter((n) => (n.folderId || "") === activeFolderId);
-
-    const q = searchQuery.trim().toLowerCase();
-    const filtered = q
-      ? folderScoped.filter((n) =>
-          (n.title || "").toLowerCase().includes(q) || (n.html || "").toLowerCase().includes(q)
-        )
-      : folderScoped;
-
-    return filtered.sort(comparePinnedRows);
-  }, [notes, pid, activeFolderId, searchQuery]);
+  const visibleNotes = libraryNotes;
 
   const folderNoteCounts = React.useMemo(() => {
     const counts = new Map<string, number>();
@@ -5924,12 +5911,6 @@ export function CavPadPanel({
     mergeDirectoryModalDirectory.id !== mergeDirectoryModalTargetId &&
     mergeDirectoryModalTargetId !== mergeDirectoryModalCurrentParentId
   );
-  const padDirectoryFilterOptions = React.useMemo(
-    () => [{ id: "all", label: "All notes" }, ...moveNoteModalDirectoryOptions.map((row) => ({ id: row.id, label: row.label }))],
-    [moveNoteModalDirectoryOptions]
-  );
-  const padDirectoryFilterValue =
-    activeFolderId === "all" || !folders.some((folder) => folder.id === activeFolderId) ? "all" : activeFolderId;
   const detailsOwnerLabel = React.useMemo(() => {
     return resolveIdentityLabel({
       displayName: cachedProfile.displayName,
@@ -6174,8 +6155,11 @@ export function CavPadPanel({
                     aria-expanded={viewMenuOpen}
                     onClick={() => setViewMenuOpen((s) => !s)}
                   >
-                    {viewLabel}
-                    <span aria-hidden="true">▾</span>
+                    <span className="cb-notes-viewbtn-label">{viewLabel}</span>
+                    <span
+                      className={`cb-notes-viewbtn-caret ${viewMenuOpen ? "is-open" : ""}`}
+                      aria-hidden="true"
+                    />
                   </button>
                   {viewMenuOpen ? (
                     <div className="cb-notes-viewmenu-pop" role="menu" aria-label="Views">
@@ -7624,22 +7608,6 @@ export function CavPadPanel({
 
               <main className="cb-notes-editorwrap" aria-label="Editor">
                 <div className="cb-notes-editorhead">
-                  {pid ? (
-                    <select
-                      className="cb-notes-folderselect cb-notes-directoryfilter"
-                      value={padDirectoryFilterValue}
-                      onChange={(event) => setActiveFolderId(String(event.currentTarget.value || "all"))}
-                      aria-label="Choose directory to filter notes"
-                      title="Choose directory to show matching notes in the left panel"
-                    >
-                      {padDirectoryFilterOptions.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
-
                   {!isPhoneWriteView ? (
                     <div className="cb-notes-titlebar">
                       <input

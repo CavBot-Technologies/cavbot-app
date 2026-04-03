@@ -187,8 +187,7 @@ body {
   box-shadow: none !important;
 }
 
-.arcade-header-badge .cavbot-dm-avatar .cavbot-eye-glow,
-.arcade-header-badge .cavbot-dm-avatar .cavbot-blink {
+.arcade-header-badge .cavbot-dm-avatar .cavbot-eye-glow {
   opacity: 0 !important;
 }
 

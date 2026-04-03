@@ -80,9 +80,11 @@ declare global {
     __cavbotHeadTrackingReady?: boolean;
     __cavbotHeadTrackingLastRefresh?: number;
     __cavbotHeadTrackingHeadCount?: number;
+    __cavbotHeadTrackingRefresh?: () => void;
     __cavbotEyeTrackingReady?: boolean;
     __cavbotEyeTrackingLastRefresh?: number;
     __cavaiEyeTrackingRefresh?: () => void;
+    __cavbotEyeTrackingRefresh?: () => void;
 
     // Console range values published by AppShell (prevents TS “property does not exist”)
     __CAVBOT_CONSOLE_RANGE__?: CavbotConsoleRangeKey;

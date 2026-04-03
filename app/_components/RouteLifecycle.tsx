@@ -288,6 +288,9 @@ function triggerRuntimeRecovery(pathname: string): void {
 function refreshTrackers() {
   if (typeof window === "undefined") return;
   const callHead = () => {
+    if (typeof window.__cavbotHeadTrackingRefresh === "function") {
+      window.__cavbotHeadTrackingRefresh();
+    }
     if (typeof window.__cavaiHeadTrackingRefresh === "function") {
       window.__cavaiHeadTrackingRefresh();
     } else if (window.cavai && typeof window.cavai.enableHeadTracking === "function") {
@@ -295,6 +298,9 @@ function refreshTrackers() {
     }
   };
   const callEye = () => {
+    if (typeof window.__cavbotEyeTrackingRefresh === "function") {
+      window.__cavbotEyeTrackingRefresh();
+    }
     if (typeof window.__cavaiEyeTrackingRefresh === "function") {
       window.__cavaiEyeTrackingRefresh();
     }

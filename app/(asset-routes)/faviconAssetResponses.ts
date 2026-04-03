@@ -1,7 +1,5 @@
 import { Buffer } from "node:buffer";
 
-export const runtime = "nodejs";
-
 const ASSETS = {
   "android-chrome-192x192.png": {
     "contentType": "image/png",
