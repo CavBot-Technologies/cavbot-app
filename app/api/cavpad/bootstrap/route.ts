@@ -1,4 +1,4 @@
-import { requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
+import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { getCavPadBootstrap } from "@/lib/cavpad/server";
@@ -6,6 +6,28 @@ import { getCavPadBootstrap } from "@/lib/cavpad/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+function degradedBootstrapResponse() {
+  return jsonNoStore(
+    {
+      ok: true,
+      degraded: true,
+      notes: [],
+      trash: [],
+      directories: [],
+      settings: {
+        syncToCavcloud: false,
+        syncToCavsafe: false,
+        allowSharing: true,
+        defaultSharePermission: "VIEW",
+        defaultShareExpiryDays: 0,
+        noteExpiryDays: 0,
+        trashRetentionDays: 30,
+      },
+    },
+    200
+  );
+}
 
 export async function GET(req: Request) {
   try {
@@ -24,6 +46,9 @@ export async function GET(req: Request) {
 
     return jsonNoStore({ ok: true, ...payload }, 200);
   } catch (err) {
+    if (err instanceof ApiAuthError) {
+      return cavcloudErrorResponse(err, "Failed to load CavPad bootstrap.");
+    }
     if (
       isSchemaMismatchError(err, {
         tables: [
@@ -38,26 +63,8 @@ export async function GET(req: Request) {
         columns: ["syncToCavcloud", "syncToCavsafe", "textContent", "trashedAt"],
       })
     ) {
-      return jsonNoStore(
-        {
-          ok: true,
-          degraded: true,
-          notes: [],
-          trash: [],
-          directories: [],
-          settings: {
-            syncToCavcloud: false,
-            syncToCavsafe: false,
-            allowSharing: true,
-            defaultSharePermission: "VIEW",
-            defaultShareExpiryDays: 0,
-            noteExpiryDays: 0,
-            trashRetentionDays: 30,
-          },
-        },
-        200
-      );
+      return degradedBootstrapResponse();
     }
-    return cavcloudErrorResponse(err, "Failed to load CavPad bootstrap.");
+    return degradedBootstrapResponse();
   }
 }

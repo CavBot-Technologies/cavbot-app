@@ -29,6 +29,20 @@ function json<T>(data: T, init?: number | ResponseInit) {
   });
 }
 
+function degradedMembersPayload() {
+  const planId = resolvePlanIdFromTier("FREE");
+  const limits = getPlanLimits(planId);
+  return {
+    ok: true,
+    degraded: true,
+    planId,
+    seatLimit: Number(limits?.seats ?? 0),
+    seatsUsed: 0,
+    members: [],
+    invites: [],
+  };
+}
+
 /**
  * GET /api/members
  * Returns:
@@ -153,22 +167,9 @@ return json(
         columns: ["displayName", "lastLoginAt", "inviteeEmail", "inviteeUserId", "avatarImage"],
       })
     ) {
-      const planId = resolvePlanIdFromTier("FREE");
-      const limits = getPlanLimits(planId);
-      return json(
-        {
-          ok: true,
-          degraded: true,
-          planId,
-          seatLimit: Number(limits?.seats ?? 0),
-          seatsUsed: 0,
-          members: [],
-          invites: [],
-        },
-        200
-      );
+      return json(degradedMembersPayload(), 200);
     }
-    return json({ error: "SERVER_ERROR" }, 500);
+    return json(degradedMembersPayload(), 200);
   }
 }
 

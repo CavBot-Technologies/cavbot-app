@@ -62,6 +62,14 @@ function encodeCursor(record: { createdAt: Date; id: string }) {
   }
 }
 
+function degradedNotificationsList() {
+  return { ok: true, degraded: true, notifications: [], nextCursor: null };
+}
+
+function degradedNotificationsMutation() {
+  return { ok: true, degraded: true };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const sess = await requireSession(req);
@@ -180,9 +188,9 @@ export async function GET(req: NextRequest) {
         columns: ["kind", "metaJson", "tone", "readAt", "accountId"],
       })
     ) {
-      return json({ ok: true, degraded: true, notifications: [], nextCursor: null }, 200);
+      return json(degradedNotificationsList(), 200);
     }
-    return json({ ok: false, error: "NOTIF_LIST_FAILED" }, 500);
+    return json(degradedNotificationsList(), 200);
   }
 }
 
@@ -231,9 +239,9 @@ export async function POST(req: NextRequest) {
         columns: ["readAt", "accountId"],
       })
     ) {
-      return json({ ok: true, degraded: true }, 200);
+      return json(degradedNotificationsMutation(), 200);
     }
-    return json({ ok: false, error: "NOTIF_MARK_READ_FAILED" }, 500);
+    return json(degradedNotificationsMutation(), 200);
   }
 }
 

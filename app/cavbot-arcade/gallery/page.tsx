@@ -1517,7 +1517,6 @@ const ArcadePage = () => {
             </div>
           </div>
 
-          <br /><br /><br /><br />
           <section className="gallery" ref={gallerySectionRef}>
             <header>
               <div className="gallery-title-block">
@@ -1525,7 +1524,6 @@ const ArcadePage = () => {
                   LIB<span className="gallery-title-highlighted-r">R</span>ARY
                 </h2>
               </div>
-              <br /><br /><br /><br />
             </header>
             <div className="gallery-controls">
               <div className="gallery-filter">
@@ -1610,7 +1608,6 @@ const ArcadePage = () => {
               )}
             </div>
           </section>
-<br /><br /><br /><br />
       </main>
       <footer className="powered" aria-label="Footer">
         <Link

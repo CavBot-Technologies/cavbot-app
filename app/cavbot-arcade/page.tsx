@@ -1434,7 +1434,7 @@ const ArcadePage = () => {
 		            <h2 className="arcade-title">
 		              <span>ACTION. SIGNALS. PUZZLES.</span>
 		              <span className="arcade-title--play">ADVENTURE BEGINS HERE.</span>
-		            </h2><br /><br /><br /><br />
+		            </h2>
 		            <div className="hero-card" aria-label="CavBot Arcade preview">
 		              <div className="hero-card-shell">
 		                <div className="hero-card-top" aria-hidden="true">
@@ -1596,13 +1596,12 @@ All games are fully playable without audio, with sound designed as a subtle enha
               ))}
             </div>
           </section>
-<br /><br />
           <section className="cta">
             <header>
               <p className="eyebrow">Next</p>
               <h2>Make your 404 experience intentional</h2>
               <p className="section-description">Turn broken routes into moments worth staying for.<br />
-                Interactive 404 games designed to engage, recover, and move visitors forward.</p><br /><br />
+                Interactive 404 games designed to engage, recover, and move visitors forward.</p>
             </header>
             <div className="cta-actions">
             <Link className="btn btn-primary btn-cta" href="/settings/integrations">
@@ -1611,7 +1610,6 @@ All games are fully playable without audio, with sound designed as a subtle enha
             </div>
           </section>
         </main>
-<br /><br /><br /><br />
 		        <footer className="powered" aria-label="Footer">
 		        <Link
 		          className="gallery-footer-return gallery-footer-return--arcade"

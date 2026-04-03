@@ -152,6 +152,11 @@ function methodNotAllowed(rid: string) {
   );
 }
 
+function degradedWorkspacesResponse(req: NextRequest, rid: string) {
+  const activeProjectId = parseProjectId(req.cookies.get("cb_pid")?.value || "");
+  return json({ projects: [], activeProjectId, degraded: true, requestId: rid }, 200, rid);
+}
+
 /**
  * OPTIONS /api/workspaces
  * CORS/preflight friendly (even if same-origin)
@@ -180,18 +185,19 @@ export async function GET(req: NextRequest) {
     const out = await listWorkspaces(req, includeInactive);
     return json(out, 200, rid);
   } catch (e) {
+    if (isApiAuthError(e)) {
+      const { status, payload } = mapError(e);
+      return json({ ...payload, requestId: rid }, status, rid);
+    }
     if (
       isSchemaMismatchError(e, {
         tables: ["Project", "Site"],
         columns: ["topSiteId", "retentionDays", "region", "isActive"],
       })
     ) {
-      const activeProjectId = parseProjectId(req.cookies.get("cb_pid")?.value || "");
-      return json({ projects: [], activeProjectId, degraded: true, requestId: rid }, 200, rid);
+      return degradedWorkspacesResponse(req, rid);
     }
-    const { status, payload } = mapError(e);
-    // attach requestId so you can trace logs without leaking internals
-    return json({ ...payload, requestId: rid }, status, rid);
+    return degradedWorkspacesResponse(req, rid);
   }
 }
 
@@ -209,17 +215,19 @@ export async function POST(req: NextRequest) {
     const out = await listWorkspaces(req, includeInactive);
     return json(out, 200, rid);
   } catch (e) {
+    if (isApiAuthError(e)) {
+      const { status, payload } = mapError(e);
+      return json({ ...payload, requestId: rid }, status, rid);
+    }
     if (
       isSchemaMismatchError(e, {
         tables: ["Project", "Site"],
         columns: ["topSiteId", "retentionDays", "region", "isActive"],
       })
     ) {
-      const activeProjectId = parseProjectId(req.cookies.get("cb_pid")?.value || "");
-      return json({ projects: [], activeProjectId, degraded: true, requestId: rid }, 200, rid);
+      return degradedWorkspacesResponse(req, rid);
     }
-    const { status, payload } = mapError(e);
-    return json({ ...payload, requestId: rid }, status, rid);
+    return degradedWorkspacesResponse(req, rid);
   }
 }
 

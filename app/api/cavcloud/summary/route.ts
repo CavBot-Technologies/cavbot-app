@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
-import { requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
+import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { getPlanLimits, resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
@@ -70,6 +70,53 @@ function planLimitBytes(account: AccountPlanShape | null, planId: PlanId): numbe
   const trialActive = Boolean(account?.trialSeatActive) && Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now();
   if (trialActive) return null;
   return storageLimitBytesForPlan(planId);
+}
+
+function degradedSummaryPayload(account: AccountPlanShape | null = null) {
+  const planId = resolveEffectivePlanId(account);
+  const limitBytes = planLimitBytes(account, planId);
+  return {
+    ok: true,
+    degraded: true,
+    summary: {
+      usedBytes: 0,
+      usedBytesExact: "0",
+      limitBytes,
+      remainingBytes: limitBytes,
+      folders: 0,
+      files: 0,
+      images: 0,
+      videos: 0,
+      other: 0,
+      planId,
+      generatedAtISO: new Date().toISOString(),
+    },
+  };
+}
+
+async function buildDegradedSummaryResponse(req: Request) {
+  const sess = await requireSession(req);
+  requireAccountContext(sess);
+  requireUser(sess);
+
+  const account = await prisma.account
+    .findUnique({
+      where: { id: String(sess.accountId || "") },
+      select: { tier: true, trialSeatActive: true, trialEndsAt: true },
+    })
+    .catch((error) => {
+      if (
+        isSchemaMismatchError(error, {
+          tables: ["Account"],
+          columns: ["trialSeatActive", "trialEndsAt", "tier"],
+        })
+      ) {
+        return null;
+      }
+      return null;
+    });
+
+  return jsonNoStore(degradedSummaryPayload(account), 200);
 }
 
 export async function GET(req: Request) {
@@ -162,6 +209,9 @@ export async function GET(req: Request) {
       },
     }, 200);
   } catch (err) {
+    if (err instanceof ApiAuthError) {
+      return cavcloudErrorResponse(err, "Failed to load CavCloud summary.");
+    }
     if (
       isMissingCavCloudTablesError(err) ||
       isSchemaMismatchError(err, {
@@ -170,47 +220,15 @@ export async function GET(req: Request) {
       })
     ) {
       try {
-        const sess = await requireSession(req);
-        requireAccountContext(sess);
-        requireUser(sess);
-        const account = await prisma.account
-          .findUnique({
-            where: { id: String(sess.accountId || "") },
-            select: { tier: true, trialSeatActive: true, trialEndsAt: true },
-          })
-          .catch((error) => {
-            if (
-              isSchemaMismatchError(error, {
-                tables: ["Account"],
-                columns: ["trialSeatActive", "trialEndsAt", "tier"],
-              })
-            ) {
-              return null;
-            }
-            throw error;
-          });
-        const planId = resolveEffectivePlanId(account);
-        const limitBytes = planLimitBytes(account, planId);
-        return jsonNoStore({
-          ok: true,
-          summary: {
-            usedBytes: 0,
-            usedBytesExact: "0",
-            limitBytes,
-            remainingBytes: limitBytes,
-            folders: 0,
-            files: 0,
-            images: 0,
-            videos: 0,
-            other: 0,
-            planId,
-            generatedAtISO: new Date().toISOString(),
-          },
-        }, 200);
-      } catch {
-        // fall through
+        return await buildDegradedSummaryResponse(req);
+      } catch (fallbackError) {
+        return cavcloudErrorResponse(fallbackError, "Failed to load CavCloud summary.");
       }
     }
-    return cavcloudErrorResponse(err, "Failed to load CavCloud summary.");
+    try {
+      return await buildDegradedSummaryResponse(req);
+    } catch (fallbackError) {
+      return cavcloudErrorResponse(fallbackError, "Failed to load CavCloud summary.");
+    }
   }
 }

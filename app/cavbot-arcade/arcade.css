@@ -288,8 +288,28 @@ body {
 @media (max-width: 720px) {
   .hero {
     margin-top: 20px;
-    padding: 22px 0 42px;
-    gap: 22px;
+    padding: 18px 0 32px;
+    gap: 16px;
+  }
+
+  .hero-card {
+    width: min(100%, 92vw);
+    gap: 16px;
+  }
+
+  .hero-card-shell {
+    padding: 14px;
+    border-radius: 24px;
+  }
+
+  .hero-logo {
+    width: min(250px, 64vw);
+  }
+
+  .arcade-title {
+    font-size: clamp(18px, 7.2vw, 28px);
+    letter-spacing: 0.1em;
+    max-width: 14ch;
   }
 }
 
@@ -784,6 +804,84 @@ body {
   gap: 12px;
   margin-left: auto;
   white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .powered {
+    padding: 12px 12px calc(14px + env(safe-area-inset-bottom));
+    justify-content: center;
+    gap: 10px 12px;
+    flex-wrap: wrap;
+    border-radius: 14px;
+  }
+
+  .powered-branding {
+    width: 100%;
+    margin-left: 0;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    white-space: normal;
+  }
+
+  .powered-phrase {
+    justify-content: center;
+    letter-spacing: 0.24em;
+  }
+
+  .powered-label {
+    font-size: 0.54rem;
+  }
+
+  .powered-mark {
+    font-size: 0.66rem;
+    letter-spacing: 0.28em;
+  }
+
+  .powered-logotype {
+    width: min(118px, 42vw);
+  }
+
+  .powered-logotype svg {
+    width: 100%;
+  }
+
+  .gallery-footer-return {
+    width: 40px;
+    height: 40px;
+  }
+
+  .gallery-footer-icon-art {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-logo {
+    width: min(220px, 58vw);
+  }
+
+  .hero-card-shell {
+    padding: 12px;
+  }
+
+  .powered {
+    padding: 10px 10px calc(12px + env(safe-area-inset-bottom));
+    gap: 8px 10px;
+  }
+
+  .powered-phrase {
+    width: 100%;
+  }
+
+  .powered-branding {
+    gap: 6px 10px;
+  }
+
+  .powered-logotype {
+    width: min(110px, 40vw);
+  }
 }
 
 .gallery-footer-return {

@@ -15,7 +15,7 @@ const CRITICAL_ICON_URLS = [
   "/icons/app/cavcode/stop-circle-svgrepo-com.svg",
   "/icons/app/microphone-svgrepo-com.svg",
   "/icons/app/sound-2-svgrepo-com.svg",
-  "/icons/app/sound-max-svgrepo-com.svg",
+  "/icons/app/audio-description2-svgrepo-com.svg",
   "/icons/copy-svgrepo-com.svg",
   "/icons/thumb-up-cavai.svg",
   "/icons/thumb-down-cavai.svg",
