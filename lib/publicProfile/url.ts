@@ -18,25 +18,44 @@ export function openCanonicalPublicProfileWindow(args: {
 
   const preferredHref = String(args.href || "").trim();
   const fallbackHref = String(args.fallbackHref || "").trim();
-  const targetHref = preferredHref || fallbackHref;
-  if (!targetHref) return false;
-
-  const resolvedHref = /^https?:\/\//i.test(targetHref)
-    ? targetHref
-    : new URL(targetHref, window.location.origin).toString();
+  const resolveHref = (value: string) => (
+    /^https?:\/\//i.test(value)
+      ? value
+      : new URL(value, window.location.origin).toString()
+  );
 
   if (preferredHref) {
-    const opened = window.open(resolvedHref, "_blank", "noopener,noreferrer");
-    if (opened) {
-      try {
-        opened.opener = null;
-      } catch {
-        // noop
+    const resolvedPreferredHref = resolveHref(preferredHref);
+    const doc = window.document;
+
+    if (doc?.body) {
+      const anchor = doc.createElement("a");
+      anchor.href = resolvedPreferredHref;
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      anchor.style.display = "none";
+      doc.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      return true;
+    }
+
+    try {
+      const opened = window.open(resolvedPreferredHref, "_blank");
+      if (opened) {
+        try {
+          opened.opener = null;
+        } catch {
+          // noop
+        }
       }
       return true;
+    } catch {
+      return false;
     }
   }
 
-  window.location.assign(resolvedHref);
-  return Boolean(preferredHref);
+  if (!fallbackHref) return false;
+  window.location.assign(resolveHref(fallbackHref));
+  return true;
 }
