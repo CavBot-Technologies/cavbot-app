@@ -930,25 +930,6 @@
   border-color: var(--cavpad-accent-glow);
   background: var(--cavpad-accent-soft);
 }
-.cb-notes-backwritebtn{
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 4px;
-  border: 1px solid var(--cavpad-border);
-  background: rgba(255,255,255,0.045);
-  color: rgba(247,251,255,0.94);
-  font-size: 10px;
-  letter-spacing: 0.01em;
-  text-transform: none;
-  font-weight: 750;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-}
-.cb-notes-backwritebtn:hover{
-  border-color: var(--cavpad-accent-glow);
-  background: var(--cavpad-accent-soft);
-}
 .cb-notes-viewmenu-pop{
   position: absolute;
   right: 0;
@@ -3847,8 +3828,7 @@
     max-height: min(320px, 42vh);
   }
 
-  .cb-notes-viewbtn,
-  .cb-notes-backwritebtn{
+  .cb-notes-viewbtn{
     height: 38px;
     padding: 0 12px;
     border-radius: 14px;

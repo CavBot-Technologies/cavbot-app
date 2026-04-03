@@ -6151,21 +6151,6 @@ export function CavPadPanel({
                 ) : null}
               </div>
 
-            {view !== "cavpad" ? (
-              <button
-                className="cb-notes-backwritebtn"
-                type="button"
-                onClick={() => {
-                  setView("cavpad");
-                  if (isNarrow) setMobileView("editor");
-                }}
-                aria-label="Back to write page"
-                title="Back to write page"
-              >
-                Write page
-              </button>
-            ) : null}
-
             <div className="cb-notes-header-search" data-cavpad-search-wrap="true">
               <input
                 className="cb-notes-header-search-input"
