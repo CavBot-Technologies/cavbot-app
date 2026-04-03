@@ -8115,7 +8115,8 @@
 
   .centerShellOverlay {
     width: calc(100vw - 12px);
-    height: calc(100dvh - 12px);
+    height: min(84dvh, 580px);
+    max-height: calc(100dvh - env(safe-area-inset-top) - 18px);
     border-radius: 12px 12px 0 0;
   }
 
