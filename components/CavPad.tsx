@@ -4236,9 +4236,16 @@ export function CavPadPanel({
     [visibleNotes, activeNoteId]
   );
   const [draftTitle, setDraftTitle] = React.useState("");
+  const [isPhoneTitleEditing, setIsPhoneTitleEditing] = React.useState(false);
+  const phoneTitleInputRef = React.useRef<HTMLInputElement | null>(null);
+  const skipPhoneTitleCommitRef = React.useRef(false);
   const activeDocId = activeDoc?.id ?? "";
   const activeDocTitle = activeDoc?.title ?? "";
   const activeDocHtml = activeDoc?.html ?? "";
+  const phoneHeaderTitle = React.useMemo(
+    () => clampStr(String(draftTitle || activeDocTitle || "").trim(), 80) || "Untitled",
+    [activeDocTitle, draftTitle]
+  );
   const cavAiSite = React.useMemo(() => {
     const siteId = String(activeDoc?.siteId || originSiteId || "").trim();
     if (!siteId) return null;
@@ -4355,6 +4362,22 @@ export function CavPadPanel({
   React.useEffect(() => {
     setDraftTitle(activeDocTitle);
   }, [activeDocId, activeDocTitle]);
+
+  React.useEffect(() => {
+    if (!isPhoneWriteView) {
+      setIsPhoneTitleEditing(false);
+      return;
+    }
+    if (!isPhoneTitleEditing) return;
+    window.setTimeout(() => {
+      phoneTitleInputRef.current?.focus();
+      phoneTitleInputRef.current?.select();
+    }, 0);
+  }, [isPhoneTitleEditing, isPhoneWriteView, activeDocId]);
+
+  React.useEffect(() => {
+    setIsPhoneTitleEditing(false);
+  }, [activeDocId, view]);
 
   React.useEffect(() => {
     if (cavAiModelOptions.some((row) => row.id === cavAiModelId)) return;
@@ -5591,6 +5614,36 @@ export function CavPadPanel({
     queueSave(html);
   }
 
+  function handleTitleChange(nextRaw: string) {
+    const nextTitle = String(nextRaw || "").slice(0, 80);
+    setDraftTitle(nextTitle);
+    if (activeDocId) queueSave(undefined, nextTitle);
+  }
+
+  function handleTitleFocus(value: string) {
+    const current = String(value || "").trim().toLowerCase();
+    if (current === "untitled") {
+      setDraftTitle("");
+    }
+  }
+
+  function seedNoteFromDraftTitle() {
+    if (activeDocId) return;
+    const seededTitle = clampStr(draftTitle, 80).trim();
+    if (!seededTitle) return;
+    createNote(seededTitle);
+  }
+
+  function handlePhoneTitleBlur() {
+    if (skipPhoneTitleCommitRef.current) {
+      skipPhoneTitleCommitRef.current = false;
+      setIsPhoneTitleEditing(false);
+      return;
+    }
+    seedNoteFromDraftTitle();
+    setIsPhoneTitleEditing(false);
+  }
+
   function handleToolbarMouseDown(event: React.MouseEvent<HTMLDivElement>) {
     const target = event.target as Element | null;
     if (!target) return;
@@ -6182,6 +6235,49 @@ export function CavPadPanel({
                     </div>
                   ) : null}
                 </div>
+              )}
+
+              {isPhoneWriteView ? (
+                <div className="cb-notes-header-titlebar">
+                  {isPhoneTitleEditing ? (
+                    <input
+                      ref={phoneTitleInputRef}
+                      className="cb-notes-titleinput cb-notes-titleinput-header"
+                      value={draftTitle}
+                      onChange={(e) => handleTitleChange(e.target.value)}
+                      onFocus={(e) => handleTitleFocus(e.currentTarget.value)}
+                      onBlur={handlePhoneTitleBlur}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          skipPhoneTitleCommitRef.current = true;
+                          setDraftTitle(activeDocTitle);
+                          setIsPhoneTitleEditing(false);
+                          e.currentTarget.blur();
+                          return;
+                        }
+                        if (e.key !== "Enter" || e.repeat || e.nativeEvent.isComposing) return;
+                        e.preventDefault();
+                        e.currentTarget.blur();
+                      }}
+                      placeholder="Untitled"
+                      aria-label="Note title"
+                      autoComplete="off"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="cb-notes-header-titlebtn"
+                      onClick={() => setIsPhoneTitleEditing(true)}
+                      aria-label="Edit note title"
+                      title={phoneHeaderTitle}
+                    >
+                      <span className="cb-notes-header-titletext">{phoneHeaderTitle}</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                null
               )}
 
               {!isPhoneWriteView ? (
@@ -7545,49 +7641,27 @@ export function CavPadPanel({
                     </select>
                   ) : null}
 
-                  <div className="cb-notes-titlebar">
-                    <input
-                      className="cb-notes-titleinput"
-                      value={draftTitle}
-                      onChange={(e) => {
-                        const nextTitle = String(e.target.value || "").slice(0, 80);
-                        setDraftTitle(nextTitle);
-                        if (activeDocId) queueSave(undefined, nextTitle);
-                      }}
-                      onFocus={(e) => {
-                        const current = String(e.currentTarget.value || "").trim().toLowerCase();
-                        if (current === "untitled") {
-                          setDraftTitle("");
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key !== "Enter" || e.repeat || e.nativeEvent.isComposing) return;
-                        if (activeDocId) return;
-                        const seededTitle = clampStr(draftTitle, 80).trim();
-                        if (!seededTitle) return;
-                        e.preventDefault();
-                        createNote(seededTitle);
-                      }}
-                      placeholder="Untitled"
-                      aria-label="Note title"
-                      autoComplete="off"
-                    />
-                    {isPhone && activeDoc?.id ? (
-                      <button
-                        type="button"
-                        className="cb-notes-trash cb-notes-trash-inline"
-                        onClick={() => deleteNote(activeDoc.id)}
-                        aria-label="Delete note"
-                        title="Delete note"
-                      >
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
-                          <path d="M20.5 6H3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                          <path d="M18.8332 8.5L18.3732 15.3991C18.1962 18.054 18.1077 19.3815 17.2427 20.1907C16.3777 21 15.0473 21 12.3865 21H11.6132C8.95235 21 7.62195 21 6.75694 20.1907C5.89194 19.3815 5.80344 18.054 5.62644 15.3991L5.1665 8.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                          <path d="M6.5 6C6.55588 6 6.58382 6 6.60915 5.99936C7.43259 5.97849 8.15902 5.45491 8.43922 4.68032C8.44784 4.65649 8.45667 4.62999 8.47434 4.57697L8.57143 4.28571C8.65431 4.03708 8.69575 3.91276 8.75071 3.8072C8.97001 3.38607 9.37574 3.09364 9.84461 3.01877C9.96213 3 10.0932 3 10.3553 3H13.6447C13.9068 3 14.0379 3 14.1554 3.01877C14.6243 3.09364 15.03 3.38607 15.2493 3.8072C15.3043 3.91276 15.3457 4.03708 15.4286 4.28571L15.5257 4.57697C15.5433 4.62992 15.5522 4.65651 15.5608 4.68032C15.841 5.45491 16.5674 5.97849 17.3909 5.99936C17.4162 6 17.4441 6 17.5 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                        </svg>
-                      </button>
-                    ) : null}
-                  </div>
+                  {!isPhoneWriteView ? (
+                    <div className="cb-notes-titlebar">
+                      <input
+                        className="cb-notes-titleinput"
+                        value={draftTitle}
+                        onChange={(e) => handleTitleChange(e.target.value)}
+                        onFocus={(e) => handleTitleFocus(e.currentTarget.value)}
+                        onKeyDown={(e) => {
+                          if (e.key !== "Enter" || e.repeat || e.nativeEvent.isComposing) return;
+                          if (activeDocId) return;
+                          const seededTitle = clampStr(draftTitle, 80).trim();
+                          if (!seededTitle) return;
+                          e.preventDefault();
+                          createNote(seededTitle);
+                        }}
+                        placeholder="Untitled"
+                        aria-label="Note title"
+                        autoComplete="off"
+                      />
+                    </div>
+                  ) : null}
 
                   {!isPhone ? (
                     <select
@@ -7662,7 +7736,7 @@ export function CavPadPanel({
                     />
                   </button>
 
-                  {!isPhone && activeDoc?.id ? (
+                  {((!isPhone) || isPhoneWriteView) && activeDoc?.id ? (
                     <button
                       type="button"
                       className="cb-notes-trash cb-notes-trash-standalone"
