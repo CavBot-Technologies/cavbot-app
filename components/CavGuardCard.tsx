@@ -33,6 +33,7 @@ export function CavGuardCard({
 }: CavGuardCardProps) {
   const cardClassName = variant === "surface" ? `${styles.card} ${styles.surfaceCard}` : styles.card;
   const footerClassName = variant === "surface" ? `${styles.footer} ${styles.surfaceFooter}` : styles.footer;
+  const copyLines = [request, reason].map((line) => String(line || "").trim()).filter(Boolean);
 
   return (
     <div className={cardClassName} data-variant={variant} onClick={onClick}>
@@ -68,10 +69,13 @@ export function CavGuardCard({
 
       <div className={styles.body}>
         <h3 className={styles.headline}>{headline}</h3>
-        <div className={styles.copyBlock}>
-          <p className={styles.copyLine}>{request}</p>
-          <p className={styles.copyLine}>{reason}</p>
-        </div>
+        {copyLines.length ? (
+          <div className={styles.copyBlock}>
+            {copyLines.map((line) => (
+              <p key={line} className={styles.copyLine}>{line}</p>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {actions.length ? (

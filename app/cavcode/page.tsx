@@ -19,7 +19,7 @@ import type { DiffEditorProps, EditorProps } from "@monaco-editor/react";
 import type * as MonacoType from "monaco-editor";
 import type { WorkspaceNode } from "@/src/lib/cavTerminal";
 import CavBotLoadingScreen from "@/components/CavBotLoadingScreen";
-import { CavGuardCard } from "@/components/CavGuardCard";
+import { CavGuardModal } from "@/components/CavGuardModal";
 import { LockIcon } from "@/components/LockIcon";
 import CavAiCodeWorkspace, {
   type CavCodeDiagnostic,
@@ -12074,6 +12074,14 @@ export default function CavCodePage() {
   const rootThemeClass = `theme-${settings.theme}`;
 
   if (!isDesktop) {
+    const closeDesktopOnlyGuard = () => {
+      if (typeof window !== "undefined" && window.history.length > 1) {
+        router.back();
+        return;
+      }
+      router.replace("/");
+    };
+
     return (
       <div className="cc-root">
         {dragArmed ? (
@@ -12093,29 +12101,17 @@ export default function CavCodePage() {
           />
         ) : null}
 
-        <div className="cc-mobile">
-          <div role="status" aria-live="polite">
-            <CavGuardCard
-              variant="surface"
-              headline="Desktop viewport required."
-              request="CavCode is CavGuarded to desktop-class screens because the full editor, explorer, and runtime workspace need a wide protected surface."
-              reason="Open on desktop or widen your viewport to restore the guarded IDE."
-              actions={[
-                { label: "COMMAND CENTER", href: "/" },
-                {
-                  label: "REFRESH",
-                  onClick: () => {
-                    try {
-                      window.location.reload();
-                    } catch {
-                      // noop
-                    }
-                  },
-                },
-              ]}
-            />
-          </div>
-        </div>
+        <CavGuardModal
+          open={true}
+          onClose={closeDesktopOnlyGuard}
+          decision={{
+            code: "FEATURE_DISABLED",
+            actionId: "CAVCODE_DESKTOP_ONLY",
+            title: "Desktop viewport required.",
+            request: "",
+            reason: "Open CavCode on desktop to continue.",
+          }}
+        />
       </div>
     );
   }

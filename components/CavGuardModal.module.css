@@ -70,23 +70,46 @@
 
 .glowTop,
 .glowBottom {
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  width: 3px;
+  border-radius: 999px;
+  pointer-events: none;
+  opacity: 0;
   display: none;
 }
 
 .glowTop {
-  width: 280px;
-  height: 180px;
-  top: -110px;
-  right: -88px;
-  background: rgba(78, 168, 255, 0.22);
+  left: 12px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(185, 200, 90, 0.26) 12%,
+    rgba(185, 200, 90, 0.96) 50%,
+    rgba(185, 200, 90, 0.24) 88%,
+    transparent 100%
+  );
+  box-shadow: 0 0 18px rgba(185, 200, 90, 0.28);
 }
 
 .glowBottom {
-  width: 260px;
-  height: 170px;
-  left: -78px;
-  bottom: -108px;
-  background: rgba(185, 200, 90, 0.18);
+  right: 12px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(185, 200, 90, 0.2) 12%,
+    rgba(185, 200, 90, 0.9) 50%,
+    rgba(185, 200, 90, 0.18) 88%,
+    transparent 100%
+  );
+  box-shadow: 0 0 18px rgba(185, 200, 90, 0.24);
+}
+
+.card[data-variant="modal"] .glowTop,
+.card[data-variant="modal"] .glowBottom {
+  display: block;
+  opacity: 1;
 }
 
 .header {
