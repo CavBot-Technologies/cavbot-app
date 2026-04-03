@@ -36,50 +36,51 @@ function isoOrNull(value: Date | null | undefined) {
   return value.toISOString();
 }
 
-export async function GET(req: NextRequest) {
+async function readApiActivity(params: {
+  accountId: string;
+  projectId: number;
+  siteId: string | null;
+}) {
   try {
-    const session = await getSession(req);
-    if (!session || session.systemRole !== "user" || !session.accountId) {
-      return json(
-        {
-          ok: false,
-          reason: "UNAUTHENTICATED",
-          message: "Sign in to view workspace metrics.",
-        },
-        200
-      );
-    }
-
-    const workspace = await readWorkspace({ accountId: session.accountId });
-    const site =
-      workspace.sites.find((row) => row.id === workspace.activeSiteId) ??
-      workspace.sites[0] ??
-      null;
-
     const usage = await fetchEmbedUsage({
-      accountId: session.accountId,
-      projectId: workspace.projectId,
-      siteId: site?.id ?? null,
+      accountId: params.accountId,
+      projectId: params.projectId,
+      siteId: params.siteId,
       rateLimitLabel: "Today (UTC)",
     });
 
     const verifiedToday = safeCount(usage?.verifiedToday);
     const deniedToday = safeCount(usage?.deniedToday);
-    const totalRequests = verifiedToday + deniedToday;
-    const failedRequests = deniedToday;
+    return {
+      totalRequests: verifiedToday + deniedToday,
+      failedRequests: deniedToday,
+      periodLabel: "Today (UTC)",
+      deniedOrigins: Array.isArray(usage?.topDeniedOrigins) ? usage.topDeniedOrigins : [],
+    };
+  } catch {
+    return {
+      totalRequests: 0,
+      failedRequests: 0,
+      periodLabel: "Today (UTC)",
+      deniedOrigins: [],
+    };
+  }
+}
 
-    const now = new Date();
-    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const siteIds = site?.id
-      ? [site.id]
-      : workspace.sites.map((row) => String(row.id || "").trim()).filter(Boolean);
-
+async function readEventDestinationActivity(params: {
+  accountId: string;
+  projectId: number;
+  siteId: string | null;
+  siteIds: string[];
+  twentyFourHoursAgo: Date;
+}) {
+  try {
     const [installs, recentEventCount, latestEvent] = await Promise.all([
       prisma.embedInstall.findMany({
         where: {
-          accountId: session.accountId,
-          projectId: workspace.projectId,
-          siteId: site?.id ?? undefined,
+          accountId: params.accountId,
+          projectId: params.projectId,
+          siteId: params.siteId ?? undefined,
           kind: {
             in: [
               EmbedInstallKind.WIDGET,
@@ -95,18 +96,18 @@ export async function GET(req: NextRequest) {
           lastSeenAt: true,
         },
       }),
-      siteIds.length
+      params.siteIds.length
         ? prisma.siteEvent.count({
             where: {
-              siteId: { in: siteIds },
-              createdAt: { gte: twentyFourHoursAgo },
+              siteId: { in: params.siteIds },
+              createdAt: { gte: params.twentyFourHoursAgo },
             },
           })
         : Promise.resolve(0),
-      siteIds.length
+      params.siteIds.length
         ? prisma.siteEvent.findFirst({
             where: {
-              siteId: { in: siteIds },
+              siteId: { in: params.siteIds },
             },
             orderBy: { createdAt: "desc" },
             select: { createdAt: true },
@@ -118,7 +119,7 @@ export async function GET(req: NextRequest) {
     const activeDestinations = activeInstalls.length;
     const recentDestinations = activeInstalls.reduce((count, install) => {
       if (!(install.lastSeenAt instanceof Date)) return count;
-      if (install.lastSeenAt.getTime() >= twentyFourHoursAgo.getTime()) return count + 1;
+      if (install.lastSeenAt.getTime() >= params.twentyFourHoursAgo.getTime()) return count + 1;
       return count;
     }, 0);
 
@@ -140,6 +141,69 @@ export async function GET(req: NextRequest) {
       new Set(activeInstalls.map((install) => String(install.kind || "").trim().toLowerCase()).filter(Boolean))
     );
 
+    return {
+      activeDestinations,
+      recentDestinations,
+      recentEvents: safeCount(recentEventCount),
+      recentActivity: recentDestinations + safeCount(recentEventCount),
+      periodLabel: "Last 24h",
+      lastActivityAt: isoOrNull(lastActivityDate),
+      activeKinds,
+    };
+  } catch {
+    return {
+      activeDestinations: 0,
+      recentDestinations: 0,
+      recentEvents: 0,
+      recentActivity: 0,
+      periodLabel: "Last 24h",
+      lastActivityAt: null,
+      activeKinds: [],
+    };
+  }
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const session = await getSession(req);
+    if (!session || session.systemRole !== "user" || !session.accountId) {
+      return json(
+        {
+          ok: false,
+          reason: "UNAUTHENTICATED",
+          message: "Sign in to view workspace metrics.",
+        },
+        200
+      );
+    }
+
+    const workspace = await readWorkspace({ accountId: session.accountId });
+    const site =
+      workspace.sites.find((row) => row.id === workspace.activeSiteId) ??
+      workspace.sites[0] ??
+      null;
+
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const siteIds = site?.id
+      ? [site.id]
+      : workspace.sites.map((row) => String(row.id || "").trim()).filter(Boolean);
+
+    const [apiActivity, eventDestinationActivity] = await Promise.all([
+      readApiActivity({
+        accountId: session.accountId,
+        projectId: workspace.projectId,
+        siteId: site?.id ?? null,
+      }),
+      readEventDestinationActivity({
+        accountId: session.accountId,
+        projectId: workspace.projectId,
+        siteId: site?.id ?? null,
+        siteIds,
+        twentyFourHoursAgo,
+      }),
+    ]);
+
     return json(
       {
         ok: true,
@@ -149,31 +213,17 @@ export async function GET(req: NextRequest) {
           siteId: site?.id ?? null,
           siteOrigin: site?.origin ?? null,
         },
-        apiActivity: {
-          totalRequests,
-          failedRequests,
-          periodLabel: "Today (UTC)",
-          deniedOrigins: Array.isArray(usage?.topDeniedOrigins) ? usage.topDeniedOrigins : [],
-        },
-        eventDestinationActivity: {
-          activeDestinations,
-          recentDestinations,
-          recentEvents: safeCount(recentEventCount),
-          recentActivity: recentDestinations + safeCount(recentEventCount),
-          periodLabel: "Last 24h",
-          lastActivityAt: isoOrNull(lastActivityDate),
-          activeKinds,
-        },
+        apiActivity,
+        eventDestinationActivity,
       },
       200
     );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to load footer metrics.";
+  } catch {
     return json(
       {
         ok: false,
         reason: "SERVER_ERROR",
-        message,
+        message: "Footer metrics are warming up.",
       },
       200
     );

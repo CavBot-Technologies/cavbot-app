@@ -97,6 +97,10 @@ function summarizeAgeLabel(value: string | null | undefined) {
   return `${diffDay}d ago`;
 }
 
+function pluralize(value: number, singular: string, plural = `${singular}s`) {
+  return `${formatCount(value)} ${value === 1 ? singular : plural}`;
+}
+
 export default function CavbotGlobalFooter() {
   const footerRef = useRef<HTMLElement>(null);
   const developerButtonRef = useRef<HTMLButtonElement>(null);
@@ -217,56 +221,90 @@ export default function CavbotGlobalFooter() {
 
   const apiSnapshot = useMemo(() => {
     if (metricsPayload?.ok) {
+      const totalRequests = metricsPayload.apiActivity.totalRequests;
+      const failedRequests = metricsPayload.apiActivity.failedRequests;
       return {
         available: true,
-        totalRequests: metricsPayload.apiActivity.totalRequests,
-        failedRequests: metricsPayload.apiActivity.failedRequests,
+        totalRequests,
+        failedRequests,
         periodLabel: metricsPayload.apiActivity.periodLabel,
+        summary:
+          totalRequests > 0
+            ? `${pluralize(totalRequests, "request")} recorded.`
+            : "No recent API activity yet.",
+        detail:
+          totalRequests > 0
+            ? failedRequests > 0
+              ? `${pluralize(failedRequests, "request")} blocked or failed.`
+              : "No blocked or failed requests."
+            : null,
       };
     }
     if (metricsPayload && !metricsPayload.ok) {
       return {
         available: false,
-        message: metricsPayload.message,
+        message: "No recent API activity yet.",
+        detail:
+          metricsPayload.reason === "UNAUTHENTICATED"
+            ? "Sign in to load workspace metrics."
+            : "Metrics are still syncing.",
       };
     }
     if (metricsError) {
       return {
         available: false,
-        message: "Unable to load API activity.",
+        message: "No recent API activity yet.",
+        detail: "Metrics are still syncing.",
       };
     }
     return {
       available: false,
       message: "Loading API activity…",
+      detail: null,
     };
   }, [metricsError, metricsPayload]);
 
   const destinationSnapshot = useMemo(() => {
     if (metricsPayload?.ok) {
+      const activeDestinations = metricsPayload.eventDestinationActivity.activeDestinations;
+      const recentActivity = metricsPayload.eventDestinationActivity.recentActivity;
       return {
         available: true,
-        activeDestinations: metricsPayload.eventDestinationActivity.activeDestinations,
-        recentActivity: metricsPayload.eventDestinationActivity.recentActivity,
+        activeDestinations,
+        recentActivity,
         periodLabel: metricsPayload.eventDestinationActivity.periodLabel,
         lastActivityAt: metricsPayload.eventDestinationActivity.lastActivityAt,
+        summary:
+          recentActivity > 0
+            ? `${pluralize(recentActivity, "recent event")} delivered or received.`
+            : "No recent destination activity yet.",
+        detail:
+          activeDestinations > 0
+            ? `${pluralize(activeDestinations, "active destination")} standing by.`
+            : null,
       };
     }
     if (metricsPayload && !metricsPayload.ok) {
       return {
         available: false,
-        message: metricsPayload.message,
+        message: "No recent destination activity yet.",
+        detail:
+          metricsPayload.reason === "UNAUTHENTICATED"
+            ? "Sign in to load workspace metrics."
+            : "Metrics are still syncing.",
       };
     }
     if (metricsError) {
       return {
         available: false,
-        message: "Unable to load event destination activity.",
+        message: "No recent destination activity yet.",
+        detail: "Metrics are still syncing.",
       };
     }
     return {
       available: false,
       message: "Loading destination activity…",
+      detail: null,
     };
   }, [metricsError, metricsPayload]);
 
@@ -419,12 +457,15 @@ export default function CavbotGlobalFooter() {
                 <div className={styles.cardTitle}>API activity</div>
                 {apiSnapshot.available ? (
                   <>
-                    <div className={styles.cardLine}>Total requests: {formatCount(apiSnapshot.totalRequests)}</div>
-                    <div className={styles.cardLine}>Failed requests: {formatCount(apiSnapshot.failedRequests)}</div>
+                    <div className={styles.cardLine}>{apiSnapshot.summary}</div>
+                    {apiSnapshot.detail ? <div className={styles.cardLine}>{apiSnapshot.detail}</div> : null}
                     <div className={styles.cardMeta}>Window: {apiSnapshot.periodLabel}</div>
                   </>
                 ) : (
-                  <div className={styles.cardLine}>{apiSnapshot.message}</div>
+                  <>
+                    <div className={styles.cardLine}>{apiSnapshot.message}</div>
+                    {apiSnapshot.detail ? <div className={styles.cardMeta}>{apiSnapshot.detail}</div> : null}
+                  </>
                 )}
               </div>
             </div>
@@ -466,15 +507,24 @@ export default function CavbotGlobalFooter() {
                 <div className={styles.cardTitle}>Event destination activity</div>
                 {destinationSnapshot.available ? (
                   <>
-                    <div className={styles.cardLine}>
-                      Active destinations: {formatCount(destinationSnapshot.activeDestinations)}
-                    </div>
-                    <div className={styles.cardLine}>Recent activity: {formatCount(destinationSnapshot.recentActivity)}</div>
+                    <div className={styles.cardLine}>{destinationSnapshot.summary}</div>
+                    {destinationSnapshot.detail ? (
+                      <div className={styles.cardLine}>{destinationSnapshot.detail}</div>
+                    ) : null}
                     <div className={styles.cardMeta}>Window: {destinationSnapshot.periodLabel}</div>
-                    <div className={styles.cardMeta}>Last activity: {formatDateTime(destinationSnapshot.lastActivityAt)}</div>
+                    {destinationSnapshot.lastActivityAt ? (
+                      <div className={styles.cardMeta}>
+                        Last activity: {formatDateTime(destinationSnapshot.lastActivityAt)}
+                      </div>
+                    ) : null}
                   </>
                 ) : (
-                  <div className={styles.cardLine}>{destinationSnapshot.message}</div>
+                  <>
+                    <div className={styles.cardLine}>{destinationSnapshot.message}</div>
+                    {destinationSnapshot.detail ? (
+                      <div className={styles.cardMeta}>{destinationSnapshot.detail}</div>
+                    ) : null}
+                  </>
                 )}
               </div>
             </div>

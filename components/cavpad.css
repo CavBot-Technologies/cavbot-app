@@ -935,7 +935,7 @@
 .cb-notes-viewmenu{ position: relative; }
 .cb-notes-viewbtn{
   min-height: 36px;
-  padding: 0 12px 0 15px;
+  padding: 0 16px 0 15px;
   border-radius: 14px;
   border: 1px solid rgba(255,255,255,0.12);
   background:
@@ -978,14 +978,13 @@
 }
 .cb-notes-viewbtn:is(:hover, :focus-visible),
 .cb-notes-viewbtn[aria-expanded="true"]{
-  border-color: rgba(185,200,90,0.42);
+  border-color: rgba(255,255,255,0.16);
   background:
     linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%),
     rgba(10, 16, 30, 0.96);
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.06),
-    0 14px 28px rgba(0,0,0,0.28),
-    0 0 0 1px rgba(185,200,90,0.08);
+    0 14px 28px rgba(0,0,0,0.24);
   transform: translateY(-1px);
 }
 .cb-notes-header-backbtn{
@@ -1425,12 +1424,53 @@
   cursor:not-allowed;
 }
 
+.cb-notes-editorselect{
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.cb-notes-editorselect::after{
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  width: 11px;
+  height: 11px;
+  transform: translateY(-50%);
+  background-color: rgba(228,235,247,0.88);
+  -webkit-mask: url("/icons/app/cavcode/arrow-down-svgrepo-com.svg") center / contain no-repeat;
+  mask: url("/icons/app/cavcode/arrow-down-svgrepo-com.svg") center / contain no-repeat;
+  pointer-events: none;
+  opacity: 0.86;
+  transition: opacity 160ms ease;
+}
+
+.cb-notes-editorselect:is(:hover, :focus-within)::after{
+  opacity: 1;
+}
+
+.cb-notes-editorselect-font{
+  width: min(220px, 24vw);
+  max-width: 220px;
+}
+
+.cb-notes-editorselect-format{
+  width: min(176px, 18vw);
+  max-width: 176px;
+}
+
 .cb-notes-fontselect{
   height:32px;
-  padding:0 12px;
+  width: 100%;
+  padding:0 36px 0 14px;
   border-radius:10px;
-  border:1px solid var(--cavpad-border);
-  background: rgba(0,0,0,0.12);
+  border:1px solid rgba(255,255,255,0.11);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.018) 100%),
+    rgba(4,8,20,0.82);
   color: rgba(247,251,255,0.92);
   font-size:10px;
   letter-spacing:0;
@@ -1438,8 +1478,14 @@
   font-weight:600;
   outline:none;
   cursor:pointer;
-  max-width: 220px;
+  max-width: none;
   font-family: var(--font-sans);
+  appearance: none;
+  -webkit-appearance: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.04),
+    0 10px 24px rgba(0,0,0,0.16);
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
 }
 .cb-notes-fontselect:disabled{
   opacity:0.6;
@@ -1448,10 +1494,13 @@
 
 .cb-notes-formatselect{
   height:32px;
-  padding:0 12px;
+  width: 100%;
+  padding:0 36px 0 14px;
   border-radius:10px;
-  border:1px solid var(--cavpad-border);
-  background: rgba(0,0,0,0.12);
+  border:1px solid rgba(255,255,255,0.11);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.018) 100%),
+    rgba(4,8,20,0.82);
   color: rgba(247,251,255,0.92);
   font-size:10px;
   letter-spacing:0;
@@ -1459,8 +1508,25 @@
   font-weight:600;
   outline:none;
   cursor:pointer;
-  max-width: 176px;
+  max-width: none;
   font-family: var(--font-sans);
+  appearance: none;
+  -webkit-appearance: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.04),
+    0 10px 24px rgba(0,0,0,0.16);
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.cb-notes-editorselect:is(:hover, :focus-within) .cb-notes-fontselect,
+.cb-notes-editorselect:is(:hover, :focus-within) .cb-notes-formatselect{
+  border-color: rgba(255,255,255,0.16);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.065) 0%, rgba(255,255,255,0.026) 100%),
+    rgba(6,10,24,0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.05),
+    0 12px 28px rgba(0,0,0,0.18);
 }
 
 :is(.cb-home, .cb-shell) .cb-notes-iconselect{
@@ -1526,7 +1592,8 @@
 @media (max-width: 640px){
 .cb-notes-folderselect,
 .cb-notes-movefolder{ max-width: 160px; }
-.cb-notes-fontselect{ max-width: 160px; }
+.cb-notes-editorselect-font{ max-width: 160px; width: min(160px, 42vw); }
+.cb-notes-editorselect-format{ max-width: 148px; width: min(148px, 38vw); }
 .cb-notes-movefolder{ max-width: 132px; }
 }
 
@@ -1541,6 +1608,7 @@
   font-size: 13px;
   outline: none;
   font-family: var(--font-sans);
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
 }
 :is(.cb-home, .cb-shell) .cb-notes-titlebar{
   position: relative;
@@ -1550,7 +1618,11 @@
   align-items: center;
 }
 :is(.cb-home, .cb-shell) .cb-notes-titleinput:focus{
-  border-color: var(--cavpad-accent-glow);
+  border-color: rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.035);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.04),
+    0 12px 24px rgba(0,0,0,0.12);
 }
 
 :is(.cb-home, .cb-shell) .cb-notes-trash{
@@ -4201,21 +4273,27 @@
     font-size: 11px;
   }
 
-  .cb-notes-fontselect{
+  .cb-notes-editorselect-font{
     order: 3;
     grid-column: span 4;
     max-width: none;
     min-width: 0;
+  }
+
+  .cb-notes-fontselect{
     height: 36px;
     border-radius: 14px;
     font-size: 11px;
   }
 
-  .cb-notes-formatselect{
+  .cb-notes-editorselect-format{
     order: 4;
     grid-column: span 3;
     max-width: none;
     min-width: 0;
+  }
+
+  .cb-notes-formatselect{
     height: 36px;
     border-radius: 14px;
     font-size: 11px;

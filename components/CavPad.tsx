@@ -7631,36 +7631,40 @@ export function CavPadPanel({
                   ) : null}
 
                   {!isPhone ? (
-                    <select
-                      className="cb-notes-fontselect"
-                      value={settings.font || "Inter"}
-                      onChange={(e) => handleFontChange(e.currentTarget.value)}
-                      aria-label="Font"
-                    >
-                      {CAVPAD_FONTS.map((f) => (
-                        <option key={f} value={f}>
-                          {f}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="cb-notes-editorselect cb-notes-editorselect-font">
+                      <select
+                        className="cb-notes-fontselect"
+                        value={settings.font || "Inter"}
+                        onChange={(e) => handleFontChange(e.currentTarget.value)}
+                        aria-label="Font"
+                      >
+                        {CAVPAD_FONTS.map((f) => (
+                          <option key={f} value={f}>
+                            {f}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   ) : null}
 
                   {!isPhone ? (
-                    <select
-                      className="cb-notes-formatselect"
-                      value={formatMode}
-                      onChange={(e) => applyFormat(e.currentTarget.value)}
-                      aria-label="Format"
-                    >
-                      <option value="format" disabled>
-                        Format
-                      </option>
-                      {FORMAT_PRESETS.map((preset) => (
-                        <option key={preset.value} value={preset.value}>
-                          {preset.label}
+                    <div className="cb-notes-editorselect cb-notes-editorselect-format">
+                      <select
+                        className="cb-notes-formatselect"
+                        value={formatMode}
+                        onChange={(e) => applyFormat(e.currentTarget.value)}
+                        aria-label="Format"
+                      >
+                        <option value="format" disabled>
+                          Format
                         </option>
-                      ))}
-                    </select>
+                        {FORMAT_PRESETS.map((preset) => (
+                          <option key={preset.value} value={preset.value}>
+                            {preset.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   ) : null}
 
                   {!isPhone ? renderColorPicker("top") : null}
