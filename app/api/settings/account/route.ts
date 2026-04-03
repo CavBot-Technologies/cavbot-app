@@ -5,6 +5,7 @@ import { revalidateTag, unstable_noStore as noStore } from "next/cache";
 import type { AuditAction, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isBasicUsername, isReservedUsername, isValidUsername, normalizeUsername } from "@/lib/username";
+import { findUserById, getAuthPool } from "@/lib/authDb";
 import { requireSession } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
 import { auditLogWrite } from "@/lib/audit";
@@ -355,7 +356,34 @@ export async function GET(req: Request) {
     );
   } catch (e: unknown) {
     console.error("GET /api/settings/account failed:", e);
-    return jsonNoStore({ ok: false, message: "Failed to load profile." }, { status: 500 });
+    const info = await getSessionInfoSafe(req);
+    if (info?.userId) {
+      try {
+        const fallbackUser = await findUserById(getAuthPool(), info.userId);
+        if (fallbackUser) {
+          return jsonNoStore(
+            {
+              ok: true,
+              degraded: true,
+              profile: normalizePublicProfileSettings({
+                email: fallbackUser.email,
+                username: fallbackUser.username,
+                fullName: fallbackUser.displayName,
+                avatarTone: fallbackUser.avatarTone,
+                avatarImage: fallbackUser.avatarImage,
+              }),
+            },
+            { status: 200 }
+          );
+        }
+      } catch {
+        // Fall through to the generic degraded response.
+      }
+    }
+    return jsonNoStore(
+      { ok: true, degraded: true, profile: normalizePublicProfileSettings({}) },
+      { status: 200 }
+    );
   }
 }
 

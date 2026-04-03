@@ -1123,7 +1123,6 @@ export default function AppShell({
       "/settings?tab=api",
       "/settings?tab=history",
       "/settings/integrations",
-      "/help",
       "/notifications",
       "/cavbot-arcade",
       "/auth?mode=login",

@@ -4,6 +4,7 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { resolvePlanIdFromTier, getPlanLimits } from "@/lib/plans";
 
 export const runtime = "nodejs";
@@ -146,6 +147,27 @@ return json(
 );
   } catch (e: unknown) {
     if (isApiAuthError(e)) return json({ error: e.code }, e.status);
+    if (
+      isSchemaMismatchError(e, {
+        tables: ["Membership", "Invite", "User", "Account"],
+        columns: ["displayName", "lastLoginAt", "inviteeEmail", "inviteeUserId", "avatarImage"],
+      })
+    ) {
+      const planId = resolvePlanIdFromTier("FREE");
+      const limits = getPlanLimits(planId);
+      return json(
+        {
+          ok: true,
+          degraded: true,
+          planId,
+          seatLimit: Number(limits?.seats ?? 0),
+          seatsUsed: 0,
+          members: [],
+          invites: [],
+        },
+        200
+      );
+    }
     return json({ error: "SERVER_ERROR" }, 500);
   }
 }

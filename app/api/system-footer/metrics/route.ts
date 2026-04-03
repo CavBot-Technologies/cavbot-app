@@ -175,7 +175,7 @@ export async function GET(req: NextRequest) {
         reason: "SERVER_ERROR",
         message,
       },
-      500
+      200
     );
   }
 }

@@ -1,10 +1,15 @@
 // app/layout.tsx
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import Script from "next/script";
 import "./globals.css";
 import "./workspace.css";
 import "@/components/LightToggle.css";
+import BrowserStoreBoot from "./_components/BrowserStoreBoot";
+import GlobalFooterMount from "./_components/GlobalFooterMount";
+import IconWarmup from "./_components/IconWarmup";
+import RouteLifecycle from "./_components/RouteLifecycle";
+import SystemStatusBootstrap from "@/components/status/SystemStatusBootstrap";
 import { resolveCavbotAssetPolicy } from "@/lib/cavbotAssetPolicy";
 
 const APP_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://app.cavbot.io";
@@ -61,6 +66,7 @@ export const metadata: Metadata = {
     ],
   },
   other: {
+    "mobile-web-app-capable": "yes",
     "msapplication-TileColor": "#01030f",
     "msapplication-TileImage": "/mstile-144x144.png",
   },
@@ -72,32 +78,7 @@ export const viewport = {
 
 export const runtime = "nodejs";
 const OFFICIAL_CDN_ASSETS = resolveCavbotAssetPolicy("customer_snippet");
-const AI_ICON_PRELOADS = [
-  "/icons/app/smart-optimization-svgrepo-com.svg",
-  "/icons/history-svgrepo-coom.svg",
-  "/icons/expand-svgrepo-com.svg",
-  "/icons/x-symbol-svgrepo-com.svg",
-  "/icons/app/cavcode/write-a-note-svgrepo-com.svg",
-  "/icons/app/cavcode/plus-large-svgrepo-com.svg",
-  "/icons/app/cavcode/3d-modelling-round-820-svgrepo-com.svg",
-  "/icons/app/cavcode/brain-svgrepo-com.svg",
-  "/icons/app/cavcode/arrow-up-circle-svgrepo-com.svg",
-  "/icons/app/cavcode/stop-circle-svgrepo-com.svg",
-  "/icons/app/microphone-svgrepo-com.svg",
-  "/icons/app/sound-2-svgrepo-com.svg",
-  "/icons/app/sound-max-svgrepo-com.svg",
-  "/icons/copy-svgrepo-com.svg",
-  "/icons/thumb-up-cavai.svg",
-  "/icons/thumb-down-cavai.svg",
-  "/icons/app/share-svgrepo-com.svg",
-  "/icons/app/retry-svgrepo-com.svg",
-  "/icons/app/deep-learning-svgrepo-com.svg",
-  "/icons/app/image-combiner-svgrepo-com.svg",
-  "/icons/app/image-edit-svgrepo-com.svg",
-  "/icons/app/file-blank-svgrepo-com.svg",
-  "/icons/app/link-svgrepo-com.svg",
-  "/icons/app/workspace-svgrepo-com.svg",
-] as const;
+const browserStoreBootstrapScript = `(function(){function c(){var m=new Map();return{get length(){return m.size;},key:function(i){if(!Number.isFinite(i)||i<0)return null;var k=Array.from(m.keys());return k[Math.trunc(i)]||null;},getItem:function(k){var n=String(k||"");if(!n)return null;return m.has(n)?String(m.get(n)||""):null;},setItem:function(k,v){var n=String(k||"");if(!n)return;m.set(n,String(v??""));},removeItem:function(k){var n=String(k||"");if(!n)return;m.delete(n);},clear:function(){m.clear();}};}if(!globalThis.__cbLocalStore)globalThis.__cbLocalStore=c();if(!globalThis.__cbSessionStore)globalThis.__cbSessionStore=c();})();`;
 
 type RootLayoutProps = {
   children: ReactNode;
@@ -107,21 +88,8 @@ export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en" data-cavbot-react-app="1" style={{ backgroundColor: "#01030f" }}>
       <head>
+        <script id="cb-browser-store-shim" dangerouslySetInnerHTML={{ __html: browserStoreBootstrapScript }} />
         <link rel="preconnect" href={OFFICIAL_CDN_ASSETS.baseUrl} crossOrigin="" />
-        <link rel="preload" as="image" href="/logo/official-logotype-light.svg" type="image/svg+xml" />
-        <link rel="preload" as="image" href="/logo/cavbot-logomark.svg" type="image/svg+xml" />
-        <link rel="preload" as="image" href="/icons/cavpad/notepad-svgrepo-com.svg" type="image/svg+xml" />
-        <link rel="preload" as="image" href="/icons/app/bell-svgrepo-com.svg" type="image/svg+xml" />
-        <link rel="preload" as="image" href="/icons/app/help-outline-svgrepo-com.svg" type="image/svg+xml" />
-        <link rel="preload" as="image" href="/icons/app/settings-svgrepo-com.svg" type="image/svg+xml" />
-        <link rel="preload" as="image" href="/icons/app/game-control-2-svgrepo-com.svg" type="image/svg+xml" />
-        <link rel="preload" as="image" href="/icons/app/scroll-down-1382-svgrepo-com.svg" type="image/svg+xml" />
-        <link rel="preload" as="image" href="/icons/app/scroll-up-1381-svgrepo-com.svg" type="image/svg+xml" />
-        <link rel="preload" as="image" href="/icons/app/spark-svgrepo-com.svg" type="image/svg+xml" />
-        <link rel="preload" as="image" href="/icons/cavpad/sparkles-svgrepo-com.svg" type="image/svg+xml" />
-        {AI_ICON_PRELOADS.map((href) => (
-          <link key={href} rel="preload" as="image" href={href} type="image/svg+xml" />
-        ))}
       </head>
 
       <body style={{ backgroundColor: "#01030f", color: "#c5cee7" }}>
@@ -130,7 +98,23 @@ export default function RootLayout({ children }: RootLayoutProps) {
           Skip to content
         </a>
 
+        <Suspense fallback={null}>
+          <BrowserStoreBoot />
+        </Suspense>
+        <Suspense fallback={null}>
+          <RouteLifecycle />
+        </Suspense>
+        <Suspense fallback={null}>
+          <IconWarmup />
+        </Suspense>
+        <Suspense fallback={null}>
+          <SystemStatusBootstrap />
+        </Suspense>
+
         {children}
+        <Suspense fallback={null}>
+          <GlobalFooterMount />
+        </Suspense>
         <Script
           id="cavbot-official-brain-cdn"
           src={OFFICIAL_CDN_ASSETS.scripts.brain}

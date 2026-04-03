@@ -3,6 +3,7 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import crypto from "crypto";
 
@@ -179,6 +180,15 @@ export async function GET(req: NextRequest) {
     const out = await listWorkspaces(req, includeInactive);
     return json(out, 200, rid);
   } catch (e) {
+    if (
+      isSchemaMismatchError(e, {
+        tables: ["Project", "Site"],
+        columns: ["topSiteId", "retentionDays", "region", "isActive"],
+      })
+    ) {
+      const activeProjectId = parseProjectId(req.cookies.get("cb_pid")?.value || "");
+      return json({ projects: [], activeProjectId, degraded: true, requestId: rid }, 200, rid);
+    }
     const { status, payload } = mapError(e);
     // attach requestId so you can trace logs without leaking internals
     return json({ ...payload, requestId: rid }, status, rid);
@@ -199,6 +209,15 @@ export async function POST(req: NextRequest) {
     const out = await listWorkspaces(req, includeInactive);
     return json(out, 200, rid);
   } catch (e) {
+    if (
+      isSchemaMismatchError(e, {
+        tables: ["Project", "Site"],
+        columns: ["topSiteId", "retentionDays", "region", "isActive"],
+      })
+    ) {
+      const activeProjectId = parseProjectId(req.cookies.get("cb_pid")?.value || "");
+      return json({ projects: [], activeProjectId, degraded: true, requestId: rid }, 200, rid);
+    }
     const { status, payload } = mapError(e);
     return json({ ...payload, requestId: rid }, status, rid);
   }

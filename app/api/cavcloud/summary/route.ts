@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 
 import { requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { getPlanLimits, resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 
@@ -96,15 +97,29 @@ export async function GET(req: Request) {
       ],
     };
 
-    const [account, folderCount, fileCount, imageCount, videoCount, bytesAgg] = await Promise.all([
-      prisma.account.findUnique({
+    const accountPromise = prisma.account
+      .findUnique({
         where: { id: accountId },
         select: {
           tier: true,
           trialSeatActive: true,
           trialEndsAt: true,
         },
-      }),
+      })
+      .catch((error) => {
+        if (
+          isSchemaMismatchError(error, {
+            tables: ["Account"],
+            columns: ["trialSeatActive", "trialEndsAt", "tier"],
+          })
+        ) {
+          return null;
+        }
+        throw error;
+      });
+
+    const [account, folderCount, fileCount, imageCount, videoCount, bytesAgg] = await Promise.all([
+      accountPromise,
       prisma.cavCloudFolder.count({
         where: { accountId, deletedAt: null, path: { not: "/" } },
       }),
@@ -147,15 +162,33 @@ export async function GET(req: Request) {
       },
     }, 200);
   } catch (err) {
-    if (isMissingCavCloudTablesError(err)) {
+    if (
+      isMissingCavCloudTablesError(err) ||
+      isSchemaMismatchError(err, {
+        tables: ["Account"],
+        columns: ["trialSeatActive", "trialEndsAt", "tier"],
+      })
+    ) {
       try {
         const sess = await requireSession(req);
         requireAccountContext(sess);
         requireUser(sess);
-        const account = await prisma.account.findUnique({
-          where: { id: String(sess.accountId || "") },
-          select: { tier: true, trialSeatActive: true, trialEndsAt: true },
-        });
+        const account = await prisma.account
+          .findUnique({
+            where: { id: String(sess.accountId || "") },
+            select: { tier: true, trialSeatActive: true, trialEndsAt: true },
+          })
+          .catch((error) => {
+            if (
+              isSchemaMismatchError(error, {
+                tables: ["Account"],
+                columns: ["trialSeatActive", "trialEndsAt", "tier"],
+              })
+            ) {
+              return null;
+            }
+            throw error;
+          });
         const planId = resolveEffectivePlanId(account);
         const limitBytes = planLimitBytes(account, planId);
         return jsonNoStore({

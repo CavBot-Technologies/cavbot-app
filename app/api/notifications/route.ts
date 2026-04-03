@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import { ensureCavCloudShareExpirySoonNotifications } from "@/lib/cavcloud/notifications.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { buildGuardDecisionPayload } from "@/src/lib/cavguard/cavGuard.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
@@ -173,6 +174,14 @@ export async function GET(req: NextRequest) {
       });
       return json({ ok: false, error: error.code, ...(guardPayload || {}) }, error.status);
     }
+    if (
+      isSchemaMismatchError(error, {
+        tables: ["Notification"],
+        columns: ["kind", "metaJson", "tone", "readAt", "accountId"],
+      })
+    ) {
+      return json({ ok: true, degraded: true, notifications: [], nextCursor: null }, 200);
+    }
     return json({ ok: false, error: "NOTIF_LIST_FAILED" }, 500);
   }
 }
@@ -215,6 +224,14 @@ export async function POST(req: NextRequest) {
         actionId: error.status === 403 ? "NOTIFICATIONS_OWNER_ONLY" : "AUTH_REQUIRED",
       });
       return json({ ok: false, error: error.code, ...(guardPayload || {}) }, error.status);
+    }
+    if (
+      isSchemaMismatchError(error, {
+        tables: ["Notification"],
+        columns: ["readAt", "accountId"],
+      })
+    ) {
+      return json({ ok: true, degraded: true }, 200);
     }
     return json({ ok: false, error: "NOTIF_MARK_READ_FAILED" }, 500);
   }
