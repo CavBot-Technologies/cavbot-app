@@ -466,6 +466,16 @@
   border-top: 1px solid rgba(255,255,255,0.10);
 }
 
+.cb-cavpad-modal-footer-badge{
+  display: none;
+  align-items: center;
+}
+
+.cb-cavpad-modal-footer-badge .cb-badge{
+  width: 38px;
+  height: 38px;
+}
+
 /* ===== Theme variables ===== */
 .cb-cavpad-root{
   --cavpad-accent: #b9c85a;
@@ -929,6 +939,29 @@
 .cb-notes-viewbtn:hover{
   border-color: var(--cavpad-accent-glow);
   background: var(--cavpad-accent-soft);
+}
+.cb-notes-header-backbtn{
+  height: 32px;
+  width: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--cavpad-border);
+  background: rgba(0,0,0,0.12);
+  color: rgba(247,251,255,0.92);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.cb-notes-header-backbtn:hover{
+  border-color: var(--cavpad-accent-glow);
+  background: var(--cavpad-accent-soft);
+}
+.cb-notes-header-backbtn-icon{
+  width: 14px;
+  height: 14px;
+  display: block;
+  filter: brightness(0) invert(1);
 }
 .cb-notes-viewmenu-pop{
   position: absolute;
@@ -3769,6 +3802,13 @@
   .cb-cavpad-modal .cb-home-modal-actions{
     padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
     background: rgba(3, 6, 22, 0.98);
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  .cb-cavpad-modal-footer-badge{
+    display: inline-flex;
   }
 
   :is(.cb-home, .cb-shell) .cb-home-modal-panel.wide .cb-notes-embed .cb-card-head{
@@ -3788,19 +3828,7 @@
   }
 
   :is(.cb-home, .cb-shell) .cb-notes-headleft-badge{
-    width: 100%;
-    justify-content: center;
-    align-items: center;
-  }
-
-  :is(.cb-home, .cb-shell) .cb-notes-headleft-badge .cb-badge-left{
-    width: 100%;
-    justify-content: center;
-  }
-
-  :is(.cb-home, .cb-shell) .cb-notes-headleft-badge .cb-badge{
-    width: 42px;
-    height: 42px;
+    display: none;
   }
 
   :is(.cb-home, .cb-shell) .cb-notes-actions-right{
@@ -3809,6 +3837,12 @@
     grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 8px;
     align-items: center;
+  }
+
+  :is(.cb-home, .cb-shell) .cb-notes-actions-right.is-phone-write{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
 
   :is(.cb-home, .cb-shell) .cb-notes-header-search{
@@ -3830,10 +3864,21 @@
 
   .cb-notes-viewbtn{
     height: 38px;
-    padding: 0 12px;
+    padding: 0 10px;
     border-radius: 14px;
     font-size: 10px;
     letter-spacing: 0.08em;
+    min-width: 0;
+    max-width: 132px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cb-notes-header-backbtn{
+    width: 38px;
+    height: 38px;
+    border-radius: 14px;
   }
 
   .cb-notes-viewmenu-pop{
@@ -4117,23 +4162,45 @@
   }
 
   :is(.cb-home, .cb-shell) .cb-cavpad-directory-toolbar{
-    gap: 12px;
+    gap: 8px;
+    flex-wrap: nowrap;
+    align-items: center;
   }
 
   :is(.cb-home, .cb-shell) .cb-cavpad-directory-toolbar-left{
-    gap: 10px;
+    gap: 8px;
+    width: auto;
+    flex: 0 0 auto;
   }
 
   :is(.cb-home, .cb-shell) .cb-cavpad-directory-section-select{
-    max-width: none;
-    width: 100%;
+    width: auto;
+    max-width: 118px;
+    min-width: 0;
+    font-size: 10px;
+    letter-spacing: 0.04em;
   }
 
   :is(.cb-home, .cb-shell) .cb-cavpad-directory-toolbar-meta{
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  :is(.cb-home, .cb-shell) .cb-cavpad-directory-toolbar-name{
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  :is(.cb-home, .cb-shell) .cb-cavpad-directory-toolbar-counts{
+    flex: 0 0 auto;
+    font-size: 10px;
   }
 
   :is(.cb-home, .cb-shell) .cb-cavpad-desktop-grid{

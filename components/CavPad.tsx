@@ -1954,6 +1954,13 @@ function CavPadModalShell({
         <div className="cb-cavpad-shell-body">{children}</div>
 
         <div className="cb-home-modal-actions">
+          <div className="cb-cavpad-modal-footer-badge" aria-hidden="true">
+            <div className="cb-badge-left">
+              <div className="cb-badge cb-badge-inline">
+                <CdnBadgeEyes trackingMode="eyeOnly" />
+              </div>
+            </div>
+          </div>
           <button className="cb-linkpill" type="button" onClick={onCloseAction}>
             Close
           </button>
@@ -5639,6 +5646,7 @@ export function CavPadPanel({
           : view === "details"
           ? "Details"
             : "Settings";
+  const isPhoneWriteView = isPhone && view === "cavpad";
 
   function renderColorPicker(variant: "top" | "toolbar") {
     return (
@@ -6065,142 +6073,170 @@ export function CavPadPanel({
       >
         <div className="cb-card-head">
           <div className="cb-card-head-row cb-notes-headrow">
-            <div className="cb-notes-headleft cb-notes-headleft-badge" aria-label="CavPad">
-              <div className="cb-badge-left" aria-hidden="true">
-                <div
-                  className={`cb-badge cb-badge-inline ${
-                    badgeTone === "lime"
-                      ? "cavbot-auth-eye-watch"
-                      : badgeTone === "red"
-                        ? "cavbot-auth-eye-error"
-                        : ""
-                  }`}
-                >
-                  <CdnBadgeEyes trackingMode="eyeOnly" />
+            {!isPhone ? (
+              <div className="cb-notes-headleft cb-notes-headleft-badge" aria-label="CavPad">
+                <div className="cb-badge-left" aria-hidden="true">
+                  <div
+                    className={`cb-badge cb-badge-inline ${
+                      badgeTone === "lime"
+                        ? "cavbot-auth-eye-watch"
+                        : badgeTone === "red"
+                          ? "cavbot-auth-eye-error"
+                          : ""
+                    }`}
+                  >
+                    <CdnBadgeEyes trackingMode="eyeOnly" />
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : null}
 
-            <div className="cb-notes-actions-right">
-              <div className="cb-notes-viewmenu">
+            <div className={`cb-notes-actions-right ${isPhoneWriteView ? "is-phone-write" : ""}`}>
+              {isPhoneWriteView ? (
                 <button
                   type="button"
-                  className="cb-notes-viewbtn"
-                  aria-haspopup="menu"
-                  aria-expanded={viewMenuOpen}
-                  onClick={() => setViewMenuOpen((s) => !s)}
+                  className="cb-notes-header-backbtn"
+                  onClick={() => {
+                    setViewMenuOpen(false);
+                    openDirectoryRoot();
+                  }}
+                  aria-label="Back to CavPad"
+                  title="Back to CavPad"
                 >
-                  {viewLabel}
-                  <span aria-hidden="true">▾</span>
+                  <Image
+                    src="/icons/back-svgrepo-com.svg"
+                    alt=""
+                    width={14}
+                    height={14}
+                    className="cb-notes-header-backbtn-icon"
+                    aria-hidden="true"
+                    unoptimized
+                  />
                 </button>
-                {viewMenuOpen ? (
-                  <div className="cb-notes-viewmenu-pop" role="menu" aria-label="Views">
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setViewMenuOpen(false);
-                        openDirectoryRoot();
-                      }}
-                    >
-                      CavPad
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setViewMenuOpen(false);
-                        setView("cavpad");
-                        if (isNarrow) setMobileView("editor");
-                      }}
-                    >
-                      Write a note
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setViewMenuOpen(false);
-                        setView("notes");
-                      }}
-                    >
-                      Notes
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setViewMenuOpen(false);
-                        openCavPadSettings();
-                      }}
-                    >
-                      Settings
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="cb-notes-viewmenu-trash"
-                      onClick={() => {
-                        setViewMenuOpen(false);
-                        setView("trash");
-                      }}
-                    >
-                      Recently deleted
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-
-            <div className="cb-notes-header-search" data-cavpad-search-wrap="true">
-              <input
-                className="cb-notes-header-search-input"
-                value={globalSearchQuery}
-                onChange={(e) => {
-                  setGlobalSearchQuery(e.target.value);
-                  setGlobalSearchOpen(true);
-                }}
-                onFocus={() => setGlobalSearchOpen(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (globalSearchResults[0]) openSearchResult(globalSearchResults[0]);
-                  }
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    setGlobalSearchOpen(false);
-                  }
-                }}
-                placeholder="Search CavPad"
-                aria-label="Search CavPad"
-              />
-              {globalSearchOpen && globalSearchQuery.trim() ? (
-                <div className="cb-notes-header-search-pop" role="listbox" aria-label="CavPad search results">
-                  {globalSearchResults.length ? (
-                    globalSearchResults.map((row) => (
+              ) : (
+                <div className="cb-notes-viewmenu">
+                  <button
+                    type="button"
+                    className="cb-notes-viewbtn"
+                    aria-haspopup="menu"
+                    aria-expanded={viewMenuOpen}
+                    onClick={() => setViewMenuOpen((s) => !s)}
+                  >
+                    {viewLabel}
+                    <span aria-hidden="true">▾</span>
+                  </button>
+                  {viewMenuOpen ? (
+                    <div className="cb-notes-viewmenu-pop" role="menu" aria-label="Views">
                       <button
-                        key={row.key}
                         type="button"
-                        role="option"
-                        aria-selected={false}
-                        className="cb-notes-header-search-item"
-                        onClick={() => openSearchResult(row)}
+                        role="menuitem"
+                        onClick={() => {
+                          setViewMenuOpen(false);
+                          openDirectoryRoot();
+                        }}
                       >
-                        <span className="cb-notes-header-search-item-label">{row.label}</span>
-                        <span className="cb-notes-header-search-item-sub">{row.sublabel}</span>
+                        CavPad
                       </button>
-                    ))
-                  ) : (
-                    <div className="cb-notes-header-search-empty">No matches in CavPad.</div>
-                  )}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setViewMenuOpen(false);
+                          setView("cavpad");
+                          if (isNarrow) setMobileView("editor");
+                        }}
+                      >
+                        Write a note
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setViewMenuOpen(false);
+                          setView("notes");
+                        }}
+                      >
+                        Notes
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setViewMenuOpen(false);
+                          openCavPadSettings();
+                        }}
+                      >
+                        Settings
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="cb-notes-viewmenu-trash"
+                        onClick={() => {
+                          setViewMenuOpen(false);
+                          setView("trash");
+                        }}
+                      >
+                        Recently deleted
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              {!isPhoneWriteView ? (
+                <div className="cb-notes-header-search" data-cavpad-search-wrap="true">
+                  <input
+                    className="cb-notes-header-search-input"
+                    value={globalSearchQuery}
+                    onChange={(e) => {
+                      setGlobalSearchQuery(e.target.value);
+                      setGlobalSearchOpen(true);
+                    }}
+                    onFocus={() => setGlobalSearchOpen(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (globalSearchResults[0]) openSearchResult(globalSearchResults[0]);
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        setGlobalSearchOpen(false);
+                      }
+                    }}
+                    placeholder="Search CavPad"
+                    aria-label="Search CavPad"
+                  />
+                  {globalSearchOpen && globalSearchQuery.trim() ? (
+                    <div className="cb-notes-header-search-pop" role="listbox" aria-label="CavPad search results">
+                      {globalSearchResults.length ? (
+                        globalSearchResults.map((row) => (
+                          <button
+                            key={row.key}
+                            type="button"
+                            role="option"
+                            aria-selected={false}
+                            className="cb-notes-header-search-item"
+                            onClick={() => openSearchResult(row)}
+                          >
+                            <span className="cb-notes-header-search-item-label">{row.label}</span>
+                            <span className="cb-notes-header-search-item-sub">{row.sublabel}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="cb-notes-header-search-empty">No matches in CavPad.</div>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
+
+              <button className="cb-notes-newbtn" type="button" onClick={openCreateChooser} aria-label="Create" title="Create">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z" />
+                </svg>
+              </button>
             </div>
-            <button className="cb-notes-newbtn" type="button" onClick={openCreateChooser} aria-label="Create" title="Create">
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                <path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z" />
-              </svg>
-            </button>
-          </div>
           </div>
         </div>
 
