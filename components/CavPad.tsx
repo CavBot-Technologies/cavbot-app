@@ -4362,6 +4362,35 @@ export function CavPadPanel({
   }, [activeDocId, activeNoteId, setActiveNoteId]);
 
   React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const w = window as Window & {
+      cavai?: {
+        enableEyeTracking?: () => void;
+        enableHeadTracking?: () => void;
+      };
+      __cavaiEyeTrackingRefresh?: () => void;
+      __cavaiHeadTrackingRefresh?: () => void;
+      __cavbotEyeTrackingRefresh?: () => void;
+      __cavbotHeadTrackingRefresh?: () => void;
+    };
+    const refresh = () => {
+      w.cavai?.enableEyeTracking?.();
+      w.cavai?.enableHeadTracking?.();
+      w.__cavaiEyeTrackingRefresh?.();
+      w.__cavaiHeadTrackingRefresh?.();
+      w.__cavbotEyeTrackingRefresh?.();
+      w.__cavbotHeadTrackingRefresh?.();
+    };
+    refresh();
+    const rafId = window.requestAnimationFrame(refresh);
+    const timer = window.setTimeout(refresh, 96);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.clearTimeout(timer);
+    };
+  }, [view, mobileView, editorFullscreen, activeDocId, directoryViewFolderId, badgeTone]);
+
+  React.useEffect(() => {
     if (!activeDocId) return;
     autoCreateNoteIdRef.current = "";
   }, [activeDocId]);
@@ -5990,7 +6019,7 @@ export function CavPadPanel({
                         : ""
                   }`}
                 >
-                  <CdnBadgeEyes />
+                  <CdnBadgeEyes trackingMode="eyeOnly" />
                 </div>
               </div>
             </div>
@@ -7428,7 +7457,7 @@ export function CavPadPanel({
                     aria-label="Font"
                   >
                     {CAVPAD_FONTS.map((f) => (
-                      <option key={f} value={f} style={{ fontFamily: f, textTransform: "none" }}>
+                      <option key={f} value={f}>
                         {f}
                       </option>
                     ))}

@@ -1318,7 +1318,7 @@
   outline:none;
   cursor:pointer;
   max-width: 220px;
-  font-family: initial;
+  font-family: var(--font-sans);
 }
 .cb-notes-fontselect:disabled{
   opacity:0.6;
@@ -1339,7 +1339,7 @@
   outline:none;
   cursor:pointer;
   max-width: 176px;
-  font-family: initial;
+  font-family: var(--font-sans);
 }
 
 @media (max-width: 640px){
@@ -1369,15 +1369,19 @@
   width: 36px;
   height: 36px;
   border-radius: 12px;
-  border: 1px solid rgba(255,120,120,0.22);
-  background: rgba(255,120,120,0.08);
+  border: 1px solid transparent;
+  background: transparent;
   color: rgba(255,200,200,0.92);
   cursor:pointer;
   display:grid;
   place-items:center;
 }
 :is(.cb-home, .cb-shell) .cb-notes-trash svg{ display:block; }
-:is(.cb-home, .cb-shell) .cb-notes-trash:hover{ background: rgba(255,120,120,0.12); }
+:is(.cb-home, .cb-shell) .cb-notes-trash:hover{
+  background: transparent;
+  border-color: transparent;
+  color: rgba(255,151,151,0.96);
+}
 
 :is(.cb-home, .cb-shell) .cb-notes-toolbar{
   display:flex;
@@ -1393,8 +1397,8 @@
   min-width: 34px;
   padding: 0 10px;
   border-radius: 10px;
-  border: 1px solid var(--cavpad-border);
-  background: rgba(255,255,255,0.02);
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--cavpad-ink);
   cursor:pointer;
   font-size: 12px;
@@ -1404,7 +1408,8 @@
   place-items:center;
 }
 :is(.cb-home, .cb-shell) .cb-notes-tool:hover{
-  background: var(--cavpad-accent-soft);
+  background: transparent;
+  border-color: transparent;
   color: var(--cavpad-accent-strong);
 }
 .cb-notes-tool-icon--editor-control{
@@ -1566,8 +1571,8 @@
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  border: 1px solid var(--cavpad-border);
-  background: rgba(255,255,255,0.03);
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--cavpad-ink);
   display: grid;
   place-items: center;
@@ -1578,7 +1583,8 @@
   background: transparent;
 }
 :is(.cb-home, .cb-shell) .cb-notes-editor-control-btn:hover{
-  background: var(--cavpad-accent-soft);
+  background: transparent;
+  border-color: transparent;
   color: var(--cavpad-accent-strong);
 }
 :is(.cb-home, .cb-shell) .cb-notes-editor-control-btn--plain:hover{
@@ -4036,7 +4042,7 @@
     width: 38px;
     height: 38px;
     border-radius: 14px;
-    background: rgba(7, 12, 30, 0.9);
+    background: transparent;
   }
 
   :is(.cb-home, .cb-shell) .cb-notes-editor-control-menu--prompt{
