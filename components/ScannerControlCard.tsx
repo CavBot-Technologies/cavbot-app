@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PlanId, formatPlanLabelForUi } from "@/lib/plans";
+import { PlanId, formatPlanLabelForUi, getPlanLimits } from "@/lib/plans";
 import type { ProjectScanStatus, ScanReport } from "@/lib/scanner";
 
 type ScannerSite = {
@@ -93,11 +93,20 @@ export default function ScannerControlCard({
     return () => window.clearTimeout(timer);
   }, [scanStatus, fetchStatus]);
 
-  const usage = scanStatus?.usage ?? null;
-  const planLabel = formatPlanLabelForUi(planId);
-  const remaining = usage ? Math.max(0, usage.scansPerMonth - usage.scansThisMonth) : 0;
-  const totalScans = usage?.scansPerMonth ?? 0;
-  const scansRemainingLabel = usage ? `${remaining}/${totalScans}` : "—/—";
+  const liveUsage = scanStatus?.usage ?? null;
+  const planLimits = useMemo(() => getPlanLimits(planId), [planId]);
+  const displayUsage = liveUsage ?? {
+    planId,
+    planLabel: formatPlanLabelForUi(planId),
+    scansThisMonth: 0,
+    scansPerMonth: planLimits.scansPerMonth,
+    pagesPerScan: planLimits.pagesPerScan,
+  };
+  const effectivePlanId = liveUsage?.planId ?? planId;
+  const planLabel = formatPlanLabelForUi(effectivePlanId);
+  const remaining = Math.max(0, displayUsage.scansPerMonth - displayUsage.scansThisMonth);
+  const totalScans = displayUsage.scansPerMonth;
+  const scansRemainingLabel = `${remaining}/${totalScans}`;
   const isRunning = scanStatus?.lastJob?.status === "RUNNING";
   const isSuccess = scanStatus?.lastJob?.status === "SUCCEEDED";
   const isFailed = scanStatus?.lastJob?.status === "FAILED";
@@ -110,7 +119,7 @@ export default function ScannerControlCard({
     report?.metrics.highPriorityCount ?? latestJob?.highPriorityCount ?? 0;
 
   const canRunScan =
-    Boolean(projectId && activeSite && usage) &&
+    Boolean(projectId && activeSite && liveUsage) &&
     !isRunning &&
     !isSubmitting &&
     remaining > 0;
@@ -200,7 +209,7 @@ export default function ScannerControlCard({
           </div>
         </div>
         <div className="cb-scan-plan-note">
-          Plan: <strong>{planLabel}</strong> · Pages per scan: {usage?.pagesPerScan ?? "—"}
+          Plan: <strong>{planLabel}</strong> · Pages per scan: {displayUsage.pagesPerScan}
         </div>
       </div>
 

@@ -94,9 +94,13 @@ async function getAccountPlan(accountId: string | undefined): Promise<PlanId> {
   if (!accountId) return "free";
   const account = await prisma.account.findUnique({
     where: { id: accountId },
-    select: { tier: true },
+    select: { tier: true, trialSeatActive: true, trialEndsAt: true },
   });
-  return resolvePlanIdFromTier(account?.tier ?? "FREE");
+  const now = Date.now();
+  const endsAtMs = account?.trialEndsAt ? new Date(account.trialEndsAt).getTime() : 0;
+  const trialActive = Boolean(account?.trialSeatActive) && endsAtMs > now;
+  const tierEffective = trialActive ? "PREMIUM_PLUS" : String(account?.tier || "FREE").toUpperCase();
+  return resolvePlanIdFromTier(tierEffective);
 }
 
 export type ScanUsage = {

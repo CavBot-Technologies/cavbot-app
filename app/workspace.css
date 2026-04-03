@@ -1064,7 +1064,12 @@ body.cb-home-delete-open .cb-main{
 
 @media (max-width: 520px){
   .cb-home .cb-card-scanner .cb-scan-head-cta{
-    margin-top: -10px;
+    margin-top: -12px;
+    margin-bottom: 12px;
+  }
+
+  .cb-home .cb-scan-plan-note{
+    margin-top: 0;
   }
 
   .cb-home .cb-card-cavcloud{
@@ -1121,18 +1126,23 @@ body.cb-home-delete-open .cb-main{
   .cb-home .cb-cavcloud-types{
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
+    justify-items: center;
     gap: 10px 8px;
+    width: calc(100% + 28px);
     margin: 0 -14px;
     padding: 12px 14px 0;
   }
 
   .cb-home .cb-cavcloud-type{
+    width: 100%;
+    max-width: 56px;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
     gap: 5px;
     padding: 0;
     text-align: center;
+    margin: 0 auto;
   }
 
   .cb-home .cb-cavcloud-type + .cb-cavcloud-type{
@@ -1140,14 +1150,17 @@ body.cb-home-delete-open .cb-main{
   }
 
   .cb-home .cb-cavcloud-type-label{
+    width: 100%;
     font-size: 8px;
     letter-spacing: 0.1em;
     line-height: 1.25;
+    text-align: center;
   }
 
   .cb-home .cb-cavcloud-type-value{
     margin-left: 0;
     font-size: 11px;
+    text-align: center;
   }
 }
 
