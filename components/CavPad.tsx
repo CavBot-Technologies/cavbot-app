@@ -2052,6 +2052,7 @@ export function CavPadPanel({
   const [viewMenuOpen, setViewMenuOpen] = React.useState(false);
   const [isNarrow, setIsNarrow] = React.useState(false);
   const [isPhone, setIsPhone] = React.useState(false);
+  const isPhoneWriteView = isPhone && view === "cavpad";
   const [mobileView, setMobileView] = React.useState<"list" | "editor">("list");
   const [editorEmpty, setEditorEmpty] = React.useState(true);
   const [colorOpen, setColorOpen] = React.useState(false);
@@ -5699,8 +5700,6 @@ export function CavPadPanel({
           : view === "details"
           ? "Details"
             : "Settings";
-  const isPhoneWriteView = isPhone && view === "cavpad";
-
   function renderColorPicker(variant: "top" | "toolbar") {
     return (
       <div
