@@ -257,7 +257,7 @@ export function listCavAiPageContextAdapters(): CavAiPageContextAdapter[] {
 const DEFAULT_ADAPTERS: CavAiPageContextAdapter[] = [
   {
     id: "home",
-    routePatterns: ["/", "/command-center"],
+    routePatterns: ["/"],
     surface: "workspace",
     category: "home",
     contextLabel: "Workspace context",

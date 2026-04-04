@@ -1006,7 +1006,6 @@ export default function AppShell({
   useEffect(() => {
     const warmRoutes = [
       "/",
-      "/command-center",
       "/console",
       "/errors",
       "/seo",
@@ -1329,7 +1328,7 @@ export default function AppShell({
 
   const nav: NavItem[] = useMemo(
     () => [
-      { href: "/command-center", label: "Command Center", hint: "Notifications + Manage URLs", required: "FREE" },
+      { href: "/", label: "Command Center", hint: "Notifications + Manage URLs", required: "FREE" },
       { href: "/console", label: "Dashboard", hint: "Overall health + events", required: "FREE" },
 
 
@@ -1576,7 +1575,6 @@ export default function AppShell({
 
 
   const isActive = (href: string) => {
-    if (href === "/command-center" && (pathname === "/" || pathname === "/command-center")) return true;
     return pathname === href;
   };
 
@@ -2171,7 +2169,7 @@ export default function AppShell({
             const active = isActive(item.href);
             const requiredPlan = item.required || "FREE";
             const unlocked = canAccess(planTier, requiredPlan);
-            const shouldWarmHome = item.href === "/" || item.href === "/command-center";
+            const shouldWarmHome = item.href === "/";
 
 
             return (
