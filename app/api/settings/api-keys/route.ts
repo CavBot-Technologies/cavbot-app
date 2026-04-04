@@ -45,6 +45,22 @@ type KeyResponse = {
   usage: KeyUsagePayload;
 };
 
+function emptyKeyResponse(): KeyResponse {
+  return {
+    ok: true,
+    publishableKeys: [],
+    secretKeys: [],
+    allowedOrigins: [],
+    site: null,
+    usage: {
+      verifiedToday: null,
+      deniedToday: null,
+      rateLimit: DEFAULT_RATE_LIMIT_LABEL,
+      topDeniedOrigins: null,
+    },
+  };
+}
+
 function toType(raw: unknown): ApiKeyType {
   const value = String(raw ?? "publishable").trim().toUpperCase();
   if (value === "SECRET" || value === "ADMIN" || value === "PUBLISHABLE") return value as ApiKeyType;
@@ -55,22 +71,7 @@ export async function GET(req: NextRequest) {
   try {
     const session = await requireSettingsOwnerSession(req);
     const workspace = await resolveApiKeyWorkspace({ accountId: session.accountId });
-    if (!workspace) {
-      const emptyPayload: KeyResponse = {
-        ok: true,
-        publishableKeys: [],
-        secretKeys: [],
-        allowedOrigins: [],
-        site: null,
-        usage: {
-          verifiedToday: null,
-          deniedToday: null,
-          rateLimit: DEFAULT_RATE_LIMIT_LABEL,
-          topDeniedOrigins: null,
-        },
-      };
-      return json(emptyPayload, 200);
-    }
+    if (!workspace) return json(emptyKeyResponse(), 200);
 
     const keys = await prisma.apiKey.findMany({
       where: { projectId: workspace.projectId },
@@ -114,7 +115,7 @@ export async function GET(req: NextRequest) {
   } catch (error: unknown) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
     console.error("[settings/api-keys] load failed", error);
-    return json({ ok: false, error: "SERVER_ERROR" }, 500);
+    return json(emptyKeyResponse(), 200);
   }
 }
 

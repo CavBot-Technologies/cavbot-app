@@ -21,6 +21,18 @@ function json<T>(payload: T, init?: number | ResponseInit) {
   });
 }
 
+function defaultUsageResponse() {
+  return {
+    ok: true,
+    usage: {
+      verifiedToday: null,
+      deniedToday: null,
+      rateLimit: DEFAULT_RATE_LIMIT_LABEL,
+      topDeniedOrigins: null,
+    },
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await requireSettingsOwnerSession(req);
@@ -29,20 +41,7 @@ export async function GET(req: NextRequest) {
       accountId: session.accountId,
       requestedSiteId: rawSiteId || null,
     });
-    if (!workspace) {
-      return json(
-        {
-          ok: true,
-          usage: {
-            verifiedToday: null,
-            deniedToday: null,
-            rateLimit: DEFAULT_RATE_LIMIT_LABEL,
-            topDeniedOrigins: null,
-          },
-        },
-        200
-      );
-    }
+    if (!workspace) return json(defaultUsageResponse(), 200);
 
     const siteRecord = workspace.activeSite;
 
@@ -68,6 +67,6 @@ export async function GET(req: NextRequest) {
   } catch (error: unknown) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
     console.error("[settings/api-keys/usage] load failed", error);
-    return json({ ok: false, error: "SERVER_ERROR" }, 500);
+    return json(defaultUsageResponse(), 200);
   }
 }
