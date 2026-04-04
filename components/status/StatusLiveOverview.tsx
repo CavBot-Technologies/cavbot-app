@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import LocalTimestamp from "@/components/status/LocalTimestamp";
 import { useSystemStatus } from "@/lib/hooks/useSystemStatus";
 import { STATUS_UI_MAP } from "@/lib/status/ui";
@@ -57,33 +58,7 @@ export default function StatusLiveOverview({
           <div className="status-heroBadgeRight">
             <div className="status-heroBadge" aria-label="CavBot">
               <div className={`cb-badge cb-badge-inline ${badgeToneClass}`} aria-hidden="true">
-                <div className="cavbot-dm-avatar">
-                  <div className="cavbot-dm-avatar-core">
-                    <div className="cavbot-dm-face">
-                      <div className="cavbot-eyes-row">
-                        <div className="cavbot-eye">
-                          <div className="cavbot-eye-inner">
-                            <div className="cavbot-eye-track">
-                              <div className="cavbot-eye-pupil"></div>
-                            </div>
-                          </div>
-                          <div className="cavbot-eye-glow"></div>
-                          <div className="cavbot-blink"></div>
-                        </div>
-
-                        <div className="cavbot-eye">
-                          <div className="cavbot-eye-inner">
-                            <div className="cavbot-eye-track">
-                              <div className="cavbot-eye-pupil"></div>
-                            </div>
-                          </div>
-                          <div className="cavbot-eye-glow"></div>
-                          <div className="cavbot-blink"></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <CdnBadgeEyes />
               </div>
             </div>
           </div>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 
 export default function ConfirmEmailRecoveryPage() {
   return (
@@ -125,29 +126,7 @@ function ConfirmEmailRecoveryPageInner() {
                     aria-hidden="false"
                   >
                     <div className="cavbot-badge-frame">
-                      <div className="cavbot-dm-avatar" data-cavbot-head="dm">
-                        <div className="cavbot-dm-avatar-core">
-                          <div className="cavbot-dm-face">
-                            <div className="cavbot-eyes-row">
-                              <div className="cavbot-eye">
-                                <div className="cavbot-eye-inner">
-                                  <div className="cavbot-eye-pupil"></div>
-                                </div>
-                                <div className="cavbot-eye-glow"></div>
-                                <div className="cavbot-blink"></div>
-                              </div>
-
-                              <div className="cavbot-eye">
-                                <div className="cavbot-eye-inner">
-                                  <div className="cavbot-eye-pupil"></div>
-                                </div>
-                                <div className="cavbot-eye-glow"></div>
-                                <div className="cavbot-blink"></div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                      <CdnBadgeEyes />
                     </div>
                   </div>
 

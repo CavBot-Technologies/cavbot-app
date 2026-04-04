@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import StatusShell from "@/components/status/StatusShell";
 import { getIncidentDetail, getStatusTimeline } from "@/lib/status/service";
 import { ensureStatusSnapshotFresh } from "@/lib/status/checker";
@@ -199,33 +200,7 @@ export default async function IncidentDetailPage({ params }: Params) {
           <div className="status-history-badge">
             <div className={`cb-badge cb-badge-inline ${badgeToneClass}`} aria-hidden="true">
               <div className="cavbot-badge-frame">
-                <div className="cavbot-dm-avatar" data-cavbot-head="dm">
-                  <div className="cavbot-dm-avatar-core">
-                    <div className="cavbot-dm-face">
-                      <div className="cavbot-eyes-row">
-                        <div className="cavbot-eye">
-                          <div className="cavbot-eye-inner">
-                            <div className="cavbot-eye-track">
-                              <div className="cavbot-eye-pupil"></div>
-                            </div>
-                          </div>
-                          <div className="cavbot-eye-glow"></div>
-                          <div className="cavbot-blink"></div>
-                        </div>
-
-                        <div className="cavbot-eye">
-                          <div className="cavbot-eye-inner">
-                            <div className="cavbot-eye-track">
-                              <div className="cavbot-eye-pupil"></div>
-                            </div>
-                          </div>
-                          <div className="cavbot-eye-glow"></div>
-                          <div className="cavbot-blink"></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <CdnBadgeEyes />
               </div>
             </div>
           </div>

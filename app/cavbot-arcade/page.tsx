@@ -1306,7 +1306,7 @@ const ArcadePage = () => {
           <header className="arcade-header arcade-header--avatar">
             <div className="arcade-header-badge">
               <div className={`cb-badge cb-badge-inline ${getBadgeToneClass(profileTone)}`} aria-hidden="true">
-                <CdnBadgeEyes trackingMode="eyeOnly" />
+                <CdnBadgeEyes />
               </div>
             </div>
             <button

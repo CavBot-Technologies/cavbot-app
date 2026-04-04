@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import StatusShell from "@/components/status/StatusShell";
 import { getStatusHistoryMonth } from "@/lib/status/service";
 import {
@@ -63,33 +64,7 @@ export default async function StatusHistoryPage({ searchParams }: PageProps) {
         <div className="status-history-badge" aria-hidden="true">
           <div className={`cb-badge cb-badge-inline ${badgeToneClass}`} aria-hidden="true">
             <div className="cavbot-badge-frame">
-              <div className="cavbot-dm-avatar" data-cavbot-head="dm">
-                <div className="cavbot-dm-avatar-core">
-                  <div className="cavbot-dm-face">
-                    <div className="cavbot-eyes-row">
-                      <div className="cavbot-eye">
-                        <div className="cavbot-eye-inner">
-                          <div className="cavbot-eye-track">
-                            <div className="cavbot-eye-pupil"></div>
-                          </div>
-                        </div>
-                        <div className="cavbot-eye-glow"></div>
-                        <div className="cavbot-blink"></div>
-                      </div>
-
-                      <div className="cavbot-eye">
-                        <div className="cavbot-eye-inner">
-                          <div className="cavbot-eye-track">
-                            <div className="cavbot-eye-pupil"></div>
-                          </div>
-                        </div>
-                        <div className="cavbot-eye-glow"></div>
-                        <div className="cavbot-blink"></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <CdnBadgeEyes />
             </div>
           </div>
         </div>

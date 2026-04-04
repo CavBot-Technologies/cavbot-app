@@ -10,6 +10,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import { LockIcon } from "@/components/LockIcon";
 import { getSession } from "@/lib/apiAuth";
 import { findPublicProfileUserByUsername, getAuthPool } from "@/lib/authDb";
@@ -705,63 +706,13 @@ export default async function PublicCavbotProfilePage({
           {isCavbotProfile ? (
             <div className="pp-topbarRight pp-topbarRightLink" aria-label="CavBot badge">
               <div className="cb-badge cb-badge-inline" aria-hidden="true">
-                <div className="cavbot-dm-avatar">
-                  <div className="cavbot-dm-avatar-core">
-                    <div className="cavbot-dm-face">
-                      <div className="cavbot-eyes-row">
-                        <div className="cavbot-eye">
-                          <div className="cavbot-eye-inner">
-                            <div className="cavbot-eye-track">
-                              <div className="cavbot-eye-pupil"></div>
-                            </div>
-                          </div>
-                          <div className="cavbot-eye-glow"></div>
-                          <div className="cavbot-blink"></div>
-                        </div>
-                        <div className="cavbot-eye">
-                          <div className="cavbot-eye-inner">
-                            <div className="cavbot-eye-track">
-                              <div className="cavbot-eye-pupil"></div>
-                            </div>
-                          </div>
-                          <div className="cavbot-eye-glow"></div>
-                          <div className="cavbot-blink"></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <CdnBadgeEyes />
               </div>
             </div>
           ) : (
             <div className="pp-topbarRight" aria-label="CavBot badge">
               <div className="cb-badge cb-badge-inline" aria-hidden="true">
-                <div className="cavbot-dm-avatar">
-                  <div className="cavbot-dm-avatar-core">
-                    <div className="cavbot-dm-face">
-                      <div className="cavbot-eyes-row">
-                        <div className="cavbot-eye">
-                          <div className="cavbot-eye-inner">
-                            <div className="cavbot-eye-track">
-                              <div className="cavbot-eye-pupil"></div>
-                            </div>
-                          </div>
-                          <div className="cavbot-eye-glow"></div>
-                          <div className="cavbot-blink"></div>
-                        </div>
-                        <div className="cavbot-eye">
-                          <div className="cavbot-eye-inner">
-                            <div className="cavbot-eye-track">
-                              <div className="cavbot-eye-pupil"></div>
-                            </div>
-                          </div>
-                          <div className="cavbot-eye-glow"></div>
-                          <div className="cavbot-blink"></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <CdnBadgeEyes />
               </div>
             </div>
           )}

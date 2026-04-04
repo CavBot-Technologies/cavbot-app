@@ -735,19 +735,6 @@ a:focus{
   gap: 6px;
 }
 
-.cb-topbar .cb-account-caret{
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.78;
-  transition: transform 160ms ease, opacity 160ms ease;
-}
-
-.cb-topbar .cb-account-caret.is-open{
-  transform: rotate(90deg);
-  opacity: 1;
-}
-
 .cb-menu-btn{
   width:40px;
   height:40px;
@@ -988,6 +975,54 @@ a:focus{
   .cb-controls-row::-webkit-scrollbar{ display:none; }
 }
 
+@media (max-width: 640px){
+  .cb-topbar{
+    gap: 8px;
+    padding: calc(10px + var(--safe-top)) 12px 10px;
+  }
+
+  .cb-topbar-left{
+    gap: 8px;
+  }
+
+  .cb-topbar .cb-controls-row{
+    gap: 6px;
+  }
+
+  .cb-topbar .cb-icon-btn-top,
+  .cb-topbar .cb-account{
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+  }
+
+  .cb-topbar .cb-account-chip{
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
+    font-size: 9px;
+  }
+
+  .cb-topbar .cb-account-chip svg{
+    width: 16px;
+    height: 16px;
+  }
+
+  .cb-topbar .cb-icon-btn-top :is(svg, img){
+    width: 18px;
+    height: 18px;
+  }
+
+  .cb-topbar .cb-notif-bubble{
+    top: -3px;
+    right: -3px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 5px;
+    font-size: 9px;
+  }
+}
+
 /* ==========================
   GEOMETRY (Global)
   Unify controls and surfaces into grounded rounded-rects:
@@ -1214,8 +1249,6 @@ html body :is(
   color: var(--chip-ink);
   display:block;
 }
-
-.cb-account-caret{ opacity:0.65; }
 
 /* ==========================
   NOTIFICATIONS (bubble)

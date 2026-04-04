@@ -1957,7 +1957,7 @@ function CavPadModalShell({
           <div className="cb-cavpad-modal-footer-badge" aria-hidden="true">
             <div className="cb-badge-left">
               <div className="cb-badge cb-badge-inline">
-                <CdnBadgeEyes trackingMode="eyeOnly" />
+                <CdnBadgeEyes />
               </div>
             </div>
           </div>
@@ -6161,7 +6161,7 @@ export function CavPadPanel({
                           : ""
                     }`}
                   >
-                    <CdnBadgeEyes trackingMode="eyeOnly" />
+                    <CdnBadgeEyes />
                   </div>
                 </div>
               </div>

@@ -6,6 +6,7 @@ import "./billing-failed.css";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 
 type Phase = "processing" | "failed";
 
@@ -146,26 +147,7 @@ export default function BillingFailedPage({
         ].join(" ")}
       >
         <div className="cavbot-badge-frame">
-          <div className="cavbot-dm-avatar">
-            <div className="cavbot-dm-avatar-core">
-              <div className="cavbot-dm-face">
-                <div className="cavbot-eyes-row">
-                  <div className="cavbot-eye">
-                    <div className="cavbot-eye-inner">
-                      <div className="cavbot-eye-pupil" />
-                    </div>
-                    <div className="cavbot-eye-glow" />
-                  </div>
-                  <div className="cavbot-eye">
-                    <div className="cavbot-eye-inner">
-                      <div className="cavbot-eye-pupil" />
-                    </div>
-                    <div className="cavbot-eye-glow" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <CdnBadgeEyes />
         </div>
 
         <br />

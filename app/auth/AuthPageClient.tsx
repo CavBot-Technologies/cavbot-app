@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { isLoginUsername, isReservedUsername, isValidUsername, normalizeUsername } from "@/lib/username";
 import { PasswordVisibilityIcon } from "@/components/icons/PasswordVisibilityIcon";
 import { CavBotVerifyModal } from "@/components/CavBotVerifyModal";
+import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 
 type Mode = "signup" | "login";
 type VerifyActionType = "signup" | "login";
@@ -587,29 +588,7 @@ const clearError = useCallback((fieldId: string) => {
                   aria-hidden="false"
                 >
                   <div className="cavbot-badge-frame">
-                    <div className="cavbot-dm-avatar" data-cavbot-head="dm">
-                      <div className="cavbot-dm-avatar-core">
-                        <div className="cavbot-dm-face">
-                          <div className="cavbot-eyes-row">
-                            <div className="cavbot-eye">
-                              <div className="cavbot-eye-inner">
-                                <div className="cavbot-eye-pupil"></div>
-                              </div>
-                              <div className="cavbot-eye-glow"></div>
-                              <div className="cavbot-blink"></div>
-                            </div>
-
-                            <div className="cavbot-eye">
-                              <div className="cavbot-eye-inner">
-                                <div className="cavbot-eye-pupil"></div>
-                              </div>
-                              <div className="cavbot-eye-glow"></div>
-                              <div className="cavbot-blink"></div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <CdnBadgeEyes />
                   </div>
                 </div>
 

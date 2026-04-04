@@ -4,6 +4,7 @@
 import Link from "next/link";
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import "./accept-invite.css";
 
 type Tone = "good" | "watch" | "bad";
@@ -155,29 +156,7 @@ function AcceptInvitePageInner() {
               {/* CavBot badge snippet (SAME STRUCTURE AS AUTH) */}
               <div className="invite-badge cb-badge cb-badge-inline" aria-hidden="false">
                 <div className="cavbot-badge-frame">
-                  <div className="cavbot-dm-avatar" data-cavbot-head="dm">
-                    <div className="cavbot-dm-avatar-core">
-                      <div className="cavbot-dm-face">
-                        <div className="cavbot-eyes-row">
-                          <div className="cavbot-eye">
-                            <div className="cavbot-eye-inner">
-                              <div className="cavbot-eye-pupil"></div>
-                            </div>
-                            <div className="cavbot-eye-glow"></div>
-                            <div className="cavbot-blink"></div>
-                          </div>
-
-                          <div className="cavbot-eye">
-                            <div className="cavbot-eye-inner">
-                              <div className="cavbot-eye-pupil"></div>
-                            </div>
-                            <div className="cavbot-eye-glow"></div>
-                            <div className="cavbot-blink"></div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <CdnBadgeEyes />
                 </div>
               </div>
 

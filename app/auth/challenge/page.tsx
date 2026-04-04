@@ -1,5 +1,6 @@
 // app/auth/challenge/page.tsx
 import Link from "next/link";
+import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import "./challenge.css";
 
 
@@ -40,30 +41,7 @@ export default async function ChallengePage({ searchParams }: PageProps) {
             <div className="invite-brand">
               <div className="invite-badge cb-badge cb-badge-inline" aria-hidden="false">
                 <div className="cavbot-badge-frame">
-                  <div className="cavbot-dm-avatar" data-cavbot-head="dm">
-                    <div className="cavbot-dm-avatar-core">
-                      <div className="cavbot-dm-face">
-                        <div className="cavbot-eyes-row">
-                          <div className="cavbot-eye">
-                            <div className="cavbot-eye-inner">
-                              <div className="cavbot-eye-pupil"></div>
-                            </div>
-                            <div className="cavbot-eye-glow"></div>
-                            <div className="cavbot-blink"></div>
-                          </div>
-
-
-                          <div className="cavbot-eye">
-                            <div className="cavbot-eye-inner">
-                              <div className="cavbot-eye-pupil"></div>
-                            </div>
-                            <div className="cavbot-eye-glow"></div>
-                            <div className="cavbot-blink"></div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <CdnBadgeEyes />
                 </div>
               </div>
 
