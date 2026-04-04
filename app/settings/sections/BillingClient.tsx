@@ -314,7 +314,6 @@ function DownloadIcon() {
 
 const pk = String(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "").trim();
 const stripePromise: Promise<Stripe | null> | null = pk ? loadStripe(pk) : null;
-const stripeUiAvailable = Boolean(pk && stripePromise);
 
 
 function usePrettyNull(v: string | null | undefined, fallback: string) {
@@ -1175,65 +1174,50 @@ function BillingClientInner() {
 
 
           <div className="sx-cardDetailsSpan">
-            {stripeUiAvailable ? (
-              <Elements
-                stripe={stripePromise}
-                options={{
-                  appearance: {
-                    theme: "night",
-                    variables: {
-                      colorPrimary: "#b9c85a",
-                      colorText: "rgba(234,240,255,0.92)",
-                      colorBackground: "rgba(0,0,0,0.0)",
-                      colorDanger: "rgba(255,120,120,1)",
-                      fontFamily: "system-ui, -apple-system, Segoe UI, Inter, Arial",
-                      borderRadius: "14px",
-                    },
+            <Elements
+              stripe={stripePromise}
+              options={{
+                appearance: {
+                  theme: "night",
+                  variables: {
+                    colorPrimary: "#b9c85a",
+                    colorText: "rgba(234,240,255,0.92)",
+                    colorBackground: "rgba(0,0,0,0.0)",
+                    colorDanger: "rgba(255,120,120,1)",
+                    fontFamily: "system-ui, -apple-system, Segoe UI, Inter, Arial",
+                    borderRadius: "14px",
                   },
+                },
+              }}
+            >
+              <CardDetailsForm
+                busy={busy}
+                onBusy={setBusy}
+                onToast={pushToast}
+                onPmUpdated={(nextPm) => {
+                  setPm(nextPm);
+                  if (nextPm?.billingName) setCardName(String(nextPm.billingName));
                 }}
-              >
-                <CardDetailsForm
-                  busy={busy}
-                  onBusy={setBusy}
-                  onToast={pushToast}
-                  onPmUpdated={(nextPm) => {
-                    setPm(nextPm);
-                    if (nextPm?.billingName) setCardName(String(nextPm.billingName));
-                  }}
-                  onSaved={async () => {
-                    await refresh();
-                    await refreshInvoices();
-                  }}
-                  cardName={cardName}
-                  setCardName={setCardName}
-                  billing1={billing1}
-                  setBilling1={setBilling1}
-                  billing2={billing2}
-                  setBilling2={setBilling2}
-                  billingCity={billingCity}
-                  setBillingCity={setBillingCity}
-                  billingRegion={billingRegion}
-                  setBillingRegion={setBillingRegion}
-                  billingPostal={billingPostal}
-                  setBillingPostal={setBillingPostal}
-                  billingCountry={billingCountry}
-                  setBillingCountry={setBillingCountry}
-                />
-              </Elements>
-            ) : (
-              <div className="sx-cardDetails" aria-label="Card details unavailable">
-                <div className="sx-cardDetailsHead">
-                  <div>
-                    <div className="sx-kicker">Card details</div>
-                    <div className="sx-cardSub">Payment method setup is temporarily unavailable.</div>
-                  </div>
-                </div>
-                <div className="sx-divider sx-billDivider" aria-hidden="true" />
-                <div className="sx-billMini">
-                  Stripe setup is not available in this environment yet. Billing status, plan details, and invoices remain fully accessible.
-                </div>
-              </div>
-            )}
+                onSaved={async () => {
+                  await refresh();
+                  await refreshInvoices();
+                }}
+                cardName={cardName}
+                setCardName={setCardName}
+                billing1={billing1}
+                setBilling1={setBilling1}
+                billing2={billing2}
+                setBilling2={setBilling2}
+                billingCity={billingCity}
+                setBillingCity={setBillingCity}
+                billingRegion={billingRegion}
+                setBillingRegion={setBillingRegion}
+                billingPostal={billingPostal}
+                setBillingPostal={setBillingPostal}
+                billingCountry={billingCountry}
+                setBillingCountry={setBillingCountry}
+              />
+            </Elements>
           </div>
         </div>
 
