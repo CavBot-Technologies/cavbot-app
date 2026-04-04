@@ -1013,6 +1013,12 @@ a:focus{
     height: 18px;
   }
 
+  .cb-topbar .cb-topbar-cavai-icon{
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+  }
+
   .cb-topbar .cb-notif-bubble{
     top: -3px;
     right: -3px;

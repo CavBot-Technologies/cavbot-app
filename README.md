@@ -12,6 +12,27 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Safe localhost workflow
+
+`npm run dev` now runs in safe localhost mode by default.
+
+- App origins are forced to `http://localhost:3000` for the dev server.
+- Live integrations such as Stripe, Resend, Cloudflare, and R2 are stripped in dev unless you explicitly opt in.
+- Remote databases are blocked by default. If your env still points at a hosted Postgres instance, dev will refuse to boot.
+
+Recommended setup:
+
+1. Copy `.env.development.local.example` to `.env.development.local`.
+2. Set `CAVBOT_DEV_DATABASE_URL` and `CAVBOT_DEV_DIRECT_URL` to a local Postgres database.
+3. Run `npm run dev`.
+
+If you intentionally want to use remote infrastructure in dev, opt in explicitly in `.env.development.local`:
+
+- `CAVBOT_ALLOW_REMOTE_DEV_DB=1`
+- `CAVBOT_ALLOW_LIVE_INTEGRATIONS_IN_DEV=1`
+
+That opt-in is manual on purpose so production services are not touched by accident.
+
 ## Deploy on Cloudflare
 
 Primary deploy target is Cloudflare via OpenNext.

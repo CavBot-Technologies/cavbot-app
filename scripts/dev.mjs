@@ -8,6 +8,7 @@
 // for the lifetime of the dev server.
 
 import { spawn } from "node:child_process";
+import { parse as parseDotenv } from "dotenv";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -39,7 +40,201 @@ function checkNodeVersion() {
 
 checkNodeVersion();
 
+const LOCALHOST_FALLBACK_ORIGIN = "http://localhost:3000";
+const LOCAL_DB_ENV_KEYS = ["CAVBOT_DEV_DATABASE_URL", "CAVBOT_DEV_DIRECT_URL"];
+const ALWAYS_STRIPPED_INTEGRATION_ENV_KEYS = [
+  "RESEND_API_KEY",
+  "RESEND_SIGNUP_API_KEY",
+  "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_ACCOUNT_ID",
+  "CLOUDFLARE_R2_ENDPOINT",
+  "CAVCLOUD_R2_ENDPOINT",
+  "CAVCLOUD_R2_ACCESS_KEY_ID",
+  "CAVCLOUD_R2_SECRET_ACCESS_KEY",
+  "CAVCLOUD_R2_BUCKET",
+  "CAVCLOUD_R2_REGION",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN",
+];
+
+function readEnvFile(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return {};
+    return parseDotenv(fs.readFileSync(filePath));
+  } catch {
+    return {};
+  }
+}
+
+function loadDevEnvSnapshot(rootDir) {
+  const merged = {};
+  const orderedFiles = [
+    ".env",
+    ".env.development",
+    ".env.local",
+    ".env.development.local",
+  ];
+
+  for (const relPath of orderedFiles) {
+    Object.assign(merged, readEnvFile(path.join(rootDir, relPath)));
+  }
+
+  return {
+    ...merged,
+    ...process.env,
+  };
+}
+
+function isTruthyFlag(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function normalizeOrigin(value) {
+  const raw = String(value || "").trim() || LOCALHOST_FALLBACK_ORIGIN;
+  try {
+    const url = new URL(raw);
+    return url.origin;
+  } catch {
+    return LOCALHOST_FALLBACK_ORIGIN;
+  }
+}
+
+function getUrlHostname(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    return new URL(raw).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isLocalHostname(hostname) {
+  if (!hostname) return false;
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname.endsWith(".local");
+}
+
+function isRemoteDatabaseUrl(value) {
+  const hostname = getUrlHostname(value);
+  if (!hostname) return false;
+  return !isLocalHostname(hostname);
+}
+
+function describeUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "(missing)";
+  try {
+    const url = new URL(raw);
+    const dbName = url.pathname.replace(/^\/+/, "") || "(no-db)";
+    return `${url.protocol}//${url.hostname}${url.port ? `:${url.port}` : ""}/${dbName}`;
+  } catch {
+    return raw;
+  }
+}
+
+function isStripeTestSecretKey(value) {
+  const raw = String(value || "").trim();
+  return raw.startsWith("sk_test_") || raw.startsWith("rk_test_");
+}
+
+function isStripeTestPublishableKey(value) {
+  const raw = String(value || "").trim();
+  return raw.startsWith("pk_test_");
+}
+
+function assertSafeLocalDatabase(env) {
+  const allowRemoteDb = isTruthyFlag(env.CAVBOT_ALLOW_REMOTE_DEV_DB);
+  if (allowRemoteDb) return;
+
+  const databaseUrl = String(env.DATABASE_URL || "").trim();
+  const directUrl = String(env.DIRECT_URL || "").trim();
+  const remoteUrls = [
+    ["DATABASE_URL", databaseUrl],
+    ["DIRECT_URL", directUrl],
+  ].filter(([, value]) => isRemoteDatabaseUrl(value));
+
+  if (!remoteUrls.length) return;
+
+  const details = remoteUrls.map(([key, value]) => `  - ${key}: ${describeUrl(value)}`).join("\n");
+  const msg =
+    "\n[cavbot dev] Refusing to start with a remote database in safe localhost mode.\n" +
+    `${details}\n\n` +
+    "Set a local Postgres URL in `.env.development.local` using `CAVBOT_DEV_DATABASE_URL` " +
+    "(and optionally `CAVBOT_DEV_DIRECT_URL`) or explicitly opt in with `CAVBOT_ALLOW_REMOTE_DEV_DB=1`.\n";
+  console.error(msg);
+  process.exit(1);
+}
+
+function applySafeLocalhostEnv(baseEnv) {
+  const devOrigin = normalizeOrigin(baseEnv.CAVBOT_DEV_ORIGIN);
+  const env = {
+    ...baseEnv,
+    CAVBOT_DEV_ORIGIN: devOrigin,
+    CAVBOT_APP_ORIGIN: devOrigin,
+    APP_URL: devOrigin,
+    NEXT_PUBLIC_APP_ORIGIN: devOrigin,
+    NEXT_PUBLIC_APP_URL: devOrigin,
+    AUTH_REDIRECT_BASE_URL: devOrigin,
+    NEXT_PUBLIC_WIDGET_CONFIG_ORIGIN: devOrigin,
+    NEXT_PUBLIC_EMBED_API_URL: devOrigin,
+    NEXT_PUBLIC_CAVBOT_LIVE_MODE: "0",
+    NEXT_PUBLIC_CAVBOT_DISABLE_EVENTS: "1",
+    CAVBOT_DISABLE_EVENTS: "1",
+  };
+
+  const devDatabaseUrl = String(baseEnv.CAVBOT_DEV_DATABASE_URL || "").trim();
+  const devDirectUrl = String(baseEnv.CAVBOT_DEV_DIRECT_URL || "").trim();
+  if (devDatabaseUrl) env.DATABASE_URL = devDatabaseUrl;
+  if (devDirectUrl) {
+    env.DIRECT_URL = devDirectUrl;
+  } else if (devDatabaseUrl) {
+    env.DIRECT_URL = devDatabaseUrl;
+  }
+
+  assertSafeLocalDatabase(env);
+
+  const allowLiveIntegrations = isTruthyFlag(baseEnv.CAVBOT_ALLOW_LIVE_INTEGRATIONS_IN_DEV);
+  const strippedKeys = [];
+  if (!allowLiveIntegrations) {
+    for (const key of ALWAYS_STRIPPED_INTEGRATION_ENV_KEYS) {
+      if (!String(env[key] || "").trim()) continue;
+      env[key] = "";
+      strippedKeys.push(key);
+    }
+
+    const hasStripeTestKeys =
+      isStripeTestSecretKey(baseEnv.STRIPE_SECRET_KEY)
+      || isStripeTestPublishableKey(baseEnv.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+    if (!hasStripeTestKeys) {
+      for (const key of ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY"]) {
+        if (!String(env[key] || "").trim()) continue;
+        env[key] = "";
+        strippedKeys.push(key);
+      }
+    }
+  }
+
+  const localDbSource =
+    LOCAL_DB_ENV_KEYS.find((key) => String(baseEnv[key] || "").trim())
+    || (String(env.DATABASE_URL || "").trim() ? "DATABASE_URL" : "");
+
+  const modeSummary = [
+    `[cavbot dev] Safe localhost mode enabled.`,
+    `[cavbot dev] Origin: ${devOrigin}`,
+    `[cavbot dev] Database source: ${localDbSource || "unset"}`,
+  ];
+  if (strippedKeys.length) {
+    modeSummary.push(`[cavbot dev] Stripped live integrations: ${strippedKeys.join(", ")}`);
+  }
+  console.log(`\n${modeSummary.join("\n")}\n`);
+
+  return env;
+}
+
 const root = process.cwd();
+const devEnvSnapshot = loadDevEnvSnapshot(root);
 const nextDir = path.join(root, ".next");
 const serverDir = path.join(root, ".next", "server");
 const chunksDir = path.join(serverDir, "chunks");
@@ -139,11 +334,11 @@ function nextCmd() {
 }
 
 const { cmd, args } = nextCmd();
-const childEnv = {
-  ...process.env,
+const childEnv = applySafeLocalhostEnv({
+  ...devEnvSnapshot,
   // Keep local dev overlay focused on app errors by skipping Next telemetry/version staleness checks.
-  NEXT_TELEMETRY_DISABLED: process.env.NEXT_TELEMETRY_DISABLED || "1",
-};
+  NEXT_TELEMETRY_DISABLED: devEnvSnapshot.NEXT_TELEMETRY_DISABLED || "1",
+});
 const child = spawn(cmd, args, { stdio: "inherit", env: childEnv });
 
 function shutdown(code) {
