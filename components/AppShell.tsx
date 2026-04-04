@@ -2468,6 +2468,7 @@ export default function AppShell({
                   context={aiRouteContext}
                   preload
                   triggerClassName="cb-icon-btn-top"
+                  iconClassName="cb-topbar-cavai-icon"
                   triggerAriaLabel="Open CavAi Center"
                   iconOnly
                 />
