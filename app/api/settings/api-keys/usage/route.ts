@@ -3,7 +3,7 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
-import { readWorkspace } from "@/lib/workspaceStore.server";
+import { resolveApiKeyWorkspace } from "@/lib/settings/apiKeyWorkspace.server";
 import { DEFAULT_RATE_LIMIT_LABEL, fetchUsageForWorkspace } from "@/lib/apiKeyUsage.server";
 
 const NO_STORE_HEADERS: Record<string, string> = {
@@ -24,12 +24,27 @@ function json<T>(payload: T, init?: number | ResponseInit) {
 export async function GET(req: NextRequest) {
   try {
     const session = await requireSettingsOwnerSession(req);
-
-    const workspace = await readWorkspace({ accountId: session.accountId });
-    const projectId = workspace.projectId;
     const rawSiteId = req.nextUrl.searchParams.get("siteId")?.trim();
-    const targetSiteId = rawSiteId && rawSiteId.length ? rawSiteId : workspace.activeSiteId || null;
-    const siteRecord = targetSiteId ? workspace.sites.find((s) => s.id === targetSiteId) ?? null : null;
+    const workspace = await resolveApiKeyWorkspace({
+      accountId: session.accountId,
+      requestedSiteId: rawSiteId || null,
+    });
+    if (!workspace) {
+      return json(
+        {
+          ok: true,
+          usage: {
+            verifiedToday: null,
+            deniedToday: null,
+            rateLimit: DEFAULT_RATE_LIMIT_LABEL,
+            topDeniedOrigins: null,
+          },
+        },
+        200
+      );
+    }
+
+    const siteRecord = workspace.activeSite;
 
     if (rawSiteId && rawSiteId.length && !siteRecord) {
       return json({ ok: false, error: "SITE_NOT_FOUND" }, 404);
@@ -37,7 +52,7 @@ export async function GET(req: NextRequest) {
 
     const usage =
       (await fetchUsageForWorkspace({
-        projectId,
+        projectId: workspace.projectId,
         accountId: session.accountId!,
         siteId: siteRecord?.id ?? null,
         siteOrigin: siteRecord?.origin ?? null,
@@ -52,6 +67,7 @@ export async function GET(req: NextRequest) {
     return json({ ok: true, usage }, 200);
   } catch (error: unknown) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
+    console.error("[settings/api-keys/usage] load failed", error);
     return json({ ok: false, error: "SERVER_ERROR" }, 500);
   }
 }

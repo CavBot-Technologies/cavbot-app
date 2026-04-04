@@ -5,7 +5,7 @@ import { ApiKeyType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
-import { readWorkspace } from "@/lib/workspaceStore.server";
+import { resolveApiKeyWorkspace } from "@/lib/settings/apiKeyWorkspace.server";
 import { buildApiKeyInsertData, serializeApiKey } from "@/lib/apiKeys.server";
 import { DEFAULT_RATE_LIMIT_LABEL, KeyUsagePayload, fetchUsageForWorkspace } from "@/lib/apiKeyUsage.server";
 import { auditLogWrite } from "@/lib/audit";
@@ -54,13 +54,26 @@ function toType(raw: unknown): ApiKeyType {
 export async function GET(req: NextRequest) {
   try {
     const session = await requireSettingsOwnerSession(req);
-
-    const workspace = await readWorkspace({ accountId: session.accountId });
-    const projectId = workspace.projectId;
-    const activeSiteId = workspace.activeSiteId || null;
+    const workspace = await resolveApiKeyWorkspace({ accountId: session.accountId });
+    if (!workspace) {
+      const emptyPayload: KeyResponse = {
+        ok: true,
+        publishableKeys: [],
+        secretKeys: [],
+        allowedOrigins: [],
+        site: null,
+        usage: {
+          verifiedToday: null,
+          deniedToday: null,
+          rateLimit: DEFAULT_RATE_LIMIT_LABEL,
+          topDeniedOrigins: null,
+        },
+      };
+      return json(emptyPayload, 200);
+    }
 
     const keys = await prisma.apiKey.findMany({
-      where: { projectId },
+      where: { projectId: workspace.projectId },
       orderBy: { createdAt: "desc" },
     });
 
@@ -71,24 +84,12 @@ export async function GET(req: NextRequest) {
       .filter((key) => key.type === "SECRET")
       .map((key) => serializeApiKey(key));
 
-    const siteRecord = workspace.sites.find((s) => s.id === activeSiteId) ?? null;
-
-    const allowedRows = activeSiteId
-      ? await prisma.siteAllowedOrigin.findMany({
-          where: { siteId: activeSiteId },
-          orderBy: { createdAt: "asc" },
-        })
-      : [];
-
-    const originSet = new Set<string>();
-    if (siteRecord) originSet.add(siteRecord.origin);
-    for (const row of allowedRows) originSet.add(row.origin);
-
-    const allowedOrigins = Array.from(originSet);
+    const siteRecord = workspace.activeSite;
+    const allowedOrigins = workspace.allowedOrigins;
 
     const usage =
       (await fetchUsageForWorkspace({
-        projectId,
+        projectId: workspace.projectId,
         accountId: session.accountId!,
         siteId: siteRecord?.id ?? null,
         siteOrigin: siteRecord?.origin ?? null,
@@ -112,6 +113,7 @@ export async function GET(req: NextRequest) {
     return json(payload, 200);
   } catch (error: unknown) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
+    console.error("[settings/api-keys] load failed", error);
     return json({ ok: false, error: "SERVER_ERROR" }, 500);
   }
 }
@@ -119,10 +121,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSettingsOwnerSession(req);
-
-    const workspace = await readWorkspace({ accountId: session.accountId });
-    const projectId = workspace.projectId;
-    const activeSiteId = workspace.activeSiteId || null;
+    const workspace = await resolveApiKeyWorkspace({ accountId: session.accountId });
+    if (!workspace) return json({ ok: false, error: "PROJECT_NOT_FOUND" }, 404);
 
     const body = (await readSanitizedJson(req, null)) as ApiKeyCreateBody | null;
 
@@ -133,20 +133,20 @@ export async function POST(req: NextRequest) {
       const site = await prisma.site.findFirst({
         where: {
           id: bodySiteId,
-          projectId,
+          projectId: workspace.projectId,
           isActive: true,
         },
       });
       if (!site) return json({ ok: false, error: "SITE_NOT_FOUND" }, 404);
       siteId = site.id;
-    } else if (activeSiteId) {
-      siteId = activeSiteId;
+    } else if (workspace.activeSite?.id) {
+      siteId = workspace.activeSite.id;
     }
 
     const insert = buildApiKeyInsertData({
       type,
       accountId: session.accountId!,
-      projectId,
+      projectId: workspace.projectId,
       siteId,
       name: String(body?.name || "").trim() || null,
       scopes: Array.isArray(body?.scopes) ? body.scopes : undefined,
@@ -184,6 +184,7 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
     const message = error instanceof Error ? error.message : String(error);
+    console.error("[settings/api-keys] create failed", error);
     return json({ ok: false, error: "CREATE_KEY_FAILED", message }, 500);
   }
 }
