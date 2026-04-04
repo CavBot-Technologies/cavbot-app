@@ -111,7 +111,7 @@ export default function DashboardToolsControls({
   const icon = useMemo(
     () => (
       <Image
-        src="/icons/app/tools-svgrepo-com.svg"
+        src="/icons/app/tool-svgrepo-com.svg"
         alt=""
         width={16}
         height={16}
