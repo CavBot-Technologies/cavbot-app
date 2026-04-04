@@ -391,8 +391,8 @@ a:focus{
 .cb-sidebar{
   position:sticky;
   top:0;
-  height: calc(100dvh - var(--cb-footer-rail-space));
-  max-height: calc(100dvh - var(--cb-footer-rail-space));
+  height: calc(100dvh - var(--cb-footer-rail-space) + 12px);
+  max-height: calc(100dvh - var(--cb-footer-rail-space) + 12px);
 
   padding: 18px 16px;
   border-right: 1px solid rgba(185,200,90,0.08);
@@ -580,7 +580,7 @@ a:focus{
   flex: 0 0 auto;
   margin-top:auto;
   padding-top: 28px;
-  padding-bottom: 6px;
+  padding-bottom: 0;
   min-height: 164px;
 
   display:flex;
@@ -2281,8 +2281,8 @@ html body :is(
     top:0;
     left:0;
 
-    height: calc(100dvh - var(--cb-footer-rail-space));
-    max-height: calc(100dvh - var(--cb-footer-rail-space));
+    height: calc(100dvh - var(--cb-footer-rail-space) + 12px);
+    max-height: calc(100dvh - var(--cb-footer-rail-space) + 12px);
     width: 86vw;
     max-width: 340px;
 
