@@ -610,8 +610,8 @@ a:focus{
   height:40px;
   border-radius: 12px;
 
-  border: 1px solid var(--border-subtle);
-  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.12));
+  border: 1px solid transparent;
+  background: transparent;
 
   color: rgba(247,251,255,0.92);
   display:grid;
@@ -624,18 +624,18 @@ a:focus{
 
 .cb-icon-btn:hover{
   transform: translateY(-1px);
-  border-color: rgba(185,200,90,0.24);
-  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.14));
+  border-color: transparent;
+  background: transparent;
 }
 
 /* Arcade accent */
 .cb-icon-btn-arcade{
-  border-color: rgba(78,168,255,0.42);
-  background: linear-gradient(180deg, rgba(78,168,255,0.10), rgba(0,0,0,0.16));
+  border-color: transparent;
+  background: transparent;
 }
 .cb-icon-btn-arcade:hover{
-  border-color: rgba(78,168,255,0.62);
-  background: linear-gradient(180deg, rgba(78,168,255,0.16), rgba(0,0,0,0.20));
+  border-color: transparent;
+  background: transparent;
 }
 
 .cb-arcade-icon{

@@ -66,6 +66,7 @@ type AccessRequestRow = {
 type AccessRequestsPayload = {
   ok: boolean;
   requests: AccessRequestRow[];
+  degraded?: boolean;
 };
 
 type ResolvedUser = {
@@ -370,11 +371,11 @@ export default function TeamClient() {
     try {
       const [membersData, requestsData] = await Promise.all([
         api<MembersPayload>("/api/members"),
-        api<AccessRequestsPayload>("/api/workspaces/access-requests?status=PENDING").catch((error) => {
-          const message = String(error instanceof Error ? error.message : "").toUpperCase();
-          if (message.includes("UNAUTHORIZED")) return { ok: false, requests: [] };
-          throw error;
-        }),
+        api<AccessRequestsPayload>("/api/workspaces/access-requests?status=PENDING").catch(() => ({
+          ok: false,
+          degraded: true,
+          requests: [],
+        })),
       ]);
 
       const prev = lastCountsRef.current;
