@@ -580,7 +580,8 @@ a:focus{
   flex: 0 0 auto;
   margin-top:auto;
   padding-top: 28px;
-  padding-bottom: 14px;
+  padding-bottom: 6px;
+  min-height: 164px;
 
   display:flex;
   flex-direction:column;
@@ -1905,7 +1906,7 @@ html body :is(
   UPGRADE CARD (Apple/Google tier CTA)
 ========================== */
 .cb-side-plan{ width:100%; }
-.cb-side-plan{ margin-top: 6px; }
+.cb-side-plan{ margin-top: auto; }
 
 .cb-side-account-wrap{
   width: 100%;
