@@ -636,10 +636,15 @@ a:focus{
   transition: transform 180ms ease, border-color 180ms ease, filter 180ms ease;
 }
 
-.cb-side-tools-trigger:hover,
-.cb-side-tools-trigger[aria-expanded="true"]{
+.cb-side-tools-trigger:hover{
   transform: translateY(-1px);
   border-color: rgba(255,255,255,0.14);
+  filter: brightness(1.03);
+}
+
+.cb-side-tools-trigger[aria-expanded="true"]{
+  transform: translateY(-1px);
+  border-color: rgba(78,168,255,0.40);
   filter: brightness(1.03);
 }
 
@@ -675,6 +680,12 @@ a:focus{
   background: rgba(255,255,255,0.03);
 }
 
+.cb-side-tools-menu .cb-icon-btn,
+.cb-side-tools-menu .cb-icon-btn-arcade{
+  border-color: rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+}
+
 .cb-side-tools-menu .cb-side-tools-item{
   width: 40px;
   height: 40px;
@@ -697,6 +708,14 @@ a:focus{
 .cb-side-tools-menu .cb-icon-btn-arcade:hover{
   border-color: rgba(255,255,255,0.16);
   background: rgba(255,255,255,0.06);
+}
+
+.cb-side-tools-menu .cb-arcade-icon,
+.cb-side-tools-menu .cb-help-icon,
+.cb-side-tools-menu .cb-settings-icon,
+.cb-side-tools-menu .cb-cavpad-icon{
+  width: 24px;
+  height: 24px;
 }
 
 .cb-icon-btn{
