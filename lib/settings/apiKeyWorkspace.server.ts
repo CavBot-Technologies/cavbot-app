@@ -31,7 +31,6 @@ export async function resolveApiKeyWorkspace(args: {
     },
     select: {
       id: true,
-      topSiteId: true,
     },
   });
 
@@ -53,21 +52,23 @@ export async function resolveApiKeyWorkspace(args: {
 
   const requestedSiteId = String(args.requestedSiteId || "").trim();
   const requestedSite = requestedSiteId ? sites.find((site) => site.id === requestedSiteId) ?? null : null;
-  const topSite = project.topSiteId ? sites.find((site) => site.id === project.topSiteId) ?? null : null;
-  const activeSite = requestedSite || topSite || sites[0] || null;
-
-  const allowedRows = activeSite
-    ? await prisma.siteAllowedOrigin.findMany({
-        where: { siteId: activeSite.id },
-        orderBy: { createdAt: "asc" },
-        select: { origin: true },
-      })
-    : [];
+  const activeSite = requestedSite || sites[0] || null;
 
   const originSet = new Set<string>();
   if (activeSite?.origin) originSet.add(activeSite.origin);
-  for (const row of allowedRows) {
-    if (row.origin) originSet.add(row.origin);
+  if (activeSite) {
+    try {
+      const allowedRows = await prisma.siteAllowedOrigin.findMany({
+        where: { siteId: activeSite.id },
+        orderBy: { createdAt: "asc" },
+        select: { origin: true },
+      });
+      for (const row of allowedRows) {
+        if (row.origin) originSet.add(row.origin);
+      }
+    } catch (error) {
+      console.error("[settings/api-keys] allowed origins lookup failed", error);
+    }
   }
 
   return {
