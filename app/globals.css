@@ -585,7 +585,8 @@ a:focus{
 
   display:flex;
   flex-direction:column;
-  gap:16px;
+  justify-content:flex-end;
+  gap:10px;
   align-items:flex-start;
   width:100%;
 }
@@ -603,10 +604,20 @@ a:focus{
   flex-direction:column;
   gap:10px;
   align-items:flex-start;
+  width:100%;
 }
 
 .cb-side-tools-wrap{
   position: relative;
+  width: 40px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  transition: width 180ms ease;
+}
+
+.cb-side-tools-wrap.is-open{
+  width: 100%;
 }
 
 .cb-side-tools-trigger{
@@ -620,6 +631,7 @@ a:focus{
   display: grid;
   place-items: center;
   cursor: pointer;
+  flex: 0 0 40px;
   transition: transform 180ms ease, border-color 180ms ease, filter 180ms ease;
 }
 
@@ -636,14 +648,16 @@ a:focus{
 }
 
 .cb-side-tools-menu{
-  position: absolute;
-  left: 0;
-  bottom: calc(100% + 10px);
+  position: static;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   padding: 8px;
-  border-radius: 16px;
+  min-height: 40px;
+  border-radius: 10px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(3, 6, 22, 0.94);
   backdrop-filter: blur(12px);
@@ -653,11 +667,19 @@ a:focus{
 }
 
 .cb-side-tools-item{
-  width: 40px;
+  width: 100%;
   height: 40px;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(255,255,255,0.03);
+}
+
+.cb-side-tools-menu .cb-side-tools-item{
+  width: 100%;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
 }
 
 .cb-side-tools-menu .cb-icon-btn:hover{
@@ -1984,7 +2006,7 @@ html body :is(
   UPGRADE CARD (Apple/Google tier CTA)
 ========================== */
 .cb-side-plan{ width:100%; }
-.cb-side-plan{ margin-top: auto; }
+.cb-side-plan{ margin-top: 0; }
 
 .cb-side-account-wrap{
   width: 100%;

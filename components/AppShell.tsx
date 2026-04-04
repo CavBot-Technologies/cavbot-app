@@ -2223,7 +2223,7 @@ export default function AppShell({
         {/* ===== SIDEBAR FOOTER (Icons + Plan) ===== */}
         <div className="cb-side-bottom" aria-label="Sidebar footer">
           <div className="cb-side-icons" aria-label="Quick tools">
-            <div className="cb-side-tools-wrap" ref={quickToolsWrapRef}>
+            <div className={`cb-side-tools-wrap ${quickToolsOpen ? "is-open" : ""}`} ref={quickToolsWrapRef}>
               <button
                 className="cb-side-tools-trigger"
                 type="button"
