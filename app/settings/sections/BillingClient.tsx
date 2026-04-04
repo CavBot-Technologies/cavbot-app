@@ -314,6 +314,7 @@ function DownloadIcon() {
 
 const pk = String(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "").trim();
 const stripePromise: Promise<Stripe | null> | null = pk ? loadStripe(pk) : null;
+const stripeUiAvailable = Boolean(pk && stripePromise);
 
 
 function usePrettyNull(v: string | null | undefined, fallback: string) {
@@ -589,6 +590,8 @@ function CardDetailsForm(props: {
             <div className="sx-field">
               <label className="sx-label">Name on card</label>
               <input
+                id="billing-card-name"
+                name="billingCardName"
                 className="sx-input"
                 value={props.cardName}
                 onChange={(e) => props.setCardName(e.target.value)}
@@ -631,6 +634,8 @@ function CardDetailsForm(props: {
             <div className="sx-field">
               <label className="sx-label">Billing address</label>
               <input
+                id="billing-address-line1"
+                name="billingAddressLine1"
                 className="sx-input"
                 value={props.billing1}
                 onChange={(e) => props.setBilling1(e.target.value)}
@@ -644,6 +649,8 @@ function CardDetailsForm(props: {
             <div className="sx-field">
               <label className="sx-label">Apt / suite</label>
               <input
+                id="billing-address-line2"
+                name="billingAddressLine2"
                 className="sx-input"
                 value={props.billing2}
                 onChange={(e) => props.setBilling2(e.target.value)}
@@ -658,6 +665,8 @@ function CardDetailsForm(props: {
               <div className="sx-field">
                 <label className="sx-label">City</label>
                 <input
+                  id="billing-city"
+                  name="billingCity"
                   className="sx-input"
                   value={props.billingCity}
                   onChange={(e) => props.setBillingCity(e.target.value)}
@@ -670,6 +679,8 @@ function CardDetailsForm(props: {
               <div className="sx-field">
                 <label className="sx-label">Region</label>
                 <input
+                  id="billing-region"
+                  name="billingRegion"
                   className="sx-input"
                   value={props.billingRegion}
                   onChange={(e) => props.setBillingRegion(e.target.value)}
@@ -685,6 +696,8 @@ function CardDetailsForm(props: {
               <div className="sx-field">
                 <label className="sx-label">Postal</label>
                 <input
+                  id="billing-postal"
+                  name="billingPostal"
                   className="sx-input"
                   value={props.billingPostal}
                   onChange={(e) => props.setBillingPostal(e.target.value)}
@@ -697,6 +710,8 @@ function CardDetailsForm(props: {
               <div className="sx-field">
                 <label className="sx-label">Country</label>
                 <select
+                  id="billing-country"
+                  name="billingCountry"
                   className="sx-select"
                   value={props.billingCountry}
                   onChange={(e) => props.setBillingCountry(e.target.value)}
@@ -1160,50 +1175,65 @@ function BillingClientInner() {
 
 
           <div className="sx-cardDetailsSpan">
-            <Elements
-              stripe={stripePromise}
-              options={{
-                appearance: {
-                  theme: "night",
-                  variables: {
-                    colorPrimary: "#b9c85a",
-                    colorText: "rgba(234,240,255,0.92)",
-                    colorBackground: "rgba(0,0,0,0.0)",
-                    colorDanger: "rgba(255,120,120,1)",
-                    fontFamily: "system-ui, -apple-system, Segoe UI, Inter, Arial",
-                    borderRadius: "14px",
+            {stripeUiAvailable ? (
+              <Elements
+                stripe={stripePromise}
+                options={{
+                  appearance: {
+                    theme: "night",
+                    variables: {
+                      colorPrimary: "#b9c85a",
+                      colorText: "rgba(234,240,255,0.92)",
+                      colorBackground: "rgba(0,0,0,0.0)",
+                      colorDanger: "rgba(255,120,120,1)",
+                      fontFamily: "system-ui, -apple-system, Segoe UI, Inter, Arial",
+                      borderRadius: "14px",
+                    },
                   },
-                },
-              }}
-            >
-              <CardDetailsForm
-                busy={busy}
-                onBusy={setBusy}
-                onToast={pushToast}
-                onPmUpdated={(nextPm) => {
-                  setPm(nextPm);
-                  if (nextPm?.billingName) setCardName(String(nextPm.billingName));
                 }}
-                onSaved={async () => {
-                  await refresh();
-                  await refreshInvoices();
-                }}
-                cardName={cardName}
-                setCardName={setCardName}
-                billing1={billing1}
-                setBilling1={setBilling1}
-                billing2={billing2}
-                setBilling2={setBilling2}
-                billingCity={billingCity}
-                setBillingCity={setBillingCity}
-                billingRegion={billingRegion}
-                setBillingRegion={setBillingRegion}
-                billingPostal={billingPostal}
-                setBillingPostal={setBillingPostal}
-                billingCountry={billingCountry}
-                setBillingCountry={setBillingCountry}
-              />
-            </Elements>
+              >
+                <CardDetailsForm
+                  busy={busy}
+                  onBusy={setBusy}
+                  onToast={pushToast}
+                  onPmUpdated={(nextPm) => {
+                    setPm(nextPm);
+                    if (nextPm?.billingName) setCardName(String(nextPm.billingName));
+                  }}
+                  onSaved={async () => {
+                    await refresh();
+                    await refreshInvoices();
+                  }}
+                  cardName={cardName}
+                  setCardName={setCardName}
+                  billing1={billing1}
+                  setBilling1={setBilling1}
+                  billing2={billing2}
+                  setBilling2={setBilling2}
+                  billingCity={billingCity}
+                  setBillingCity={setBillingCity}
+                  billingRegion={billingRegion}
+                  setBillingRegion={setBillingRegion}
+                  billingPostal={billingPostal}
+                  setBillingPostal={setBillingPostal}
+                  billingCountry={billingCountry}
+                  setBillingCountry={setBillingCountry}
+                />
+              </Elements>
+            ) : (
+              <div className="sx-cardDetails" aria-label="Card details unavailable">
+                <div className="sx-cardDetailsHead">
+                  <div>
+                    <div className="sx-kicker">Card details</div>
+                    <div className="sx-cardSub">Payment method setup is temporarily unavailable.</div>
+                  </div>
+                </div>
+                <div className="sx-divider sx-billDivider" aria-hidden="true" />
+                <div className="sx-billMini">
+                  Stripe setup is not available in this environment yet. Billing status, plan details, and invoices remain fully accessible.
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1350,27 +1380,5 @@ function BillingClientInner() {
 
 
 export default function BillingClient() {
-  if (!pk) {
-    return (
-      <section className="sx-panel" aria-label="Billing settings">
-        <header className="sx-panelHead">
-          <div>
-            <h2 className="sx-h2">Billing</h2>
-            <p className="sx-sub">Plan, subscription status, payment method, and invoices.</p>
-          </div>
-          <span className="sx-badge sx-badgeBill">Setup</span>
-        </header>
-
-
-        <div className="sx-body">
-          <div className="sx-billError">
-            Missing <b>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</b>. Add it to <b>.env.local</b> and restart <b>npm run dev</b>.
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-
   return <BillingClientInner />;
 }
