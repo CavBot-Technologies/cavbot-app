@@ -2414,6 +2414,17 @@ html body :is(
 
   .cb-sidebar.is-open{ transform: translateX(0%); }
 
+  .cb-menu-btn,
+  .cb-menu-btn:hover{
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .cb-menu-btn svg{
+    width: 24px;
+    height: 24px;
+  }
+
   .cb-overlay{
     display:block;
     position:fixed;

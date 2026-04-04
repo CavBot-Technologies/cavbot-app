@@ -6,7 +6,6 @@ import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
 import { getAuditActionDefinition } from "@/lib/audit";
-import { AUDIT_LOG_USER_ID_COLUMN_SQL } from "@/lib/auditModelCompat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,10 +20,18 @@ const NO_STORE_HEADERS: Record<string, string> = {
 type HistoryCategory = "all" | "sites" | "keys" | "system" | "changes";
 
 const PAGE_SIZE = 24;
+const HISTORY_SCHEMA_CACHE_TTL = process.env.NODE_ENV === "production" ? 60_000 : 2_000;
 
 type CursorState = {
   id: string;
   createdAt: Date;
+};
+
+type HistorySchemaShape = {
+  auditLog: Set<string>;
+  user: Set<string>;
+  membership: Set<string>;
+  auditLogUserIdColumn: "operatorUserId" | "actorUserId" | null;
 };
 
 type RawHistoryRow = {
@@ -47,6 +54,8 @@ type RawHistoryRow = {
   category: string | null;
   severity: string | null;
 };
+
+let historySchemaCache: { value: HistorySchemaShape; fetchedAt: number } | null = null;
 
 function formatActionLabel(action: string) {
   return action
@@ -78,17 +87,77 @@ function deriveTargetLabel(row: RawHistoryRow, meta: Record<string, unknown> | n
   return "—";
 }
 
+function selectColumnSql(
+  available: Set<string>,
+  tableAlias: string,
+  column: string,
+  alias: string,
+  cast: "text" | "jsonb" = "text",
+) {
+  if (available.has(column)) {
+    return `"${tableAlias}"."${column}" AS "${alias}"`;
+  }
+  return `NULL::${cast} AS "${alias}"`;
+}
+
+async function getHistorySchema(): Promise<HistorySchemaShape> {
+  if (historySchemaCache && Date.now() - historySchemaCache.fetchedAt < HISTORY_SCHEMA_CACHE_TTL) {
+    return historySchemaCache.value;
+  }
+
+  try {
+    const rows = await prisma.$queryRaw<Array<{ table_name: string; column_name: string }>>(Prisma.sql`
+      SELECT table_name, column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name IN ('AuditLog', 'User', 'Membership')
+    `);
+
+    const auditLog = new Set<string>();
+    const user = new Set<string>();
+    const membership = new Set<string>();
+
+    for (const row of rows) {
+      if (row.table_name === "AuditLog") auditLog.add(row.column_name);
+      if (row.table_name === "User") user.add(row.column_name);
+      if (row.table_name === "Membership") membership.add(row.column_name);
+    }
+
+    const value: HistorySchemaShape = {
+      auditLog,
+      user,
+      membership,
+      auditLogUserIdColumn: auditLog.has("operatorUserId")
+        ? "operatorUserId"
+        : auditLog.has("actorUserId")
+        ? "actorUserId"
+        : null,
+    };
+
+    historySchemaCache = { value, fetchedAt: Date.now() };
+    return value;
+  } catch {
+    return {
+      auditLog: new Set(),
+      user: new Set(),
+      membership: new Set(),
+      auditLogUserIdColumn: null,
+    };
+  }
+}
+
 function buildWhereClause(options: {
   category: HistoryCategory;
   searchTerm: string | null;
   cursor: CursorState | null;
   accountId: string;
+  schema: HistorySchemaShape;
 }): Prisma.Sql {
   const clauses: Prisma.Sql[] = [];
 
   clauses.push(Prisma.sql`al."accountId" = ${options.accountId}`);
 
-  if (options.category !== "all") {
+  if (options.category !== "all" && options.schema.auditLog.has("category")) {
     clauses.push(Prisma.sql`al."category" = ${options.category}`);
   }
 
@@ -100,17 +169,32 @@ function buildWhereClause(options: {
 
   if (options.searchTerm) {
     const pattern = `%${options.searchTerm.toLowerCase()}%`;
+    const searchClauses: Prisma.Sql[] = [Prisma.sql`lower(al."action") LIKE ${pattern}`];
+
+    if (options.schema.auditLog.has("actionLabel")) {
+      searchClauses.push(Prisma.sql`lower(coalesce(al."actionLabel", "")) LIKE ${pattern}`);
+    }
+    if (options.schema.auditLog.has("targetType")) {
+      searchClauses.push(Prisma.sql`lower(coalesce(al."targetType", "")) LIKE ${pattern}`);
+    }
+    if (options.schema.auditLog.has("targetId")) {
+      searchClauses.push(Prisma.sql`lower(coalesce(al."targetId", "")) LIKE ${pattern}`);
+    }
+    if (options.schema.auditLog.has("targetLabel")) {
+      searchClauses.push(Prisma.sql`lower(coalesce(al."targetLabel", "")) LIKE ${pattern}`);
+    }
+    if (options.schema.user.has("displayName")) {
+      searchClauses.push(Prisma.sql`lower(coalesce(u."displayName", "")) LIKE ${pattern}`);
+    }
+    if (options.schema.user.has("email")) {
+      searchClauses.push(Prisma.sql`lower(coalesce(u."email", "")) LIKE ${pattern}`);
+    }
+    if (options.schema.auditLog.has("metaJson")) {
+      searchClauses.push(Prisma.sql`lower(coalesce(al."metaJson"::text, "")) LIKE ${pattern}`);
+    }
+
     clauses.push(
-      Prisma.sql`(
-        lower(al."action") LIKE ${pattern} OR
-        lower(coalesce(al."actionLabel", "")) LIKE ${pattern} OR
-        lower(coalesce(al."targetType", "")) LIKE ${pattern} OR
-        lower(coalesce(al."targetId", "")) LIKE ${pattern} OR
-        lower(coalesce(al."targetLabel", "")) LIKE ${pattern} OR
-        lower(coalesce(u."displayName", "")) LIKE ${pattern} OR
-        lower(coalesce(u."email", "")) LIKE ${pattern} OR
-        lower(coalesce(al."metaJson"::text, "")) LIKE ${pattern}
-      )`
+      Prisma.sql`(${Prisma.join(searchClauses, " OR ")})`
     );
   }
 
@@ -124,35 +208,47 @@ async function fetchHistoryRows(options: {
   cursor: CursorState | null;
   limit: number;
 }) {
+  const schema = await getHistorySchema();
+  if (!schema.auditLog.size) return [];
+
   const whereClause = buildWhereClause({
     category: options.category,
     searchTerm: options.searchTerm,
     cursor: options.cursor,
     accountId: options.accountId,
+    schema,
   });
+
+  const joinUserSql = schema.auditLogUserIdColumn
+    ? Prisma.raw(`u."id" = al."${schema.auditLogUserIdColumn}"`)
+    : Prisma.sql`FALSE`;
+
+  const selectColumns = Prisma.raw([
+    `al."id"`,
+    `al."action"`,
+    selectColumnSql(schema.auditLog, "al", "targetType", "targetType"),
+    selectColumnSql(schema.auditLog, "al", "targetId", "targetId"),
+    selectColumnSql(schema.auditLog, "al", "targetLabel", "targetLabel"),
+    selectColumnSql(schema.auditLog, "al", "metaJson", "metaJson", "jsonb"),
+    selectColumnSql(schema.auditLog, "al", "ip", "ip"),
+    selectColumnSql(schema.auditLog, "al", "userAgent", "userAgent"),
+    `al."createdAt" AS "createdAt"`,
+    selectColumnSql(schema.auditLog, "al", "actionLabel", "actionLabel"),
+    selectColumnSql(schema.auditLog, "al", "category", "category"),
+    selectColumnSql(schema.auditLog, "al", "severity", "severity"),
+    `u."id" AS "operatorId"`,
+    selectColumnSql(schema.user, "u", "displayName", "operatorDisplayName"),
+    selectColumnSql(schema.user, "u", "email", "operatorEmail"),
+    selectColumnSql(schema.user, "u", "fullName", "operatorFullName"),
+    selectColumnSql(schema.user, "u", "username", "operatorUsername"),
+    selectColumnSql(schema.membership, "m", "role", "operatorRole"),
+  ].join(",\n      "));
 
   const rows = await prisma.$queryRaw<RawHistoryRow[]>(Prisma.sql`
     SELECT
-      al."id",
-      al."action",
-      al."targetType",
-      al."targetId",
-      al."targetLabel",
-      al."metaJson",
-      al."ip",
-      al."userAgent",
-      al."createdAt",
-      al."actionLabel",
-      al."category",
-      al."severity",
-      u."id" AS "operatorId",
-      u."displayName" AS "operatorDisplayName",
-      u."email" AS "operatorEmail",
-      u."fullName" AS "operatorFullName",
-      u."username" AS "operatorUsername",
-      m."role" AS "operatorRole"
+      ${selectColumns}
     FROM "AuditLog" al
-    LEFT JOIN "User" u ON u."id" = al.${AUDIT_LOG_USER_ID_COLUMN_SQL}
+    LEFT JOIN "User" u ON ${joinUserSql}
     LEFT JOIN "Membership" m ON m."userId" = u."id" AND m."accountId" = ${options.accountId}
     WHERE ${whereClause}
     ORDER BY al."createdAt" DESC, al."id" DESC
@@ -160,6 +256,17 @@ async function fetchHistoryRows(options: {
   `);
 
   return rows;
+}
+
+function parseMetaJson(value: RawHistoryRow["metaJson"]): Record<string, unknown> | null {
+  if (value == null) return null;
+  try {
+    return typeof value === "string"
+      ? (JSON.parse(value) as Record<string, unknown>)
+      : (value as Record<string, unknown>);
+  } catch {
+    return null;
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -188,24 +295,25 @@ export async function GET(req: NextRequest) {
       cursorState = { id: cursorRow.id, createdAt: cursorRow.createdAt };
     }
 
-    const rows = await fetchHistoryRows({
-      accountId: session.accountId,
-      category,
-      searchTerm: searchQuery || null,
-      cursor: cursorState,
-      limit,
-    });
+    let rows: RawHistoryRow[] = [];
+    try {
+      rows = await fetchHistoryRows({
+        accountId: session.accountId,
+        category,
+        searchTerm: searchQuery || null,
+        cursor: cursorState,
+        limit,
+      });
+    } catch (error) {
+      console.error("[settings/history] query failed", error);
+      return json({ ok: true, entries: [], nextCursor: null }, 200);
+    }
 
     const hasMore = rows.length > limit;
     const sliced = hasMore ? rows.slice(0, limit) : rows;
 
     const entries = sliced.map((row) => {
-      const meta =
-        row.metaJson == null
-          ? null
-          : typeof row.metaJson === "string"
-          ? (JSON.parse(row.metaJson) as Record<string, unknown>)
-          : (row.metaJson as Record<string, unknown>);
+      const meta = parseMetaJson(row.metaJson);
       const actingUser = row.operatorId
         ? {
             id: row.operatorId,
