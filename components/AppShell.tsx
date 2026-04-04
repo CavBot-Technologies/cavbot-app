@@ -2363,14 +2363,18 @@ export default function AppShell({
                 </span>
 
                 <span className="cb-side-account-spark" aria-hidden="true">
-                  <Image
-                    src="/icons/app/spark-svgrepo-com.svg"
-                    alt=""
-                    width={18}
-                    height={18}
-                    className="cb-upgrade-badgeIcon"
-                    priority
-                  />
+                  {planTier === "PREMIUM_PLUS" ? (
+                    <IconPremiumPlusStar />
+                  ) : (
+                    <Image
+                      src="/icons/app/spark-svgrepo-com.svg"
+                      alt=""
+                      width={18}
+                      height={18}
+                      className="cb-upgrade-badgeIcon"
+                      priority
+                    />
+                  )}
                 </span>
               </button>
 
@@ -2758,6 +2762,23 @@ function IconFellowActivity() {
       priority
       unoptimized
     />
+  );
+}
+
+function IconPremiumPlusStar() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      className="cb-upgrade-badgeStar"
+      aria-hidden="true"
+    >
+      <path
+        fill="currentColor"
+        d="M12 2.4l2.9 5.87 6.48.94-4.69 4.57 1.11 6.45L12 17.2 6.2 20.23l1.11-6.45L2.62 9.21l6.48-.94L12 2.4z"
+      />
+    </svg>
   );
 }
 
