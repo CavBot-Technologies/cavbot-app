@@ -2469,6 +2469,7 @@ export default function AppShell({
                   preload
                   triggerClassName="cb-icon-btn-top"
                   iconClassName="cb-topbar-cavai-icon"
+                  iconSizePx={22}
                   triggerAriaLabel="Open CavAi Center"
                   iconOnly
                 />

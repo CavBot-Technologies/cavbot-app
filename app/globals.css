@@ -1014,9 +1014,9 @@ a:focus{
   }
 
   .cb-topbar .cb-topbar-cavai-icon{
-    width: 18px;
-    height: 18px;
-    flex: 0 0 18px;
+    width: 18px !important;
+    height: 18px !important;
+    flex: 0 0 18px !important;
   }
 
   .cb-topbar .cb-notif-bubble{
