@@ -612,13 +612,13 @@ a:focus{
   position: relative;
   width: 40px;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
   transition: width 180ms ease;
 }
 
 .cb-side-tools-wrap.is-open{
-  width: 100%;
+  width: fit-content;
 }
 
 .cb-side-tools-trigger{
@@ -651,19 +651,19 @@ a:focus{
 .cb-side-tools-menu{
   position: static;
   display: flex;
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 0 0 auto;
+  min-width: auto;
   flex-direction: row;
   align-items: center;
   gap: 8px;
-  padding: 8px;
-  min-height: 40px;
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(3, 6, 22, 0.94);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 18px 36px rgba(0,0,0,0.30);
+  padding: 0;
+  min-height: 0;
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
   z-index: 140;
 }
 
