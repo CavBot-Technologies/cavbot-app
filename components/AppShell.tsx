@@ -592,6 +592,7 @@ export default function AppShell({
   // ===== Range (persisted only; NO URL WRITES) =====
   const [range, setRange] = useState<RangeKey>("24h");
   const [rangeOpen, setRangeOpen] = useState(false);
+  const [quickToolsOpen, setQuickToolsOpen] = useState(false);
 
   useEffect(() => {
     const stored = readStoredRange();
@@ -687,10 +688,12 @@ export default function AppShell({
 
 
   const rangeWrapRef = useRef<HTMLDivElement | null>(null);
+  const quickToolsWrapRef = useRef<HTMLDivElement | null>(null);
   const accountWrapRef = useRef<HTMLDivElement | null>(null);
   const notifWrapRef = useRef<HTMLDivElement | null>(null);
   const navScrollRef = useRef<HTMLElement | null>(null);
   const rangeOpenRef = useRef(false);
+  const quickToolsOpenRef = useRef(false);
   const accountOpenRef = useRef(false);
   const notifOpenRef = useRef(false);
   const [navScrollIndicator, setNavScrollIndicator] = useState<"down" | "up">("down");
@@ -1217,6 +1220,7 @@ export default function AppShell({
   useEffect(() => {
     setNavOpen(false);
     setRangeOpen(false);
+    setQuickToolsOpen(false);
     setAccountOpen(false);
     setNotifOpen(false);
   }, [pathname]);
@@ -1526,6 +1530,10 @@ export default function AppShell({
   }, [rangeOpen]);
 
   useEffect(() => {
+    quickToolsOpenRef.current = quickToolsOpen;
+  }, [quickToolsOpen]);
+
+  useEffect(() => {
     accountOpenRef.current = accountOpen;
   }, [accountOpen]);
 
@@ -1542,6 +1550,8 @@ export default function AppShell({
 
 
       if (rangeOpenRef.current && rangeWrapRef.current && !rangeWrapRef.current.contains(t)) setRangeOpen(false);
+      if (quickToolsOpenRef.current && quickToolsWrapRef.current && !quickToolsWrapRef.current.contains(t))
+        setQuickToolsOpen(false);
       if (accountOpenRef.current && accountWrapRef.current && !accountWrapRef.current.contains(t))
         setAccountOpen(false);
       if (notifOpenRef.current && notifWrapRef.current && !notifWrapRef.current.contains(t)) setNotifOpen(false);
@@ -1552,6 +1562,7 @@ export default function AppShell({
       if (e.key === "Escape") {
         setNavOpen(false);
         setRangeOpen(false);
+        setQuickToolsOpen(false);
         setAccountOpen(false);
         setNotifOpen(false);
         setCavGuardModalOpen(false);
@@ -1587,6 +1598,7 @@ export default function AppShell({
 
   function onSettingsClick(event: ReactMouseEvent<HTMLAnchorElement>) {
     setNavOpen(false);
+    setQuickToolsOpen(false);
     prefetchRoute("/settings");
     prefetchRoute("/settings?tab=account");
     prefetchRoute("/settings/integrations");
@@ -1617,6 +1629,7 @@ export default function AppShell({
 
   function onArcadeClick(event: ReactMouseEvent<HTMLAnchorElement>) {
     setNavOpen(false);
+    setQuickToolsOpen(false);
     if (!memberRole || memberRole === "OWNER") return;
     if (arcadeCollaboratorAccessEnabled) return;
     event.preventDefault();
@@ -2210,60 +2223,84 @@ export default function AppShell({
         {/* ===== SIDEBAR FOOTER (Icons + Plan) ===== */}
         <div className="cb-side-bottom" aria-label="Sidebar footer">
           <div className="cb-side-icons" aria-label="Quick tools">
-            <Link
-              className="cb-icon-btn cb-icon-btn-arcade"
-              href={"/cavbot-arcade"}
-              data-cb-route-intent="/cavbot-arcade"
-              data-cb-perf-source="sidebar-quicktool"
-              aria-label="CavBot Arcade"
-              onMouseEnter={() => prefetchRoute("/cavbot-arcade")}
-              onFocus={() => prefetchRoute("/cavbot-arcade")}
-              onPointerDown={() => prefetchRoute("/cavbot-arcade")}
-              onClick={onArcadeClick}
-            >
-              <IconArcadeCabinet />
-            </Link>
+            <div className="cb-side-tools-wrap" ref={quickToolsWrapRef}>
+              <button
+                className="cb-side-tools-trigger"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={quickToolsOpen}
+                aria-label="Open quick tools"
+                onClick={() => setQuickToolsOpen((value) => !value)}
+              >
+                <IconFellowActivity />
+              </button>
 
-            {aiLauncherInSidebar ? (
-              <CavAiCenterLauncher
-                surface={aiSurface}
-                contextLabel={aiContextLabel}
-                workspaceId={workspaceParam || null}
-                projectId={aiProjectId}
-                expandHref={aiExpandHref}
-                context={aiRouteContext}
-                preload
-                triggerClassName="cb-icon-btn"
-                triggerAriaLabel={aiSurface === "cavsafe" ? "Open CavAi Center for CavSafe" : "Open CavAi Center for CavCloud"}
-                iconOnly
-              />
-            ) : null}
+              {quickToolsOpen ? (
+                <div className="cb-side-tools-menu" role="menu" aria-label="Quick tools">
+                  <Link
+                    className="cb-icon-btn cb-side-tools-item cb-icon-btn-arcade"
+                    href={"/cavbot-arcade"}
+                    data-cb-route-intent="/cavbot-arcade"
+                    data-cb-perf-source="sidebar-quicktool"
+                    aria-label="CavBot Arcade"
+                    role="menuitem"
+                    onMouseEnter={() => prefetchRoute("/cavbot-arcade")}
+                    onFocus={() => prefetchRoute("/cavbot-arcade")}
+                    onPointerDown={() => prefetchRoute("/cavbot-arcade")}
+                    onClick={onArcadeClick}
+                  >
+                    <IconArcadeCabinet />
+                  </Link>
 
-            <a
-              className="cb-icon-btn"
-              href="https://cavbot.io/help-center"
-              target="_blank"
-              rel="noreferrer noopener"
-              aria-label="Help Center"
-              onClick={() => setNavOpen(false)}
-            >
-              <IconHelp />
-            </a>
+                  {aiLauncherInSidebar ? (
+                    <CavAiCenterLauncher
+                      surface={aiSurface}
+                      contextLabel={aiContextLabel}
+                      workspaceId={workspaceParam || null}
+                      projectId={aiProjectId}
+                      expandHref={aiExpandHref}
+                      context={aiRouteContext}
+                      preload
+                      triggerClassName="cb-icon-btn cb-side-tools-item"
+                      triggerAriaLabel={
+                        aiSurface === "cavsafe" ? "Open CavAi Center for CavSafe" : "Open CavAi Center for CavCloud"
+                      }
+                      iconOnly
+                    />
+                  ) : null}
 
+                  <a
+                    className="cb-icon-btn cb-side-tools-item"
+                    href="https://cavbot.io/help-center"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    aria-label="Help Center"
+                    role="menuitem"
+                    onClick={() => {
+                      setNavOpen(false);
+                      setQuickToolsOpen(false);
+                    }}
+                  >
+                    <IconHelp />
+                  </a>
 
-            <Link
-              className="cb-icon-btn"
-              href={"/settings"}
-              data-cb-route-intent="/settings"
-              data-cb-perf-source="sidebar-quicktool"
-              aria-label="Settings"
-              onMouseEnter={() => prefetchRoute("/settings")}
-              onFocus={() => prefetchRoute("/settings")}
-              onPointerDown={() => prefetchRoute("/settings")}
-              onClick={onSettingsClick}
-            >
-              <IconGear />
-            </Link>
+                  <Link
+                    className="cb-icon-btn cb-side-tools-item"
+                    href={"/settings"}
+                    data-cb-route-intent="/settings"
+                    data-cb-perf-source="sidebar-quicktool"
+                    aria-label="Settings"
+                    role="menuitem"
+                    onMouseEnter={() => prefetchRoute("/settings")}
+                    onFocus={() => prefetchRoute("/settings")}
+                    onPointerDown={() => prefetchRoute("/settings")}
+                    onClick={onSettingsClick}
+                  >
+                    <IconGear />
+                  </Link>
+                </div>
+              ) : null}
+            </div>
           </div>
 
 
@@ -2702,6 +2739,21 @@ function IconBell() {
       width={22}
       height={22}
       className="cb-bell-icon"
+      aria-hidden="true"
+      priority
+      unoptimized
+    />
+  );
+}
+
+function IconFellowActivity() {
+  return (
+    <Image
+      src="/icons/app/fellow-activity-svgrepo-com.svg"
+      alt=""
+      width={22}
+      height={22}
+      className="cb-fellow-activity-icon"
       aria-hidden="true"
       priority
       unoptimized
