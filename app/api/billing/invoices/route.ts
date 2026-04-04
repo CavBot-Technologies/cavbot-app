@@ -7,7 +7,8 @@ import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getStripe } from "@/lib/stripeClient";
-import { requireSession, requireAccountContext, requireAccountRole, isApiAuthError } from "@/lib/apiAuth";
+import { requireSession, isApiAuthError } from "@/lib/apiAuth";
+import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,10 +82,10 @@ function hasStripeSecret() {
 export async function GET(req: NextRequest) {
   try {
     const sess = await requireSession(req);
-    requireAccountContext(sess);
-    await requireAccountRole(sess, ["OWNER", "ADMIN"]);
+    const billingCtx = await resolveBillingAccountContext(sess);
+    requireBillingManageRole(billingCtx);
 
-    const accountId = sess.accountId!;
+    const accountId = billingCtx.accountId;
 
     const account = await prisma.account.findUnique({
       where: { id: accountId },

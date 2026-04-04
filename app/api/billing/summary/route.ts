@@ -3,9 +3,10 @@ import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { requireSession, isApiAuthError } from "@/lib/apiAuth";
 import { resolvePlanIdFromTier, PLANS } from "@/lib/plans";
 import { getQwenCoderPopoverState } from "@/src/lib/ai/qwen-coder-credits.server";
+import { resolveBillingAccountContext } from "@/lib/billingAccount.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -183,10 +184,9 @@ async function findLatestSubscription(
 export async function GET(req: NextRequest) {
   try {
     const sess = await requireSession(req);
-    requireAccountContext(sess);
-
-    const accountId = sess.accountId;
-    const userId = String(sess.sub || "").trim();
+    const billingCtx = await resolveBillingAccountContext(sess);
+    const accountId = billingCtx.accountId;
+    const userId = billingCtx.userId;
 
     const account = await findBillingAccount(accountId);
 

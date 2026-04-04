@@ -8,13 +8,12 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import {
   requireSession,
-  requireAccountContext,
-  requireAccountRole,
   isApiAuthError,
 } from "@/lib/apiAuth";
 import { getStripe } from "@/lib/stripeClient";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -152,11 +151,11 @@ async function ensureStripeCustomer(args: {
 export async function GET(req: NextRequest) {
   try {
     const sess = await requireSession(req);
-    requireAccountContext(sess);
+    const billingCtx = await resolveBillingAccountContext(sess);
 
     if (!hasStripeSecret()) return json(pmEmpty(), 200);
 
-    const accountId = sess.accountId!;
+    const accountId = billingCtx.accountId;
     const account = await prisma.account.findUnique({
       where: { id: accountId },
       select: { stripeCustomerId: true },
@@ -205,12 +204,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const sess = await requireSession(req);
-    requireAccountContext(sess);
-    await requireAccountRole(sess, ["OWNER", "ADMIN"]);
+    const billingCtx = await resolveBillingAccountContext(sess);
+    requireBillingManageRole(billingCtx);
  
  
-    const accountId = sess.accountId!;
-    const operatorUserId = sess.sub;
+    const accountId = billingCtx.accountId;
+    const operatorUserId = billingCtx.userId;
  
  
     type BodyAddress = {

@@ -4,7 +4,8 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripeClient";
-import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { requireSession, isApiAuthError } from "@/lib/apiAuth";
+import { resolveBillingAccountContext } from "@/lib/billingAccount.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,7 +69,7 @@ function detectPaymentMethodLabel(args: {
 export async function GET(req: NextRequest) {
   try {
     const sess = await requireSession(req);
-    requireAccountContext(sess);
+    const billingCtx = await resolveBillingAccountContext(sess);
 
     const { searchParams } = new URL(req.url);
     const sessionId = s(searchParams.get("session_id"));
@@ -84,7 +85,7 @@ export async function GET(req: NextRequest) {
 
     // HARD SAFETY: ensure session belongs to this account (your metadata contract)
     const metaAccountId = s(checkout.metadata?.cavbot_account_id);
-    if (!metaAccountId || metaAccountId !== s(sess.accountId)) {
+    if (!metaAccountId || metaAccountId !== billingCtx.accountId) {
       return json({ ok: false, error: "FORBIDDEN" }, 403);
     }
 

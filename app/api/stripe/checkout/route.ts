@@ -3,10 +3,11 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
-import { requireSession, requireAccountContext, requireAccountRole, isApiAuthError } from "@/lib/apiAuth";
+import { requireSession, isApiAuthError } from "@/lib/apiAuth";
 import { getStripe } from "@/lib/stripeClient";
 import { getAppUrl, priceIdFor, type StripePlanId, type StripeBilling } from "@/lib/stripe";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,8 +45,8 @@ function normalizeBilling(raw: unknown): StripeBilling {
 export async function POST(req: NextRequest) {
   try {
     const sess = await requireSession(req);
-    requireAccountContext(sess);
-    await requireAccountRole(sess, ["OWNER", "ADMIN"]);
+    const billingCtx = await resolveBillingAccountContext(sess);
+    requireBillingManageRole(billingCtx);
 
     const body = (await readSanitizedJson(req, null)) as null | { targetPlan?: string; billing?: string };
 
@@ -53,8 +54,8 @@ export async function POST(req: NextRequest) {
     if (!planId) return json({ ok: false, error: "BAD_INPUT", message: "Missing/invalid targetPlan." }, 400);
 
     const billing = normalizeBilling(body?.billing);
-    const accountId = sess.accountId!;
-    const operatorUserId = sess.sub;
+    const accountId = billingCtx.accountId;
+    const operatorUserId = billingCtx.userId;
 
     const appUrl = getAppUrl();
     const successUrl = `${appUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`;
