@@ -35,6 +35,10 @@ function json<T>(data: T, init?: number | ResponseInit) {
 function s(value: unknown) {
   return String(value ?? "").trim();
 }
+
+function hasStripeSecret() {
+  return Boolean(s(process.env.STRIPE_SECRET_KEY));
+}
  
  
 function readIdem(req: NextRequest, fallbackPrefix: string) {
@@ -150,6 +154,8 @@ export async function GET(req: NextRequest) {
     const sess = await requireSession(req);
     requireAccountContext(sess);
 
+    if (!hasStripeSecret()) return json(pmEmpty(), 200);
+
     const accountId = sess.accountId!;
     const account = await prisma.account.findUnique({
       where: { id: accountId },
@@ -159,9 +165,15 @@ export async function GET(req: NextRequest) {
     const customerId = s(account?.stripeCustomerId);
     if (!customerId) return json(pmEmpty(), 200);
 
-    const customer = await getStripe().customers.retrieve(customerId, {
-      expand: ["invoice_settings.default_payment_method"],
-    });
+    let customer: Stripe.Customer | Stripe.DeletedCustomer;
+    try {
+      customer = await getStripe().customers.retrieve(customerId, {
+        expand: ["invoice_settings.default_payment_method"],
+      });
+    } catch (error) {
+      console.error("[billing/payment-method] stripe customer lookup failed", error);
+      return json(pmEmpty(), 200);
+    }
 
     if ("deleted" in customer && customer.deleted) return json(pmEmpty(), 200);
 
@@ -235,7 +247,7 @@ export async function POST(req: NextRequest) {
       const customerId =
         typeof si.customer === "string" ? si.customer : (si.customer as Stripe.Customer)?.id || "";
 
-      if (!customerId) return json({ ok: false, error: "NO_CUSTOMER", message: "Missing customer on SetupIntent." }, 409);
+      if (!customerId) return json({ ok: false, error: "NO_CUSTOMER", message: "Missing client billing profile on SetupIntent." }, 409);
 
       const pmObj = si.payment_method;
       const pmId = typeof pmObj === "string" ? pmObj : pmObj?.id || "";
@@ -254,7 +266,7 @@ export async function POST(req: NextRequest) {
  
       const expectedCustomerId = s(acc?.stripeCustomerId);
       if (expectedCustomerId && expectedCustomerId !== customerId) {
-        return json({ ok: false, error: "FORBIDDEN", message: "Customer mismatch." }, 403);
+        return json({ ok: false, error: "FORBIDDEN", message: "Client billing profile mismatch." }, 403);
       }
  
  
