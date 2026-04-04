@@ -33,9 +33,9 @@
   --cb-surface-panel-hover: linear-gradient(160deg, rgba(12,18,36,0.95), rgba(5,10,24,0.98));
   --cb-surface-empty: rgba(255,255,255,0.03);
 
-  --r-lg: 16px;
-  --r-md: 12px;
-  --r-sm: 10px;
+  --r-lg: 14px;
+  --r-md: 10px;
+  --r-sm: 8px;
 
   --pad-lg: 18px;
   --pad-md: 14px;

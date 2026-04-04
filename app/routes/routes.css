@@ -30,9 +30,9 @@
   --stroke: rgba(255,255,255,0.12);
   --cb-surface-empty: rgba(255,255,255,0.03);
 
-  --r-lg: 16px;
-  --r-md: 12px;
-  --r-sm: 10px;
+  --r-lg: 14px;
+  --r-md: 10px;
+  --r-sm: 8px;
 
   --pad-lg: 18px;
   --pad-md: 14px;
@@ -363,6 +363,12 @@
   gap: 12px;
 }
 
+.routes-mini-grid.routes-mini-grid-compact{
+  grid-template-columns: repeat(3, minmax(152px, 170px));
+  justify-content: flex-start;
+  gap: 10px;
+}
+
 .routes-mini{
   border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.02);
@@ -370,6 +376,30 @@
   padding: 12px;
   overflow: hidden;
   min-width: 0;
+}
+
+.routes-mini.routes-mini-compact{
+  min-height: 118px;
+  padding: 10px 12px;
+  border-color: rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.28);
+}
+
+.routes-mini.routes-mini-compact .routes-mini-k{
+  font-size: 10px;
+  line-height: 1.35;
+  letter-spacing: 0.14em;
+}
+
+.routes-mini.routes-mini-compact .routes-mini-v{
+  margin-top: 8px;
+  font-size: 16px;
+}
+
+.routes-mini.routes-mini-compact .routes-mini-sub{
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .routes-mini-k{

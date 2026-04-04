@@ -150,6 +150,7 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
   const topHistory = useMemo(() => history.slice(0, 4), [history]);
   const showEmptyState = !loading && !visiblePriorities.length;
   const rootClassName = isCommandCenter ? "cb-card cb-card-cavpri" : "cb-card cb-card-pad";
+  const bodyStyle = isCommandCenter ? undefined : isConsolePanel ? { marginTop: 32 } : { marginTop: 24 };
   const emptyMessage = useMemo(() => {
     if (!normalizedOrigin) {
       return "Select a primary site to begin.";
@@ -369,6 +370,8 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
         <div
           className="cb-divider cb-divider-full"
           style={{
+            marginTop: 16,
+            marginBottom: 24,
             marginLeft: "calc(0px - var(--pad-lg, 18px))",
             marginRight: "calc(0px - var(--pad-lg, 18px))",
             width: "calc(100% + (var(--pad-lg, 18px) * 2))",
@@ -377,7 +380,7 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
         />
       ) : null}
 
-      <div className={isCommandCenter ? "cb-cavpri-body" : undefined} style={isConsolePanel ? { marginTop: 32 } : undefined}>
+      <div className={isCommandCenter ? "cb-cavpri-body" : undefined} style={bodyStyle}>
         {!showEmptyState || loading || loadError ? (
           <div className={`cb-sub${isCommandCenter ? " cb-cavpri-status" : ""}`} style={isCommandCenter ? undefined : { marginTop: 12 }}>
             {loadError ? loadError : status}
@@ -429,7 +432,7 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
                       ? undefined
                       : {
                           border: "1px solid rgba(255,255,255,0.10)",
-                          borderRadius: 12,
+                          borderRadius: 10,
                           padding: "10px 12px",
                           background: "rgba(255,255,255,0.02)",
                         }
@@ -516,7 +519,7 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
                 : {
                     marginTop: 12,
                     border: "1px solid rgba(255,255,255,0.10)",
-                    borderRadius: 12,
+                    borderRadius: 10,
                     padding: "12px 14px",
                     background: "rgba(0,0,0,0.10)",
                   }

@@ -779,25 +779,22 @@ export default async function RoutesPage({ searchParams }: PageProps) {
 
               <br />
 
-              <div className="routes-mini-grid">
-                <div className={`routes-mini tone-${cov404Tone}`}>
+              <div className="routes-mini-grid routes-mini-grid-compact">
+                <div className={`routes-mini routes-mini-compact tone-${cov404Tone}`}>
                   <div className="routes-mini-k">404 Views</div>
                   <div className="routes-mini-v">{fmtPct(routes.views404Pct)}</div>
-                  <br />
                   <div className="routes-mini-sub">{fmtInt(routes.views404Count)} views affected</div>
                 </div>
 
-                <div className={`routes-mini tone-${jsTone}`}>
+                <div className={`routes-mini routes-mini-compact tone-${jsTone}`}>
                   <div className="routes-mini-k">JS Error Rate</div>
                   <div className="routes-mini-v">{fmtPct(routes.jsErrorPct)}</div>
-                  <br />
                   <div className="routes-mini-sub">{fmtInt(routes.jsErrorCount)} errors observed</div>
                 </div>
 
-                <div className={`routes-mini tone-${slowTone}`}>
+                <div className={`routes-mini routes-mini-compact tone-${slowTone}`}>
                   <div className="routes-mini-k">Slow Routes</div>
                   <div className="routes-mini-v">{fmtPct(routes.slowRoutePct)}</div>
-                  <br />
                   <div className="routes-mini-sub">{fmtInt(routes.slowRouteCount)} routes flagged</div>
                 </div>
               </div>

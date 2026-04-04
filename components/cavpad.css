@@ -543,7 +543,7 @@
   justify-content:center;
   gap: 8px;
   padding: 0 14px;
-  border-radius: 999px;
+  border-radius: 10px;
   border: 1px solid var(--cavpad-border);
   background: rgba(255,255,255,0.03);
   color: rgba(247,251,255,0.92);
