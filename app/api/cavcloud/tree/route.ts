@@ -114,7 +114,7 @@ async function fallbackTreeForMissingTables(accountId: string) {
     ) {
       return null;
     }
-    throw error;
+    return null;
   });
 
   let planId: PlanId = resolvePlanIdFromTier(account?.tier || "FREE");

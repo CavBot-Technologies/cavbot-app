@@ -48,7 +48,8 @@
     "resend": "^6.8.0",
     "stripe": "^20.2.0",
     "stylelint": "^17.0.0",
-    "swr": "^2.3.8"
+    "swr": "^2.3.8",
+    "typescript": "^5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -66,7 +67,6 @@
     "rg": "^0.0.2",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
-    "typescript": "^5",
     "wrangler": "^4.78.0"
   },
   "prisma": {

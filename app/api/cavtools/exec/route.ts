@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 import { ApiAuthError } from "@/lib/apiAuth";
-import { executeCavtoolsCommand } from "@/lib/cavtools/commandPlane.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -37,6 +36,8 @@ export async function POST(req: Request) {
     if (!command) {
       return jsonNoStore({ ok: false, error: { code: "COMMAND_REQUIRED", message: "command is required." } }, 400);
     }
+
+    const { executeCavtoolsCommand } = await import("@/lib/cavtools/commandPlane.server");
 
     const result = await executeCavtoolsCommand(req, {
       cwd: body.cwd,

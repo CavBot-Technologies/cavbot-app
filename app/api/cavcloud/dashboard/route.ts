@@ -285,7 +285,7 @@ async function buildDegradedDashboardResponse(req: Request) {
       ) {
         return null;
       }
-      throw error;
+      return null;
     });
 
   return jsonNoStore(degradedDashboardPayload(account), 200);
