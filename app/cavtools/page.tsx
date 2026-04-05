@@ -5,12 +5,12 @@ import "./cavtools.css";
 
 import type React from "react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 
 import CdnBadgeEyes from "@/components/CdnBadgeEyes";
-import { CavGuardCard } from "@/components/CavGuardCard";
+import { CavGuardModal } from "@/components/CavGuardModal";
 import CavMobileMenu from "@/components/CavMobileMenu";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 
@@ -607,6 +607,7 @@ export default function CavtoolsPage() {
 }
 
 function CavToolsPageInner() {
+  const router = useRouter();
   const sp = useSearchParams();
 
   const projectId = (sp.get("project") || "").trim();
@@ -1873,21 +1874,35 @@ function CavToolsPageInner() {
     );
   }
 
+  if (!isDesktop) {
+    const closeDesktopOnlyGuard = () => {
+      if (typeof window !== "undefined" && window.history.length > 1) {
+        router.back();
+        return;
+      }
+      router.replace("/");
+    };
+
+    return (
+      <div className="cb-cavtools-root">
+        <CavGuardModal
+          open={true}
+          onClose={closeDesktopOnlyGuard}
+          decision={{
+            code: "FEATURE_DISABLED",
+            actionId: "CAVTOOLS_DESKTOP_ONLY",
+            title: "Desktop viewport required.",
+            request: "Access protected operator action.",
+            reason: "Open CavTools on desktop to continue.",
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="cb-cavtools-root">
-      {!isDesktop ? (
-        <div className="cb-cavtools-mobile" role="main">
-          <div role="status" aria-live="polite">
-            <CavGuardCard
-              variant="surface"
-              headline="Desktop viewport required."
-              request="Access protected operator action."
-              reason="Open CavTools on desktop to continue."
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="cb-cavtools-desktop">
+      <div className="cb-cavtools-desktop">
           <header className="cb-cavtools-top" role="banner">
             <div className="cb-cavtools-top-left">
               <CavMobileMenu />
@@ -2405,7 +2420,6 @@ function CavToolsPageInner() {
             </main>
           </div>
         </div>
-      )}
     </div>
   );
 }
