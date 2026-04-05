@@ -850,10 +850,9 @@ export default async function ControlRoomGamesPage({ searchParams }: PageProps) 
               </div>
             </article>
           </section>
-<br /><br />
-          {/* ROUTES + WHY */}
-          <section className="crg-split" aria-label="Routes and explanation">
-            <article className="cb-card cb-card-pad">
+          {/* BROKEN ROUTES */}
+          <section className="crg-section" aria-label="Broken routes">
+            <article className="cb-card cb-card-pad crg-routes-section">
               <div className="cb-card-head">
                 <div>
                   <h2 className="cb-h2">Broken Routes</h2>
@@ -865,9 +864,8 @@ export default async function ControlRoomGamesPage({ searchParams }: PageProps) 
                   </span>
                 </div>
               </div>
-<br /><br />
               {topRoutes.length ? (
-                <div className="crg-tablewrap">
+                <div className={`crg-tablewrap crg-tablewrap-routes${topRoutes.length > 10 ? " is-scroll" : ""}`}>
                   <table className="crg-table" aria-label="Top 404 routes table">
                     <thead>
                       <tr>
@@ -910,8 +908,140 @@ export default async function ControlRoomGamesPage({ searchParams }: PageProps) 
                 </div>
               )}
             </article>
+          </section>
 
-            <article className="cb-card cb-card-pad">
+          {/* ARCADE TELEMETRY */}
+          <section className="cb-card cb-card-pad crg-arcade-section" aria-label="Arcade telemetry">
+            <div className="cb-card-head crg-headrow">
+              <div>
+                <h2 className="cb-h2">Arcade Telemetry</h2>
+                <p className="cb-sub">Gameplay and score signals for your 404 recovery surfaces.</p>
+              </div>
+              <div className="crg-pillrow">
+                <span className="crg-pill">
+                  Games: <b>{fmtInt(cr.games?.length ?? null)}</b>
+                </span>
+              </div>
+            </div>
+            {cr.games && cr.games.length ? (
+              <div className="crg-games">
+                {cr.games.slice(0, 8).map((g, i) => (
+                  <div key={`${g.gameId || "g"}-${i}`} className="crg-game">
+                    <div className="crg-game-top">
+                      <div className="crg-game-name">{g.name || g.gameId || "Game"}</div>
+                      <div className="crg-game-id mono">{g.gameId || "—"}</div>
+                    </div>
+
+                    <div className="crg-game-grid">
+                      <div className="crg-stat">
+                        <div className="crg-stat-k">Sessions</div>
+                        <div className="crg-stat-v">{fmtInt(g.sessions)}</div>
+                      </div>
+                      <div className="crg-stat">
+                        <div className="crg-stat-k">Plays</div>
+                        <div className="crg-stat-v">{fmtInt(g.plays)}</div>
+                      </div>
+                      <div className="crg-stat">
+                        <div className="crg-stat-k">Avg Score</div>
+                        <div className="crg-stat-v">{fmtInt(g.avgScore)}</div>
+                      </div>
+                      <div className="crg-stat">
+                        <div className="crg-stat-k">High Score</div>
+                        <div className="crg-stat-v">{fmtInt(g.highScore)}</div>
+                      </div>
+                      <div className="crg-stat">
+                        <div className="crg-stat-k">Completion</div>
+                        <div className="crg-stat-v">{fmtPct(g.completionPct, 1)}</div>
+                      </div>
+                    </div>
+
+                    <div className="crg-game-sub">
+                      If scores are low or completion drops, your recovery flow might be confusing — tighten CTAs, simplify choices, and make the “Back to safety” path obvious.
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="crg-empty crg-empty-compact crg-game-empty">
+                <div className="crg-empty-title">No gameplay telemetry yet.</div>
+                <div className="crg-empty-sub">
+                  {configuredArcadeGameName ? (
+                    <>
+                      Once your <span className="mono">{configuredArcadeGameName}</span> surface emits game events, CavBot will
+                      surface sessions, plays, scores, and completion here.
+                    </>
+                  ) : (
+                    <>Once your 404 game surfaces emit game events, CavBot will surface sessions, plays, scores, and completion here.</>
+                  )}
+                </div>
+              </div>
+            )}
+            <div className="crg-leader">
+              <div className="crg-leader-top">
+                <div className="crg-leader-head">
+                  <div className="crg-leader-k">Leaderboard</div>
+                  <div className="crg-leader-sub">High scores captured from real 404 game sessions.</div>
+                </div>
+              </div>
+
+              {leaderboardRows.length ? (
+                <>
+                  <div className="crg-leader-metrics" aria-label="Leaderboard summary">
+                    <div className="crg-leader-metric">
+                      <span className="crg-leader-metric-k">Entries</span>
+                      <span className="crg-leader-metric-v">{fmtInt(leaderboardRows.length)}</span>
+                    </div>
+                    <div className="crg-leader-metric">
+                      <span className="crg-leader-metric-k">Top Score</span>
+                      <span className="crg-leader-metric-v">{fmtInt(leaderboardTopScore)}</span>
+                    </div>
+                    <div className="crg-leader-metric">
+                      <span className="crg-leader-metric-k">Games</span>
+                      <span className="crg-leader-metric-v">{fmtInt(leaderboardGameCount || null)}</span>
+                    </div>
+                  </div>
+
+                <div className="crg-tablewrap crg-leader-tablewrap">
+                  <table className="crg-table crg-leader-table" aria-label="Leaderboard table">
+                    <thead>
+                      <tr>
+                        <th>Player</th>
+                        <th>Game</th>
+                        <th className="t-right">Score</th>
+                        <th>Captured</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaderboardRows.map((x, i) => (
+                        <tr key={i}>
+                          <td>
+                            <div className="crg-leader-player">
+                              <span className={`crg-leader-rank${i < 3 ? ` is-top-${i + 1}` : ""}`}>#{i + 1}</span>
+                              <span className="crg-leader-player-name">{x.label || "—"}</span>
+                            </div>
+                          </td>
+                          <td className="mono crg-leader-game">{x.gameId || "—"}</td>
+                          <td className="t-right"><span className="crg-leader-score">{fmtInt(x.score)}</span></td>
+                          <td className="mono crg-leader-captured">{safeISOLabel(x.achievedAtISO || null)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                </>
+              ) : (
+                <div className="crg-mini-empty crg-leader-empty">
+                  <div className="crg-leader-empty-title">No leaderboard feed yet.</div>
+                  <div className="crg-leader-empty-sub">
+                    Once score events arrive, CavBot will auto-populate top players, games, and run timestamps here.
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="crg-section" aria-label="Route explanation">
+            <article className="cb-card cb-card-pad crg-why-section">
               <div className="cb-card-head">
                 <div>
                   <h2 className="cb-h2">Why Routes Break</h2>
@@ -979,147 +1109,12 @@ export default async function ControlRoomGamesPage({ searchParams }: PageProps) 
               </div>
             </article>
           </section>
-          {/* ARCADE TELEMETRY */}
-          <section className="cb-card cb-card-pad crg-arcade-section" aria-label="Arcade telemetry">
-            <div className="cb-card-head crg-headrow">
-              <div>
-                <h2 className="cb-h2">Arcade Telemetry</h2>
-                <p className="cb-sub">Gameplay and score signals for your 404 recovery surfaces.</p>
-              </div>
-              <div className="crg-pillrow">
-                <span className="crg-pill">
-                  Games: <b>{fmtInt(cr.games?.length ?? null)}</b>
-                </span>
-              </div>
-            </div>
-            {cr.games && cr.games.length ? (
-              <div className="crg-games">
-                {cr.games.slice(0, 8).map((g, i) => (
-                  <div key={`${g.gameId || "g"}-${i}`} className="crg-game">
-                    <div className="crg-game-top">
-                      <div className="crg-game-name">{g.name || g.gameId || "Game"}</div>
-                      <div className="crg-game-id mono">{g.gameId || "—"}</div>
-                    </div>
-
-                    <div className="crg-game-grid">
-                      <div className="crg-stat">
-                        <div className="crg-stat-k">Sessions</div>
-                        <div className="crg-stat-v">{fmtInt(g.sessions)}</div>
-                      </div>
-                      <div className="crg-stat">
-                        <div className="crg-stat-k">Plays</div>
-                        <div className="crg-stat-v">{fmtInt(g.plays)}</div>
-                      </div>
-                      <div className="crg-stat">
-                        <div className="crg-stat-k">Avg Score</div>
-                        <div className="crg-stat-v">{fmtInt(g.avgScore)}</div>
-                      </div>
-                      <div className="crg-stat">
-                        <div className="crg-stat-k">High Score</div>
-                        <div className="crg-stat-v">{fmtInt(g.highScore)}</div>
-                      </div>
-                      <div className="crg-stat">
-                        <div className="crg-stat-k">Completion</div>
-                        <div className="crg-stat-v">{fmtPct(g.completionPct, 1)}</div>
-                      </div>
-                    </div>
-
-                    <div className="crg-game-sub">
-                      If scores are low or completion drops, your recovery flow might be confusing — tighten CTAs, simplify choices, and make the “Back to safety” path obvious.
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="crg-empty crg-empty-compact crg-game-empty">
-                <div className="crg-empty-title">No gameplay telemetry yet.</div>
-                <div className="crg-empty-sub">
-                  {configuredArcadeGameName ? (
-                    <>
-                      Once your <span className="mono">{configuredArcadeGameName}</span> surface emits game events, CavBot will
-                      surface sessions, plays, scores, and completion here.
-                    </>
-                  ) : (
-                    <>Once your 404 game surfaces emit game events, CavBot will surface sessions, plays, scores, and completion here.</>
-                  )}
-                </div>
-              </div>
-            )}
-            {/* Leaderboard (real only if provided) */}
-            <div className="crg-leader">
-              <div className="crg-leader-top">
-                <div className="crg-leader-head">
-                  <div className="crg-leader-k">Leaderboard</div>
-                  <div className="crg-leader-sub">High scores captured from real 404 game sessions.</div>
-                </div>
-              </div>
-
-              {leaderboardRows.length ? (
-                <>
-                  <div className="crg-leader-metrics" aria-label="Leaderboard summary">
-                    <div className="crg-leader-metric">
-                      <span className="crg-leader-metric-k">Entries</span>
-                      <span className="crg-leader-metric-v">{fmtInt(leaderboardRows.length)}</span>
-                    </div>
-                    <div className="crg-leader-metric">
-                      <span className="crg-leader-metric-k">Top Score</span>
-                      <span className="crg-leader-metric-v">{fmtInt(leaderboardTopScore)}</span>
-                    </div>
-                    <div className="crg-leader-metric">
-                      <span className="crg-leader-metric-k">Games</span>
-                      <span className="crg-leader-metric-v">{fmtInt(leaderboardGameCount || null)}</span>
-                    </div>
-                  </div>
-
-                <div className="crg-tablewrap crg-leader-tablewrap">
-                  <table className="crg-table crg-leader-table" aria-label="Leaderboard table">
-                    <thead>
-                      <tr>
-                        <th>Player</th>
-                        <th>Game</th>
-                        <th className="t-right">Score</th>
-                        <th>Captured</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leaderboardRows.map((x, i) => (
-                        <tr key={i}>
-                          <td>
-                            <div className="crg-leader-player">
-                              <span className={`crg-leader-rank${i < 3 ? ` is-top-${i + 1}` : ""}`}>#{i + 1}</span>
-                              <span className="crg-leader-player-name">{x.label || "—"}</span>
-                            </div>
-                          </td>
-                          <td className="mono crg-leader-game">{x.gameId || "—"}</td>
-                          <td className="t-right"><span className="crg-leader-score">{fmtInt(x.score)}</span></td>
-                          <td className="mono crg-leader-captured">{safeISOLabel(x.achievedAtISO || null)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                </>
-              ) : (
-                <div className="crg-mini-empty crg-leader-empty">
-                  <div className="crg-leader-empty-title">No leaderboard feed yet.</div>
-                  <div className="crg-leader-empty-sub">
-                    Once score events arrive, CavBot will auto-populate top players, games, and run timestamps here.
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
           {/* LOCAL SESSION SNAPSHOT (client-only, real only) */}
           <section className="cb-card cb-card-pad crg-local-section" aria-label="Local session snapshot">
             <div className="cb-card-head">
               <div>
                 <h2 className="cb-h2">Local Session Snapshot</h2>
                 <p className="cb-sub">Session-level diagnostics captured locally for immediate visibility and faster analysis.</p>
-              </div>
-              <div className="crg-pillrow">
-                <span className="crg-pill crg-local-session-pill">
-                  Session: <b className="mono" id="crg-local-session">—</b>
-                </span>
               </div>
             </div>
             <div className="crg-local-grid">
