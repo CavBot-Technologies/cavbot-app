@@ -243,17 +243,6 @@ function deriveAccountInitials(fullName?: string | null, username?: string | nul
   return "C";
 }
 
-function profileToneToAccentColor(tone: string): string {
-  const value = String(tone || "").trim().toLowerCase();
-  if (value === "violet") return "#8b5cff";
-  if (value === "blue") return "#4da3ff";
-  if (value === "white") return "#f7fbff";
-  if (value === "navy") return "#9fb6ff";
-  if (value === "transparent") return "#f7fbff";
-  return "#b9c85a";
-}
-
-
 function readInitials(): string {
   try {
     const v = (globalThis.__cbLocalStore.getItem("cb_account_initials") || "").trim();
@@ -603,6 +592,7 @@ export default function AppShell({
   // ===== Range (persisted only; NO URL WRITES) =====
   const [range, setRange] = useState<RangeKey>("24h");
   const [rangeOpen, setRangeOpen] = useState(false);
+  const [quickToolsOpen, setQuickToolsOpen] = useState(false);
 
   useEffect(() => {
     const stored = readStoredRange();
@@ -698,10 +688,12 @@ export default function AppShell({
 
 
   const rangeWrapRef = useRef<HTMLDivElement | null>(null);
+  const quickToolsWrapRef = useRef<HTMLDivElement | null>(null);
   const accountWrapRef = useRef<HTMLDivElement | null>(null);
   const notifWrapRef = useRef<HTMLDivElement | null>(null);
   const navScrollRef = useRef<HTMLElement | null>(null);
   const rangeOpenRef = useRef(false);
+  const quickToolsOpenRef = useRef(false);
   const accountOpenRef = useRef(false);
   const notifOpenRef = useRef(false);
   const [navScrollIndicator, setNavScrollIndicator] = useState<"down" | "up">("down");
@@ -922,12 +914,24 @@ export default function AppShell({
   const publicProfileHref = useMemo(() => {
     return buildCanonicalPublicProfileHref(profileUsername);
   }, [profileUsername]);
-  const planStarColor = useMemo(() => profileToneToAccentColor(profileTone), [profileTone]);
   const profileMenuLabel = profilePublicEnabled === null
     ? "Profile"
     : profilePublicEnabled
       ? "Public Profile"
       : "Private Profile";
+  const profileDisplayName = useMemo(() => {
+    const full = String(profileFullName || "").trim();
+    if (full) return full;
+    const handle = String(profileUsername || "").trim().replace(/^@+/, "");
+    return handle ? `@${handle}` : "CavBot Account";
+  }, [profileFullName, profileUsername]);
+  const profilePlanLabel = useMemo(() => {
+    if (trialActive && trialDaysLeft > 0) return "FREE TRIAL";
+    if (planTier === "PREMIUM_PLUS") return "PREMIUM+";
+    if (planTier === "PREMIUM") return "PREMIUM PLAN";
+    return "FREE TIER";
+  }, [planTier, trialActive, trialDaysLeft]);
+  const planMenuLabel = planTier === "PREMIUM_PLUS" ? "See Plans" : "Upgrade Plan";
 
 
   // On mount: kill any leftover params you DO NOT want
@@ -1216,6 +1220,7 @@ export default function AppShell({
   useEffect(() => {
     setNavOpen(false);
     setRangeOpen(false);
+    setQuickToolsOpen(false);
     setAccountOpen(false);
     setNotifOpen(false);
   }, [pathname]);
@@ -1525,6 +1530,10 @@ export default function AppShell({
   }, [rangeOpen]);
 
   useEffect(() => {
+    quickToolsOpenRef.current = quickToolsOpen;
+  }, [quickToolsOpen]);
+
+  useEffect(() => {
     accountOpenRef.current = accountOpen;
   }, [accountOpen]);
 
@@ -1541,6 +1550,8 @@ export default function AppShell({
 
 
       if (rangeOpenRef.current && rangeWrapRef.current && !rangeWrapRef.current.contains(t)) setRangeOpen(false);
+      if (quickToolsOpenRef.current && quickToolsWrapRef.current && !quickToolsWrapRef.current.contains(t))
+        setQuickToolsOpen(false);
       if (accountOpenRef.current && accountWrapRef.current && !accountWrapRef.current.contains(t))
         setAccountOpen(false);
       if (notifOpenRef.current && notifWrapRef.current && !notifWrapRef.current.contains(t)) setNotifOpen(false);
@@ -1551,6 +1562,7 @@ export default function AppShell({
       if (e.key === "Escape") {
         setNavOpen(false);
         setRangeOpen(false);
+        setQuickToolsOpen(false);
         setAccountOpen(false);
         setNotifOpen(false);
         setCavGuardModalOpen(false);
@@ -1586,6 +1598,7 @@ export default function AppShell({
 
   function onSettingsClick(event: ReactMouseEvent<HTMLAnchorElement>) {
     setNavOpen(false);
+    setQuickToolsOpen(false);
     prefetchRoute("/settings");
     prefetchRoute("/settings?tab=account");
     prefetchRoute("/settings/integrations");
@@ -1616,6 +1629,7 @@ export default function AppShell({
 
   function onArcadeClick(event: ReactMouseEvent<HTMLAnchorElement>) {
     setNavOpen(false);
+    setQuickToolsOpen(false);
     if (!memberRole || memberRole === "OWNER") return;
     if (arcadeCollaboratorAccessEnabled) return;
     event.preventDefault();
@@ -1668,64 +1682,24 @@ export default function AppShell({
     router.push("/settings?tab=account");
   }
 
+  function onOpenPlans() {
+    try {
+      setAccountOpen(false);
+      setNotifOpen(false);
+      setRangeOpen(false);
+    } catch {}
+    recordClickIntent(upgradeHref, "account-plan");
+    recordNavigationStart(upgradeHref, "router.push");
+    router.push(upgradeHref);
+  }
+
   useEffect(() => {
     if (!publicProfileHref) return;
     prefetchRoute(publicProfileHref);
   }, [prefetchRoute, publicProfileHref]);
-
-
-  // ===== PLAN WIDGET COPY + CTA (PER YOUR RULES) =====
-  const planWidget = useMemo(() => {
-    if (trialActive && trialDaysLeft > 0) {
-      const days = clampInt(trialDaysLeft, 1, 365);
-      return {
-        kind: "TRIAL" as const,
-        kicker: "FREE TRIAL",
-        title: `Trial active · ${days} day${days === 1 ? "" : "s"} left`,
-        sub: "Explore Premium features before you upgrade. Your workspace stays protected throughout your trial.",
-        ctaText: "Upgrade Now ↗",
-        ctaHref: upgradeHref,
-        isLink: true,
-      };
-    }
-
-
-    if (planTier === "FREE") {
-      return {
-        kind: "FREE" as const,
-        kicker: "FREE TIER",
-        title: "Unlock PREMIUM",
-        sub: "Higher scan capacity, priority alerts, and advanced diagnostics.",
-        ctaText: "Upgrade Now ↗",
-        ctaHref: upgradeHref,
-        isLink: true,
-      };
-    }
-
-
-    if (planTier === "PREMIUM") {
-      return {
-        kind: "PREMIUM" as const,
-        kicker: "PREMIUM PLAN",
-        title: "Unlock PREMIUM+",
-        sub: "Upgrade for contrast + audit depth, trend intelligence, and full workspace diagnostics.",
-        ctaText: "Upgrade to PREMIUM+ ↗",
-        ctaHref: upgradeHref,
-        isLink: true,
-      };
-    }
-
-
-    return {
-      kind: "PREMIUM_PLUS" as const,
-      kicker: "PREMIUM+",
-      title: "Full Access",
-      sub: "Your workspace is running with maximum monitoring, advanced coverage, and complete intelligence.",
-      ctaText: "View Plans",
-      ctaHref: upgradeHref,
-      isLink: true,
-    };
-  }, [trialActive, trialDaysLeft, planTier, upgradeHref]);
+  useEffect(() => {
+    prefetchRoute(upgradeHref);
+  }, [prefetchRoute, upgradeHref]);
 
   // ==========================
   // NOTIFICATIONS: list + mark read + fade + toast + polling
@@ -2249,120 +2223,149 @@ export default function AppShell({
         {/* ===== SIDEBAR FOOTER (Icons + Plan) ===== */}
         <div className="cb-side-bottom" aria-label="Sidebar footer">
           <div className="cb-side-icons" aria-label="Quick tools">
-            <Link
-              className="cb-icon-btn cb-icon-btn-arcade"
-              href={"/cavbot-arcade"}
-              data-cb-route-intent="/cavbot-arcade"
-              data-cb-perf-source="sidebar-quicktool"
-              aria-label="CavBot Arcade"
-              onMouseEnter={() => prefetchRoute("/cavbot-arcade")}
-              onFocus={() => prefetchRoute("/cavbot-arcade")}
-              onPointerDown={() => prefetchRoute("/cavbot-arcade")}
-              onClick={onArcadeClick}
-            >
-              <IconArcadeCabinet />
-            </Link>
+            <div className={`cb-side-tools-wrap ${quickToolsOpen ? "is-open" : ""}`} ref={quickToolsWrapRef}>
+              <button
+                className="cb-side-tools-trigger"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={quickToolsOpen}
+                aria-label="Open quick tools"
+                onClick={() => setQuickToolsOpen((value) => !value)}
+              >
+                <IconFellowActivity />
+              </button>
 
-            {aiLauncherInSidebar ? (
-              <CavAiCenterLauncher
-                surface={aiSurface}
-                contextLabel={aiContextLabel}
-                workspaceId={workspaceParam || null}
-                projectId={aiProjectId}
-                expandHref={aiExpandHref}
-                context={aiRouteContext}
-                preload
-                triggerClassName="cb-icon-btn"
-                triggerAriaLabel={aiSurface === "cavsafe" ? "Open CavAi Center for CavSafe" : "Open CavAi Center for CavCloud"}
-                iconOnly
-              />
-            ) : null}
+              {quickToolsOpen ? (
+                <div className="cb-side-tools-menu" role="menu" aria-label="Quick tools">
+                  <Link
+                    className="cb-icon-btn cb-side-tools-item cb-icon-btn-arcade"
+                    href={"/cavbot-arcade"}
+                    data-cb-route-intent="/cavbot-arcade"
+                    data-cb-perf-source="sidebar-quicktool"
+                    aria-label="CavBot Arcade"
+                    role="menuitem"
+                    onMouseEnter={() => prefetchRoute("/cavbot-arcade")}
+                    onFocus={() => prefetchRoute("/cavbot-arcade")}
+                    onPointerDown={() => prefetchRoute("/cavbot-arcade")}
+                    onClick={onArcadeClick}
+                  >
+                    <IconArcadeCabinet />
+                  </Link>
 
-            <a
-              className="cb-icon-btn"
-              href="https://cavbot.io/help-center"
-              target="_blank"
-              rel="noreferrer noopener"
-              aria-label="Help Center"
-              onClick={() => setNavOpen(false)}
-            >
-              <IconHelp />
-            </a>
+                  {aiLauncherInSidebar ? (
+                    <CavAiCenterLauncher
+                      surface={aiSurface}
+                      contextLabel={aiContextLabel}
+                      workspaceId={workspaceParam || null}
+                      projectId={aiProjectId}
+                      expandHref={aiExpandHref}
+                      context={aiRouteContext}
+                      preload
+                      triggerClassName="cb-icon-btn cb-side-tools-item"
+                      triggerAriaLabel={
+                        aiSurface === "cavsafe" ? "Open CavAi Center for CavSafe" : "Open CavAi Center for CavCloud"
+                      }
+                      iconOnly
+                    />
+                  ) : null}
 
+                  <a
+                    className="cb-icon-btn cb-side-tools-item"
+                    href="https://cavbot.io/help-center"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    aria-label="Help Center"
+                    role="menuitem"
+                    onClick={() => {
+                      setNavOpen(false);
+                      setQuickToolsOpen(false);
+                    }}
+                  >
+                    <IconHelp />
+                  </a>
 
-            <Link
-              className="cb-icon-btn"
-              href={"/settings"}
-              data-cb-route-intent="/settings"
-              data-cb-perf-source="sidebar-quicktool"
-              aria-label="Settings"
-              onMouseEnter={() => prefetchRoute("/settings")}
-              onFocus={() => prefetchRoute("/settings")}
-              onPointerDown={() => prefetchRoute("/settings")}
-              onClick={onSettingsClick}
-            >
-              <IconGear />
-            </Link>
+                  <Link
+                    className="cb-icon-btn cb-side-tools-item"
+                    href={"/settings"}
+                    data-cb-route-intent="/settings"
+                    data-cb-perf-source="sidebar-quicktool"
+                    aria-label="Settings"
+                    role="menuitem"
+                    onMouseEnter={() => prefetchRoute("/settings")}
+                    onFocus={() => prefetchRoute("/settings")}
+                    onPointerDown={() => prefetchRoute("/settings")}
+                    onClick={onSettingsClick}
+                  >
+                    <IconGear />
+                  </Link>
+                </div>
+              ) : null}
+            </div>
           </div>
 
 
-          <div className="cb-side-plan" aria-label="Plan">
-            {planWidget.kind === "PREMIUM_PLUS" ? (
-              <div className="cb-upgrade-card cb-upgrade-card-static" aria-label={planWidget.kicker}>
-                <div className="cb-upgrade-top">
-                  <span className="cb-upgrade-kicker">{planWidget.kicker}</span>
-                  <Link
-                    className="cb-upgrade-badge cb-upgrade-badge-link"
-                    href="/settings?tab=account#sx-theme-switcher"
-                    data-cb-route-intent="/settings?tab=account#sx-theme-switcher"
-                    data-cb-perf-source="sidebar-plan-theme"
-                    aria-label="Open theme color switcher"
-                    style={{ color: planStarColor }}
-                    onMouseEnter={() => prefetchRoute("/settings?tab=account")}
-                    onFocus={() => prefetchRoute("/settings?tab=account")}
-                    onPointerDown={() => prefetchRoute("/settings?tab=account")}
-                    onClick={() => setNavOpen(false)}
-                  >
-                    <IconPremiumPlusStar />
-                  </Link>
-                </div>
-
-                <div className="cb-upgrade-body">
-                  <div className="cb-upgrade-title">{planWidget.title}</div>
-                  <div className="cb-upgrade-sub">{planWidget.sub}</div>
-                </div>
-
-                <div className="cb-upgrade-actions">
-                  <Link
-                    className="cb-upgrade-btn"
-                    href={planWidget.ctaHref}
-                    data-cb-route-intent={planWidget.ctaHref}
-                    data-cb-perf-source="sidebar-plan"
-                    aria-label={planWidget.ctaText}
-                    onMouseEnter={() => prefetchRoute(planWidget.ctaHref)}
-                    onFocus={() => prefetchRoute(planWidget.ctaHref)}
-                    onPointerDown={() => prefetchRoute(planWidget.ctaHref)}
-                    onClick={() => setNavOpen(false)}
-                  >
-                    {planWidget.ctaText}
-                  </Link>
-                </div>
-              </div>
-            ) : planWidget.isLink ? (
-              <Link
-                className="cb-upgrade-card"
-                href={planWidget.ctaHref}
-                data-cb-route-intent={planWidget.ctaHref}
-                data-cb-perf-source="sidebar-plan"
-                aria-label={planWidget.kicker}
-                onMouseEnter={() => prefetchRoute(planWidget.ctaHref)}
-                onFocus={() => prefetchRoute(planWidget.ctaHref)}
-                onPointerDown={() => prefetchRoute(planWidget.ctaHref)}
-                onClick={() => setNavOpen(false)}
+          <div className="cb-side-plan" aria-label="Account">
+            <div className="cb-account-wrap cb-side-account-wrap" ref={accountWrapRef}>
+              <button
+                className="cb-side-account"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={accountOpen}
+                aria-label="Open account menu"
+                onClick={() => setAccountOpen((v) => !v)}
               >
-                <div className="cb-upgrade-top">
-                  <span className="cb-upgrade-kicker">{planWidget.kicker}</span>
-                  <span className="cb-upgrade-badge" aria-hidden="true">
+                <span
+                  className="cb-account-chip cb-side-account-chip"
+                  data-tone={profileTone || "lime"}
+                  aria-hidden="true"
+                  style={{
+                    background: profileAvatar
+                      ? "transparent"
+                      : profileTone === "transparent"
+                      ? "transparent"
+                      : profileTone === "violet"
+                      ? "rgba(139,92,255,0.22)"
+                      : profileTone === "blue"
+                      ? "rgba(78,168,255,0.22)"
+                      : profileTone === "white"
+                      ? "rgba(255,255,255,0.92)"
+                      : profileTone === "navy"
+                      ? "rgba(1,3,15,0.78)"
+                      : "rgba(185,200,90,0.92)",
+                    overflow: "hidden",
+                    display: "grid",
+                    placeItems: "center",
+                  }}
+                >
+                  {profileAvatar ? (
+                    <Image
+                      src={profileAvatar}
+                      alt=""
+                      width={96}
+                      height={96}
+                      quality={60}
+                      unoptimized
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        display: "block",
+                      }}
+                    />
+                  ) : (
+                    <span className="cb-account-initials">{accountInitials}</span>
+                  )}
+                </span>
+
+                <span className="cb-side-account-meta">
+                  <span className="cb-side-account-name">{profileDisplayName}</span>
+                  <span className="cb-side-account-plan">{profilePlanLabel}</span>
+                </span>
+
+                <span className="cb-side-account-spark" aria-hidden="true">
+                  {planTier === "PREMIUM_PLUS" ? (
+                    <IconPremiumPlusStar />
+                  ) : (
                     <Image
                       src="/icons/app/spark-svgrepo-com.svg"
                       alt=""
@@ -2371,48 +2374,26 @@ export default function AppShell({
                       className="cb-upgrade-badgeIcon"
                       priority
                     />
-                  </span>
+                  )}
+                </span>
+              </button>
+
+              {accountOpen && (
+                <div className="cb-menu cb-menu-right cb-account-menu" role="menu" aria-label="Account">
+                  <button className="cb-menu-item" type="button" role="menuitem" onClick={onOpenProfile}>
+                    {profileMenuLabel}
+                  </button>
+
+                  <button className="cb-menu-item" type="button" role="menuitem" onClick={onOpenPlans}>
+                    {planMenuLabel}
+                  </button>
+
+                  <button className="cb-menu-item danger" type="button" role="menuitem" onClick={onLogout}>
+                    Log out
+                  </button>
                 </div>
-
-
-                <div className="cb-upgrade-body">
-                  <div className="cb-upgrade-title">{planWidget.title}</div>
-                  <div className="cb-upgrade-sub">{planWidget.sub}</div>
-                </div>
-
-
-                <div className="cb-upgrade-actions">
-                  <span className="cb-upgrade-btn">{planWidget.ctaText}</span>
-                </div>
-              </Link>
-            ) : (
-              <div className="cb-upgrade-card" aria-label={planWidget.kicker}>
-                <div className="cb-upgrade-top">
-                  <span className="cb-upgrade-kicker">{planWidget.kicker}</span>
-                  <span className="cb-upgrade-badge" aria-hidden="true">
-                    <Image
-                      src="/icons/app/spark-svgrepo-com.svg"
-                      alt=""
-                      width={18}
-                      height={18}
-                      className="cb-upgrade-badgeIcon"
-                      priority
-                    />
-                  </span>
-                </div>
-
-
-                <div className="cb-upgrade-body">
-                  <div className="cb-upgrade-title">{planWidget.title}</div>
-                  <div className="cb-upgrade-sub">{planWidget.sub}</div>
-                </div>
-
-
-                <div className="cb-upgrade-actions">
-                  <span className="cb-upgrade-active">{planWidget.ctaText}</span>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </aside>
@@ -2700,76 +2681,6 @@ export default function AppShell({
   ) : null}
 </div>
 
-
-{/* ACCOUNT */}
-<div className="cb-account-wrap" ref={accountWrapRef}>
-                <button
-                  className="cb-account"
-                  type="button"
-                  aria-haspopup="menu"
-                  aria-expanded={accountOpen}
-                  onClick={() => setAccountOpen((v) => !v)}
-                  title="Account"
-                >
-                <span
-                  className="cb-account-chip"
-                  data-tone={profileTone || "lime"}
-                  aria-hidden="true"
-                  style={{
-                      background: profileAvatar
-                        ? "transparent"
-                        : profileTone === "transparent"
-                        ? "transparent"
-                        : profileTone === "violet"
-                        ? "rgba(139,92,255,0.22)"
-                        : profileTone === "blue"
-                        ? "rgba(78,168,255,0.22)"
-                        : profileTone === "white"
-                        ? "rgba(255,255,255,0.92)"
-                        : profileTone === "navy"
-                        ? "rgba(1,3,15,0.78)"
-                        : "rgba(185,200,90,0.92)",
-                      overflow: "hidden",
-                      display: "grid",
-                      placeItems: "center",
-                    }}
-                  >
-                    {profileAvatar ? (
-                      <Image
-                        src={profileAvatar}
-                        alt=""
-                        width={96}
-                        height={96}
-                        quality={60}
-                        unoptimized
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                          display: "block",
-                        }}
-                      />
-                    ) : (
-                      <span className="cb-account-initials">{accountInitials}</span>
-                    )}
-                  </span>
-
-
-                </button>
-
-
-                {accountOpen && (
-                  <div className="cb-menu cb-menu-right" role="menu" aria-label="Account">
-                    <button className="cb-menu-item" type="button" role="menuitem" onClick={onOpenProfile}>
-                      {profileMenuLabel}
-                    </button>
-
-                    <button className="cb-menu-item danger" type="button" role="menuitem" onClick={onLogout}>
-                      Log out
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
           </header>
@@ -2839,6 +2750,38 @@ function IconBell() {
   );
 }
 
+function IconFellowActivity() {
+  return (
+    <Image
+      src="/icons/app/fellow-activity-svgrepo-com.svg"
+      alt=""
+      width={22}
+      height={22}
+      className="cb-fellow-activity-icon"
+      aria-hidden="true"
+      priority
+      unoptimized
+    />
+  );
+}
+
+function IconPremiumPlusStar() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      className="cb-upgrade-badgeStar"
+      aria-hidden="true"
+    >
+      <path
+        fill="currentColor"
+        d="M12 2.4l2.9 5.87 6.48.94-4.69 4.57 1.11 6.45L12 17.2 6.2 20.23l1.11-6.45L2.62 9.21l6.48-.94L12 2.4z"
+      />
+    </svg>
+  );
+}
+
 function IconHelp() {
   return (
     <Image
@@ -2883,22 +2826,5 @@ function IconArcadeCabinet() {
       priority
       unoptimized
     />
-  );
-}
-
-function IconPremiumPlusStar() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      className="cb-upgrade-badgeStar"
-      aria-hidden="true"
-    >
-      <path
-        fill="currentColor"
-        d="M12 2.4l2.9 5.87 6.48.94-4.69 4.57 1.11 6.45L12 17.2 6.2 20.23l1.11-6.45L2.62 9.21l6.48-.94L12 2.4z"
-      />
-    </svg>
   );
 }

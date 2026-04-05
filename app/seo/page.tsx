@@ -923,7 +923,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
                 title="Dashboard tools"
               >
                 <Image
-                  src="/icons/app/tools-svgrepo-com.svg"
+                  src="/icons/app/tool-svgrepo-com.svg"
                   alt=""
                   width={16}
                   height={16}

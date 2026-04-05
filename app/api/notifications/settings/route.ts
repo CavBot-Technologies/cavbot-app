@@ -116,6 +116,11 @@ const KEYS = [
 
 type Key = (typeof KEYS)[number];
 
+type NotificationSettingsRow = Partial<Record<Key, boolean>> & {
+  id?: string;
+  metaJson?: unknown;
+};
+
 function pickPatch(body: unknown) {
   const patch: Partial<Record<Key, boolean>> = {};
   for (const k of KEYS) {
@@ -125,37 +130,86 @@ function pickPatch(body: unknown) {
   return patch;
 }
 
+function defaultSettings(): Record<string, unknown> {
+  return {
+    promoEmail: false,
+    productUpdates: true,
+    billingEmails: true,
+    securityEmails: true,
+    inAppSignals: true,
+    sound: true,
+    quietHours: false,
+    digestEmail: true,
+    digestInApp: false,
+    evtSubDue: true,
+    evtSubRenewed: true,
+    evtSubExpired: true,
+    evtUpgraded: true,
+    evtDowngraded: true,
+    evtSiteCritical: true,
+    evtSeatInviteAccepted: true,
+    evtSeatLimitHit: true,
+    evtNewFeatures: true,
+  };
+}
+
+function mergeSettings(row: NotificationSettingsRow | null, extra?: Record<string, unknown>) {
+  return {
+    ...defaultSettings(),
+    ...(row || {}),
+    ...readMetaFields(row?.metaJson),
+    ...(extra || {}),
+  };
+}
+
 async function ensureRow(userId: string, accountId: string | null) {
   if (accountId) {
-    return prisma.notificationSettings.upsert({
-      where: {
-        userId_accountId: {
+    try {
+      return await prisma.notificationSettings.upsert({
+        where: {
+          userId_accountId: {
+            userId,
+            accountId,
+          },
+        },
+        update: {},
+        create: {
           userId,
           accountId,
         },
-      },
-      update: {},
-      create: {
-        userId,
-        accountId,
-      },
-    });
+      });
+    } catch (error) {
+      console.error("[notifications/settings] scoped upsert failed", error);
+      try {
+        return await prisma.notificationSettings.findFirst({
+          where: { userId, accountId },
+        });
+      } catch (fallbackError) {
+        console.error("[notifications/settings] scoped fallback lookup failed", fallbackError);
+        return null;
+      }
+    }
   }
 
-  const existing = await prisma.notificationSettings.findFirst({
-    where: {
-      userId,
-      accountId: null,
-    },
-  });
-  if (existing) return existing;
+  try {
+    const existing = await prisma.notificationSettings.findFirst({
+      where: {
+        userId,
+        accountId: null,
+      },
+    });
+    if (existing) return existing;
 
-  return prisma.notificationSettings.create({
-    data: {
-      userId,
-      accountId: null,
-    },
-  });
+    return await prisma.notificationSettings.create({
+      data: {
+        userId,
+        accountId: null,
+      },
+    });
+  } catch (error) {
+    console.error("[notifications/settings] global row bootstrap failed", error);
+    return null;
+  }
 }
 
 
@@ -175,7 +229,7 @@ export async function GET(req: NextRequest) {
     const accountId = s(sess.accountId) || null;
 
     const row = await ensureRow(userId, accountId);
-    const mergedSettings = { ...row, ...readMetaFields(row.metaJson) };
+    const mergedSettings = mergeSettings(row);
     return json({ ok: true, settings: mergedSettings }, 200);
   } catch (error: unknown) {
     if (isApiAuthError(error)) {
@@ -211,19 +265,38 @@ export async function POST(req: NextRequest) {
 
     const row = await ensureRow(userId, accountId);
     const metaPatch = pickMetaPatch(body);
-    const existingMeta = isRecord(row.metaJson) ? { ...row.metaJson } : {};
+    const existingMeta = isRecord(row?.metaJson) ? { ...row.metaJson } : {};
     const nextMeta = { ...existingMeta, ...metaPatch };
     const metaToSave = Object.keys(nextMeta).length ? nextMeta : null;
 
-    const next = await prisma.notificationSettings.update({
-      where: { id: row.id },
-      data: {
-        ...patch,
-        metaJson: metaToSave ?? Prisma.JsonNull,
-      },
-    });
+    if (!row?.id) {
+      return json({ ok: true, settings: mergeSettings(null, { ...patch, ...metaPatch }) }, 200);
+    }
 
-    const mergedSettings = { ...next, ...readMetaFields(next.metaJson) };
+    let next: NotificationSettingsRow | null = null;
+    try {
+      next = await prisma.notificationSettings.update({
+        where: { id: row.id },
+        data: {
+          ...patch,
+          metaJson: metaToSave ?? Prisma.JsonNull,
+        },
+      });
+    } catch (error) {
+      console.error("[notifications/settings] full update failed", error);
+      try {
+        next = await prisma.notificationSettings.update({
+          where: { id: row.id },
+          data: {
+            ...patch,
+          },
+        });
+      } catch (fallbackError) {
+        console.error("[notifications/settings] fallback update failed", fallbackError);
+      }
+    }
+
+    const mergedSettings = mergeSettings(next || row, metaPatch);
     return json({ ok: true, settings: mergedSettings }, 200);
   } catch (error: unknown) {
     if (isApiAuthError(error)) {

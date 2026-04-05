@@ -335,6 +335,11 @@ function buildBillingEmailLabel(planId: PlanId, email: string | null | undefined
   return planId === "free" ? "Account not billed" : "—";
 }
 
+function safePlanLimit(planId: PlanId, key: "seats" | "websites") {
+  const value = PLANS?.[planId]?.limits?.[key];
+  return typeof value === "number" ? value : null;
+}
+
 
 /* =========================
  CARD BRAND ICONS
@@ -589,6 +594,8 @@ function CardDetailsForm(props: {
             <div className="sx-field">
               <label className="sx-label">Name on card</label>
               <input
+                id="billing-card-name"
+                name="billingCardName"
                 className="sx-input"
                 value={props.cardName}
                 onChange={(e) => props.setCardName(e.target.value)}
@@ -631,6 +638,8 @@ function CardDetailsForm(props: {
             <div className="sx-field">
               <label className="sx-label">Billing address</label>
               <input
+                id="billing-address-line1"
+                name="billingAddressLine1"
                 className="sx-input"
                 value={props.billing1}
                 onChange={(e) => props.setBilling1(e.target.value)}
@@ -644,6 +653,8 @@ function CardDetailsForm(props: {
             <div className="sx-field">
               <label className="sx-label">Apt / suite</label>
               <input
+                id="billing-address-line2"
+                name="billingAddressLine2"
                 className="sx-input"
                 value={props.billing2}
                 onChange={(e) => props.setBilling2(e.target.value)}
@@ -658,6 +669,8 @@ function CardDetailsForm(props: {
               <div className="sx-field">
                 <label className="sx-label">City</label>
                 <input
+                  id="billing-city"
+                  name="billingCity"
                   className="sx-input"
                   value={props.billingCity}
                   onChange={(e) => props.setBillingCity(e.target.value)}
@@ -670,6 +683,8 @@ function CardDetailsForm(props: {
               <div className="sx-field">
                 <label className="sx-label">Region</label>
                 <input
+                  id="billing-region"
+                  name="billingRegion"
                   className="sx-input"
                   value={props.billingRegion}
                   onChange={(e) => props.setBillingRegion(e.target.value)}
@@ -685,6 +700,8 @@ function CardDetailsForm(props: {
               <div className="sx-field">
                 <label className="sx-label">Postal</label>
                 <input
+                  id="billing-postal"
+                  name="billingPostal"
                   className="sx-input"
                   value={props.billingPostal}
                   onChange={(e) => props.setBillingPostal(e.target.value)}
@@ -697,6 +714,8 @@ function CardDetailsForm(props: {
               <div className="sx-field">
                 <label className="sx-label">Country</label>
                 <select
+                  id="billing-country"
+                  name="billingCountry"
                   className="sx-select"
                   value={props.billingCountry}
                   onChange={(e) => props.setBillingCountry(e.target.value)}
@@ -798,7 +817,13 @@ function BillingClientInner() {
       setSummary(s);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setErr(message || "Failed to load billing.");
+      const normalized = String(message || "").trim().toUpperCase();
+      if (normalized === "ACCOUNT_CONTEXT_REQUIRED" || normalized === "ACCOUNT_NOT_FOUND") {
+        setSummary(null);
+        setErr("");
+        return;
+      }
+      setErr("Billing details are temporarily unavailable.");
     }
   }, []);
 
@@ -891,6 +916,13 @@ function BillingClientInner() {
 
 
   const currentPlanId = summary?.computed.currentPlanId ?? bootPlanId;
+  const hasBillingContext = Boolean(summary?.account?.id);
+  const seatLimitValue = hasBillingContext
+    ? (summary?.computed?.seatLimit ?? null)
+    : safePlanLimit(currentPlanId, "seats");
+  const websiteLimitValue = hasBillingContext
+    ? (summary?.computed?.websiteLimit ?? null)
+    : safePlanLimit(currentPlanId, "websites");
   const pending = summary?.account?.pendingDowngradePlanId
     ? {
         toPlan: summary.account.pendingDowngradePlanId,
@@ -1239,13 +1271,13 @@ function BillingClientInner() {
 
               <article className="sx-billDetailCard">
                 <div className="sx-billDetailLabel">Seat limit</div>
-                <div className="sx-billDetailValue">{fmtLimit(summary?.computed?.seatLimit ?? null)}</div>
+                <div className="sx-billDetailValue">{fmtLimit(seatLimitValue)}</div>
                 <div className="sx-billDetailTag">Active seats: {summary?.computed?.seatsUsed ?? 0}</div>
               </article>
 
               <article className="sx-billDetailCard">
                 <div className="sx-billDetailLabel">Site limit</div>
-                <div className="sx-billDetailValue">{fmtLimit(summary?.computed?.websiteLimit ?? null)}</div>
+                <div className="sx-billDetailValue">{fmtLimit(websiteLimitValue)}</div>
                 <div className="sx-billDetailTag">Assigned: {summary?.computed?.websitesUsed ?? 0}</div>
               </article>
             </div>
@@ -1350,27 +1382,5 @@ function BillingClientInner() {
 
 
 export default function BillingClient() {
-  if (!pk) {
-    return (
-      <section className="sx-panel" aria-label="Billing settings">
-        <header className="sx-panelHead">
-          <div>
-            <h2 className="sx-h2">Billing</h2>
-            <p className="sx-sub">Plan, subscription status, payment method, and invoices.</p>
-          </div>
-          <span className="sx-badge sx-badgeBill">Setup</span>
-        </header>
-
-
-        <div className="sx-body">
-          <div className="sx-billError">
-            Missing <b>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</b>. Add it to <b>.env.local</b> and restart <b>npm run dev</b>.
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-
   return <BillingClientInner />;
 }

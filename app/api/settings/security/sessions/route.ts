@@ -244,19 +244,6 @@ export async function GET(req: NextRequest) {
     const ipNow = pickClientIp(req);
     const geoNow = readNetworkGeo(req, ipNow || null);
 
-    const events = await prisma.auditLog.findMany({
-      where: withAuditLogUserIdField({ accountId }, userId) as Prisma.AuditLogWhereInput,
-      orderBy: { createdAt: "desc" },
-      take: 20,
-      select: {
-        id: true,
-        createdAt: true,
-        ip: true,
-        userAgent: true,
-        metaJson: true,
-      },
-    });
-
     type SessionRow = {
       id: string;
       label: string;
@@ -285,13 +272,41 @@ export async function GET(req: NextRequest) {
       ip: ipNow || null,
     });
 
+    const events = await prisma.auditLog.findMany({
+      where: withAuditLogUserIdField({ accountId }, userId) as Prisma.AuditLogWhereInput,
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      select: {
+        id: true,
+        createdAt: true,
+        ip: true,
+        userAgent: true,
+        metaJson: true,
+      },
+    }).catch(async (error) => {
+      console.error("[settings/security/sessions] full audit query failed", error);
+      return prisma.auditLog.findMany({
+        where: withAuditLogUserIdField({ accountId }, userId) as Prisma.AuditLogWhereInput,
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: {
+          id: true,
+          createdAt: true,
+          userAgent: true,
+        },
+      }).catch((fallbackError) => {
+        console.error("[settings/security/sessions] fallback audit query failed", fallbackError);
+        return [];
+      });
+    });
+
     for (const e of events) {
-      const eua = String(e.userAgent || "");
+      const eua = String(("userAgent" in e ? e.userAgent : "") || "");
       const b = detectBrowser(eua);
       const dv = deviceLabel(eua);
 
-      const ip = String(e.ip || "").trim();
-      const locFromMeta = readLocationFromMeta(e.metaJson, ip || null);
+      const ip = String(("ip" in e ? e.ip : "") || "").trim();
+      const locFromMeta = readLocationFromMeta("metaJson" in e ? e.metaJson : null, ip || null);
 
       out.push({
         id: e.id,

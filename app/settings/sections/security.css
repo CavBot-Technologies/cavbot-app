@@ -359,8 +359,8 @@
   height: 18px;
   display: block;
   background-color: rgba(234,240,255,0.92);
-  -webkit-mask: url("/icons/app/security-protection-fingerprint-shield-svgrepo-com.svg") center/contain no-repeat;
-  mask: url("/icons/app/security-protection-fingerprint-shield-svgrepo-com.svg") center/contain no-repeat;
+  -webkit-mask: url("/icons/app/security-protection-hand-shield-svgrepo-com.svg") center/contain no-repeat;
+  mask: url("/icons/app/security-protection-hand-shield-svgrepo-com.svg") center/contain no-repeat;
 }
 
 .sx-cavbot-eyes{

@@ -6,7 +6,7 @@ import { isApiAuthError, requireSession, requireUser } from "@/lib/apiAuth";
 import { auditLogWrite } from "@/lib/audit";
 import { hasRequestIntegrityHeader } from "@/lib/security/requestIntegrity";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
-import { createWorkspaceAccessRequest } from "@/lib/workspaceTeam.server";
+import { createWorkspaceAccessRequest, isWorkspaceAccessRequestSchemaMismatch } from "@/lib/workspaceTeam.server";
 import { buildGuardDecisionPayload } from "@/src/lib/cavguard/cavGuard.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
@@ -143,6 +143,16 @@ export async function POST(req: NextRequest) {
         errorCode: error.code,
       });
       return json({ ok: false, error: error.code, ...(guardPayload || {}) }, error.status);
+    }
+    if (isWorkspaceAccessRequestSchemaMismatch(error)) {
+      return json(
+        {
+          ok: false,
+          error: "FEATURE_UNAVAILABLE",
+          message: "Workspace access requests are temporarily unavailable.",
+        },
+        503,
+      );
     }
     return json({ ok: false, error: "SERVER_ERROR" }, 500);
   }

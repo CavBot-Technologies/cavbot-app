@@ -5,7 +5,8 @@ import type Stripe from "stripe";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStripe } from "@/lib/stripeClient";
-import { requireSession, requireAccountContext, requireAccountRole, isApiAuthError } from "@/lib/apiAuth";
+import { requireSession, isApiAuthError } from "@/lib/apiAuth";
+import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,10 +32,10 @@ type DownloadParams = { invoiceId: string };
 export async function GET(req: NextRequest, ctx: { params: Promise<DownloadParams> }) {
   try {
     const sess = await requireSession(req);
-    requireAccountContext(sess);
-    await requireAccountRole(sess, ["OWNER", "ADMIN"]);
+    const billingCtx = await resolveBillingAccountContext(sess);
+    requireBillingManageRole(billingCtx);
 
-    const accountId = s(sess.accountId);
+    const accountId = billingCtx.accountId;
     const params = await ctx.params;
     const invoiceId = s(params?.invoiceId);
 

@@ -1,12 +1,11 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma, type AuditAction } from "@prisma/client";
+import { Prisma, type AuditAction, type AuditLog, type AuditCategory } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
 import { getAuditActionDefinition } from "@/lib/audit";
-import { AUDIT_LOG_USER_ID_COLUMN_SQL } from "@/lib/auditModelCompat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,25 +26,14 @@ type CursorState = {
   createdAt: Date;
 };
 
-type RawHistoryRow = {
-  id: string;
-  action: string;
-  targetType: string | null;
-  targetId: string | null;
-  targetLabel: string | null;
-  metaJson: string | Record<string, unknown> | null;
-  ip: string | null;
-  userAgent: string | null;
-  createdAt: Date;
-  operatorId: string | null;
-  operatorDisplayName: string | null;
-  operatorEmail: string | null;
-  operatorRole: string | null;
-  operatorFullName: string | null;
-  operatorUsername: string | null;
-  actionLabel: string | null;
-  category: string | null;
-  severity: string | null;
+type RawHistoryRow = AuditLog & {
+  operator: {
+    id: string;
+    displayName: string | null;
+    email: string | null;
+    fullName: string | null;
+    username: string | null;
+  } | null;
 };
 
 function formatActionLabel(action: string) {
@@ -82,43 +70,49 @@ function buildWhereClause(options: {
   category: HistoryCategory;
   searchTerm: string | null;
   cursor: CursorState | null;
-  accountId: string;
-}): Prisma.Sql {
-  const clauses: Prisma.Sql[] = [];
-
-  clauses.push(Prisma.sql`al."accountId" = ${options.accountId}`);
+  accountIds: string[];
+}): Prisma.AuditLogWhereInput {
+  const filters: Prisma.AuditLogWhereInput[] = [{ accountId: { in: options.accountIds } }];
 
   if (options.category !== "all") {
-    clauses.push(Prisma.sql`al."category" = ${options.category}`);
+    filters.push({ category: options.category as AuditCategory });
   }
 
   if (options.cursor) {
-    clauses.push(
-      Prisma.sql`(al."createdAt" < ${options.cursor.createdAt} OR (al."createdAt" = ${options.cursor.createdAt} AND al."id" < ${options.cursor.id}))`
-    );
+    filters.push({
+      OR: [
+        { createdAt: { lt: options.cursor.createdAt } },
+        {
+          AND: [
+            { createdAt: options.cursor.createdAt },
+            { id: { lt: options.cursor.id } },
+          ],
+        },
+      ],
+    });
   }
 
   if (options.searchTerm) {
-    const pattern = `%${options.searchTerm.toLowerCase()}%`;
-    clauses.push(
-      Prisma.sql`(
-        lower(al."action") LIKE ${pattern} OR
-        lower(coalesce(al."actionLabel", "")) LIKE ${pattern} OR
-        lower(coalesce(al."targetType", "")) LIKE ${pattern} OR
-        lower(coalesce(al."targetId", "")) LIKE ${pattern} OR
-        lower(coalesce(al."targetLabel", "")) LIKE ${pattern} OR
-        lower(coalesce(u."displayName", "")) LIKE ${pattern} OR
-        lower(coalesce(u."email", "")) LIKE ${pattern} OR
-        lower(coalesce(al."metaJson"::text, "")) LIKE ${pattern}
-      )`
-    );
+    const term = options.searchTerm;
+    filters.push({
+      OR: [
+        { actionLabel: { contains: term, mode: "insensitive" } },
+        { targetType: { contains: term, mode: "insensitive" } },
+        { targetId: { contains: term, mode: "insensitive" } },
+        { targetLabel: { contains: term, mode: "insensitive" } },
+        { operator: { is: { displayName: { contains: term, mode: "insensitive" } } } },
+        { operator: { is: { email: { contains: term, mode: "insensitive" } } } },
+        { operator: { is: { fullName: { contains: term, mode: "insensitive" } } } },
+        { operator: { is: { username: { contains: term, mode: "insensitive" } } } },
+      ],
+    });
   }
 
-  return clauses.length ? Prisma.join(clauses, " AND ") : Prisma.sql`TRUE`;
+  return filters.length === 1 ? filters[0] : { AND: filters };
 }
 
 async function fetchHistoryRows(options: {
-  accountId: string;
+  accountIds: string[];
   category: HistoryCategory;
   searchTerm: string | null;
   cursor: CursorState | null;
@@ -128,38 +122,73 @@ async function fetchHistoryRows(options: {
     category: options.category,
     searchTerm: options.searchTerm,
     cursor: options.cursor,
-    accountId: options.accountId,
+    accountIds: options.accountIds,
   });
 
-  const rows = await prisma.$queryRaw<RawHistoryRow[]>(Prisma.sql`
-    SELECT
-      al."id",
-      al."action",
-      al."targetType",
-      al."targetId",
-      al."targetLabel",
-      al."metaJson",
-      al."ip",
-      al."userAgent",
-      al."createdAt",
-      al."actionLabel",
-      al."category",
-      al."severity",
-      u."id" AS "operatorId",
-      u."displayName" AS "operatorDisplayName",
-      u."email" AS "operatorEmail",
-      u."fullName" AS "operatorFullName",
-      u."username" AS "operatorUsername",
-      m."role" AS "operatorRole"
-    FROM "AuditLog" al
-    LEFT JOIN "User" u ON u."id" = al.${AUDIT_LOG_USER_ID_COLUMN_SQL}
-    LEFT JOIN "Membership" m ON m."userId" = u."id" AND m."accountId" = ${options.accountId}
-    WHERE ${whereClause}
-    ORDER BY al."createdAt" DESC, al."id" DESC
-    LIMIT ${options.limit + 1}
-  `);
+  return prisma.auditLog.findMany({
+    where: whereClause,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: options.limit + 1,
+    include: {
+      operator: {
+        select: {
+          id: true,
+          displayName: true,
+          email: true,
+          fullName: true,
+          username: true,
+        },
+      },
+    },
+  }) as Promise<RawHistoryRow[]>;
+}
 
-  return rows;
+async function resolveOperatorRoles(accountIds: string[], operatorUserIds: string[]) {
+  if (!accountIds.length || !operatorUserIds.length) return new Map<string, string>();
+  const rows = await prisma.membership.findMany({
+    where: {
+      accountId: { in: accountIds },
+      userId: { in: operatorUserIds },
+    },
+    select: {
+      accountId: true,
+      userId: true,
+      role: true,
+    },
+  });
+
+  return new Map(rows.map((row) => [`${row.accountId}:${row.userId}`, row.role]));
+}
+
+async function resolveHistoryAccountIds(session: Awaited<ReturnType<typeof requireSettingsOwnerSession>>) {
+  const primaryAccountIds = [session.accountId];
+  const primaryCount = await prisma.auditLog.count({
+    where: { accountId: session.accountId },
+  });
+  if (primaryCount > 0) return primaryAccountIds;
+
+  const ownerMemberships = await prisma.membership.findMany({
+    where: {
+      userId: session.sub,
+      role: "OWNER",
+    },
+    select: {
+      accountId: true,
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
+
+  const allOwnerAccountIds = Array.from(
+    new Set(
+      ownerMemberships
+        .map((row) => String(row.accountId || "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  return allOwnerAccountIds.length ? allOwnerAccountIds : primaryAccountIds;
 }
 
 export async function GET(req: NextRequest) {
@@ -175,11 +204,12 @@ export async function GET(req: NextRequest) {
     const cursorId = (url.searchParams.get("cursor") || "").trim() || null;
     const rawLimit = Number(url.searchParams.get("limit") || PAGE_SIZE);
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 10), 50) : PAGE_SIZE;
+    const accountIds = await resolveHistoryAccountIds(session);
 
     let cursorState: CursorState | null = null;
     if (cursorId) {
       const cursorRow = await prisma.auditLog.findFirst({
-        where: { id: cursorId, accountId: session.accountId },
+        where: { id: cursorId, accountId: { in: accountIds } },
         select: { id: true, createdAt: true },
       });
       if (!cursorRow) {
@@ -189,31 +219,32 @@ export async function GET(req: NextRequest) {
     }
 
     const rows = await fetchHistoryRows({
-      accountId: session.accountId,
+      accountIds,
       category,
       searchTerm: searchQuery || null,
       cursor: cursorState,
       limit,
     });
+    const roleMap = await resolveOperatorRoles(
+      accountIds,
+      Array.from(new Set(rows.map((row) => String(row.operator?.id || "").trim()).filter(Boolean)))
+    );
 
     const hasMore = rows.length > limit;
     const sliced = hasMore ? rows.slice(0, limit) : rows;
 
     const entries = sliced.map((row) => {
-      const meta =
-        row.metaJson == null
-          ? null
-          : typeof row.metaJson === "string"
-          ? (JSON.parse(row.metaJson) as Record<string, unknown>)
-          : (row.metaJson as Record<string, unknown>);
-      const actingUser = row.operatorId
+      const meta = row.metaJson && typeof row.metaJson === "object"
+        ? (row.metaJson as Record<string, unknown>)
+        : null;
+      const actingUser = row.operator?.id
         ? {
-            id: row.operatorId,
-            fullName: row.operatorFullName,
-            displayName: row.operatorDisplayName || "",
-            email: row.operatorEmail,
-            role: row.operatorRole,
-            username: row.operatorUsername,
+            id: row.operator.id,
+            fullName: row.operator.fullName,
+            displayName: row.operator.displayName || "",
+            email: row.operator.email,
+            role: roleMap.get(`${row.accountId}:${row.operator.id}`) || null,
+            username: row.operator.username,
           }
         : {
             id: null,
@@ -226,11 +257,11 @@ export async function GET(req: NextRequest) {
 
       const actionDefinition = getAuditActionDefinition(row.action as AuditAction);
       const actionLabel =
-        row.actionLabel?.trim() || actionDefinition?.label || formatActionLabel(row.action);
+        row.actionLabel.trim() || actionDefinition?.label || formatActionLabel(row.action);
       const category =
-        (row.category as HistoryCategory) || actionDefinition?.category || "system";
+        (row.category as HistoryCategory) || (actionDefinition?.category as HistoryCategory) || "system";
       const severity =
-        (row.severity as "info" | "warning" | "destructive") || actionDefinition?.severity || "info";
+        row.severity || actionDefinition?.severity || "info";
 
       return {
         id: row.id,

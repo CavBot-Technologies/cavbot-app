@@ -255,7 +255,12 @@ export default function HistoryClient() {
         setHasMore(Boolean(payload.nextCursor));
       } catch (err) {
         if ((err as { name?: string }).name === "AbortError") return;
-        setError((err as Error).message || "Unable to load history.");
+        if (!opts.loadMore) {
+          setEntries([]);
+          setNextCursor(null);
+          setHasMore(false);
+        }
+        setError(null);
       } finally {
         setLoading(false);
       }

@@ -2,9 +2,10 @@ import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession, requireAccountContext, requireAccountRole, isApiAuthError } from "@/lib/apiAuth";
+import { requireSession, isApiAuthError } from "@/lib/apiAuth";
 import { getStripe } from "@/lib/stripeClient";
 import { getAppUrl } from "@/lib/stripe";
+import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,10 +30,10 @@ function s(v: unknown) {
 export async function POST(req: NextRequest) {
   try {
     const sess = await requireSession(req);
-    requireAccountContext(sess);
-    await requireAccountRole(sess, ["OWNER", "ADMIN"]);
+    const billingCtx = await resolveBillingAccountContext(sess);
+    requireBillingManageRole(billingCtx);
 
-    const accountId = sess.accountId!;
+    const accountId = billingCtx.accountId;
     const appUrl = getAppUrl();
 
     const account = await prisma.account.findUnique({

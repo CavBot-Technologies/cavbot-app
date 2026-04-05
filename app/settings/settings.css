@@ -36,6 +36,12 @@
   --sx-font-code: "IBM Plex Mono", "Space Mono", "SFMono-Regular", "Menlo", "Ubuntu Mono", monospace;
 }
 
+.cb-content:has(.sx-page){
+  padding-left: 0;
+  padding-right: 0;
+  background: rgba(3,7,18,0.95);
+}
+
 /* Page */
 .sx-page{
   width: 100%;
@@ -1285,6 +1291,7 @@
 }
 
 .sx-body{
+  --sx-divider-bleed: 24px;
   padding: 20px 24px 28px;
   display:flex;
   flex-direction: column;
@@ -1989,6 +1996,10 @@
   letter-spacing: 0.02em;
 }
 .sx-websitesAddBtn{
+  height: 34px;
+  padding: 0 12px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
   gap: 8px;
 }
 .sx-websitesAddBtnIcon{
@@ -2417,6 +2428,7 @@
 
 @media (max-width: 720px){
   .sx-body{
+    --sx-divider-bleed: 18px;
     padding: 16px 18px 24px;
     gap: 18px;
   }
@@ -2479,6 +2491,10 @@
 }
 .sx-workspaceLinks{
   margin-top: 2px;
+}
+.sx-workspaceWebsitesField{
+  grid-column: 1 / -1;
+  margin-top: 18px;
 }
 
 .sx-companyCard{
@@ -2621,6 +2637,15 @@
   font-size: 12px;
   outline: none;
   min-width: 0;
+}
+.sx-page .sx-select{
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M7 10l5 5 5-5' stroke='%23eaf0ff' stroke-opacity='.72' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 14px 14px;
+  padding-right: 42px;
 }
 .usernameInput{
   color: var(--sx-tone-lime);
@@ -2917,7 +2942,28 @@
 
 .sx-ddCaret{
   margin-left:auto;
+  margin-right: 2px;
+  width: 18px;
+  height: 18px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
   color: rgba(234,240,255,0.72);
+}
+
+.sx-itemArrow{
+  width: 16px;
+  height: 16px;
+  margin-right: 2px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color: rgba(234,240,255,0.56);
+}
+
+.sx-itemArrow svg,
+.sx-ddCaret svg{
+  display:block;
 }
 
 .sx-ddMenu{
@@ -2996,11 +3042,8 @@
   height: 1px;
   background: rgba(255,255,255,0.08);
   border-radius: 0;
-
-
-  /* stretch to card edges */
-  width: calc(100% + 32px);
-  margin: 14px -16px 16px;
+  width: calc(100% + var(--sx-divider-bleed, 24px) + var(--sx-divider-bleed, 24px));
+  margin: 14px calc(0px - var(--sx-divider-bleed, 24px)) 16px;
 }
 @media (max-width: 640px){
 

@@ -1583,7 +1583,7 @@ const handleCategoryChange = (value: string) => {
 
             <div className="sx-form sx-profileForm">
 	            <div className="sx-formRow" style={{ gridTemplateColumns: "1fr" }}>
-	              <div className="sx-field">
+                  <div className="sx-field">
 	                <div className="sx-label">Full name</div>
 	                <input
 		                  className="sx-input"
@@ -1873,7 +1873,7 @@ const handleCategoryChange = (value: string) => {
 	                  <div className="sx-hint sx-linkHint">Professional identity and company presence.</div>
 	                </div>
 
-	                  <div className="sx-field">
+	                  <div className="sx-field sx-workspaceWebsitesField">
 	                    <div
 	                      className="sx-label"
 	                      style={{

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { isApiAuthError, requireSession, requireUser } from "@/lib/apiAuth";
 import { auditLogWrite } from "@/lib/audit";
-import { denyWorkspaceAccessRequest } from "@/lib/workspaceTeam.server";
+import { denyWorkspaceAccessRequest, isWorkspaceAccessRequestSchemaMismatch } from "@/lib/workspaceTeam.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -90,6 +90,16 @@ export async function POST(req: NextRequest, ctx: { params: { id?: string } }) {
     );
   } catch (error) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
+    if (isWorkspaceAccessRequestSchemaMismatch(error)) {
+      return json(
+        {
+          ok: false,
+          error: "FEATURE_UNAVAILABLE",
+          message: "Workspace access requests are temporarily unavailable.",
+        },
+        503,
+      );
+    }
     return json({ ok: false, error: "SERVER_ERROR" }, 500);
   }
 }
