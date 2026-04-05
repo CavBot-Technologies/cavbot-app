@@ -2801,17 +2801,24 @@
 }
 
 @media (max-width: 900px){
+  .cb-content:has(.sx-page){
+    padding-left: 0;
+    padding-right: 0;
+    background: rgba(3,7,18,0.95);
+  }
+
   .sx-page{
     max-width: 100%;
-    padding: 12px 10px 64px;
+    padding: 12px 8px 64px;
   }
   .sx-frame{
     width: 100%;
+    gap: 14px;
   }
   .sx-main{
     width: 100%;
     border-radius: var(--sx-r10);
-    padding: 20px;
+    padding: 18px 16px;
   }
   .sx-panel,
   .sx-card{
@@ -2820,12 +2827,42 @@
   }
 }
 
+@media (max-width: 640px){
+  .cb-content:has(.sx-page){
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .sx-page{
+    padding: 10px 0 60px;
+  }
+
+  .sx-top,
+  .sx-frame,
+  .sx-integrationsLayout,
+  .cb-cavbotPage{
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .sx-main{
+    padding: 16px 14px;
+  }
+}
+
 @media (max-width: 480px){
   .sx-page{
-    padding: 10px 8px 60px;
+    padding: 8px 0 60px;
+  }
+  .sx-top,
+  .sx-frame,
+  .sx-integrationsLayout,
+  .cb-cavbotPage{
+    padding-left: 8px;
+    padding-right: 8px;
   }
   .sx-main{
-    padding: 18px;
+    padding: 14px 12px;
   }
 }
 /* ==========================
