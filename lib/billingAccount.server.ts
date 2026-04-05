@@ -78,6 +78,7 @@ export async function resolveBillingAccountContext(sess: CavbotSession): Promise
 
   const userId = String(sess.sub || "").trim();
   const currentAccountId = String(sess.accountId || "").trim();
+  const currentMemberRole = roleFromPrisma(sess.memberRole);
 
   const tryResolve = async (candidates: AuthMembership[]) => {
     for (const candidate of candidates) {
@@ -132,6 +133,26 @@ export async function resolveBillingAccountContext(sess: CavbotSession): Promise
 
   const prismaResolved = await tryResolve(await findPrismaMembershipCandidates(userId, currentAccountId));
   if (prismaResolved) return prismaResolved;
+
+  if (currentAccountId) {
+    const signedSessionAccount = await prisma.account
+      .findUnique({
+        where: { id: currentAccountId },
+        select: { id: true },
+      })
+      .catch(() => null);
+
+    if (signedSessionAccount?.id) {
+      sess.accountId = signedSessionAccount.id;
+      sess.memberRole = currentMemberRole;
+
+      return {
+        userId,
+        accountId: signedSessionAccount.id,
+        memberRole: currentMemberRole,
+      } satisfies BillingAccountContext;
+    }
+  }
 
   throw new ApiAuthError("ACCOUNT_CONTEXT_REQUIRED", 401);
 }
