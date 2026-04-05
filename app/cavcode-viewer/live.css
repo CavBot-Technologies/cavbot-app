@@ -40,8 +40,15 @@ body{
 
 /* Root */
 .ccv-root{
+  height: calc(100dvh - var(--cb-global-footer-height));
   min-height: calc(100dvh - var(--cb-global-footer-height));
   background: var(--cb-bg0);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 
 .ccv-root,
@@ -277,6 +284,7 @@ body{
 
 /* Body layout */
 .ccv-body{
+  flex: 1 0 auto;
   display:grid;
   grid-template-columns: 420px 1fr;
   gap: 14px;
@@ -1052,11 +1060,22 @@ body{
   .ccv-top{
     position: sticky;
     top: 0;
-    align-items:center;
+    align-items:flex-start;
   }
   .ccv-body{
     grid-template-columns: 1fr;
     min-height: 0;
+    padding: 14px 14px 24px;
+  }
+  .ccv-topLeft,
+  .ccv-topRight{
+    width: 100%;
+  }
+  .ccv-topRight{
+    justify-content: flex-start;
+  }
+  .ccv-card{
+    height: auto;
   }
   .ccv-right{
     height: auto;
@@ -1068,6 +1087,14 @@ body{
   }
   .ccv-frame.is-desktop{
     height: min(68dvh, 720px);
+  }
+  .ccv-frame.is-phone .ccv-iframe{
+    width: min(390px, 100%);
+    height: min(780px, 72dvh);
+  }
+  .ccv-frame.is-tablet .ccv-iframe{
+    width: min(100%, 720px);
+    height: min(980px, 78dvh);
   }
 
   .ccv-uploadRow,
