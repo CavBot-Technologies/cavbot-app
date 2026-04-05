@@ -1988,6 +1988,15 @@
   border-radius: var(--sx-r10);
   letter-spacing: 0.02em;
 }
+.sx-websitesAddBtn{
+  gap: 8px;
+}
+.sx-websitesAddBtnIcon{
+  display: none;
+  width: 14px;
+  height: 14px;
+  filter: brightness(0) invert(1);
+}
 .sx-btnSerious.sx-btnGhost:hover{
   /* Override sx-btnGhost hover dropping down */
   transform: translateY(-1px);
@@ -2797,6 +2806,23 @@
   .sx-panel,
   .sx-card{
     width: 100%;
+  }
+
+  .sx-websitesAddBtn{
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: var(--sx-r10);
+    flex: 0 0 auto;
+  }
+
+  .sx-websitesAddBtnLabel{
+    display: none;
+  }
+
+  .sx-websitesAddBtnIcon{
+    display: block;
   }
 }
 

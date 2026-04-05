@@ -1885,12 +1885,21 @@ const handleCategoryChange = (value: string) => {
 	                    >
 	                      <span>Websites</span>
 	                      <button
-	                        className="sx-btn sx-btnGhost sx-btnSerious"
+	                        className="sx-btn sx-btnGhost sx-btnSerious sx-websitesAddBtn"
 	                        type="button"
 	                        onClick={openAddWebsite}
 	                        disabled={loading || customLinkUrls.length >= MAX_CUSTOM_LINKS}
+                          aria-label="Add website"
 	                      >
-	                        Add website
+                          <span className="sx-websitesAddBtnLabel">Add website</span>
+                          <Image
+                            className="sx-websitesAddBtnIcon"
+                            src="/icons/app/plus-svgrepo-com.svg"
+                            alt=""
+                            width={14}
+                            height={14}
+                            aria-hidden="true"
+                          />
 	                      </button>
 	                    </div>
 
