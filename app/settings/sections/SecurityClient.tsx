@@ -771,10 +771,9 @@ export default function SecurityClient() {
             <div className="sx-card sx-secWide">
               <div className="sx-secCardTop">
                 <div>
-                  <div className="sx-kicker">Setup 2-Step Verification</div>
+                  <div className="sx-kicker">2-Step Verification</div>
                   <div className="sx-cardSub sx-secSub">
-                    Add an extra layer of protection for your workspace access. CavBot uses email and authenticator methods
-                    only.
+                    Add an extra layer of protection for your workspace access.
                   </div>
                   <br />
                   <br />
@@ -905,15 +904,14 @@ export default function SecurityClient() {
                         <div className="sx-secSessMain">
                           <div className="sx-secSessTitle">
                             <span className="sx-secSessLabel">{s.label}</span>
-                            {s.isCurrent ? (
-                              <span className="sx-secLiveDot" aria-label="Active session" role="status" />
-                            ) : null}
                           </div>
 
                           <div className="sx-secSessMeta">
                             <span className="sx-secLoc">{renderSessionLocation(s)}</span>
-                            <span className="sx-secDot" aria-hidden="true" />
-                            <span className="sx-secWhen">{s.statusText}</span>
+                            <span className="sx-secSessState" data-tone={s.isCurrent ? "active" : "default"}>
+                              <span className="sx-secStateDot" aria-hidden="true" />
+                              <span className="sx-secWhen">{s.statusText}</span>
+                            </span>
                           </div>
                         </div>
 
