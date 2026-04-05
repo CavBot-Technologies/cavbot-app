@@ -280,6 +280,9 @@ export async function GET(req: NextRequest) {
 
     return json({ ok: true, invoices: merged }, 200);
   } catch (error: unknown) {
+    if (isApiAuthError(error) && error.code === "ACCOUNT_CONTEXT_REQUIRED") {
+      return json({ ok: true, invoices: [] }, 200);
+    }
     if (isApiAuthError(error)) return json({ ok: false, error: error.code, message: error.message }, error.status);
     return json({ ok: false, error: "BILLING_INVOICES_FAILED", message: "Failed to load invoices." }, 500);
   }

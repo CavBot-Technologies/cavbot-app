@@ -32,6 +32,46 @@ function limitToNullable(x: number | "unlimited") {
   return typeof x === "number" ? x : null;
 }
 
+function buildEmptyBillingSummary() {
+  const fallbackPlanId = "free" as const;
+  const planDef = PLANS[fallbackPlanId];
+
+  return {
+    ok: true,
+    account: {
+      id: "",
+      slug: "",
+      tier: "FREE" as const,
+      billingEmail: null,
+      trialSeatActive: false,
+      trialStartedAt: null,
+      trialEndsAt: null,
+      pendingDowngradePlanId: null,
+      pendingDowngradeBilling: null,
+      pendingDowngradeAt: null,
+      pendingDowngradeEffectiveAt: null,
+      lastUpgradePlanId: null,
+      lastUpgradeBilling: null,
+      lastUpgradeAt: null,
+      lastUpgradeProrated: null,
+      stripeCustomerId: null,
+    },
+    subscription: null,
+    computed: {
+      currentPlanId: fallbackPlanId,
+      seatLimit: limitToNullable(planDef.limits.seats),
+      websiteLimit: limitToNullable(planDef.limits.websites),
+      seatsUsed: 0,
+      websitesUsed: 0,
+      billingCycle: "monthly" as const,
+      providerConnected: false,
+      stripeConnected: false,
+      portalReady: false,
+    },
+    qwenCoderUsage: null,
+  };
+}
+
 type SummaryAccountRecord = {
   id: string;
   slug: string;
@@ -190,7 +230,7 @@ export async function GET(req: NextRequest) {
 
     const account = await findBillingAccount(accountId);
 
-    if (!account) return json({ ok: false, error: "ACCOUNT_NOT_FOUND", message: "Account not found." }, 404);
+    if (!account) return json(buildEmptyBillingSummary(), 200);
 
     const currentPlanId = resolvePlanIdFromTier(account.tier);
     const planDef = PLANS[currentPlanId];
@@ -316,6 +356,9 @@ export async function GET(req: NextRequest) {
       200
     );
   } catch (error) {
+    if (isApiAuthError(error) && error.code === "ACCOUNT_CONTEXT_REQUIRED") {
+      return json(buildEmptyBillingSummary(), 200);
+    }
     if (isApiAuthError(error)) return json({ ok: false, error: error.code, message: error.message }, error.status);
     return json({ ok: false, error: "BILLING_SUMMARY_FAILED", message: "Failed to load billing summary." }, 500);
   }

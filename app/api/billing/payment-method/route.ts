@@ -185,6 +185,7 @@ export async function GET(req: NextRequest) {
 
     return json(pmFromCard(paymentMethod), 200);
   } catch (error: unknown) {
+    if (isApiAuthError(error) && error.code === "ACCOUNT_CONTEXT_REQUIRED") return json(pmEmpty(), 200);
     if (isApiAuthError(error)) return json({ ok: false, error: error.code, message: error.message }, error.status);
     return json({ ok: false, error: "PAYMENT_METHOD_FETCH_FAILED", message: "Failed to load payment method." }, 500);
   }
