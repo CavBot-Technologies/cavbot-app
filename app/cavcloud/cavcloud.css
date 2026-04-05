@@ -5688,15 +5688,26 @@ body{ margin:0; }
 @media (max-width: 1100px){
   .cavcloud-root{
     grid-template-columns: 1fr;
+    height: calc(100dvh - var(--cb-global-footer-height));
+    min-height: calc(100dvh - var(--cb-global-footer-height));
+    overflow-y: auto;
+    overflow-x: hidden;
+    align-content: start;
   }
   .cavcloud-side{
+    order: 2;
     flex-direction: column;
+    padding: 16px;
     overflow-x: hidden;
-    overflow-y: auto;
+    overflow-y: visible;
     scrollbar-width: none;
   }
   .cavcloud-side::-webkit-scrollbar{
     display: none;
+  }
+  .cavcloud-main{
+    order: 1;
+    min-height: 0;
   }
   .cavcloud-grid{
     grid-template-columns: 1fr;
@@ -6136,6 +6147,17 @@ body{ margin:0; }
 .cavcloud-main,
 .cavcloud-grid{
   overflow-x: hidden;
+}
+
+@media (max-width: 1100px){
+  .cavcloud-main{
+    padding: 0 16px 22px;
+  }
+
+  .cavcloud-top{
+    margin: 0 -16px 0;
+    padding: calc(12px + var(--safe-top, 0px)) 16px 12px;
+  }
 }
 
 .cavcloud-pane,

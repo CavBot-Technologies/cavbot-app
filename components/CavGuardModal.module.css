@@ -59,6 +59,12 @@
   transition: none;
 }
 
+.surfaceCard .glowTop,
+.surfaceCard .glowBottom {
+  display: block;
+  opacity: 1;
+}
+
 .surfaceCard .brSpacer {
   height: 24px;
 }

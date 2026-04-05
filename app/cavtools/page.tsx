@@ -1880,22 +1880,9 @@ function CavToolsPageInner() {
           <div role="status" aria-live="polite">
             <CavGuardCard
               variant="surface"
-              headline="Desktop operator surface required."
-              request="CavTools is CavGuarded to desktop-class screens because secure command execution and multi-namespace controls require a full operator viewport."
-              reason="Open on desktop or widen your viewport to re-enter the guarded surface."
-              actions={[
-                { label: "COMMAND CENTER", href: "/" },
-                {
-                  label: "REFRESH",
-                  onClick: () => {
-                    try {
-                      window.location.reload();
-                    } catch {
-                      // noop
-                    }
-                  },
-                },
-              ]}
+              headline="Desktop viewport required."
+              request="Access protected operator action."
+              reason="Open CavTools on desktop to continue."
             />
           </div>
         </div>
