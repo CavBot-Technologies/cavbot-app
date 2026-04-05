@@ -68,7 +68,6 @@ function resolveSessionMemberRole(
   if (normalized === "OWNER" || normalized === "ADMIN" || normalized === "MEMBER") return normalized;
   return fallback;
 }
-
 function isCavCloudSettingsReadSchemaMismatch(err: unknown) {
   return isSchemaMismatchError(err, {
     tables: ["CavCloudSettings", "CavCloudCollabPolicy", "CavCloudFolder", "Membership"],
