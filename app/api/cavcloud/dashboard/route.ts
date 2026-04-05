@@ -1,8 +1,9 @@
 import type { Prisma } from "@prisma/client";
 
-import { requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
+import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import { CAVCLOUD_ACTIVITY_OPERATION_KINDS } from "@/lib/cavcloud/historyLayers.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { getPlanLimits, resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 
@@ -175,6 +176,121 @@ function isMissingOperationLogTableError(err: unknown): boolean {
   return msg.includes("cavcloudoperationlog") && (msg.includes("does not exist") || msg.includes("relation"));
 }
 
+function isCavCloudDashboardSchemaMismatch(err: unknown) {
+  return isSchemaMismatchError(err, {
+    tables: [
+      "Account",
+      "CavCloudFile",
+      "CavCloudFolder",
+      "CavCloudUsagePoint",
+      "CavCloudOperationLog",
+      "CavCloudActivity",
+      "CavCloudStorageShare",
+      "CavCloudShare",
+      "PublicArtifact",
+      "CavCloudFolderUploadSession",
+      "CavCloudImportSession",
+    ],
+    columns: [
+      "tier",
+      "trialSeatActive",
+      "trialEndsAt",
+      "bytes",
+      "deletedAt",
+      "mimeType",
+      "name",
+      "path",
+      "folderId",
+      "bucketStart",
+      "usedBytes",
+      "kind",
+      "subjectType",
+      "subjectId",
+      "label",
+      "meta",
+      "action",
+      "targetType",
+      "targetId",
+      "targetPath",
+      "metaJson",
+      "expiresAt",
+      "revokedAt",
+      "sourcePath",
+      "displayTitle",
+      "visibility",
+      "publishedAt",
+      "rootFolderId",
+      "resolvedRootName",
+      "discoveredFilesCount",
+      "finalizedFilesCount",
+      "failedFilesCount",
+      "provider",
+      "status",
+      "targetFolderId",
+      "discoveredCount",
+      "importedCount",
+      "failedCount",
+    ],
+  });
+}
+
+function degradedDashboardPayload(account: AccountPlanShape | null = null) {
+  const planId = resolveEffectivePlanId(account);
+  const totalBytesLimit = planLimitBytes(account, planId);
+  return {
+    ok: true,
+    degraded: true,
+    storage: {
+      usedBytes: 0,
+      totalBytesLimit,
+      freeBytes: totalBytesLimit,
+      growthBytesRange: 0,
+      trendPoints: [{ t: Date.now(), usedBytes: 0 }],
+      breakdown: ["images", "video", "code", "docs", "archives", "other"].map((kind) => ({ kind, bytes: 0 })),
+      largestFolders: [],
+    },
+    activity: {
+      events: [],
+    },
+    sharesArtifacts: {
+      activeSharesCount: 0,
+      expiringSoon: [],
+      recentArtifacts: [],
+    },
+    pinned: {
+      items: [],
+    },
+    uploads: {
+      activeFolderUploads: [],
+    },
+  };
+}
+
+async function buildDegradedDashboardResponse(req: Request) {
+  const sess = await requireSession(req);
+  requireAccountContext(sess);
+  requireUser(sess);
+
+  const account = await prisma.account
+    .findUnique({
+      where: { id: String(sess.accountId || "") },
+      select: { tier: true, trialSeatActive: true, trialEndsAt: true },
+    })
+    .catch((error) => {
+      if (
+        isSchemaMismatchError(error, {
+          tables: ["Account"],
+          columns: ["tier", "trialSeatActive", "trialEndsAt"],
+        })
+      ) {
+        return null;
+      }
+      throw error;
+    });
+
+  return jsonNoStore(degradedDashboardPayload(account), 200);
+}
+
 function sanitizeEventMeta(args: {
   subjectType: string;
   subjectId: string;
@@ -295,7 +411,12 @@ async function accountPathSetFor(accountId: string, paths: string[]): Promise<Se
       },
       select: { path: true },
     }),
-  ]);
+  ]).catch((error) => {
+    if (isCavCloudDashboardSchemaMismatch(error)) {
+      return [[], []] as const;
+    }
+    throw error;
+  });
 
   const out = new Set<string>();
   for (const row of fileRows) out.add(normalizePath(row.path));
@@ -337,6 +458,16 @@ export async function GET(req: Request) {
           trialSeatActive: true,
           trialEndsAt: true,
         },
+      }).catch((error) => {
+        if (
+          isSchemaMismatchError(error, {
+            tables: ["Account"],
+            columns: ["tier", "trialSeatActive", "trialEndsAt"],
+          })
+        ) {
+          return null;
+        }
+        throw error;
       }),
       prisma.cavCloudFile.aggregate({
         where: {
@@ -446,164 +577,220 @@ export async function GET(req: Request) {
           });
           return { mode: "operation" as const, rows };
         } catch (err) {
-          if (!isMissingOperationLogTableError(err)) throw err;
-          const fallback = await prisma.cavCloudActivity.findMany({
+          if (!isMissingOperationLogTableError(err) && !isCavCloudDashboardSchemaMismatch(err)) throw err;
+          try {
+            const fallback = await prisma.cavCloudActivity.findMany({
+              where: {
+                accountId,
+                action: { in: Array.from(FALLBACK_ACTIVITY_ACTIONS) },
+              },
+              orderBy: { createdAt: "desc" },
+              take: 80,
+              select: {
+                id: true,
+                action: true,
+                targetType: true,
+                targetId: true,
+                targetPath: true,
+                metaJson: true,
+                createdAt: true,
+              },
+            });
+            return { mode: "activity" as const, rows: fallback };
+          } catch (fallbackError) {
+            if (isCavCloudDashboardSchemaMismatch(fallbackError)) {
+              return { mode: "activity" as const, rows: [] };
+            }
+            throw fallbackError;
+          }
+        }
+      })(),
+      (async () => {
+        try {
+          return await prisma.cavCloudStorageShare.count({
             where: {
               accountId,
-              action: { in: Array.from(FALLBACK_ACTIVITY_ACTIONS) },
+              revokedAt: null,
+              expiresAt: { gt: now },
             },
-            orderBy: { createdAt: "desc" },
+          });
+        } catch (error) {
+          if (isCavCloudDashboardSchemaMismatch(error)) return 0;
+          throw error;
+        }
+      })(),
+      (async () => {
+        try {
+          return await prisma.cavCloudStorageShare.findMany({
+            where: {
+              accountId,
+              revokedAt: null,
+              expiresAt: { gt: now },
+            },
+            orderBy: { expiresAt: "asc" },
+            take: 12,
+            select: {
+              id: true,
+              expiresAt: true,
+              file: {
+                select: {
+                  id: true,
+                  name: true,
+                  path: true,
+                },
+              },
+              folder: {
+                select: {
+                  id: true,
+                  name: true,
+                  path: true,
+                },
+              },
+            },
+          });
+        } catch (error) {
+          if (isCavCloudDashboardSchemaMismatch(error)) return [];
+          throw error;
+        }
+      })(),
+      (async () => {
+        try {
+          return await prisma.cavCloudShare.findMany({
+            where: {
+              createdByUserId: userId,
+              revokedAt: null,
+              expiresAt: { gt: now },
+            },
+            orderBy: { expiresAt: "asc" },
+            take: 120,
+            select: {
+              id: true,
+              expiresAt: true,
+              artifact: {
+                select: {
+                  sourcePath: true,
+                  displayTitle: true,
+                },
+              },
+            },
+          });
+        } catch (error) {
+          if (isCavCloudDashboardSchemaMismatch(error)) return [];
+          throw error;
+        }
+      })(),
+      (async () => {
+        try {
+          return await prisma.publicArtifact.findMany({
+            where: {
+              userId,
+              sourcePath: { not: null },
+            },
+            orderBy: { updatedAt: "desc" },
             take: 80,
             select: {
               id: true,
+              sourcePath: true,
+              displayTitle: true,
+              visibility: true,
+              publishedAt: true,
+              updatedAt: true,
+            },
+          });
+        } catch (error) {
+          if (isCavCloudDashboardSchemaMismatch(error)) return [];
+          throw error;
+        }
+      })(),
+      (async () => {
+        try {
+          return await prisma.cavCloudActivity.findMany({
+            where: {
+              accountId,
+              action: {
+                in: ["file.star", "folder.star", "file.unstar", "folder.unstar"],
+              },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 4000,
+            select: {
               action: true,
               targetType: true,
               targetId: true,
               targetPath: true,
-              metaJson: true,
               createdAt: true,
             },
           });
-          return { mode: "activity" as const, rows: fallback };
+        } catch (error) {
+          if (isCavCloudDashboardSchemaMismatch(error)) return [];
+          throw error;
         }
       })(),
-      prisma.cavCloudStorageShare.count({
-        where: {
-          accountId,
-          revokedAt: null,
-          expiresAt: { gt: now },
-        },
-      }),
-      prisma.cavCloudStorageShare.findMany({
-        where: {
-          accountId,
-          revokedAt: null,
-          expiresAt: { gt: now },
-        },
-        orderBy: { expiresAt: "asc" },
-        take: 12,
-        select: {
-          id: true,
-          expiresAt: true,
-          file: {
+      (async () => {
+        try {
+          return await prisma.cavCloudFolderUploadSession.findMany({
+            where: {
+              accountId,
+              status: {
+                in: ["CREATED", "UPLOADING", "FAILED"],
+              },
+            },
+            orderBy: { updatedAt: "desc" },
+            take: 10,
             select: {
               id: true,
-              name: true,
-              path: true,
+              rootFolderId: true,
+              status: true,
+              resolvedRootName: true,
+              discoveredFilesCount: true,
+              finalizedFilesCount: true,
+              failedFilesCount: true,
+              rootFolder: {
+                select: {
+                  path: true,
+                },
+              },
             },
-          },
-          folder: {
+          });
+        } catch (error) {
+          if (isCavCloudDashboardSchemaMismatch(error)) return [];
+          throw error;
+        }
+      })(),
+      (async () => {
+        try {
+          return await prisma.cavCloudImportSession.findMany({
+            where: {
+              accountId,
+              provider: "GOOGLE_DRIVE",
+              status: {
+                in: ["CREATED", "RUNNING", "FAILED"],
+              },
+            },
+            orderBy: {
+              updatedAt: "desc",
+            },
+            take: 10,
             select: {
               id: true,
-              name: true,
-              path: true,
+              targetFolderId: true,
+              status: true,
+              discoveredCount: true,
+              importedCount: true,
+              failedCount: true,
+              targetFolder: {
+                select: {
+                  path: true,
+                  name: true,
+                },
+              },
             },
-          },
-        },
-      }),
-      prisma.cavCloudShare.findMany({
-        where: {
-          createdByUserId: userId,
-          revokedAt: null,
-          expiresAt: { gt: now },
-        },
-        orderBy: { expiresAt: "asc" },
-        take: 120,
-        select: {
-          id: true,
-          expiresAt: true,
-          artifact: {
-            select: {
-              sourcePath: true,
-              displayTitle: true,
-            },
-          },
-        },
-      }),
-      prisma.publicArtifact.findMany({
-        where: {
-          userId,
-          sourcePath: { not: null },
-        },
-        orderBy: { updatedAt: "desc" },
-        take: 80,
-        select: {
-          id: true,
-          sourcePath: true,
-          displayTitle: true,
-          visibility: true,
-          publishedAt: true,
-          updatedAt: true,
-        },
-      }),
-      prisma.cavCloudActivity.findMany({
-        where: {
-          accountId,
-          action: {
-            in: ["file.star", "folder.star", "file.unstar", "folder.unstar"],
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 4000,
-        select: {
-          action: true,
-          targetType: true,
-          targetId: true,
-          targetPath: true,
-          createdAt: true,
-        },
-      }),
-      prisma.cavCloudFolderUploadSession.findMany({
-        where: {
-          accountId,
-          status: {
-            in: ["CREATED", "UPLOADING", "FAILED"],
-          },
-        },
-        orderBy: { updatedAt: "desc" },
-        take: 10,
-        select: {
-          id: true,
-          rootFolderId: true,
-          status: true,
-          resolvedRootName: true,
-          discoveredFilesCount: true,
-          finalizedFilesCount: true,
-          failedFilesCount: true,
-          rootFolder: {
-            select: {
-              path: true,
-            },
-          },
-        },
-      }),
-      prisma.cavCloudImportSession.findMany({
-        where: {
-          accountId,
-          provider: "GOOGLE_DRIVE",
-          status: {
-            in: ["CREATED", "RUNNING", "FAILED"],
-          },
-        },
-        orderBy: {
-          updatedAt: "desc",
-        },
-        take: 10,
-        select: {
-          id: true,
-          targetFolderId: true,
-          status: true,
-          discoveredCount: true,
-          importedCount: true,
-          failedCount: true,
-          targetFolder: {
-            select: {
-              path: true,
-              name: true,
-            },
-          },
-        },
-      }),
+          });
+        } catch (error) {
+          if (isCavCloudDashboardSchemaMismatch(error)) return [];
+          throw error;
+        }
+      })(),
     ]);
 
     const usedBig = bytesAgg._sum.bytes ?? BigInt(0);
@@ -852,6 +1039,19 @@ export async function GET(req: Request) {
       },
     }, 200);
   } catch (err) {
+    if (err instanceof ApiAuthError) {
+      return cavcloudErrorResponse(err, "Failed to load CavCloud dashboard.");
+    }
+    if (isMissingUsagePointTableError(err) || isMissingOperationLogTableError(err) || isCavCloudDashboardSchemaMismatch(err)) {
+      try {
+        return await buildDegradedDashboardResponse(req);
+      } catch (fallbackError) {
+        return cavcloudErrorResponse(fallbackError, "Failed to load CavCloud dashboard.");
+      }
+    }
+    try {
+      return await buildDegradedDashboardResponse(req);
+    } catch {}
     return cavcloudErrorResponse(err, "Failed to load CavCloud dashboard.");
   }
 }

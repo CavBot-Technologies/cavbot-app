@@ -1,7 +1,8 @@
-import { requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
+import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import { getCavCloudSettings } from "@/lib/cavcloud/settings.server";
 import { getRootFolder } from "@/lib/cavcloud/storage.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -33,6 +34,54 @@ function isMissingCavCloudTablesError(err: unknown): boolean {
   if (msg.includes("does not exist") && msg.includes("cavcloud")) return true;
   if (msg.includes("relation") && msg.includes("cavcloud")) return true;
   return false;
+}
+
+function isCavCloudRootSchemaMismatch(err: unknown) {
+  return isSchemaMismatchError(err, {
+    tables: ["CavCloudFolder", "CavCloudSettings", "Membership"],
+    columns: [
+      "path",
+      "name",
+      "parentId",
+      "createdAt",
+      "updatedAt",
+      "deletedAt",
+      "lastFolderId",
+      "pinnedFolderId",
+      "startLocation",
+      "accountId",
+      "userId",
+    ],
+  });
+}
+
+function degradedRootPayload() {
+  const now = new Date().toISOString();
+  const root = {
+    id: "root",
+    name: "root",
+    path: "/",
+    parentId: null,
+    createdAtISO: now,
+    updatedAtISO: now,
+    sharedUserCount: 0,
+    collaborationEnabled: false,
+  };
+  return {
+    ok: true,
+    degraded: true,
+    rootFolderId: root.id,
+    defaultFolderId: root.id,
+    root,
+    defaultFolder: root,
+  };
+}
+
+async function buildDegradedRootResponse(req: Request) {
+  const sess = await requireSession(req);
+  requireAccountContext(sess);
+  requireUser(sess);
+  return jsonNoStore(degradedRootPayload(), 200);
 }
 
 export async function GET(req: Request) {
@@ -116,26 +165,19 @@ export async function GET(req: Request) {
       defaultFolder,
     }, 200);
   } catch (err) {
-    if (isMissingCavCloudTablesError(err)) {
-      const now = new Date().toISOString();
-      const root = {
-        id: "root",
-        name: "root",
-        path: "/",
-        parentId: null,
-        createdAtISO: now,
-        updatedAtISO: now,
-        sharedUserCount: 0,
-        collaborationEnabled: false,
-      };
-      return jsonNoStore({
-        ok: true,
-        rootFolderId: root.id,
-        defaultFolderId: root.id,
-        root,
-        defaultFolder: root,
-      }, 200);
+    if (err instanceof ApiAuthError) {
+      return cavcloudErrorResponse(err, "Failed to load CavCloud root.");
     }
+    if (isMissingCavCloudTablesError(err) || isCavCloudRootSchemaMismatch(err)) {
+      try {
+        return await buildDegradedRootResponse(req);
+      } catch (fallbackError) {
+        return cavcloudErrorResponse(fallbackError, "Failed to load CavCloud root.");
+      }
+    }
+    try {
+      return await buildDegradedRootResponse(req);
+    } catch {}
     return cavcloudErrorResponse(err, "Failed to load CavCloud root.");
   }
 }
