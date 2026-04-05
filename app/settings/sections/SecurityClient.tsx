@@ -915,14 +915,14 @@ export default function SecurityClient() {
                         <div className="sx-secSessMain">
                           <div className="sx-secSessTitle">
                             <span className="sx-secSessLabel">{s.label}</span>
-                            <span className="sx-secSessState" data-tone={s.isCurrent ? "active" : "default"}>
-                              <span className="sx-secStateDot" aria-hidden="true" />
-                              <span className="sx-secWhen">{s.statusText}</span>
-                            </span>
                           </div>
 
                           <div className="sx-secSessMeta">
                             <span className="sx-secLoc">{renderSessionLocation(s)}</span>
+                            <span className="sx-secSessState" data-tone={s.isCurrent ? "active" : "default"}>
+                              <span className="sx-secStateDot" aria-hidden="true" />
+                              <span className="sx-secWhen">{s.statusText}</span>
+                            </span>
                           </div>
                         </div>
 
