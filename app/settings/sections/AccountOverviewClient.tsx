@@ -1718,7 +1718,7 @@ const handleCategoryChange = (value: string) => {
 	              </div>
 	            </div>
 
-	            <div className="sx-formRow">
+	            <div className="sx-formRow sx-workspaceDescriptorRow">
 	              <div className="sx-field">
 	                <div className="sx-label">
 	                  {companyCategory ? `${categoryLabel} descriptor` : "Descriptor"}
@@ -1875,6 +1875,9 @@ const handleCategoryChange = (value: string) => {
 	                  <div className="sx-hint sx-linkHint">Professional identity and company presence.</div>
 	                </div>
 
+	            </div>
+
+	            <div className="sx-formRow sx-workspaceWebsiteRow">
 	                  <div className="sx-field sx-workspaceWebsitesField">
 	                    <div
 	                      className="sx-label"
