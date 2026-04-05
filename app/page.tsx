@@ -862,7 +862,7 @@ function CommandDeckPageInner() {
             source: "server",
           }))
         );
-      } catch (loadError) {
+      } catch {
         if (!alive) return;
         setNoticesError(null);
         setServerNotices([]);
@@ -2489,7 +2489,7 @@ function ProfileCard() {
           const planDetail = {
             planKey,
             planLabel,
-            trialActive: Boolean(meJson?.trialActive),
+            trialActive: Boolean(meJson?.account?.trialActive ?? meJson?.trialActive),
           };
 
           try {

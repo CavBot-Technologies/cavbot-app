@@ -12,7 +12,8 @@ import type {
 
 import { ApiAuthError } from "@/lib/apiAuth";
 import { CAVCLOUD_NOTIFICATION_KINDS } from "@/lib/notificationKinds";
-import { getPlanLimits, resolvePlanIdFromTier } from "@/lib/plans";
+import { getCavCloudPlanContext } from "@/lib/cavcloud/plan.server";
+import { getPlanLimits } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { notifyCavCloudCollabSignal } from "@/lib/cavcloud/notifications.server";
 import { writeCavCloudOperationLog } from "@/lib/cavcloud/operationLog.server";
@@ -185,16 +186,7 @@ async function ensureMemberSeatCapacity(args: {
   });
   if (existing?.id) return;
 
-  const account = await args.tx.account.findUnique({
-    where: {
-      id: args.accountId,
-    },
-    select: {
-      tier: true,
-    },
-  });
-
-  const planId = resolvePlanIdFromTier(account?.tier || "FREE");
+  const planId = (await getCavCloudPlanContext(args.accountId, args.tx)).planId;
   const seatLimit = Number(getPlanLimits(planId)?.seats ?? 0);
   if (seatLimit > 0) {
     const [membersCount, pendingInvitesCount] = await Promise.all([

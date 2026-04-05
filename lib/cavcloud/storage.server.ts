@@ -7,7 +7,8 @@ import { pipeline } from "stream/promises";
 
 import { Prisma } from "@prisma/client";
 
-import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
+import { getCavCloudPlanContext } from "@/lib/cavcloud/plan.server";
+import { type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { buildZipBuffer } from "@/lib/cavcloud/zip.server";
 import { preferredMimeType } from "@/lib/fileMime";
@@ -66,13 +67,7 @@ const QUOTA_WRITE_BASE_DELAY_MS = 40;
 const INTERACTIVE_TX_MAX_WAIT_MS = 60 * 1000;
 const INTERACTIVE_TX_TIMEOUT_MS = 60 * 1000;
 const QUOTA_LOCK_NAMESPACE = "cavcloud_quota_v1";
-const GIB = BigInt(1024) * BigInt(1024) * BigInt(1024);
 const DEFAULT_MAX_ARCHIVE_SOURCE_BYTES = 512 * 1024 * 1024;
-const CAVCLOUD_PLAN_STORAGE_LIMITS: Record<PlanId, bigint> = {
-  free: BigInt(5) * GIB,
-  premium: BigInt(50) * GIB,
-  premium_plus: BigInt(500) * GIB,
-};
 const OFFICIAL_SYNC_ROOT_PATH = "/Synced";
 const OFFICIAL_SYNC_CAVCODE_PATH = "/Synced/CavCode";
 const OFFICIAL_SYNC_CAVPAD_PATH = "/Synced/CavPad";
@@ -634,20 +629,6 @@ function envInt(name: string): number | null {
   return n;
 }
 
-function perFileLimitBytesForPlan(planId: PlanId): bigint {
-  const free = envInt("CAVCLOUD_MAX_FILE_BYTES_FREE") ?? 64 * 1024 * 1024;
-  const premium = envInt("CAVCLOUD_MAX_FILE_BYTES_PREMIUM") ?? 1024 * 1024 * 1024;
-  const premiumPlus = envInt("CAVCLOUD_MAX_FILE_BYTES_PREMIUM_PLUS") ?? 5 * 1024 * 1024 * 1024;
-
-  if (planId === "premium_plus") return BigInt(premiumPlus);
-  if (planId === "premium") return BigInt(premium);
-  return BigInt(free);
-}
-
-function storageLimitBytesForPlan(planId: PlanId): bigint {
-  return CAVCLOUD_PLAN_STORAGE_LIMITS[planId] ?? CAVCLOUD_PLAN_STORAGE_LIMITS.free;
-}
-
 function normalizePath(raw: string): string {
   const trimmed = String(raw || "").trim();
   if (!trimmed) return "/";
@@ -848,30 +829,13 @@ async function accountPlanSnapshot(accountId: string, tx: DbClient = prisma): Pr
   limitBytes: bigint | null;
   perFileMaxBytes: bigint;
 }> {
-  const account = await tx.account.findUnique({
-    where: { id: accountId },
-    select: {
-      tier: true,
-      trialSeatActive: true,
-      trialEndsAt: true,
-    },
-  });
-
-  if (!account) throw new CavCloudError("ACCOUNT_NOT_FOUND", 404, "account not found");
-
-  let planId = resolvePlanIdFromTier(account.tier);
-  const trialEndsAtMs = account.trialEndsAt ? new Date(account.trialEndsAt).getTime() : 0;
-  if (account.trialSeatActive && Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now()) {
-    planId = "premium_plus";
-  }
-
-  const limitBytes = storageLimitBytesForPlan(planId);
-  const perFileMaxBytes = perFileLimitBytesForPlan(planId);
+  const plan = await getCavCloudPlanContext(accountId, tx);
+  if (!plan.account) throw new CavCloudError("ACCOUNT_NOT_FOUND", 404, "account not found");
 
   return {
-    planId,
-    limitBytes,
-    perFileMaxBytes,
+    planId: plan.planId,
+    limitBytes: plan.limitBytesBigInt,
+    perFileMaxBytes: plan.perFileMaxBytesBigInt,
   };
 }
 

@@ -3,13 +3,12 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { getCavCloudPlanContext } from "@/lib/cavcloud/plan.server";
 import { getCavCloudSettings } from "@/lib/cavcloud/settings.server";
 import { CAVCLOUD_NOTIFICATION_KINDS } from "@/lib/notificationKinds";
-import { PLANS, resolvePlanIdFromTier } from "@/lib/plans";
 
 type NotificationTone = "GOOD" | "WATCH" | "BAD";
 
-const BYTES_IN_GB = BigInt(1024) * BigInt(1024) * BigInt(1024);
 const SHARE_EXPIRY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const SHARE_EXPIRY_SCAN_THROTTLE_MS = 3 * 60 * 1000;
 
@@ -131,16 +130,10 @@ async function resolveStorageSnapshot(accountId: string): Promise<{
   limitBytes: bigint | null;
   pct: number | null;
 }> {
-  const [account, quota] = await Promise.all([
-    prisma.account.findUnique({
-      where: { id: accountId },
-      select: { tier: true },
-    }),
-    prisma.cavCloudQuota.findUnique({
-      where: { accountId },
-      select: { usedBytes: true },
-    }),
-  ]);
+  const quota = await prisma.cavCloudQuota.findUnique({
+    where: { accountId },
+    select: { usedBytes: true },
+  });
 
   let usedBytes = BigInt(0);
   if (typeof quota?.usedBytes === "bigint") {
@@ -159,9 +152,8 @@ async function resolveStorageSnapshot(accountId: string): Promise<{
     usedBytes = typeof raw === "bigint" ? raw : BigInt(Number(raw || 0));
   }
 
-  const planId = resolvePlanIdFromTier(account?.tier);
-  const storageGb = PLANS[planId]?.limits?.storageGb;
-  if (typeof storageGb !== "number" || !Number.isFinite(storageGb) || storageGb <= 0) {
+  const plan = await getCavCloudPlanContext(accountId);
+  if (plan.limitBytesBigInt == null) {
     return {
       usedBytes,
       limitBytes: null,
@@ -169,7 +161,7 @@ async function resolveStorageSnapshot(accountId: string): Promise<{
     };
   }
 
-  const limitBytes = BigInt(Math.max(1, Math.trunc(storageGb))) * BYTES_IN_GB;
+  const limitBytes = plan.limitBytesBigInt;
   return {
     usedBytes,
     limitBytes,

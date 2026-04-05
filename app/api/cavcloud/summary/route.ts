@@ -2,8 +2,8 @@ import type { Prisma } from "@prisma/client";
 
 import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
+import { getCavCloudPlanContext } from "@/lib/cavcloud/plan.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
-import { getPlanLimits, resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -18,14 +18,6 @@ function toSafeNumber(value: bigint): number {
   const max = BigInt(Number.MAX_SAFE_INTEGER);
   if (value > max) return Number.MAX_SAFE_INTEGER;
   return Number(value);
-}
-
-function storageLimitBytesForPlan(planId: PlanId): number | null {
-  const limits = getPlanLimits(planId);
-  if (limits.storageGb === "unlimited") return null;
-  const bytes = Number(limits.storageGb || 0) * 1024 * 1024 * 1024;
-  if (!Number.isFinite(bytes) || bytes <= 0) return null;
-  return Math.trunc(bytes);
 }
 
 function isMissingCavCloudTablesError(err: unknown): boolean {
@@ -50,31 +42,8 @@ function extClauses(exts: readonly string[]): Prisma.CavCloudFileWhereInput[] {
   }));
 }
 
-type AccountPlanShape = {
-  tier: unknown;
-  trialSeatActive: boolean;
-  trialEndsAt: Date | null;
-};
-
-function resolveEffectivePlanId(account: AccountPlanShape | null): PlanId {
-  const base = resolvePlanIdFromTier(String(account?.tier || "FREE"));
-  const trialEndsAtMs = account?.trialEndsAt ? new Date(account.trialEndsAt).getTime() : 0;
-  if (account?.trialSeatActive && Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now()) {
-    return "premium_plus";
-  }
-  return base;
-}
-
-function planLimitBytes(account: AccountPlanShape | null, planId: PlanId): number | null {
-  const trialEndsAtMs = account?.trialEndsAt ? new Date(account.trialEndsAt).getTime() : 0;
-  const trialActive = Boolean(account?.trialSeatActive) && Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now();
-  if (trialActive) return null;
-  return storageLimitBytesForPlan(planId);
-}
-
-function degradedSummaryPayload(account: AccountPlanShape | null = null) {
-  const planId = resolveEffectivePlanId(account);
-  const limitBytes = planLimitBytes(account, planId);
+function degradedSummaryPayload(plan: Awaited<ReturnType<typeof getCavCloudPlanContext>>) {
+  const limitBytes = plan.limitBytes;
   return {
     ok: true,
     degraded: true,
@@ -88,7 +57,7 @@ function degradedSummaryPayload(account: AccountPlanShape | null = null) {
       images: 0,
       videos: 0,
       other: 0,
-      planId,
+      planId: plan.planId,
       generatedAtISO: new Date().toISOString(),
     },
   };
@@ -98,25 +67,8 @@ async function buildDegradedSummaryResponse(req: Request) {
   const sess = await requireSession(req);
   requireAccountContext(sess);
   requireUser(sess);
-
-  const account = await prisma.account
-    .findUnique({
-      where: { id: String(sess.accountId || "") },
-      select: { tier: true, trialSeatActive: true, trialEndsAt: true },
-    })
-    .catch((error) => {
-      if (
-        isSchemaMismatchError(error, {
-          tables: ["Account"],
-          columns: ["trialSeatActive", "trialEndsAt", "tier"],
-        })
-      ) {
-        return null;
-      }
-      return null;
-    });
-
-  return jsonNoStore(degradedSummaryPayload(account), 200);
+  const plan = await getCavCloudPlanContext(String(sess.accountId || ""));
+  return jsonNoStore(degradedSummaryPayload(plan), 200);
 }
 
 export async function GET(req: Request) {
@@ -144,29 +96,8 @@ export async function GET(req: Request) {
       ],
     };
 
-    const accountPromise = prisma.account
-      .findUnique({
-        where: { id: accountId },
-        select: {
-          tier: true,
-          trialSeatActive: true,
-          trialEndsAt: true,
-        },
-      })
-      .catch((error) => {
-        if (
-          isSchemaMismatchError(error, {
-            tables: ["Account"],
-            columns: ["trialSeatActive", "trialEndsAt", "tier"],
-          })
-        ) {
-          return null;
-        }
-        throw error;
-      });
-
-    const [account, folderCount, fileCount, imageCount, videoCount, bytesAgg] = await Promise.all([
-      accountPromise,
+    const [plan, folderCount, fileCount, imageCount, videoCount, bytesAgg] = await Promise.all([
+      getCavCloudPlanContext(accountId),
       prisma.cavCloudFolder.count({
         where: { accountId, deletedAt: null, path: { not: "/" } },
       }),
@@ -187,8 +118,7 @@ export async function GET(req: Request) {
 
     const usedBig = bytesAgg._sum.bytes ?? BigInt(0);
     const usedBytes = toSafeNumber(usedBig);
-    const planId = resolveEffectivePlanId(account);
-    const limitBytes = planLimitBytes(account, planId);
+    const limitBytes = plan.limitBytes;
     const remainingBytes = limitBytes == null ? null : Math.max(0, limitBytes - usedBytes);
     const otherCount = Math.max(0, fileCount - imageCount - videoCount);
 
@@ -204,7 +134,7 @@ export async function GET(req: Request) {
         images: imageCount,
         videos: videoCount,
         other: otherCount,
-        planId,
+        planId: plan.planId,
         generatedAtISO: new Date().toISOString(),
       },
     }, 200);
