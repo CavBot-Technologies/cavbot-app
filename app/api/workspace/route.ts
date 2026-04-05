@@ -3,6 +3,7 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext } from "@/lib/apiAuth";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -99,6 +100,21 @@ function emptyPayload(): WorkspacePayload {
   };
 }
 
+function isWorkspaceSchemaMismatch(error: unknown) {
+  return isSchemaMismatchError(error, {
+    tables: ["Project", "Site"],
+    columns: [
+      "accountId",
+      "isActive",
+      "topSiteId",
+      "createdAt",
+      "label",
+      "origin",
+      "projectId",
+    ],
+  });
+}
+
 export async function GET(req: NextRequest) {
   try {
     const sess = await requireSession(req);
@@ -165,7 +181,9 @@ export async function GET(req: NextRequest) {
     );
   } catch (e: unknown) {
     const { status, payload } = asHttpError(e);
-    return json(payload, status);
+    if (status === 401 || status === 403) return json(payload, status);
+    if (isWorkspaceSchemaMismatch(e)) return json({ ...emptyPayload(), degraded: true }, 200);
+    return json({ ...emptyPayload(), degraded: true }, 200);
   }
 }
 
@@ -213,7 +231,9 @@ export async function POST(req: NextRequest) {
     return res;
   } catch (e: unknown) {
     const { status, payload } = asHttpError(e);
-    return json(payload, status);
+    if (status === 401 || status === 403) return json(payload, status);
+    if (isWorkspaceSchemaMismatch(e)) return json({ ...emptyPayload(), degraded: true }, 200);
+    return json({ ...emptyPayload(), degraded: true }, 200);
   }
 }
 
@@ -245,7 +265,9 @@ export async function DELETE(req: NextRequest) {
     return res;
   } catch (e: unknown) {
     const { status, payload } = asHttpError(e);
-    return json(payload, status);
+    if (status === 401 || status === 403) return json(payload, status);
+    if (isWorkspaceSchemaMismatch(e)) return json({ ok: true, degraded: true }, 200);
+    return json({ ok: true, degraded: true }, 200);
   }
 }
 

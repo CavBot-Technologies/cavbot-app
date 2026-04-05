@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 
 import { requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
 import { deleteCavcloudObject } from "@/lib/cavcloud/r2.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
@@ -141,6 +142,50 @@ function isMissingCavCloudTablesError(err: unknown): boolean {
   if (msg.includes("does not exist") && msg.includes("cavcloud")) return true;
   if (msg.includes("relation") && msg.includes("cavcloud")) return true;
   return false;
+}
+
+function isWorkspaceStateSchemaMismatch(err: unknown): boolean {
+  return isSchemaMismatchError(err, {
+    tables: [
+      "Project",
+      "CavCodeWorkspaceState",
+      "CavCloudFolder",
+      "CavCloudFile",
+      "CavCloudFileVersion",
+    ],
+    columns: [
+      "accountId",
+      "isActive",
+      "createdAt",
+      "scopeKey",
+      "snapshot",
+      "snapshotBytes",
+      "deletedAt",
+      "path",
+      "r2Key",
+      "updatedAt",
+      "projectId",
+      "userId",
+    ],
+  });
+}
+
+function degradedWorkspaceStateResponse(projectId: number | null = null) {
+  return jsonNoStore({
+    ok: true,
+    degraded: true,
+    projectId,
+    scopeKey: projectId ? `project_${projectId}` : "project_none",
+    snapshot: null,
+    storage: "degraded",
+    path: null,
+    updatedAtISO: null,
+  });
+}
+
+function shouldDegradeWorkspaceStateError(error: unknown) {
+  const status = httpErrorStatus(error);
+  return status !== 401 && status !== 403 && status !== 404;
 }
 
 async function resolveWorkspaceScope(accountId: string, projectIdInput: number | null) {
@@ -337,6 +382,8 @@ async function ensureLegacyWorkspaceStatePurged(accountId: string): Promise<void
 }
 
 export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const projectIdHint = parseProjectId(url.searchParams.get("projectId") || url.searchParams.get("project"));
   try {
     const session = await requireSession(req);
     requireAccountContext(session);
@@ -344,8 +391,6 @@ export async function GET(req: Request) {
 
     const accountId = s(session.accountId);
     const userId = s(session.sub);
-    const url = new URL(req.url);
-    const projectIdHint = parseProjectId(url.searchParams.get("projectId") || url.searchParams.get("project"));
     const scope = await resolveWorkspaceScope(accountId, projectIdHint);
     await ensureLegacyWorkspaceStatePurged(accountId);
     const row = await readWorkspaceState({
@@ -364,6 +409,12 @@ export async function GET(req: Request) {
       updatedAtISO: row?.updatedAtISO ?? null,
     });
   } catch (error) {
+    if (isWorkspaceStateSchemaMismatch(error)) {
+      return degradedWorkspaceStateResponse(projectIdHint);
+    }
+    if (shouldDegradeWorkspaceStateError(error)) {
+      return degradedWorkspaceStateResponse(projectIdHint);
+    }
     const status = httpErrorStatus(error);
     const message = error instanceof Error ? error.message : "Failed to read CavCode workspace state.";
     return jsonNoStore(
@@ -383,6 +434,8 @@ type PutBody = {
 };
 
 export async function PUT(req: Request) {
+  const url = new URL(req.url);
+  const queryProjectIdHint = parseProjectId(url.searchParams.get("projectId") || url.searchParams.get("project"));
   try {
     const session = await requireSession(req);
     requireAccountContext(session);
@@ -402,9 +455,8 @@ export async function PUT(req: Request) {
       );
     }
 
-    const url = new URL(req.url);
     const projectIdHint =
-      parseProjectId(url.searchParams.get("projectId") || url.searchParams.get("project")) ||
+      queryProjectIdHint ||
       parseProjectId(body.projectId);
     const scope = await resolveWorkspaceScope(accountId, projectIdHint);
 
@@ -440,6 +492,12 @@ export async function PUT(req: Request) {
       updatedAtISO: new Date().toISOString(),
     });
   } catch (error) {
+    if (isWorkspaceStateSchemaMismatch(error)) {
+      return degradedWorkspaceStateResponse(queryProjectIdHint);
+    }
+    if (shouldDegradeWorkspaceStateError(error)) {
+      return degradedWorkspaceStateResponse(queryProjectIdHint);
+    }
     const status = httpErrorStatus(error);
     const message = error instanceof Error ? error.message : "Failed to save CavCode workspace state.";
     return jsonNoStore(

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { ApiAuthError } from "@/lib/apiAuth";
 import { executeCavtoolsCommand } from "@/lib/cavtools/commandPlane.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
@@ -45,9 +46,62 @@ export async function POST(req: Request) {
       sessionId: body.sessionId,
     });
 
-    return jsonNoStore(result, result.ok ? 200 : 400);
+    return jsonNoStore(result, 200);
   } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return jsonNoStore(
+        {
+          ok: false,
+          cwd: "/cavcloud",
+          command: "",
+          warnings: [],
+          blocks: [
+            {
+              kind: "text",
+              title: "Command Blocked",
+              lines: [error.code === "FORBIDDEN" ? "Access denied." : "Authentication required."],
+            },
+          ],
+          durationMs: 0,
+          audit: {
+            commandId: "exec_route_auth",
+            atISO: new Date().toISOString(),
+            denied: true,
+          },
+          error: {
+            code: error.code,
+            message: error.code === "FORBIDDEN" ? "Access denied." : "Authentication required.",
+          },
+        },
+        error.status
+      );
+    }
     const message = error instanceof Error ? error.message : "Failed to execute command.";
-    return jsonNoStore({ ok: false, error: { code: "INTERNAL", message } }, 500);
+    return jsonNoStore(
+      {
+        ok: false,
+        cwd: "/cavcloud",
+        command: "",
+        warnings: [],
+        blocks: [
+          {
+            kind: "text",
+            title: "Command Failed",
+            lines: [message],
+          },
+        ],
+        durationMs: 0,
+        audit: {
+          commandId: "exec_route_error",
+          atISO: new Date().toISOString(),
+          denied: false,
+        },
+        error: {
+          code: "INTERNAL",
+          message,
+        },
+      },
+      200
+    );
   }
 }

@@ -1,7 +1,8 @@
-import { requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
+import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import { getCavCloudSettings, toCavCloudListingPreferences } from "@/lib/cavcloud/settings.server";
 import { getTree, getTreeLite } from "@/lib/cavcloud/storage.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
 import { getPlanLimits, resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
 
@@ -73,10 +74,47 @@ function isMissingCavCloudTablesError(err: unknown): boolean {
   return false;
 }
 
+function isCavCloudTreeSchemaMismatch(err: unknown) {
+  return isSchemaMismatchError(err, {
+    tables: ["Account", "CavCloudFolder", "CavCloudFile", "CavCloudSettings", "Membership"],
+    columns: [
+      "tier",
+      "trialSeatActive",
+      "trialEndsAt",
+      "path",
+      "name",
+      "parentId",
+      "createdAt",
+      "updatedAt",
+      "deletedAt",
+      "bytes",
+      "mimeType",
+      "sha256",
+      "status",
+      "errorCode",
+      "errorMessage",
+      "lastFolderId",
+      "pinnedFolderId",
+      "defaultView",
+      "defaultSort",
+    ],
+  });
+}
+
 async function fallbackTreeForMissingTables(accountId: string) {
   const account = await prisma.account.findUnique({
     where: { id: accountId },
     select: { tier: true, trialSeatActive: true, trialEndsAt: true },
+  }).catch((error) => {
+    if (
+      isSchemaMismatchError(error, {
+        tables: ["Account"],
+        columns: ["tier", "trialSeatActive", "trialEndsAt"],
+      })
+    ) {
+      return null;
+    }
+    throw error;
   });
 
   let planId: PlanId = resolvePlanIdFromTier(account?.tier || "FREE");
@@ -91,6 +129,7 @@ async function fallbackTreeForMissingTables(accountId: string) {
 
   return {
     ok: true,
+    degraded: true,
     folder: { id: "root", name: "root", path: "/", parentId: null, createdAtISO: now, updatedAtISO: now },
     breadcrumbs: [{ id: "root", name: "root", path: "/" }],
     folders: [],
@@ -110,6 +149,14 @@ async function fallbackTreeForMissingTables(accountId: string) {
     activity: [],
     storageHistory: [],
   };
+}
+
+async function buildDegradedTreeResponse(req: Request) {
+  const sess = await requireSession(req);
+  requireAccountContext(sess);
+  requireUser(sess);
+  const fallback = await fallbackTreeForMissingTables(String(sess.accountId || ""));
+  return jsonNoStore(fallback, 200);
 }
 
 export async function GET(req: Request) {
@@ -149,17 +196,19 @@ export async function GET(req: Request) {
     const filtered = normalizePath(folder) === "/" ? stripReservedSystemEntriesAtRoot(tree) : tree;
     return jsonNoStore({ ok: true, ...filtered }, 200);
   } catch (err) {
-    if (isMissingCavCloudTablesError(err)) {
+    if (err instanceof ApiAuthError) {
+      return cavcloudErrorResponse(err, "Failed to load CavCloud tree.");
+    }
+    if (isMissingCavCloudTablesError(err) || isCavCloudTreeSchemaMismatch(err)) {
       try {
-        const sess = await requireSession(req);
-        requireAccountContext(sess);
-        requireUser(sess);
-        const fallback = await fallbackTreeForMissingTables(sess.accountId);
-        return jsonNoStore(fallback, 200);
-      } catch {
-        // fall through to standard error response
+        return await buildDegradedTreeResponse(req);
+      } catch (fallbackError) {
+        return cavcloudErrorResponse(fallbackError, "Failed to load CavCloud tree.");
       }
     }
+    try {
+      return await buildDegradedTreeResponse(req);
+    } catch {}
     return cavcloudErrorResponse(err, "Failed to load CavCloud tree.");
   }
 }
