@@ -1718,29 +1718,31 @@ const handleCategoryChange = (value: string) => {
 	              </div>
 	            </div>
 
-	            <div className="sx-subcategoryBlock">
-	              <div className="sx-label">
-	                {companyCategory ? `${categoryLabel} descriptor` : "Descriptor"}
-	              </div>
-              <select
-	                className="sx-select"
-	                value={companySubcategory}
-	                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCompanySubcategory(e.target.value)}
-	                disabled={!availableSubcategories.length || loading}
-	              >
-                <option value="">
-                  {companyCategory ? "Choose a descriptor" : "Select a category first"}
-                </option>
-                {availableSubcategories.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-              <div className="sx-hint">
-                {companyCategory
-	                  ? "These descriptors help teammates understand how you show up across CavBot."
-	                  : "Select a category to see curated descriptors."}
+	            <div className="sx-formRow">
+	              <div className="sx-field">
+	                <div className="sx-label">
+	                  {companyCategory ? `${categoryLabel} descriptor` : "Descriptor"}
+	                </div>
+                  <select
+	                  className="sx-select"
+	                  value={companySubcategory}
+	                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCompanySubcategory(e.target.value)}
+	                  disabled={!availableSubcategories.length || loading}
+	                >
+                    <option value="">
+                      {companyCategory ? "Choose a descriptor" : "Select a category first"}
+                    </option>
+                    {availableSubcategories.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  {companyCategory ? (
+                    <div className="sx-hint">
+                      These descriptors help teammates understand how you show up across CavBot.
+                    </div>
+                  ) : null}
 	              </div>
 	            </div>
 

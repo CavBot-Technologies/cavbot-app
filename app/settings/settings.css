@@ -2508,30 +2508,6 @@
   gap: 18px;
 }
 
-.sx-subcategoryBlock{
-  border-radius: var(--sx-r10);
-  border: 1px solid rgba(255,255,255,0.08);
-  padding: 18px 22px;
-  background: rgba(4,7,16,0.85);
-  display:flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.sx-subcategoryBlock .sx-label{
-  font-size: 12px;
-  letter-spacing: .12em;
-  color: rgba(255,255,255,0.72);
-}
-
-.sx-subcategoryBlock .sx-select{
-  border-radius: var(--sx-r10);
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(0,0,0,0.32);
-  padding: 0 12px;
-  height: 46px;
-}
-
 .sx-companyActions{
   display:flex;
   justify-content:flex-end;
