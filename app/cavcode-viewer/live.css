@@ -999,7 +999,7 @@ body{
   .ccv-top{
     position: sticky;
     top: 0;
-    align-items:center;
+    align-items:flex-start;
     padding: 12px 14px;
     gap: 12px;
   }
@@ -1012,7 +1012,7 @@ body{
   }
 
   .ccv-topLeft{
-    width: auto;
+    width: 100%;
     gap: 8px;
   }
 
@@ -1021,10 +1021,14 @@ body{
   }
 
   .ccv-topRight{
-    width: auto;
-    margin-left: auto;
-    justify-content: flex-end;
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
     gap: 8px;
+  }
+
+  .ccv-card{
+    height: auto;
   }
 
   .ccv-deviceRailDesktop{
@@ -1127,6 +1131,14 @@ body{
   .ccv-frame.is-tablet .ccv-iframe{
     width: min(100%, 720px);
     height: min(940px, 78dvh);
+  }
+  .ccv-frame.is-phone .ccv-iframe{
+    width: min(390px, 100%);
+    height: min(780px, 72dvh);
+  }
+  .ccv-frame.is-tablet .ccv-iframe{
+    width: min(100%, 720px);
+    height: min(980px, 78dvh);
   }
 
   .ccv-uploadRow,
