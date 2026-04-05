@@ -38,6 +38,16 @@ function readCloudflareGeo(req: NextRequest) {
   return { country: country || null, label: country || null };
 }
 
+function twoFactorEmpty() {
+  return {
+    ok: true,
+    twoFactor: {
+      email2fa: false,
+      app2fa: false,
+    },
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const sess = await requireSettingsOwnerSession(req);
@@ -47,9 +57,12 @@ export async function GET(req: NextRequest) {
     const auth = await prisma.userAuth.findUnique({
       where: { userId },
       select: { twoFactorEmailEnabled: true, twoFactorAppEnabled: true },
+    }).catch((error) => {
+      console.error("[settings/security/2fa] load failed", error);
+      return null;
     });
 
-    if (!auth) return json({ error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
+    if (!auth) return json(twoFactorEmpty(), 200);
 
     return json(
       {
@@ -80,16 +93,19 @@ export async function PATCH(req: NextRequest) {
 
     const geo = readCloudflareGeo(req);
 
-    await prisma.userAuth.update({
+    const updated = await prisma.userAuth.update({
       where: { userId },
       data: {
         twoFactorEmailEnabled: email2fa,
         twoFactorAppEnabled: app2fa,
       },
       select: { twoFactorEmailEnabled: true, twoFactorAppEnabled: true },
+    }).catch((error) => {
+      console.error("[settings/security/2fa] save failed", error);
+      return null;
     });
 
-    if (accountId) {
+    if (updated && accountId) {
       await auditLogWrite({
         request: req,
         action: "SECURITY_SETTINGS_UPDATED",

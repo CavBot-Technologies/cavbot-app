@@ -74,9 +74,17 @@ export async function POST(req: NextRequest) {
     const auth = await prisma.userAuth.findUnique({
       where: { userId },
       select: { twoFactorAppEnabled: true, totpSecretPending: true, totpSecret: true },
+    }).catch((error) => {
+      console.error("[settings/security/2fa/setup] auth lookup failed", error);
+      return null;
     });
 
-    if (!auth) return json({ ok: false, error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
+    if (!auth) {
+      return json(
+        { ok: false, error: "TOTP_UNAVAILABLE", message: "Authenticator setup is temporarily unavailable." },
+        409
+      );
+    }
 
     // If already enabled, do not rotate silently
     if (auth.twoFactorAppEnabled && auth.totpSecret) {
@@ -101,14 +109,24 @@ export async function POST(req: NextRequest) {
     )}&digits=6&period=30`;
 
     // Store pending only (safer)
-    await prisma.userAuth.update({
+    const persisted = await prisma.userAuth.update({
       where: { userId },
       data: {
         totpSecretPending: secretB32,
         // Keep disabled until confirm
         twoFactorAppEnabled: false,
       },
+    }).catch((error) => {
+      console.error("[settings/security/2fa/setup] pending secret save failed", error);
+      return null;
     });
+
+    if (!persisted) {
+      return json(
+        { ok: false, error: "TOTP_UNAVAILABLE", message: "Authenticator setup is temporarily unavailable." },
+        409
+      );
+    }
 
     const qrSvg = await makeQrSvg(otpauthUrl);
 

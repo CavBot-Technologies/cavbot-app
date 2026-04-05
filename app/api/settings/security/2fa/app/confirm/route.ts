@@ -102,9 +102,17 @@ export async function POST(req: NextRequest) {
     const auth = await prisma.userAuth.findUnique({
       where: { userId },
       select: { totpSecretPending: true, twoFactorAppEnabled: true, sessionVersion: true },
+    }).catch((error) => {
+      console.error("[settings/security/2fa/confirm] auth lookup failed", error);
+      return null;
     });
 
-    if (!auth) return json({ ok: false, error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
+    if (!auth) {
+      return json(
+        { ok: false, error: "TOTP_UNAVAILABLE", message: "Authenticator confirmation is temporarily unavailable." },
+        409
+      );
+    }
 
     const pending = String(auth.totpSecretPending || "").trim();
     if (!pending) {
@@ -116,7 +124,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Commit + enable + rotate sessions (recommended)
-    await prisma.userAuth.update({
+    const updated = await prisma.userAuth.update({
       where: { userId },
       data: {
         totpSecret: pending,
@@ -124,7 +132,17 @@ export async function POST(req: NextRequest) {
         twoFactorAppEnabled: true,
         sessionVersion: Number(auth.sessionVersion || 1) + 1,
       },
+    }).catch((error) => {
+      console.error("[settings/security/2fa/confirm] auth update failed", error);
+      return null;
     });
+
+    if (!updated) {
+      return json(
+        { ok: false, error: "TOTP_UNAVAILABLE", message: "Authenticator confirmation is temporarily unavailable." },
+        409
+      );
+    }
 
     return json({ ok: true }, 200);
   } catch (e: unknown) {

@@ -35,9 +35,17 @@ export async function POST(req: NextRequest) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: { auth: true },
+    }).catch((error) => {
+      console.error("[settings/security/2fa/disable] user lookup failed", error);
+      return null;
     });
 
-    if (!user?.auth) return json({ ok: false, error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
+    if (!user?.auth) {
+      return json(
+        { ok: false, error: "TOTP_UNAVAILABLE", message: "Authenticator disable is temporarily unavailable." },
+        409
+      );
+    }
 
     const salt = String(user.auth.passwordSalt || "");
     const hash = String(user.auth.passwordHash || "");
@@ -48,7 +56,7 @@ export async function POST(req: NextRequest) {
 
     const sv = Number(user.auth.sessionVersion ?? 1);
 
-    await prisma.userAuth.update({
+    const updated = await prisma.userAuth.update({
       where: { userId },
       data: {
         twoFactorAppEnabled: false,
@@ -56,7 +64,17 @@ export async function POST(req: NextRequest) {
         totpSecretPending: null,
         sessionVersion: sv + 1, // revoke existing sessions
       },
+    }).catch((error) => {
+      console.error("[settings/security/2fa/disable] auth update failed", error);
+      return null;
     });
+
+    if (!updated) {
+      return json(
+        { ok: false, error: "TOTP_UNAVAILABLE", message: "Authenticator disable is temporarily unavailable." },
+        409
+      );
+    }
 
     return json({ ok: true }, 200);
   } catch (e: unknown) {
