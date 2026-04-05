@@ -36,6 +36,13 @@ function s(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+async function buildDegradedAccessRequestsResponse(req: NextRequest) {
+  const session = await requireSession(req);
+  requireAccountContext(session);
+  requireAccountRole(session, ["OWNER", "ADMIN"]);
+  return json({ ok: true, degraded: true, requests: [] }, 200);
+}
+
 function readClientIp(req: NextRequest): string {
   const direct =
     String(req.headers.get("cf-connecting-ip") || "").trim() ||
@@ -72,6 +79,11 @@ export async function GET(req: NextRequest) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
     if (isWorkspaceAccessRequestSchemaMismatch(error)) {
       return json({ ok: true, degraded: true, requests: [] }, 200);
+    }
+    try {
+      return await buildDegradedAccessRequestsResponse(req);
+    } catch {
+      // Fall through to the original server error if the session/context itself is invalid.
     }
     return json({ ok: false, error: "SERVER_ERROR" }, 500);
   }

@@ -2,6 +2,7 @@ import "server-only";
 
 import type { PublicArtifactVisibility } from "@prisma/client";
 
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
 
 const THEME_ACCENTS = ["lime", "violet", "blue", "white", "clear"] as const;
@@ -269,31 +270,55 @@ function isSettingsForeignKeyViolationError(err: unknown): boolean {
 
 async function hasSettingsMembership(accountId: string, userId: string): Promise<boolean> {
   if (!accountId || !userId) return false;
-  const membership = await prisma.membership.findUnique({
-    where: {
-      accountId_userId: {
-        accountId,
-        userId,
+  try {
+    const membership = await prisma.membership.findUnique({
+      where: {
+        accountId_userId: {
+          accountId,
+          userId,
+        },
       },
-    },
-    select: { id: true },
-  });
-  return Boolean(membership?.id);
+      select: { id: true },
+    });
+    return Boolean(membership?.id);
+  } catch (err) {
+    if (
+      isSchemaMismatchError(err, {
+        tables: ["Membership"],
+        columns: ["accountId", "userId"],
+      })
+    ) {
+      return false;
+    }
+    throw err;
+  }
 }
 
 async function resolveFolderPathById(accountId: string, folderId: string | null): Promise<string | null> {
   if (!folderId) return null;
-  const folder = await prisma.cavCloudFolder.findFirst({
-    where: {
-      id: folderId,
-      accountId,
-      deletedAt: null,
-    },
-    select: {
-      path: true,
-    },
-  });
-  return folder?.path ? String(folder.path) : null;
+  try {
+    const folder = await prisma.cavCloudFolder.findFirst({
+      where: {
+        id: folderId,
+        accountId,
+        deletedAt: null,
+      },
+      select: {
+        path: true,
+      },
+    });
+    return folder?.path ? String(folder.path) : null;
+  } catch (err) {
+    if (
+      isSchemaMismatchError(err, {
+        tables: ["CavCloudFolder"],
+        columns: ["path", "accountId", "deletedAt"],
+      })
+    ) {
+      return null;
+    }
+    throw err;
+  }
 }
 
 async function ensureSettingsRow(accountId: string, userId: string) {

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { isApiAuthError, requireSession, requireUser } from "@/lib/apiAuth";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
-import { resolveWorkspaceAccessTarget } from "@/lib/workspaceTeam.server";
+import { isWorkspaceAccessRequestSchemaMismatch, resolveWorkspaceAccessTarget } from "@/lib/workspaceTeam.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,6 +66,9 @@ export async function GET(req: NextRequest) {
     return json({ ok: true, workspace }, 200);
   } catch (error) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
+    if (isWorkspaceAccessRequestSchemaMismatch(error)) {
+      return json({ ok: true, degraded: true, workspace: null }, 200);
+    }
     return json({ ok: false, error: "SERVER_ERROR" }, 500);
   }
 }
@@ -76,4 +79,3 @@ export async function OPTIONS() {
     headers: { ...NO_STORE_HEADERS, Allow: "GET, OPTIONS" },
   });
 }
-

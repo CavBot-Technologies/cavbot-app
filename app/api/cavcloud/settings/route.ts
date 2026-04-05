@@ -1,15 +1,18 @@
 import { requireAccountContext, requireAccountRole, requireSession, requireUser } from "@/lib/apiAuth";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import {
+  DEFAULT_CAVCLOUD_SETTINGS,
   getCavCloudSettings,
   parseCavCloudSettingsPatch,
   updateCavCloudSettings,
 } from "@/lib/cavcloud/settings.server";
 import {
+  DEFAULT_CAVCLOUD_COLLAB_POLICY,
   getCavCloudCollabPolicy,
   parseCavCloudCollabPolicyPatch,
   updateCavCloudCollabPolicy,
 } from "@/lib/cavcloud/collabPolicy.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { getCavCloudOperatorContext } from "@/lib/cavcloud/permissions.server";
 import { resolvePlanIdFromTier } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
@@ -56,6 +59,46 @@ async function buildOwnerSettingsGuard(args: {
     role: args.role || undefined,
     plan: guardPlan,
   });
+}
+
+function isCavCloudSettingsReadSchemaMismatch(err: unknown) {
+  return isSchemaMismatchError(err, {
+    tables: ["CavCloudSettings", "CavCloudCollabPolicy", "CavCloudFolder", "Membership"],
+    columns: [
+      "themeAccent",
+      "startLocation",
+      "lastFolderId",
+      "pinnedFolderId",
+      "path",
+      "deletedAt",
+      "allowAdminsManageCollaboration",
+      "allowMembersEditFiles",
+      "allowMembersCreateUpload",
+      "allowAdminsPublishArtifacts",
+      "allowAdminsViewAccessLogs",
+      "enableContributorLinks",
+      "allowTeamAiAccess",
+      "role",
+    ],
+  });
+}
+
+async function buildDegradedSettingsResponse(req: Request) {
+  const sess = await requireSession(req);
+  requireAccountContext(sess);
+  requireUser(sess);
+  requireAccountRole(sess, ["OWNER"]);
+
+  return jsonNoStore(
+    {
+      ok: true,
+      degraded: true,
+      settings: { ...DEFAULT_CAVCLOUD_SETTINGS },
+      collabPolicy: { ...DEFAULT_CAVCLOUD_COLLAB_POLICY },
+      memberRole: String(sess.memberRole || "OWNER").toUpperCase(),
+    },
+    200,
+  );
 }
 
 export async function GET(req: Request) {
@@ -107,6 +150,18 @@ export async function GET(req: Request) {
         },
         403,
       );
+    }
+    if (isCavCloudSettingsReadSchemaMismatch(err)) {
+      try {
+        return await buildDegradedSettingsResponse(req);
+      } catch (fallbackError) {
+        return cavcloudErrorResponse(fallbackError, "Failed to load CavCloud settings.");
+      }
+    }
+    try {
+      return await buildDegradedSettingsResponse(req);
+    } catch {
+      // Keep the original error payload when degraded auth fallback is unavailable.
     }
     return cavcloudErrorResponse(err, "Failed to load CavCloud settings.");
   }
