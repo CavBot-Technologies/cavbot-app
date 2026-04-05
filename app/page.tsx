@@ -2199,6 +2199,7 @@ type ProfileApiResponse = {
 type AuthAccount = {
   tierEffective?: string | null;
   tier?: string | null;
+  trialActive?: boolean;
 };
 
 type AuthMeResponse = {
