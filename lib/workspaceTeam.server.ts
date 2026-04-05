@@ -188,7 +188,7 @@ function jsonMeta(meta: Record<string, unknown>): Prisma.JsonObject {
 
 export function isWorkspaceAccessRequestSchemaMismatch(error: unknown) {
   return isSchemaMismatchError(error, {
-    tables: ["WorkspaceAccessRequest"],
+    tables: ["WorkspaceAccessRequest", "Membership", "User", "Account"],
     columns: [
       "accountId",
       "requesterUserId",
@@ -196,6 +196,12 @@ export function isWorkspaceAccessRequestSchemaMismatch(error: unknown) {
       "status",
       "createdAt",
       "respondedAt",
+      "role",
+      "username",
+      "displayName",
+      "avatarImage",
+      "companyName",
+      "name",
     ],
   });
 }

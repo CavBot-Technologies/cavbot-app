@@ -1,5 +1,6 @@
 import { requireAccountContext, requireAccountRole, requireSession, requireUser } from "@/lib/apiAuth";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import {
   asMetaObject,
   cavcloudAccessActionLabel,
@@ -41,7 +42,47 @@ function operatorDisplayName(operator: { displayName: string | null; username: s
   return "CavCloud user";
 }
 
+function isCavCloudAuditSchemaMismatch(err: unknown) {
+  return isSchemaMismatchError(err, {
+    tables: ["CavCloudOperationLog", "User", "Membership"],
+    columns: [
+      "accountId",
+      "kind",
+      "subjectType",
+      "subjectId",
+      "label",
+      "meta",
+      "createdAt",
+      "operatorId",
+      "displayName",
+      "username",
+      "email",
+      "role",
+    ],
+  });
+}
+
+async function buildDegradedAuditResponse(req: Request, filter: CavCloudAccessAuditFilter) {
+  const sess = await requireSession(req);
+  requireUser(sess);
+  requireAccountContext(sess);
+  requireAccountRole(sess, ["OWNER"]);
+
+  return jsonNoStore(
+    {
+      ok: true,
+      degraded: true,
+      rows: [],
+      nextCursor: null,
+      filter,
+    },
+    200,
+  );
+}
+
 export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const filter = parseFilter(url.searchParams.get("kind"));
   try {
     const sess = await requireSession(req);
     requireUser(sess);
@@ -49,9 +90,7 @@ export async function GET(req: Request) {
     requireAccountRole(sess, ["OWNER"]);
 
     const accountId = String(sess.accountId || "").trim();
-    const url = new URL(req.url);
     const limit = parseLimit(url.searchParams.get("limit"));
-    const filter = parseFilter(url.searchParams.get("kind"));
     const cursor = decodeCavCloudOperationCursor(url.searchParams.get("cursor"));
     const kinds = cavcloudAccessKindsForFilter(filter);
 
@@ -137,7 +176,18 @@ export async function GET(req: Request) {
       filter,
     }, 200);
   } catch (err) {
+    if (isCavCloudAuditSchemaMismatch(err)) {
+      try {
+        return await buildDegradedAuditResponse(req, filter);
+      } catch (fallbackError) {
+        return cavcloudErrorResponse(fallbackError, "Failed to load collaboration audit.");
+      }
+    }
+    try {
+      return await buildDegradedAuditResponse(req, filter);
+    } catch {
+      // Preserve the original error response if fallback auth/context resolution also fails.
+    }
     return cavcloudErrorResponse(err, "Failed to load collaboration audit.");
   }
 }
-
