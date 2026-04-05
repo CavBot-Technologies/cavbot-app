@@ -6,7 +6,11 @@ import { isApiAuthError, requireAccountContext, requireAccountRole, requireSessi
 import { auditLogWrite } from "@/lib/audit";
 import { hasRequestIntegrityHeader } from "@/lib/security/requestIntegrity";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
-import { createWorkspaceAccessRequest, listWorkspaceAccessRequests } from "@/lib/workspaceTeam.server";
+import {
+  createWorkspaceAccessRequest,
+  isWorkspaceAccessRequestSchemaMismatch,
+  listWorkspaceAccessRequests,
+} from "@/lib/workspaceTeam.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -30,6 +34,13 @@ function json<T>(data: T, init?: number | ResponseInit) {
 
 function s(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+async function buildDegradedAccessRequestsResponse(req: NextRequest) {
+  const session = await requireSession(req);
+  requireAccountContext(session);
+  requireAccountRole(session, ["OWNER", "ADMIN"]);
+  return json({ ok: true, degraded: true, requests: [] }, 200);
 }
 
 function readClientIp(req: NextRequest): string {
@@ -66,6 +77,14 @@ export async function GET(req: NextRequest) {
     return json({ ok: true, requests: requests || [] }, 200);
   } catch (error) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
+    if (isWorkspaceAccessRequestSchemaMismatch(error)) {
+      return json({ ok: true, degraded: true, requests: [] }, 200);
+    }
+    try {
+      return await buildDegradedAccessRequestsResponse(req);
+    } catch {
+      // Fall through to the original server error if the session/context itself is invalid.
+    }
     return json({ ok: false, error: "SERVER_ERROR" }, 500);
   }
 }
@@ -165,6 +184,16 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
+    if (isWorkspaceAccessRequestSchemaMismatch(error)) {
+      return json(
+        {
+          ok: false,
+          error: "FEATURE_UNAVAILABLE",
+          message: "Workspace access requests are temporarily unavailable.",
+        },
+        503,
+      );
+    }
     return json({ ok: false, error: "SERVER_ERROR" }, 500);
   }
 }

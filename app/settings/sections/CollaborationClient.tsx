@@ -361,6 +361,8 @@ export default function CollaborationClient() {
                 <label className="sx-collabAuditFilterField">
                   <span className="sx-collabAuditFilterLabel">Filter</span>
                   <select
+                    id="sx-collab-audit-filter"
+                    name="collaborationAuditFilter"
                     className="sx-collabAuditFilterSelect"
                     value={auditFilter}
                     onChange={(event) => setAuditFilter(event.target.value as AuditFilter)}

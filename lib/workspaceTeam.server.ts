@@ -4,6 +4,7 @@ import crypto from "crypto";
 
 import type { Prisma } from "@prisma/client";
 
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { WORKSPACE_NOTIFICATION_KINDS } from "@/lib/notificationKinds";
 import { resolvePlanIdFromTier, getPlanLimits } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
@@ -183,6 +184,26 @@ function hasManageTeamRole(rawRole: unknown): boolean {
 
 function jsonMeta(meta: Record<string, unknown>): Prisma.JsonObject {
   return meta as Prisma.JsonObject;
+}
+
+export function isWorkspaceAccessRequestSchemaMismatch(error: unknown) {
+  return isSchemaMismatchError(error, {
+    tables: ["WorkspaceAccessRequest", "Membership", "User", "Account"],
+    columns: [
+      "accountId",
+      "requesterUserId",
+      "respondedByUserId",
+      "status",
+      "createdAt",
+      "respondedAt",
+      "role",
+      "username",
+      "displayName",
+      "avatarImage",
+      "companyName",
+      "name",
+    ],
+  });
 }
 
 async function writeWorkspaceNotification(args: {

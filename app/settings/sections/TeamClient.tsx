@@ -66,6 +66,7 @@ type AccessRequestRow = {
 type AccessRequestsPayload = {
   ok: boolean;
   requests: AccessRequestRow[];
+  degraded?: boolean;
 };
 
 type ResolvedUser = {
@@ -370,11 +371,11 @@ export default function TeamClient() {
     try {
       const [membersData, requestsData] = await Promise.all([
         api<MembersPayload>("/api/members"),
-        api<AccessRequestsPayload>("/api/workspaces/access-requests?status=PENDING").catch((error) => {
-          const message = String(error instanceof Error ? error.message : "").toUpperCase();
-          if (message.includes("UNAUTHORIZED")) return { ok: false, requests: [] };
-          throw error;
-        }),
+        api<AccessRequestsPayload>("/api/workspaces/access-requests?status=PENDING").catch(() => ({
+          ok: false,
+          degraded: true,
+          requests: [],
+        })),
       ]);
 
       const prev = lastCountsRef.current;
@@ -926,6 +927,8 @@ export default function TeamClient() {
               <div className="sx-field sx-fieldUsernameInvite">
                 <div className="sx-label">Invite by username</div>
                 <input
+                  id="sx-team-invite-username"
+                  name="inviteUsername"
                   className="sx-input"
                   placeholder="@username"
                   value={inviteByUsernameInput}
@@ -980,6 +983,8 @@ export default function TeamClient() {
               <div className="sx-field">
                 <div className="sx-label">Invite by email</div>
                 <input
+                  id="sx-team-invite-email"
+                  name="inviteEmail"
                   className="sx-input"
                   placeholder="Enter an email address"
                   value={inviteEmail}
@@ -992,6 +997,8 @@ export default function TeamClient() {
               <div className="sx-field">
                 <div className="sx-label">Role</div>
                 <select
+                  id="sx-team-invite-role"
+                  name="inviteRole"
                   className="sx-select"
                   value={inviteRole}
                   onChange={(e) => {
@@ -1364,6 +1371,7 @@ export default function TeamClient() {
                 </label>
                 <input
                   id="sx-request-access-target-input"
+                  name="requestAccessTarget"
                   className="sx-input"
                   value={requestInput}
                   onChange={(event) => {
