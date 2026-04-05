@@ -769,7 +769,6 @@ a:focus{
   width: 22px;
   height: 22px;
   display: block;
-  filter: brightness(0) invert(1);
 }
 
 .cb-cavpad-icon{

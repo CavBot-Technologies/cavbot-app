@@ -2232,7 +2232,7 @@ export default function AppShell({
                 aria-label="Open quick tools"
                 onClick={() => setQuickToolsOpen((value) => !value)}
               >
-                <IconFellowActivity />
+                <IconQuickToolsGrid />
               </button>
 
               {quickToolsOpen ? (
@@ -2750,10 +2750,10 @@ function IconBell() {
   );
 }
 
-function IconFellowActivity() {
+function IconQuickToolsGrid() {
   return (
     <Image
-      src="/icons/app/fellow-activity-svgrepo-com.svg"
+      src="/icons/app/grid-svgrepo-com copy.svg"
       alt=""
       width={22}
       height={22}
