@@ -331,7 +331,7 @@ export function CavSurfaceHeaderGreeting(props: CavSurfaceHeaderGreetingProps) {
 
   return (
     <div className="cavcloud-headerGreeting" aria-label={`Hi, ${profile.greetingName}`}>
-      <span className="cavcloud-headerGreetingPrefix">Hi, </span>
+      <span className="cavcloud-headerGreetingPrefix">Hi,</span>
       <span className="cavcloud-headerGreetingNameWrap">
         <span className="cavcloud-headerGreetingName">{profile.greetingName}</span>
         {props.showVerified ? <VerifiedBadge /> : null}

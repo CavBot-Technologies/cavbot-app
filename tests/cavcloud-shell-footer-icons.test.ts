@@ -23,7 +23,7 @@ test("cavcloud and cavsafe footer restore surface quick tools and keep premium p
   assert.match(controls, /<IconGallerySquares \/>/);
   assert.match(controls, /<IconGalleryPalette \/>/);
   assert.match(controls, /<IconGear \/>/);
-  assert.match(controls, /<span className="cavcloud-headerGreetingPrefix">Hi, <\/span>/);
+  assert.match(controls, /<span className="cavcloud-headerGreetingPrefix">Hi,<\/span>/);
   assert.match(controls, /iconSizePx=\{18\}/);
   assert.match(controls, /cavcloud-surfaceQuickToolIconGallery/);
   assert.match(controls, /cavcloud-surfaceQuickToolIconSettings/);
@@ -48,5 +48,5 @@ test("cavcloud and cavsafe footer restore surface quick tools and keep premium p
   assert.match(css, /\.cavcloud-surfaceLauncherActionIconMark\{[\s\S]*width: 18px;[\s\S]*height: 18px;/);
   assert.match(css, /\.cavcloud-paneTitleSelect\{[\s\S]*background-position: right 14px center;/);
   assert.match(css, /\.cavcloud-paneTitleSelect\{[\s\S]*appearance: none;/);
-  assert.match(css, /\.cavcloud-headerGreeting\{[\s\S]*gap: 4px;[\s\S]*font-size: 16px;/);
+  assert.match(css, /\.cavcloud-headerGreeting\{[\s\S]*gap: 6px;[\s\S]*font-size: 16px;/);
 });

@@ -2326,15 +2326,23 @@ export async function getRootFolder(args: { accountId: string }) {
   return mapFolder(root);
 }
 
+async function resolveFolderIdWithRootAlias(accountId: string, folderId: string) {
+  const normalizedFolderId = String(folderId || "").trim();
+  if (!normalizedFolderId) throw new CavCloudError("FOLDER_ID_REQUIRED", 400);
+  if (normalizedFolderId.toLowerCase() !== "root") return normalizedFolderId;
+  const root = await ensureRootFolder(accountId);
+  await ensureOfficialSyncedFolders(accountId);
+  return String(root.id || "").trim();
+}
+
 export async function getFolderChildrenById(args: {
   accountId: string;
   folderId: string;
   listing?: CavCloudListingPreferences;
 }) {
   const accountId = String(args.accountId || "").trim();
-  const folderId = String(args.folderId || "").trim();
+  const folderId = await resolveFolderIdWithRootAlias(accountId, args.folderId);
   if (!accountId) throw new CavCloudError("ACCOUNT_REQUIRED", 400);
-  if (!folderId) throw new CavCloudError("FOLDER_ID_REQUIRED", 400);
   return loadFolderChildrenPayload({
     accountId,
     folderWhere: {
@@ -2353,9 +2361,8 @@ export async function searchFolderChildren(args: {
   listing?: CavCloudListingPreferences;
 }) {
   const accountId = String(args.accountId || "").trim();
-  const folderId = String(args.folderId || "").trim();
+  const folderId = await resolveFolderIdWithRootAlias(accountId, args.folderId);
   if (!accountId) throw new CavCloudError("ACCOUNT_REQUIRED", 400);
-  if (!folderId) throw new CavCloudError("FOLDER_ID_REQUIRED", 400);
   return loadFolderChildrenPayload({
     accountId,
     folderWhere: {

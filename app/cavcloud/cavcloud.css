@@ -121,9 +121,10 @@ body{ margin:0; }
 .cavcloud-brandMenuSurface{
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  font-weight: 760;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.18;
+  font-weight: 780;
   letter-spacing: .02em;
   text-transform: none;
   color: rgba(197,206,231,0.72);
@@ -520,26 +521,29 @@ body{ margin:0; }
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 0;
-  font-size: 14px;
+  gap: 6px;
+  font-size: 16px;
+  line-height: 1.16;
   font-weight: 760;
   letter-spacing: -.01em;
   color: rgba(247,251,255,0.96);
 }
 .cavcloud-headerGreetingPrefix{
+  flex: 0 0 auto;
   color: rgba(247,251,255,0.96);
 }
 .cavcloud-headerGreetingNameWrap{
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
 }
 .cavcloud-headerGreetingName{
   max-width: min(32vw, 280px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.16;
   color: var(--cc-accent);
 }
 .cavcloud-badgeWrap{
@@ -6099,6 +6103,7 @@ body{ margin:0; }
   }
   .cavcloud-headerGreeting{
     width: 100%;
+    font-size: 15px;
   }
   .cavcloud-grid{
     grid-template-columns: 1fr;

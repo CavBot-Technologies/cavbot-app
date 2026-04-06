@@ -7616,7 +7616,7 @@ function ek(e) {
     };
   }, [S, ti, tx, tz, th, a1, tE, snippetByFileId]);
   (0, c.useEffect)(() => {
-    if (eC || collabLaunchGlobalIndexed || collabLaunchGlobalIndexBusy || collabLaunchGlobalIndexInFlightRef.current) return;
+    if (eC || "ANON" === memberRole || collabLaunchGlobalIndexed || collabLaunchGlobalIndexBusy || collabLaunchGlobalIndexInFlightRef.current) return;
     let eCanceled = !1;
     collabLaunchGlobalIndexInFlightRef.current = !0, setCollabLaunchGlobalIndexBusy(!0);
     void async function () {
@@ -7627,16 +7627,28 @@ function ek(e) {
           eRootId = String(aRoot?.id || "").trim();
         }
         eRootId || (eRootId = String(en?.folder?.id || "").trim());
-        if (!eRootId) {
+        if (!eRootId || "root" === eRootId.toLowerCase()) {
+          let aRootRes = await fetch("/api/cavcloud/root", {
+              method: "GET",
+              cache: "no-store"
+            }),
+            lRootPayload = await ev(aRootRes);
+          if (401 === aRootRes.status || 403 === aRootRes.status) return;
+          if (aRootRes.ok && lRootPayload?.ok) {
+            eRootId = String(lRootPayload.rootFolderId || lRootPayload.defaultFolderId || lRootPayload.root?.id || lRootPayload.defaultFolder?.id || "").trim();
+          }
+        }
+        if (!eRootId || "root" === eRootId.toLowerCase()) {
           let aRootRes = await fetch(`/api/cavcloud/tree?folder=${encodeURIComponent("/")}&lite=1`, {
               method: "GET",
               cache: "no-store"
             }),
             lRootPayload = await ev(aRootRes);
+          if (401 === aRootRes.status || 403 === aRootRes.status) return;
           if (!aRootRes.ok || !lRootPayload?.ok || !lRootPayload?.folder?.id) throw Error(String(lRootPayload?.message || "Failed to load root folder."));
           eRootId = String(lRootPayload.folder.id || "").trim();
         }
-        if (!eRootId) throw Error("Failed to resolve root folder.");
+        if (!eRootId || "root" === eRootId.toLowerCase()) throw Error("Failed to resolve root folder.");
         let aFolderQueue = [eRootId],
           lVisitedFolderIds = new Set(),
           tItems = new Map(),
@@ -7665,6 +7677,7 @@ function ek(e) {
               cache: "no-store"
             }),
             lPayload = await ev(aRes);
+          if (401 === aRes.status || 403 === aRes.status) return;
           if (!aRes.ok || !lPayload?.ok || !lPayload?.folder) {
             let eCode = String(lPayload?.error || "").trim().toUpperCase();
             if (404 === aRes.status || "FOLDER_NOT_FOUND" === eCode) continue;
@@ -7689,7 +7702,7 @@ function ek(e) {
     return () => {
       eCanceled = !0;
     };
-  }, [eC, collabLaunchGlobalIndexed, collabLaunchGlobalIndexBusy, en?.breadcrumbs, en?.folder?.id, l3]);
+  }, [eC, memberRole, collabLaunchGlobalIndexed, collabLaunchGlobalIndexBusy, en?.breadcrumbs, en?.folder?.id, l3]);
   (0, c.useEffect)(() => {
     let eCanceled = !1,
       aFolderIds = Array.from(new Set(collabLaunchItems.filter(e => "folder" === e.kind).map(e => String(e?.id || "").trim()).filter(Boolean))).slice(0, 64),
