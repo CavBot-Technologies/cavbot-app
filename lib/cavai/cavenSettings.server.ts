@@ -150,6 +150,18 @@ function isAgentPlanEligible(agentId: string, planId: PlanId): boolean {
   return planRank(planId) >= planRank(required);
 }
 
+function fallbackBuiltInInstalledIds(installedAgentIds: readonly string[], planId?: PlanId): string[] {
+  const installedSet = new Set(
+    (Array.isArray(installedAgentIds) ? installedAgentIds : [])
+      .map((id) => s(id).toLowerCase())
+      .filter((id) => CAVEN_AGENT_ID_SET.has(id)),
+  );
+  return CAVEN_AGENT_IDS.filter((id) => {
+    if (!installedSet.has(id)) return false;
+    return !planId || isAgentPlanEligible(id, planId);
+  });
+}
+
 function toAgentSlug(input: unknown): string {
   return s(input)
     .toLowerCase()
@@ -673,12 +685,17 @@ export async function getCavenSettings(args: {
   await ensureSettingsRow(accountId, userId);
   const row = await readSettingsRow(accountId, userId);
   const normalized = normalizeSettings(row, args.planId);
-  const activeBuiltInIds = await listActiveInstalledBuiltInAgentIds({
-    accountId,
-    userId,
-    planId: args.planId,
-    legacyInstalledAgentIds: normalized.installedAgentIds,
-  });
+  let activeBuiltInIds = fallbackBuiltInInstalledIds(normalized.installedAgentIds, args.planId);
+  try {
+    activeBuiltInIds = await listActiveInstalledBuiltInAgentIds({
+      accountId,
+      userId,
+      planId: args.planId,
+      legacyInstalledAgentIds: normalized.installedAgentIds,
+    });
+  } catch (error) {
+    console.error("[cavenSettings] listActiveInstalledBuiltInAgentIds failed, using settings fallback", error);
+  }
   const customIdSet = new Set<string>(normalized.customAgents.map((agent) => agent.id));
   const customInstalled = normalized.installedAgentIds.filter((id) => customIdSet.has(id));
   const installedAgentIds = pickInstalledAgentIds(
@@ -729,20 +746,30 @@ export async function updateCavenSettings(args: {
   const requestedBuiltInInstallIds = requestedInstalledAgentIds.filter((id) => CAVEN_AGENT_ID_SET.has(id));
   const requestedCustomInstallIds = requestedInstalledAgentIds.filter((id) => customAgentIdSet.has(id));
 
-  let activeBuiltInInstalledIds = await listActiveInstalledBuiltInAgentIds({
-    accountId,
-    userId,
-    planId: args.planId,
-    legacyInstalledAgentIds: current.installedAgentIds,
-  });
-  if (installedAgentIdsPatch !== undefined || customAgentsPatch !== undefined) {
-    activeBuiltInInstalledIds = await updateBuiltInInstallState({
+  let activeBuiltInInstalledIds = fallbackBuiltInInstalledIds(current.installedAgentIds, args.planId);
+  try {
+    activeBuiltInInstalledIds = await listActiveInstalledBuiltInAgentIds({
       accountId,
       userId,
       planId: args.planId,
-      installedAgentIds: requestedBuiltInInstallIds,
       legacyInstalledAgentIds: current.installedAgentIds,
     });
+  } catch (error) {
+    console.error("[cavenSettings] initial built-in registry sync failed, using settings fallback", error);
+  }
+  if (installedAgentIdsPatch !== undefined || customAgentsPatch !== undefined) {
+    activeBuiltInInstalledIds = fallbackBuiltInInstalledIds(requestedBuiltInInstallIds, args.planId);
+    try {
+      activeBuiltInInstalledIds = await updateBuiltInInstallState({
+        accountId,
+        userId,
+        planId: args.planId,
+        installedAgentIds: requestedBuiltInInstallIds,
+        legacyInstalledAgentIds: current.installedAgentIds,
+      });
+    } catch (error) {
+      console.error("[cavenSettings] updateBuiltInInstallState failed, preserving settings payload", error);
+    }
   }
   const finalInstalledAgentIds = pickInstalledAgentIds(
     [...activeBuiltInInstalledIds, ...requestedCustomInstallIds],
@@ -806,12 +833,17 @@ export async function updateCavenSettings(args: {
 
   const next = await readSettingsRow(accountId, userId);
   const normalizedRaw = normalizeSettings(next, args.planId);
-  const activeBuiltIns = await listActiveInstalledBuiltInAgentIds({
-    accountId,
-    userId,
-    planId: args.planId,
-    legacyInstalledAgentIds: normalizedRaw.installedAgentIds,
-  });
+  let activeBuiltIns = fallbackBuiltInInstalledIds(normalizedRaw.installedAgentIds, args.planId);
+  try {
+    activeBuiltIns = await listActiveInstalledBuiltInAgentIds({
+      accountId,
+      userId,
+      planId: args.planId,
+      legacyInstalledAgentIds: normalizedRaw.installedAgentIds,
+    });
+  } catch (error) {
+    console.error("[cavenSettings] post-save built-in registry sync failed, using settings fallback", error);
+  }
   const normalizedCustomIdSet = new Set<string>(normalizedRaw.customAgents.map((agent) => agent.id));
   const normalizedCustomInstalled = normalizedRaw.installedAgentIds.filter((id) => normalizedCustomIdSet.has(id));
   const normalized: CavenSettings = {
