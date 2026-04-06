@@ -1,10 +1,15 @@
 import type { Prisma } from "@prisma/client";
 
 import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
+import {
+  findLatestEntitledSubscription,
+  isTrialSeatEntitled,
+  resolveEffectivePlanId as resolveEffectiveAccountPlanId,
+} from "@/lib/accountPlan.server";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import { CAVCLOUD_ACTIVITY_OPERATION_KINDS } from "@/lib/cavcloud/historyLayers.server";
-import { getCavCloudPlanContext } from "@/lib/cavcloud/plan.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
+import { getPlanLimits, type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -92,6 +97,31 @@ function parseRange(raw: string | null): { key: "7d"; start: Date } {
     return { key: "7d", start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) };
   }
   return { key: "7d", start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) };
+}
+
+type AccountPlanShape = {
+  tier: unknown;
+  trialSeatActive: boolean;
+  trialEndsAt: Date | null;
+};
+
+function resolveEffectivePlanId(account: AccountPlanShape | null): PlanId {
+  return resolveEffectiveAccountPlanId({
+    account,
+  });
+}
+
+function storageLimitBytesForPlan(planId: PlanId): number | null {
+  const limits = getPlanLimits(planId);
+  if (limits.storageGb === "unlimited") return null;
+  const bytes = Number(limits.storageGb || 0) * 1024 * 1024 * 1024;
+  if (!Number.isFinite(bytes) || bytes <= 0) return null;
+  return Math.trunc(bytes);
+}
+
+function planLimitBytes(account: AccountPlanShape | null, planId: PlanId): number | null {
+  if (isTrialSeatEntitled(account)) return null;
+  return storageLimitBytesForPlan(planId);
 }
 
 function isMissingUsagePointTableError(err: unknown): boolean {
@@ -204,8 +234,9 @@ function isCavCloudDashboardSchemaMismatch(err: unknown) {
   });
 }
 
-function degradedDashboardPayload(plan: Awaited<ReturnType<typeof getCavCloudPlanContext>>) {
-  const totalBytesLimit = plan.limitBytes;
+function degradedDashboardPayload(account: AccountPlanShape | null = null) {
+  const planId = resolveEffectivePlanId(account);
+  const totalBytesLimit = planLimitBytes(account, planId);
   return {
     ok: true,
     degraded: true,
@@ -239,8 +270,49 @@ async function buildDegradedDashboardResponse(req: Request) {
   const sess = await requireSession(req);
   requireAccountContext(sess);
   requireUser(sess);
-  const plan = await getCavCloudPlanContext(String(sess.accountId || ""));
-  return jsonNoStore(degradedDashboardPayload(plan), 200);
+  const accountId = String(sess.accountId || "");
+
+  const [account, entitledSubscription] = await Promise.all([
+    prisma.account
+      .findUnique({
+        where: { id: accountId },
+        select: { tier: true, trialSeatActive: true, trialEndsAt: true },
+      })
+      .catch((error) => {
+        if (
+          isSchemaMismatchError(error, {
+            tables: ["Account"],
+            columns: ["tier", "trialSeatActive", "trialEndsAt"],
+          })
+        ) {
+          return null;
+        }
+        throw error;
+      }),
+    findLatestEntitledSubscription(accountId),
+  ]);
+
+  const degradedAccount = account
+    ? {
+        ...account,
+        tier: planTierFromAccountAndSubscription(account, entitledSubscription),
+      }
+    : null;
+
+  return jsonNoStore(degradedDashboardPayload(degradedAccount), 200);
+}
+
+function planTierFromAccountAndSubscription(
+  account: AccountPlanShape | null,
+  subscription: { tier?: unknown; status?: unknown; currentPeriodEnd?: Date | null } | null,
+) {
+  const planId = resolveEffectiveAccountPlanId({
+    account,
+    subscription,
+  });
+  if (planId === "premium_plus") return "ENTERPRISE";
+  if (planId === "premium") return "PREMIUM";
+  return "FREE";
 }
 
 function sanitizeEventMeta(args: {
@@ -389,7 +461,8 @@ export async function GET(req: Request) {
     const now = new Date();
 
     const [
-      plan,
+      account,
+      entitledSubscription,
       bytesAgg,
       breakdownRows,
       largestFolderRows,
@@ -403,7 +476,25 @@ export async function GET(req: Request) {
       activeFolderUploads,
       activeGoogleDriveImports,
     ] = await Promise.all([
-      getCavCloudPlanContext(accountId),
+      prisma.account.findUnique({
+        where: { id: accountId },
+        select: {
+          tier: true,
+          trialSeatActive: true,
+          trialEndsAt: true,
+        },
+      }).catch((error) => {
+        if (
+          isSchemaMismatchError(error, {
+            tables: ["Account"],
+            columns: ["tier", "trialSeatActive", "trialEndsAt"],
+          })
+        ) {
+          return null;
+        }
+        throw error;
+      }),
+      findLatestEntitledSubscription(accountId),
       prisma.cavCloudFile.aggregate({
         where: {
           accountId,
@@ -730,7 +821,11 @@ export async function GET(req: Request) {
 
     const usedBig = bytesAgg._sum.bytes ?? BigInt(0);
     const usedBytes = toSafeNumber(usedBig);
-    const totalBytesLimit = plan.limitBytes;
+    const planId = resolveEffectiveAccountPlanId({
+      account,
+      subscription: entitledSubscription,
+    });
+    const totalBytesLimit = planLimitBytes(account, planId);
     const freeBytes = totalBytesLimit == null ? null : Math.max(0, totalBytesLimit - usedBytes);
 
     const trendPointsRaw = usageRows

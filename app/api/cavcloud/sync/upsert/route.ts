@@ -1,7 +1,7 @@
 import { requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
+import { findLatestEntitledSubscription, resolveEffectivePlanId as resolveEffectiveAccountPlanId } from "@/lib/accountPlan.server";
 import { notifyCavCloudStorageThresholds, notifyCavCloudUploadFailure } from "@/lib/cavcloud/notifications.server";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
-import { getCavCloudPlanContext } from "@/lib/cavcloud/plan.server";
 import { upsertTextFile } from "@/lib/cavcloud/storage.server";
 import { upsertTextFile as upsertCavsafeTextFile } from "@/lib/cavsafe/storage.server";
 import { assertCavCloudActionAllowed, getCavCloudOperatorContext } from "@/lib/cavcloud/permissions.server";
@@ -76,7 +76,23 @@ export async function POST(req: Request) {
         target: "cavcloud",
       });
     }
-    const planId = (await getCavCloudPlanContext(String(sess.accountId || ""))).planId;
+    const [account, entitledSubscription] = await Promise.all([
+      prisma.account.findUnique({
+        where: {
+          id: sess.accountId,
+        },
+        select: {
+          tier: true,
+          trialSeatActive: true,
+          trialEndsAt: true,
+        },
+      }),
+      findLatestEntitledSubscription(String(sess.accountId || "")),
+    ]);
+    const planId = resolveEffectiveAccountPlanId({
+      account,
+      subscription: entitledSubscription,
+    });
     const cavsafePlanEnabled = planId === "premium" || planId === "premium_plus";
     const normalizedFilePath = joinPath(normalizedFolderPath, name);
     const shouldMirrorToCavsafe = cavsafePlanEnabled

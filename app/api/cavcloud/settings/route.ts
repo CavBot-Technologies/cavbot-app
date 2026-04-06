@@ -1,4 +1,9 @@
 import { requireAccountContext, requireAccountRole, requireSession, requireUser } from "@/lib/apiAuth";
+import {
+  findLatestEntitledSubscription,
+  planTierTokenFromPlanId,
+  resolveEffectivePlanId as resolveEffectiveAccountPlanId,
+} from "@/lib/accountPlan.server";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import {
   DEFAULT_CAVCLOUD_SETTINGS,
@@ -13,7 +18,6 @@ import {
   updateCavCloudCollabPolicy,
 } from "@/lib/cavcloud/collabPolicy.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
-import { resolvePlanIdFromTier } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { buildGuardDecisionPayload } from "@/src/lib/cavguard/cavGuard.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -22,29 +26,25 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-function isTrialSeatActiveNow(trialSeatActive: boolean | null, trialEndsAt: Date | null) {
-  if (!trialSeatActive || !trialEndsAt) return false;
-  const endsAtMs = new Date(trialEndsAt).getTime();
-  return Number.isFinite(endsAtMs) && endsAtMs > Date.now();
-}
-
 async function resolveGuardPlan(accountIdRaw: string): Promise<"FREE" | "PREMIUM" | "PREMIUM_PLUS"> {
   const accountId = String(accountIdRaw || "").trim();
   if (!accountId) return "FREE";
-  const account = await prisma.account.findUnique({
-    where: { id: accountId },
-    select: {
-      tier: true,
-      trialSeatActive: true,
-      trialEndsAt: true,
-    },
-  });
+  const [account, entitledSubscription] = await Promise.all([
+    prisma.account.findUnique({
+      where: { id: accountId },
+      select: {
+        tier: true,
+        trialSeatActive: true,
+        trialEndsAt: true,
+      },
+    }),
+    findLatestEntitledSubscription(accountId),
+  ]);
   if (!account) return "FREE";
-  if (isTrialSeatActiveNow(account.trialSeatActive, account.trialEndsAt)) return "PREMIUM_PLUS";
-  const planId = resolvePlanIdFromTier(account.tier);
-  if (planId === "premium_plus") return "PREMIUM_PLUS";
-  if (planId === "premium") return "PREMIUM";
-  return "FREE";
+  return planTierTokenFromPlanId(resolveEffectiveAccountPlanId({
+    account,
+    subscription: entitledSubscription,
+  }));
 }
 
 async function buildOwnerSettingsGuard(args: {

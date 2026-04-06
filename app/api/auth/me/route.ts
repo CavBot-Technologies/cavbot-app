@@ -2,8 +2,6 @@
 import { NextResponse } from "next/server";
 import { getSession, isApiAuthError } from "@/lib/apiAuth";
 import type { CavbotSession } from "@/lib/apiAuth";
-import { cavcloudTierTokenForPlanId } from "@/lib/cavcloud/plan";
-import { getCavCloudPlanContext } from "@/lib/cavcloud/plan.server";
 import {
   clearExpiredTrialSeat,
   findAccountById,
@@ -11,6 +9,12 @@ import {
   findUserById,
   getAuthPool,
 } from "@/lib/authDb";
+import {
+  findLatestEntitledSubscription,
+  isTrialSeatEntitled,
+  planTierTokenFromPlanId,
+  resolveEffectivePlanId,
+} from "@/lib/accountPlan.server";
 
 const DEFAULT_CAVCLOUD_COLLAB_POLICY = {
   allowAdminsManageCollaboration: false,
@@ -90,31 +94,17 @@ type AccountWithComputed = PrismaAccount & {
   trialDaysLeft: number;
 };
 
-function computeEffectiveTier(account?: {
-  tier?: unknown;
-  trialSeatActive?: boolean | null;
-  trialEndsAt?: string | number | Date | null;
-} | null) {
+function computeEffectiveTier(account: PrismaAccount) {
   const now = Date.now();
   const endsAtMs = account?.trialEndsAt ? new Date(account.trialEndsAt).getTime() : 0;
-
-  const trialActive = Boolean(account?.trialSeatActive) && endsAtMs > now;
-
-  // IMPORTANT: "PREMIUM_PLUS" doesn't exist in Prisma enum
-  // but we can return it as a JSON-only "effective" tier for your UI + gates.
-  let tierEffective = String(account?.tier || "FREE").toUpperCase();
-
-  // Map ENTERPRISE to top access
-  if (tierEffective === "ENTERPRISE") tierEffective = "PREMIUM_PLUS";
-
-  if (trialActive) tierEffective = "PREMIUM_PLUS";
+  const trialActive = isTrialSeatEntitled(account, now);
 
   const daysLeft =
-    trialActive && endsAtMs
+    trialActive && endsAtMs > now
       ? Math.max(0, Math.ceil((endsAtMs - now) / (1000 * 60 * 60 * 24)))
       : 0;
 
-  return { trialActive, tierEffective, daysLeft };
+  return { trialActive, daysLeft };
 }
 
 export async function GET(req: Request) {
@@ -161,26 +151,24 @@ export async function GET(req: Request) {
       if (!membership) return json({ ok: true, authenticated: false }, 200);
 
       await clearExpiredTrialSeat(pool, accountId);
-      const accountRecord = await findAccountById(pool, accountId);
+      const [accountRecord, entitledSubscription] = await Promise.all([
+        findAccountById(pool, accountId),
+        findLatestEntitledSubscription(accountId),
+      ]);
 
       if (!accountRecord) return json({ ok: true, authenticated: false }, 200);
 
       account = accountRecord;
 
-      const fallbackEff = computeEffectiveTier(account);
-      const resolvedPlan = await getCavCloudPlanContext(accountId).catch(() => null);
-      const resolvedTrialDetails = computeEffectiveTier(resolvedPlan?.account);
-      const eff = resolvedPlan
-        ? {
-            trialActive: resolvedPlan.trialActive,
-            tierEffective: cavcloudTierTokenForPlanId(resolvedPlan.planId),
-            daysLeft: resolvedTrialDetails.daysLeft,
-          }
-        : fallbackEff;
-
+      // Compute effective tier for UI + gates
+      const eff = computeEffectiveTier(account);
+      const effectivePlanId = resolveEffectivePlanId({
+        account,
+        subscription: entitledSubscription,
+      });
       accountWithComputed = {
         ...account,
-        tierEffective: eff.tierEffective, // "FREE" | "PREMIUM" | "PREMIUM_PLUS"
+        tierEffective: planTierTokenFromPlanId(effectivePlanId),
         trialActive: eff.trialActive,
         trialDaysLeft: eff.daysLeft,
       };

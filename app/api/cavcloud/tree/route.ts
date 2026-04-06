@@ -1,9 +1,11 @@
 import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
+import { findLatestEntitledSubscription, resolveEffectivePlanId as resolveEffectiveAccountPlanId } from "@/lib/accountPlan.server";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
-import { getCavCloudPlanContext } from "@/lib/cavcloud/plan.server";
 import { getCavCloudSettings, toCavCloudListingPreferences } from "@/lib/cavcloud/settings.server";
 import { getTree, getTreeLite } from "@/lib/cavcloud/storage.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
+import { prisma } from "@/lib/prisma";
+import { getPlanLimits, type PlanId } from "@/lib/plans";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +35,31 @@ function stripReservedSystemEntriesAtRoot<T extends { folders?: Array<{ path?: s
     folders: folders.filter((item) => !isReservedSystemPath(String(item?.path || ""))),
     files: files.filter((item) => !isReservedSystemPath(String(item?.path || ""))),
   };
+}
+
+function envPositiveInt(name: string, fallback: number): number {
+  const raw = String(process.env[name] || "").trim();
+  if (!raw) return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return fallback;
+  return n;
+}
+
+function perFileMaxBytesForPlan(planId: PlanId): number {
+  const free = envPositiveInt("CAVCLOUD_MAX_FILE_BYTES_FREE", 64 * 1024 * 1024);
+  const premium = envPositiveInt("CAVCLOUD_MAX_FILE_BYTES_PREMIUM", 1024 * 1024 * 1024);
+  const premiumPlus = envPositiveInt("CAVCLOUD_MAX_FILE_BYTES_PREMIUM_PLUS", 5 * 1024 * 1024 * 1024);
+  if (planId === "premium_plus") return premiumPlus;
+  if (planId === "premium") return premium;
+  return free;
+}
+
+function storageLimitBytesForPlan(planId: PlanId): number | null {
+  const limits = getPlanLimits(planId);
+  if (limits.storageGb === "unlimited") return null;
+  const bytes = Number(limits.storageGb || 0) * 1024 * 1024 * 1024;
+  if (!Number.isFinite(bytes) || bytes <= 0) return null;
+  return Math.trunc(bytes);
 }
 
 function isMissingCavCloudTablesError(err: unknown): boolean {
@@ -76,7 +103,31 @@ function isCavCloudTreeSchemaMismatch(err: unknown) {
 }
 
 async function fallbackTreeForMissingTables(accountId: string) {
-  const plan = await getCavCloudPlanContext(accountId);
+  const [account, entitledSubscription] = await Promise.all([
+    prisma.account.findUnique({
+      where: { id: accountId },
+      select: { tier: true, trialSeatActive: true, trialEndsAt: true },
+    }).catch((error) => {
+      if (
+        isSchemaMismatchError(error, {
+          tables: ["Account"],
+          columns: ["tier", "trialSeatActive", "trialEndsAt"],
+        })
+      ) {
+        return null;
+      }
+      throw error;
+    }),
+    findLatestEntitledSubscription(accountId),
+  ]);
+
+  const planId: PlanId = resolveEffectiveAccountPlanId({
+    account,
+    subscription: entitledSubscription,
+  });
+
+  const limitBytes = storageLimitBytesForPlan(planId);
+  const perFileMaxBytes = perFileMaxBytesForPlan(planId);
   const now = new Date().toISOString();
 
   return {
@@ -90,13 +141,13 @@ async function fallbackTreeForMissingTables(accountId: string) {
     usage: {
       usedBytes: 0,
       usedBytesExact: "0",
-      limitBytes: plan.limitBytes,
-      limitBytesExact: plan.limitBytes == null ? null : String(plan.limitBytes),
-      remainingBytes: plan.limitBytes == null ? null : plan.limitBytes,
-      remainingBytesExact: plan.limitBytes == null ? null : String(plan.limitBytes),
-      planId: plan.planId,
-      perFileMaxBytes: plan.perFileMaxBytes,
-      perFileMaxBytesExact: String(plan.perFileMaxBytes),
+      limitBytes,
+      limitBytesExact: limitBytes == null ? null : String(limitBytes),
+      remainingBytes: limitBytes == null ? null : limitBytes,
+      remainingBytesExact: limitBytes == null ? null : String(limitBytes),
+      planId,
+      perFileMaxBytes,
+      perFileMaxBytesExact: String(perFileMaxBytes),
     },
     activity: [],
     storageHistory: [],
