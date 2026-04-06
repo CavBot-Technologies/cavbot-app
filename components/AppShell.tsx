@@ -1616,7 +1616,8 @@ export default function AppShell({
 
   const authenticatedWorkspaceUser = authPlanVerified && Boolean(memberRole);
   const notificationsOwnerAllowed = authPlanVerified && memberRole === "OWNER";
-  const shouldMountCavPad = showCavPad && authenticatedWorkspaceUser;
+  const shouldRenderCavPadTrigger = showCavPad;
+  const shouldMountCavPad = showCavPad && (authenticatedWorkspaceUser || cavPadOpen);
 
   function onNotificationsToggle() {
     if (notificationsOwnerAllowed) {
@@ -2460,7 +2461,7 @@ export default function AppShell({
                 />
               ) : null}
 
-              {shouldMountCavPad ? (
+              {shouldRenderCavPadTrigger ? (
                 <button
                   className="cb-icon-btn-top"
                   type="button"

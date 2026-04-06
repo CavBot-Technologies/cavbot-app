@@ -22,6 +22,15 @@ test("app shell keeps the multicolor quick tools trigger and founder premium plu
   assert.match(globals, /\.cb-side-tools-grid \.is-lime\{/);
 });
 
+test("app shell keeps the CavPad header trigger visible independently from dock mounting", () => {
+  const appShell = read("components/AppShell.tsx");
+
+  assert.match(appShell, /const shouldRenderCavPadTrigger = showCavPad;/);
+  assert.match(appShell, /const shouldMountCavPad = showCavPad && \(authenticatedWorkspaceUser \|\| cavPadOpen\);/);
+  assert.match(appShell, /\{shouldRenderCavPadTrigger \? \(/);
+  assert.match(appShell, /aria-label="Open CavPad"/);
+});
+
 test("cavcloud and cavsafe gate compact header controls to compact shell only", () => {
   const cloud = read("app/cavcloud/CavCloudClient.tsx");
   const safe = read("app/cavsafe/CavSafeClient.tsx");
