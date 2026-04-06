@@ -53,17 +53,6 @@ function badgeToneClass(tone: "default" | "lime" | "red") {
   return "";
 }
 
-function decodeSessionLocation(value: string) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  const normalized = raw.replace(/\+/g, " ");
-  try {
-    return decodeURIComponent(normalized);
-  } catch {
-    return normalized;
-  }
-}
-
 function IconBrowser({ b }: { b: BrowserKey }) {
   // Original CavBot-native icons (safe). Swap later with your own licensed browser marks if you want.
   if (b === "safari") {
@@ -154,6 +143,17 @@ function inferBrowser(row: SessionRow): BrowserKey {
   const fromUa = detectBrowser(row.userAgent || "");
   if (fromUa !== "unknown") return fromUa;
   return guessBrowserFromLabel(row.label);
+}
+
+function decodeSessionLocation(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const normalized = raw.replace(/\+/g, " ");
+  try {
+    return decodeURIComponent(normalized);
+  } catch {
+    return normalized;
+  }
 }
 
 function renderSessionLocation(row: SessionRow) {

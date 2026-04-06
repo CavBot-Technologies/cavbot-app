@@ -27,10 +27,12 @@ import {
   pgUniqueViolationMentions,
   withAuthTransaction,
 } from "@/lib/authDb";
+import { buildPreferredPersonalWorkspaceSlug, derivePersonalWorkspaceNameFromEmail } from "@/lib/profileIdentity";
 import { sendSignupWelcomeEmail } from "@/lib/signupWelcomeEmail.server";
 
 import { createHash, randomBytes } from "crypto";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
+import { readCoarseRequestGeo } from "@/lib/requestGeo";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -89,13 +91,6 @@ function randomToken(bytes = 32) {
 
 async function sha256Hex(text: string) {
   return createHash("sha256").update(text).digest("hex");
-}
-
-function deriveAccountNameFromEmail(email: string) {
-  const domain = (email.split("@")[1] || "").trim();
-  const base = (domain.split(".")[0] || "CavBot").trim();
-  const nice = base ? base.slice(0, 1).toUpperCase() + base.slice(1) : "CavBot";
-  return `${nice} Account`;
 }
 
 function toStringValue(value: unknown): string | undefined {
@@ -174,28 +169,6 @@ async function findAvailableAccountSlug(queryable: Queryable, requested: string)
   Cloudflare IP + Geo
   ========================= */
 
-function safeStr(v: unknown): string {
-  if (v == null) return "";
-  return String(v);
-}
-
-function readCloudflareGeo(req: Request) {
-  const countryRaw = safeStr(req.headers.get("cf-ipcountry")).trim();
-  const regionRaw =
-    safeStr(req.headers.get("cf-region")).trim() || safeStr(req.headers.get("cf-region-code")).trim();
-
-  const country = countryRaw && countryRaw !== "XX" ? countryRaw : "";
-  const region = regionRaw || "";
-
-  const label = [region, country].map((s) => String(s || "").trim()).filter(Boolean).join(", ");
-
-  return {
-    country: country || null,
-    region: region || null,
-    label: label || (country ? country : null),
-  };
-}
-
 export async function POST(req: Request) {
   try {
     const pool = getAuthPool();
@@ -266,10 +239,12 @@ export async function POST(req: Request) {
     const accountName =
       body?.accountName != null && String(body.accountName).trim()
         ? String(body.accountName).trim()
-        : deriveAccountNameFromEmail(email);
+        : derivePersonalWorkspaceNameFromEmail(email);
 
     const requestedSlug =
-      body?.accountSlug != null && String(body.accountSlug).trim() ? toSlug(body.accountSlug) : toSlug(accountName);
+      body?.accountSlug != null && String(body.accountSlug).trim()
+        ? toSlug(body.accountSlug)
+        : buildPreferredPersonalWorkspaceSlug({ username: usernameNorm, email, displayName });
 
     const accountSlug = await findAvailableAccountSlug(pool, requestedSlug);
 
@@ -283,7 +258,7 @@ export async function POST(req: Request) {
     const trialDays = 14;
     const trialEndsAt = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
 
-    const geo = readCloudflareGeo(req);
+    const geo = readCoarseRequestGeo(req);
 
       try {
         const result = await withAuthTransaction(async (tx) => {

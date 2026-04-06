@@ -7,44 +7,182 @@
 // This watcher creates symlinks `.next/server/<id>.js -> chunks/<id>.js` for numeric chunks
 // for the lifetime of the dev server.
 
-import { spawn } from "node:child_process";
-import { parse as parseDotenv } from "dotenv";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
+const MIN_SUPPORTED_NODE_MAJOR = 20;
+const MAX_SUPPORTED_NODE_MAJOR = 24;
+const FALLBACK_NODE_MAJORS = [22, 20];
+const NODE_REEXEC_ENV_FLAG = "CB_REEXECED_WITH_SUPPORTED_NODE";
+const NODE_PATH_OVERRIDE_ENV_KEYS = ["CB_NODE_EXECUTABLE", "CAVBOT_NODE_EXECUTABLE", "NODE22_BIN"];
+
+function parseNodeMajor(versionString) {
+  const major = Number(String(versionString || "").trim().split(".")[0] || 0);
+  return Number.isFinite(major) ? major : 0;
+}
+
+function isSupportedNodeMajor(major) {
+  return major >= MIN_SUPPORTED_NODE_MAJOR && major < MAX_SUPPORTED_NODE_MAJOR;
+}
+
+function preferredNodeMajors() {
+  const discovered = [];
+  try {
+    const raw = fs.readFileSync(path.join(process.cwd(), ".nvmrc"), "utf8").trim();
+    const major = Number((raw.match(/\d+/) || [])[0] || 0);
+    if (Number.isFinite(major) && major > 0) discovered.push(major);
+  } catch {
+    // ignore
+  }
+  return Array.from(new Set([...discovered, ...FALLBACK_NODE_MAJORS]));
+}
+
+function isExecutableFile(filePath) {
+  if (!filePath) return false;
+  try {
+    fs.accessSync(filePath, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveInstalledNvmNodes(major) {
+  const home = String(process.env.HOME || "").trim();
+  if (!home) return [];
+
+  const versionsDir = path.join(home, ".nvm", "versions", "node");
+  let entries = [];
+  try {
+    entries = fs.readdirSync(versionsDir);
+  } catch {
+    return [];
+  }
+
+  return entries
+    .filter((entry) => new RegExp(`^v${major}(?:\\.|$)`).test(entry))
+    .sort()
+    .reverse()
+    .map((entry) => path.join(versionsDir, entry, "bin", "node"));
+}
+
+function detectNodeBinaryMajor(nodePath) {
+  try {
+    const result = spawnSync(nodePath, ["-p", "process.versions.node"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    if (result.status !== 0) return 0;
+    return parseNodeMajor(result.stdout);
+  } catch {
+    return 0;
+  }
+}
+
+function findSupportedNodeBinary() {
+  const candidates = [];
+
+  for (const key of NODE_PATH_OVERRIDE_ENV_KEYS) {
+    const value = String(process.env[key] || "").trim();
+    if (value) candidates.push(value);
+  }
+
+  const brewPrefixes = Array.from(
+    new Set(
+      [
+        String(process.env.HOMEBREW_PREFIX || "").trim(),
+        "/opt/homebrew",
+        "/usr/local",
+      ].filter(Boolean),
+    ),
+  );
+
+  for (const major of preferredNodeMajors()) {
+    for (const prefix of brewPrefixes) {
+      candidates.push(path.join(prefix, "opt", `node@${major}`, "bin", "node"));
+    }
+    candidates.push(...resolveInstalledNvmNodes(major));
+  }
+
+  const seen = new Set();
+  for (const candidate of candidates) {
+    const normalized = path.resolve(candidate);
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    if (normalized === process.execPath) continue;
+    if (!isExecutableFile(normalized)) continue;
+
+    const major = detectNodeBinaryMajor(normalized);
+    if (!isSupportedNodeMajor(major)) continue;
+
+    return { path: normalized, major };
+  }
+
+  return null;
+}
+
+async function reexecWithNode(nodeBinary) {
+  const result = await new Promise((resolve, reject) => {
+    const child = spawn(nodeBinary, process.argv.slice(1), {
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        [NODE_REEXEC_ENV_FLAG]: "1",
+      },
+    });
+
+    child.on("error", reject);
+    child.on("exit", (code, signal) => resolve({ code, signal }));
+  });
+
+  if (result && typeof result === "object" && result.signal) {
+    process.kill(process.pid, result.signal);
+    return;
+  }
+
+  process.exit((result && typeof result === "object" && typeof result.code === "number") ? result.code : 1);
+}
+
 // This repo targets Node >=20 and <24 (see package.json engines and .nvmrc).
 // Running unsupported Node versions can corrupt `.next` output in dev (missing chunks, broken runtime requires).
-function checkNodeVersion() {
+async function checkNodeVersion() {
   try {
-    const major = Number(String(process.versions.node || "").split(".")[0] || 0);
+    const major = parseNodeMajor(process.versions.node);
     if (!Number.isFinite(major) || major <= 0) return;
-
-    const supported = major >= 20 && major < 24;
-    if (supported) return;
+    if (isSupportedNodeMajor(major)) return;
 
     // Allow local override: sometimes this still works, but it's not officially supported.
     if (process.env.CB_IGNORE_NODE_ENGINE === "1") return;
 
-    // Keep local dev unblocked. Show this only when explicitly requested.
-    if (process.env.CB_SHOW_NODE_ENGINE_WARN === "1") {
-      const msg =
-        `Unsupported Node.js v${process.versions.node} for this repo (expected >=20 <24).\n` +
-        `Fix: switch to Node 22 (see .nvmrc) and restart dev.\n` +
-        `Override: run \`npm run dev:unsafe\` (or set CB_IGNORE_NODE_ENGINE=1).`;
-      console.warn(msg);
+    if (process.env[NODE_REEXEC_ENV_FLAG] !== "1") {
+      const supportedNode = findSupportedNodeBinary();
+      if (supportedNode) {
+        console.warn(
+          `\n[cavbot dev] Unsupported Node.js v${process.versions.node}; re-running under Node v${supportedNode.major} (${supportedNode.path}).\n`,
+        );
+        await reexecWithNode(supportedNode.path);
+        return;
+      }
     }
+
+    const msg =
+      `\n[cavbot dev] Unsupported Node.js v${process.versions.node} for this repo (expected >=20 <24).\n` +
+      `[cavbot dev] This version is known to corrupt Next dev output with missing chunks/static assets.\n` +
+      `[cavbot dev] Fix: switch to Node 22 (see .nvmrc) and restart dev.\n` +
+      `[cavbot dev] Override only if you accept broken dev behavior: run \`npm run dev:unsafe\` or set CB_IGNORE_NODE_ENGINE=1.\n`;
+    console.error(msg);
+    process.exit(1);
   } catch {
     // ignore
   }
 }
 
-checkNodeVersion();
+await checkNodeVersion();
 
 const LOCALHOST_FALLBACK_ORIGIN = "http://localhost:3000";
 const LOCAL_DB_ENV_KEYS = ["CAVBOT_DEV_DATABASE_URL", "CAVBOT_DEV_DIRECT_URL"];
 const ALWAYS_STRIPPED_INTEGRATION_ENV_KEYS = [
-  "RESEND_API_KEY",
-  "RESEND_SIGNUP_API_KEY",
   "CLOUDFLARE_API_TOKEN",
   "CLOUDFLARE_ACCOUNT_ID",
   "CLOUDFLARE_R2_ENDPOINT",
@@ -57,14 +195,65 @@ const ALWAYS_STRIPPED_INTEGRATION_ENV_KEYS = [
   "AWS_SECRET_ACCESS_KEY",
   "AWS_SESSION_TOKEN",
 ];
+const EMAIL_INTEGRATION_ENV_KEYS = [
+  "RESEND_API_KEY",
+  "RESEND_SIGNUP_API_KEY",
+];
 
 function readEnvFile(filePath) {
   try {
     if (!fs.existsSync(filePath)) return {};
-    return parseDotenv(fs.readFileSync(filePath));
+    return parseSimpleDotenv(fs.readFileSync(filePath, "utf8"));
   } catch {
     return {};
   }
+}
+
+function parseSimpleDotenv(source) {
+  const text = String(source || "");
+  const out = {};
+  const lines = text.split(/\r?\n/);
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+
+    const normalized = line.startsWith("export ") ? line.slice(7).trimStart() : line;
+    const separatorIndex = normalized.indexOf("=");
+    if (separatorIndex <= 0) continue;
+
+    const key = normalized.slice(0, separatorIndex).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+
+    let value = normalized.slice(separatorIndex + 1).trim();
+    if (!value) {
+      out[key] = "";
+      continue;
+    }
+
+    const quote = value[0];
+    if (quote === "\"" || quote === "'") {
+      let inner = value.slice(1);
+      const closingIndex = inner.lastIndexOf(quote);
+      if (closingIndex >= 0) inner = inner.slice(0, closingIndex);
+      if (quote === "\"") {
+        inner = inner
+          .replace(/\\n/g, "\n")
+          .replace(/\\r/g, "\r")
+          .replace(/\\t/g, "\t")
+          .replace(/\\"/g, "\"")
+          .replace(/\\\\/g, "\\");
+      }
+      out[key] = inner;
+      continue;
+    }
+
+    const commentIndex = value.indexOf(" #");
+    if (commentIndex >= 0) value = value.slice(0, commentIndex).trimEnd();
+    out[key] = value;
+  }
+
+  return out;
 }
 
 function loadDevEnvSnapshot(rootDir) {
@@ -196,12 +385,21 @@ function applySafeLocalhostEnv(baseEnv) {
   assertSafeLocalDatabase(env);
 
   const allowLiveIntegrations = isTruthyFlag(baseEnv.CAVBOT_ALLOW_LIVE_INTEGRATIONS_IN_DEV);
+  const allowLiveEmailInDev = allowLiveIntegrations || isTruthyFlag(baseEnv.CAVBOT_ALLOW_LIVE_EMAIL_IN_DEV);
   const strippedKeys = [];
   if (!allowLiveIntegrations) {
     for (const key of ALWAYS_STRIPPED_INTEGRATION_ENV_KEYS) {
       if (!String(env[key] || "").trim()) continue;
       env[key] = "";
       strippedKeys.push(key);
+    }
+
+    if (!allowLiveEmailInDev) {
+      for (const key of EMAIL_INTEGRATION_ENV_KEYS) {
+        if (!String(env[key] || "").trim()) continue;
+        env[key] = "";
+        strippedKeys.push(key);
+      }
     }
 
     const hasStripeTestKeys =
@@ -227,6 +425,9 @@ function applySafeLocalhostEnv(baseEnv) {
   ];
   if (strippedKeys.length) {
     modeSummary.push(`[cavbot dev] Stripped live integrations: ${strippedKeys.join(", ")}`);
+  }
+  if (allowLiveEmailInDev && !allowLiveIntegrations) {
+    modeSummary.push(`[cavbot dev] Live email sending enabled for localhost.`);
   }
   console.log(`\n${modeSummary.join("\n")}\n`);
 

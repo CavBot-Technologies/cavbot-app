@@ -25,6 +25,7 @@ type RawUserRow = {
   email: string;
   username: string | null;
   displayName: string | null;
+  fullName: string | null;
   usernameChangeCount: number | null;
   lastUsernameChangeAt: string | Date | null;
   publicProfileEnabled: boolean | null;
@@ -116,6 +117,7 @@ export type AuthUser = {
   email: string;
   username: string | null;
   displayName: string | null;
+  fullName: string | null;
   usernameChangeCount: number | null;
   lastUsernameChangeAt: Date | null;
   publicProfileEnabled: boolean;
@@ -240,11 +242,14 @@ function mapMembership(row: RawMembershipRow): AuthMembership {
 }
 
 function mapUser(row: RawUserRow): AuthUser {
+  const fullName = row.fullName;
+  const displayName = fullName || row.displayName;
   return {
     id: row.id,
     email: row.email,
     username: row.username,
-    displayName: row.displayName,
+    displayName,
+    fullName,
     usernameChangeCount: row.usernameChangeCount ?? 0,
     lastUsernameChangeAt: asDate(row.lastUsernameChangeAt),
     publicProfileEnabled: Boolean(row.publicProfileEnabled),
@@ -405,6 +410,7 @@ export async function findUserByEmail(queryable: Queryable, email: string) {
         "email",
         "username",
         "displayName",
+        "fullName",
         "usernameChangeCount",
         "lastUsernameChangeAt",
         "publicProfileEnabled",
@@ -429,6 +435,7 @@ export async function findUserByUsername(queryable: Queryable, username: string)
         "email",
         "username",
         "displayName",
+        "fullName",
         "usernameChangeCount",
         "lastUsernameChangeAt",
         "publicProfileEnabled",
@@ -453,6 +460,7 @@ export async function findUserById(queryable: Queryable, userId: string) {
         "email",
         "username",
         "displayName",
+        "fullName",
         "usernameChangeCount",
         "lastUsernameChangeAt",
         "publicProfileEnabled",

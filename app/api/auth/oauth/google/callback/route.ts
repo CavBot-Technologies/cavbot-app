@@ -3,12 +3,20 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isReservedUsername, isValidUsername, normalizeUsername, USERNAME_MAX } from "@/lib/username";
 import {
+  buildPersonalWorkspaceName,
+  buildPreferredPersonalWorkspaceSlug,
+  hasMeaningfulProfileName,
+  normalizeProviderDisplayName,
+} from "@/lib/profileIdentity";
+import {
   createUserSession,
   isApiAuthError,
   sessionCookieOptions,
 } from "@/lib/apiAuth";
+import { auditLogWrite } from "@/lib/audit";
 import { createHash, randomBytes } from "crypto";
 import { sendSignupWelcomeEmail } from "@/lib/signupWelcomeEmail.server";
+import { readCoarseRequestGeo } from "@/lib/requestGeo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,16 +68,6 @@ function redirectTo(req: NextRequest, path: string) {
 
 function normalizeEmail(x: unknown) {
   return String(x ?? "").trim().toLowerCase();
-}
-
-function toSlug(input: unknown) {
-  const s = String(input ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/['"]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return s || "account";
 }
 
 function randomToken(bytes = 32) {
@@ -187,10 +185,8 @@ export async function GET(req: NextRequest) {
     const googleId = String(profile?.sub || "");
     const email = normalizeEmail(profile?.email || "");
     const emailVerified = Boolean(profile?.email_verified);
-    const displayName =
-      String(profile?.name || profile?.given_name || "")
-        .trim()
-        .slice(0, 64) || undefined;
+    const displayName = normalizeProviderDisplayName(profile?.name || profile?.given_name || "") || undefined;
+    const geo = readCoarseRequestGeo(req);
 
     if (!googleId) {
       return redirectTo(req, authPath("google_id_missing"));
@@ -205,6 +201,7 @@ export async function GET(req: NextRequest) {
     // 3) Resolve/Upsert user + identity + workspace
     const result = await prisma.$transaction(async (tx) => {
       let createdUser = false;
+      let createdWorkspace = false;
 
       // A) Find by OAuthIdentity OR by email
       const existingIdentity = await tx.oAuthIdentity.findUnique({
@@ -221,14 +218,14 @@ export async function GET(req: NextRequest) {
         existingIdentity?.userId
           ? await tx.user.findUnique({
               where: { id: existingIdentity.userId },
-              select: { id: true, email: true, username: true },
+              select: { id: true, email: true, username: true, displayName: true, fullName: true },
             })
           : null;
 
       if (!user) {
         user = await tx.user.findUnique({
           where: { email },
-          select: { id: true, email: true, username: true },
+          select: { id: true, email: true, username: true, displayName: true, fullName: true },
         });
       }
 
@@ -243,15 +240,17 @@ export async function GET(req: NextRequest) {
             emailVerifiedAt: emailVerified ? now : undefined,
             lastLoginAt: now,
           },
-          select: { id: true, email: true, username: true },
+          select: { id: true, email: true, username: true, displayName: true, fullName: true },
         });
         createdUser = true;
       } else {
+        const shouldFillDisplayName =
+          !hasMeaningfulProfileName(user.fullName) && !hasMeaningfulProfileName(user.displayName);
         await tx.user.update({
           where: { id: user.id },
           data: {
             lastLoginAt: now,
-            displayName: displayName || undefined,
+            ...(shouldFillDisplayName && displayName ? { displayName } : {}),
             emailVerifiedAt: emailVerified ? now : undefined,
             ...(user.username ? {} : { username: await findAvailableUsername(tx, email.split("@")[0] || "cavbot") }),
           },
@@ -285,10 +284,14 @@ export async function GET(req: NextRequest) {
       });
 
       if (!memberships?.length) {
-        const desiredSlug = toSlug(email.split("@")[0] || `acct-${user.id.slice(-8)}`);
+        const desiredSlug = buildPreferredPersonalWorkspaceSlug({
+          username: user.username,
+          email,
+          displayName,
+        });
         const accountSlug = await findAvailableAccountSlug(desiredSlug);
 
-        const accountName = (displayName || "CavBot User").slice(0, 32) + " Account";
+        const accountName = buildPersonalWorkspaceName(displayName);
 
         const trialDays = 14;
         const trialEndsAt = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
@@ -363,6 +366,7 @@ export async function GET(req: NextRequest) {
             includeInDashboard: true,
           },
         });
+        createdWorkspace = true;
 
         memberships = await tx.membership.findMany({
           where: { userId: user.id },
@@ -384,7 +388,7 @@ export async function GET(req: NextRequest) {
         select: { id: true },
       });
 
-      return { user, active, firstProject, createdUser };
+      return { user, active, firstProject, createdUser, createdWorkspace };
     });
 
     // 4) Mint CavBot session
@@ -424,6 +428,42 @@ export async function GET(req: NextRequest) {
       res.cookies.set("cb_active_project_id", String(result.firstProject.id), pointerCookieOpts);
       res.cookies.set("cb_pid", String(result.firstProject.id), pointerCookieOpts);
     }
+
+    if (result.createdWorkspace) {
+      await auditLogWrite({
+        request: req,
+        action: "ACCOUNT_CREATED",
+        accountId: result.active.accountId,
+        operatorUserId: result.user.id,
+        targetType: "auth",
+        targetId: result.user.id,
+        targetLabel: result.user.email || result.user.username || result.user.id,
+        metaJson: {
+          security_event: "oauth_workspace_created",
+          provider: "google",
+          location: geo.label,
+          geoRegion: geo.region,
+          geoCountry: geo.country,
+        },
+      });
+    }
+
+    await auditLogWrite({
+      request: req,
+      action: "AUTH_SIGNED_IN",
+      accountId: result.active.accountId,
+      operatorUserId: result.user.id,
+      targetType: "auth",
+      targetId: result.user.id,
+      targetLabel: result.user.email || result.user.username || result.user.id,
+      metaJson: {
+        security_event: result.createdUser ? "oauth_register" : "oauth_login",
+        method: "oauth_google",
+        location: geo.label,
+        geoRegion: geo.region,
+        geoCountry: geo.country,
+      },
+    });
 
     if (result.createdUser) {
       await sendSignupWelcomeEmail({

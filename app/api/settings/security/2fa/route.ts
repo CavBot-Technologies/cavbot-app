@@ -7,6 +7,7 @@ import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { readCoarseRequestGeo } from "@/lib/requestGeo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,30 +25,6 @@ function json<T>(data: T, init?: number | ResponseInit) {
   return NextResponse.json(data, { ...resInit, headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS } });
 }
 
-function safeStr(x: unknown) {
-  return typeof x === "string" ? x : x == null ? "" : String(x);
-}
-
-/* =========================
-   Cloudflare IP + Geo (best-effort)
-   ========================= */
-
-function readCloudflareGeo(req: NextRequest) {
-  const countryRaw = safeStr(req.headers.get("cf-ipcountry")).trim();
-  const country = countryRaw && countryRaw !== "XX" ? countryRaw : "";
-  return { country: country || null, label: country || null };
-}
-
-function twoFactorEmpty() {
-  return {
-    ok: true,
-    twoFactor: {
-      email2fa: false,
-      app2fa: false,
-    },
-  };
-}
-
 export async function GET(req: NextRequest) {
   try {
     const sess = await requireSettingsOwnerSession(req);
@@ -57,12 +34,9 @@ export async function GET(req: NextRequest) {
     const auth = await prisma.userAuth.findUnique({
       where: { userId },
       select: { twoFactorEmailEnabled: true, twoFactorAppEnabled: true },
-    }).catch((error) => {
-      console.error("[settings/security/2fa] load failed", error);
-      return null;
     });
 
-    if (!auth) return json(twoFactorEmpty(), 200);
+    if (!auth) return json({ error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
 
     return json(
       {
@@ -91,21 +65,18 @@ export async function PATCH(req: NextRequest) {
     const userId = sess.sub;
     const accountId = sess.accountId;
 
-    const geo = readCloudflareGeo(req);
+    const geo = readCoarseRequestGeo(req);
 
-    const updated = await prisma.userAuth.update({
+    await prisma.userAuth.update({
       where: { userId },
       data: {
         twoFactorEmailEnabled: email2fa,
         twoFactorAppEnabled: app2fa,
       },
       select: { twoFactorEmailEnabled: true, twoFactorAppEnabled: true },
-    }).catch((error) => {
-      console.error("[settings/security/2fa] save failed", error);
-      return null;
     });
 
-    if (updated && accountId) {
+    if (accountId) {
       await auditLogWrite({
         request: req,
         action: "SECURITY_SETTINGS_UPDATED",

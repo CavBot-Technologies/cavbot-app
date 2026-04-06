@@ -8,6 +8,7 @@ import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
 import { detectBrowser } from "@/lib/browser";
 import { withAuditLogUserIdField } from "@/lib/auditModelCompat";
+import { composeLocationLabel, pickClientIp, readGeoFromMeta, readRequestGeo } from "@/lib/requestGeo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,162 +72,6 @@ function timeAgo(iso: string) {
 }
 
 /* =========================
-  Cloudflare geo + IP (CF-first)
-  ========================= */
-
-function safeStr(x: unknown) {
-  return typeof x === "string" ? x : x == null ? "" : String(x);
-}
-
-function pickHeader(req: NextRequest, names: string[]) {
-  for (const name of names) {
-    const value = safeStr(req.headers.get(name)).trim();
-    if (value) return value;
-  }
-  return "";
-}
-
-function readCoordinate(raw: unknown, kind: "lat" | "lon") {
-  const value = safeStr(raw).trim();
-  if (!value) return null;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return null;
-  if (kind === "lat" && (parsed < -90 || parsed > 90)) return null;
-  if (kind === "lon" && (parsed < -180 || parsed > 180)) return null;
-  return parsed.toFixed(4);
-}
-
-function composeLocationLabel(args: {
-  city?: string | null;
-  region?: string | null;
-  country?: string | null;
-  latitude?: string | null;
-  longitude?: string | null;
-  ip?: string | null;
-}) {
-  const city = safeStr(args.city).trim();
-  const region = safeStr(args.region).trim();
-  const country = safeStr(args.country).trim();
-  const latitude = safeStr(args.latitude).trim();
-  const longitude = safeStr(args.longitude).trim();
-  const ip = safeStr(args.ip).trim();
-
-  const placeParts = [city, region, country].filter(Boolean);
-  if (placeParts.length) {
-    if (latitude && longitude) {
-      return `${placeParts.join(", ")} · ${latitude}, ${longitude}`;
-    }
-    return placeParts.join(", ");
-  }
-
-  if (latitude && longitude) {
-    return `Lat ${latitude}, Lon ${longitude}`;
-  }
-
-  if (ip) {
-    return `Approximate network location (IP ${ip})`;
-  }
-
-  return "Approximate network location";
-}
-
-function pickClientIp(req: NextRequest) {
-  // Cloudflare (best)
-  const cfConn = safeStr(req.headers.get("cf-connecting-ip")).trim();
-  if (cfConn) return cfConn;
-
-  // Some proxies
-  const tcip = safeStr(req.headers.get("true-client-ip")).trim();
-  if (tcip) return tcip;
-
-  // Generic fallback
-  const xff = safeStr(req.headers.get("x-forwarded-for")).trim();
-  if (xff) return xff.split(",")[0].trim();
-
-  const xr = safeStr(req.headers.get("x-real-ip")).trim();
-  if (xr) return xr;
-
-  return "";
-}
-
-/**
- * Cloudflare geo:
- * - cf-ipcountry: "US" (most reliable)
- * - cf-region / cf-region-code: sometimes present
- * City is not reliably available from CF headers.
- */
-function readNetworkGeo(req: NextRequest, ip: string | null) {
-  const city =
-    pickHeader(req, ["cf-ipcity", "x-vercel-ip-city", "x-appengine-city", "x-geo-city"]) || null;
-
-  const region =
-    pickHeader(req, [
-      "cf-region",
-      "cf-region-code",
-      "x-vercel-ip-country-region",
-      "x-appengine-region",
-      "x-geo-region",
-    ]) || null;
-
-  const countryRaw = pickHeader(req, ["cf-ipcountry", "x-vercel-ip-country", "x-appengine-country", "x-geo-country"]);
-  const country = countryRaw && countryRaw !== "XX" ? countryRaw : null;
-
-  const latitude = readCoordinate(
-    pickHeader(req, ["cf-iplatitude", "x-vercel-ip-latitude", "x-geo-latitude", "x-latitude"]),
-    "lat"
-  );
-  const longitude = readCoordinate(
-    pickHeader(req, ["cf-iplongitude", "x-vercel-ip-longitude", "x-geo-longitude", "x-longitude"]),
-    "lon"
-  );
-
-  return {
-    city,
-    region,
-    country,
-    latitude,
-    longitude,
-    label: composeLocationLabel({ city, region, country, latitude, longitude, ip }),
-  };
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null;
-}
-
-function readLocationFromMeta(metaJson: unknown, ip: string | null): string {
-  const m: Record<string, unknown> = isRecord(metaJson) ? metaJson : {};
-
-  const direct = [
-    m["location"],
-    m["geoLabel"],
-    m["geo"],
-    m["city"],
-    m["region"],
-    m["country"],
-  ]
-    .map((value) => safeStr(value).trim())
-    .find(Boolean);
-  if (direct) return direct;
-
-  const city = safeStr(m["geoCity"] ?? m["city"]).trim() || null;
-  const region = safeStr(m["geoRegion"] ?? m["region"] ?? m["regionCode"]).trim() || null;
-  const countryRaw = safeStr(m["geoCountry"] ?? m["country"] ?? m["countryCode"]).trim();
-  const country = countryRaw && countryRaw !== "XX" ? countryRaw : null;
-
-  const latitude = readCoordinate(
-    m["geoLatitude"] ?? m["latitude"] ?? m["lat"] ?? m["geoLat"],
-    "lat"
-  );
-  const longitude = readCoordinate(
-    m["geoLongitude"] ?? m["longitude"] ?? m["lng"] ?? m["lon"] ?? m["geoLon"],
-    "lon"
-  );
-
-  return composeLocationLabel({ city, region, country, latitude, longitude, ip });
-}
-
-/* =========================
   API
   ========================= */
 
@@ -242,7 +87,20 @@ export async function GET(req: NextRequest) {
     const devNow = deviceLabel(uaNow);
 
     const ipNow = pickClientIp(req);
-    const geoNow = readNetworkGeo(req, ipNow || null);
+    const geoNow = readRequestGeo(req);
+
+    const events = await prisma.auditLog.findMany({
+      where: withAuditLogUserIdField({ accountId }, userId) as Prisma.AuditLogWhereInput,
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      select: {
+        id: true,
+        createdAt: true,
+        ip: true,
+        userAgent: true,
+        metaJson: true,
+      },
+    });
 
     type SessionRow = {
       id: string;
@@ -272,41 +130,14 @@ export async function GET(req: NextRequest) {
       ip: ipNow || null,
     });
 
-    const events = await prisma.auditLog.findMany({
-      where: withAuditLogUserIdField({ accountId }, userId) as Prisma.AuditLogWhereInput,
-      orderBy: { createdAt: "desc" },
-      take: 20,
-      select: {
-        id: true,
-        createdAt: true,
-        ip: true,
-        userAgent: true,
-        metaJson: true,
-      },
-    }).catch(async (error) => {
-      console.error("[settings/security/sessions] full audit query failed", error);
-      return prisma.auditLog.findMany({
-        where: withAuditLogUserIdField({ accountId }, userId) as Prisma.AuditLogWhereInput,
-        orderBy: { createdAt: "desc" },
-        take: 20,
-        select: {
-          id: true,
-          createdAt: true,
-          userAgent: true,
-        },
-      }).catch((fallbackError) => {
-        console.error("[settings/security/sessions] fallback audit query failed", fallbackError);
-        return [];
-      });
-    });
-
     for (const e of events) {
-      const eua = String(("userAgent" in e ? e.userAgent : "") || "");
+      const eua = String(e.userAgent || "");
       const b = detectBrowser(eua);
       const dv = deviceLabel(eua);
 
-      const ip = String(("ip" in e ? e.ip : "") || "").trim();
-      const locFromMeta = readLocationFromMeta("metaJson" in e ? e.metaJson : null, ip || null);
+      const ip = String(e.ip || "").trim();
+      const metaGeo = readGeoFromMeta(e.metaJson);
+      const locFromMeta = metaGeo.label || composeLocationLabel({ ip: ip || null });
 
       out.push({
         id: e.id,

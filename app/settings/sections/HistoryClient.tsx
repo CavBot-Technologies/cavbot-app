@@ -255,12 +255,7 @@ export default function HistoryClient() {
         setHasMore(Boolean(payload.nextCursor));
       } catch (err) {
         if ((err as { name?: string }).name === "AbortError") return;
-        if (!opts.loadMore) {
-          setEntries([]);
-          setNextCursor(null);
-          setHasMore(false);
-        }
-        setError(null);
+        setError("Unable to load history right now.");
       } finally {
         setLoading(false);
       }
@@ -374,6 +369,13 @@ export default function HistoryClient() {
       {isInitialLoading ? (
         <div className="hx-loading" role="status" aria-label="Loading history">
           <span className="hx-loadingIcon" aria-hidden="true" />
+        </div>
+      ) : error ? (
+        <div className="hx-error">{error}</div>
+      ) : !formattedEntries.length ? (
+        <div className="hx-empty">
+          <div className="hx-empty-title">No history yet.</div>
+          <div className="hx-empty-sub">Activity will appear here as account and security events are recorded.</div>
         </div>
       ) : (
         <div
@@ -493,8 +495,6 @@ export default function HistoryClient() {
           })}
         </div>
       )}
-
-      {error ? <div className="hx-error">{error}</div> : null}
 
       {formattedEntries.length ? (
         <div className="hx-actions">

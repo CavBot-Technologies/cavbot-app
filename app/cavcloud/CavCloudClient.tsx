@@ -2014,6 +2014,7 @@ function ek(e) {
       shouldApplyTitle && "filename" === normalized.publishDefaultTitleMode && l_ && lG(String(l_.name || "").trim().slice(0, 140));
     }, [lH, l_]),
     updateCavcloudSettingsPatch = (0, c.useCallback)(async (patch, options = {}) => {
+      if (!isOwner) return;
       let previous = cavcloudSettingsRef.current || CAVCLOUD_SETTINGS_DEFAULTS,
         optimistic = normalizeCavcloudClientSettings({
           ...previous,
@@ -2037,8 +2038,15 @@ function ek(e) {
       } finally {
         setCavcloudSettingsSaving(!1);
       }
-    }, [applyCavcloudSettingsToUi, l3]),
+    }, [applyCavcloudSettingsToUi, isOwner, l3]),
     loadCavcloudSettings = (0, c.useCallback)(async () => {
+      if (!isOwner) {
+        let e = normalizeCavcloudClientSettings(CAVCLOUD_SETTINGS_DEFAULTS);
+        setCavcloudSettings(e), cavcloudSettingsRef.current = e, applyCavcloudSettingsToUi(e, {
+          forcePublishTitle: !0
+        }), setCavcloudSettingsLoaded(!0);
+        return;
+      }
       try {
         let e = await fetch("/api/cavcloud/settings", {
             method: "GET",
@@ -2058,7 +2066,7 @@ function ek(e) {
       } finally {
         setCavcloudSettingsLoaded(!0);
       }
-    }, [applyCavcloudSettingsToUi]),
+    }, [applyCavcloudSettingsToUi, isOwner]),
     bumpDashboardRefresh = (0, c.useCallback)(() => {
       setDashboardRefreshNonce(e => (e + 1) % 1e7);
     }, []),

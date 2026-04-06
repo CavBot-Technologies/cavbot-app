@@ -594,8 +594,6 @@ function CardDetailsForm(props: {
             <div className="sx-field">
               <label className="sx-label">Name on card</label>
               <input
-                id="billing-card-name"
-                name="billingCardName"
                 className="sx-input"
                 value={props.cardName}
                 onChange={(e) => props.setCardName(e.target.value)}
@@ -638,8 +636,6 @@ function CardDetailsForm(props: {
             <div className="sx-field">
               <label className="sx-label">Billing address</label>
               <input
-                id="billing-address-line1"
-                name="billingAddressLine1"
                 className="sx-input"
                 value={props.billing1}
                 onChange={(e) => props.setBilling1(e.target.value)}
@@ -653,8 +649,6 @@ function CardDetailsForm(props: {
             <div className="sx-field">
               <label className="sx-label">Apt / suite</label>
               <input
-                id="billing-address-line2"
-                name="billingAddressLine2"
                 className="sx-input"
                 value={props.billing2}
                 onChange={(e) => props.setBilling2(e.target.value)}
@@ -669,8 +663,6 @@ function CardDetailsForm(props: {
               <div className="sx-field">
                 <label className="sx-label">City</label>
                 <input
-                  id="billing-city"
-                  name="billingCity"
                   className="sx-input"
                   value={props.billingCity}
                   onChange={(e) => props.setBillingCity(e.target.value)}
@@ -683,8 +675,6 @@ function CardDetailsForm(props: {
               <div className="sx-field">
                 <label className="sx-label">Region</label>
                 <input
-                  id="billing-region"
-                  name="billingRegion"
                   className="sx-input"
                   value={props.billingRegion}
                   onChange={(e) => props.setBillingRegion(e.target.value)}
@@ -700,8 +690,6 @@ function CardDetailsForm(props: {
               <div className="sx-field">
                 <label className="sx-label">Postal</label>
                 <input
-                  id="billing-postal"
-                  name="billingPostal"
                   className="sx-input"
                   value={props.billingPostal}
                   onChange={(e) => props.setBillingPostal(e.target.value)}
@@ -714,8 +702,6 @@ function CardDetailsForm(props: {
               <div className="sx-field">
                 <label className="sx-label">Country</label>
                 <select
-                  id="billing-country"
-                  name="billingCountry"
                   className="sx-select"
                   value={props.billingCountry}
                   onChange={(e) => props.setBillingCountry(e.target.value)}
@@ -1382,5 +1368,27 @@ function BillingClientInner() {
 
 
 export default function BillingClient() {
+  if (!pk) {
+    return (
+      <section className="sx-panel" aria-label="Billing settings">
+        <header className="sx-panelHead">
+          <div>
+            <h2 className="sx-h2">Billing</h2>
+            <p className="sx-sub">Plan, subscription status, payment method, and invoices.</p>
+          </div>
+          <span className="sx-badge sx-badgeBill">Setup</span>
+        </header>
+
+
+        <div className="sx-body">
+          <div className="sx-billError">
+            Missing <b>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</b>. Add it to <b>.env.local</b> and restart <b>npm run dev</b>.
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+
   return <BillingClientInner />;
 }

@@ -7,6 +7,7 @@ import { isApiAuthError, verifyPassword } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { readCoarseRequestGeo } from "@/lib/requestGeo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,20 +25,6 @@ function json<T>(data: T, init?: number | ResponseInit) {
   return NextResponse.json(data, { ...resInit, headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS } });
 }
 
-function safeStr(x: unknown) {
-  return typeof x === "string" ? x : x == null ? "" : String(x);
-}
-
-/* =========================
-   Cloudflare IP + Geo (best-effort)
-   ========================= */
-
-function readCloudflareGeo(req: NextRequest) {
-  const countryRaw = safeStr(req.headers.get("cf-ipcountry")).trim();
-  const country = countryRaw && countryRaw !== "XX" ? countryRaw : "";
-  return { country: country || null, region: null as string | null, label: country || null };
-}
-
 export async function POST(req: NextRequest) {
   try {
     const sess = await requireSettingsOwnerSession(req);
@@ -49,7 +36,7 @@ export async function POST(req: NextRequest) {
     const userId = sess.sub;
     const accountId = sess.accountId;
 
-    const geo = readCloudflareGeo(req);
+    const geo = readCoarseRequestGeo(req);
 
     const user = await prisma.user.findUnique({
       where: { id: userId },

@@ -264,6 +264,7 @@ function IconGear() {
       height={22}
       className="cb-settings-icon"
       aria-hidden="true"
+      priority
       unoptimized
     />
   );
@@ -290,7 +291,6 @@ function IconPremiumPlusStar() {
     </svg>
   );
 }
-
 export function CavSurfaceSidebarBrandMenu(props: CavSurfaceSidebarBrandMenuProps) {
   return (
     <div className="cavcloud-brandMenuWrap">

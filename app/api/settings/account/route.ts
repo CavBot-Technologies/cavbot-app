@@ -8,6 +8,11 @@ import { isBasicUsername, isReservedUsername, isValidUsername, normalizeUsername
 import { findUserById, getAuthPool } from "@/lib/authDb";
 import { requireSession } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
+import {
+  buildAutoWorkspaceSlugCandidates,
+  buildPersonalWorkspaceName,
+  buildPreferredPersonalWorkspaceSlug,
+} from "@/lib/profileIdentity";
 import { auditLogWrite } from "@/lib/audit";
 import {
   readPublicProfileSettingsFallback,
@@ -34,6 +39,7 @@ const MAX_CUSTOM_LINKS = 6;
 const BASE_PROFILE_SELECT = {
   email: true,
   username: true,
+  displayName: true,
   fullName: true,
   bio: true,
   country: true,
@@ -156,6 +162,50 @@ function cleanTone(v: unknown): ToneKey | null {
   const s = String(v ?? "").trim().toLowerCase();
   const allowed: ToneKey[] = ["lime", "violet", "blue", "white", "navy", "transparent"];
   return (allowed as string[]).includes(s) ? (s as ToneKey) : null;
+}
+
+function buildAutoWorkspaceNameCandidates(input: {
+  email?: unknown;
+  username?: unknown;
+  displayName?: unknown;
+  fullName?: unknown;
+}) {
+  const values = new Set<string>();
+  const emailLocal = String(input.email ?? "")
+    .trim()
+    .toLowerCase()
+    .split("@")[0]
+    ?.trim();
+
+  const push = (value: unknown) => {
+    const normalized = String(value ?? "").trim();
+    if (!normalized) return;
+    values.add(buildPersonalWorkspaceName(normalized));
+  };
+
+  push(input.displayName);
+  push(input.fullName);
+  push(input.username);
+  push(emailLocal);
+  return values;
+}
+
+async function findAvailablePersonalAccountSlug(requested: string, excludeAccountIds: string[] = []) {
+  let slug = requested;
+
+  for (let i = 0; i < 10; i++) {
+    const exists = await prisma.account.findFirst({
+      where: {
+        slug,
+        ...(excludeAccountIds.length ? { id: { notIn: excludeAccountIds } } : {}),
+      },
+      select: { id: true },
+    });
+    if (!exists) return slug;
+    slug = `${requested}-${Math.random().toString(16).slice(2, 8)}`;
+  }
+
+  return `${requested}-${Math.random().toString(16).slice(2, 10)}`;
 }
 
 function normalizeHttpUrl(raw: string): string | null {
@@ -561,6 +611,7 @@ export async function PATCH(req: Request) {
     const normalizedEmail = email ? email.toLowerCase().trim() : null;
     const profileUpdatePayload: Prisma.UserUpdateInput = {
       fullName,
+      displayName: fullName,
       bio,
       country,
       region,
@@ -637,6 +688,78 @@ export async function PATCH(req: Request) {
       data: profileUpdatePayload,
       select: profileSelect,
     });
+
+    const renameableOwnerMemberships = await prisma.membership.findMany({
+      where: { userId, role: "OWNER" },
+      select: {
+        accountId: true,
+        account: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            _count: { select: { members: true } },
+          },
+        },
+      },
+    });
+
+    if (fullName) {
+      const oldWorkspaceNames = buildAutoWorkspaceNameCandidates({
+        email: existingProfile.email,
+        username: existingProfile.username,
+        displayName: (existingProfile as Record<string, unknown>).displayName,
+        fullName: existingProfile.fullName,
+      });
+      const nextWorkspaceName = buildPersonalWorkspaceName(fullName);
+      if (!oldWorkspaceNames.has(nextWorkspaceName)) {
+        const renameableAccountIds = renameableOwnerMemberships
+          .filter((membership) => {
+            const accountName = String(membership.account.name || "").trim();
+            return accountName && oldWorkspaceNames.has(accountName) && membership.account._count.members <= 1;
+          })
+          .map((membership) => membership.account.id);
+
+        if (renameableAccountIds.length > 0) {
+          await prisma.account.updateMany({
+            where: { id: { in: renameableAccountIds } },
+            data: { name: nextWorkspaceName },
+          });
+        }
+      }
+    }
+
+    if (hasUsernamePatch && username) {
+      const oldWorkspaceSlugs = buildAutoWorkspaceSlugCandidates({
+        email: existingProfile.email,
+        username: existingProfile.username,
+        displayName: (existingProfile as Record<string, unknown>).displayName,
+        fullName: existingProfile.fullName,
+      });
+      const slugRenameCandidates = renameableOwnerMemberships.filter((membership) => {
+        const accountSlug = String(membership.account.slug || "").trim().toLowerCase();
+        return accountSlug && oldWorkspaceSlugs.has(accountSlug) && membership.account._count.members <= 1;
+      });
+
+      if (slugRenameCandidates.length > 0) {
+        const desiredSlug = buildPreferredPersonalWorkspaceSlug({
+          username,
+          email: normalizedEmail || existingProfile.email,
+          displayName: fullName || (existingProfile as Record<string, unknown>).displayName,
+          fullName: fullName || existingProfile.fullName,
+        });
+
+        for (const membership of slugRenameCandidates) {
+          const currentSlug = String(membership.account.slug || "").trim().toLowerCase();
+          if (currentSlug === desiredSlug) continue;
+          const nextSlug = await findAvailablePersonalAccountSlug(desiredSlug, [membership.account.id]);
+          await prisma.account.update({
+            where: { id: membership.account.id },
+            data: { slug: nextSlug },
+          });
+        }
+      }
+    }
 
     let updatedForResponse = updated as unknown as Record<string, unknown>;
     if (!hasPublicColumns) {

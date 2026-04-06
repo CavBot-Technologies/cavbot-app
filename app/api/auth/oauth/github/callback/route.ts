@@ -3,9 +3,17 @@ import { NextRequest, NextResponse } from "next/server";
 import type { MemberRole, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isReservedUsername, isValidUsername, normalizeUsername, USERNAME_MAX } from "@/lib/username";
+import {
+  buildPersonalWorkspaceName,
+  buildPreferredPersonalWorkspaceSlug,
+  hasMeaningfulProfileName,
+  normalizeProviderDisplayName,
+} from "@/lib/profileIdentity";
 import { createUserSession, isApiAuthError, sessionCookieOptions } from "@/lib/apiAuth";
+import { auditLogWrite } from "@/lib/audit";
 import { createHash, randomBytes } from "crypto";
 import { sendSignupWelcomeEmail } from "@/lib/signupWelcomeEmail.server";
+import { readCoarseRequestGeo } from "@/lib/requestGeo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,16 +76,6 @@ function clearCookie(res: NextResponse, name: string) {
 
 function normalizeEmail(x: unknown) {
   return String(x ?? "").trim().toLowerCase();
-}
-
-function toSlug(input: unknown) {
-  const s = String(input ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/['"]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return s || "account";
 }
 
 function randomToken(bytes = 32) {
@@ -191,10 +189,7 @@ export async function GET(req: NextRequest) {
 
     const githubId = String(profile?.id || "");
     const login = String(profile?.login || "").trim();
-    const displayName =
-      String(profile?.name || profile?.login || "")
-        .trim()
-        .slice(0, 64) || undefined;
+    const displayName = normalizeProviderDisplayName(profile?.name || profile?.login || "") || undefined;
 
     if (!githubId) return redirectTo(req, authPath("github_id_missing"));
 
@@ -208,10 +203,12 @@ export async function GET(req: NextRequest) {
     if (!email) return redirectTo(req, authPath("github_email_missing"));
 
     const now = new Date();
+    const geo = readCoarseRequestGeo(req);
 
     // 4) Resolve identity + user + workspace inside one transaction (bulletproof)
     const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       let createdUser = false;
+      let createdWorkspace = false;
 
       // A) Lookup identity first
       const identity = await tx.oAuthIdentity.findUnique({
@@ -228,14 +225,14 @@ export async function GET(req: NextRequest) {
       let user = identity?.userId
         ? await tx.user.findUnique({
             where: { id: identity.userId },
-            select: { id: true, email: true, username: true },
+            select: { id: true, email: true, username: true, displayName: true, fullName: true },
           })
         : null;
 
       if (!user) {
         user = await tx.user.findUnique({
           where: { email },
-          select: { id: true, email: true, username: true },
+          select: { id: true, email: true, username: true, displayName: true, fullName: true },
         });
       }
 
@@ -249,16 +246,17 @@ export async function GET(req: NextRequest) {
             displayName: displayName || undefined,
             lastLoginAt: now,
           },
-          select: { id: true, email: true, username: true },
+          select: { id: true, email: true, username: true, displayName: true, fullName: true },
         });
         createdUser = true;
       } else {
-        // Update login stamp + displayName
+        const shouldFillDisplayName =
+          !hasMeaningfulProfileName(user.fullName) && !hasMeaningfulProfileName(user.displayName);
         await tx.user.update({
           where: { id: user.id },
           data: {
             lastLoginAt: now,
-            displayName: displayName || undefined,
+            ...(shouldFillDisplayName && displayName ? { displayName } : {}),
             ...(user.username ? {} : { username: await findAvailableUsername(tx, email.split("@")[0] || "cavbot") }),
           },
         });
@@ -270,7 +268,7 @@ export async function GET(req: NextRequest) {
             user = await tx.user.update({
               where: { id: user.id },
               data: { email },
-              select: { id: true, email: true, username: true },
+              select: { id: true, email: true, username: true, displayName: true, fullName: true },
             });
           }
         }
@@ -304,7 +302,11 @@ export async function GET(req: NextRequest) {
 
       // Create full workspace (same as register route) if none exists
       if (!memberships.length) {
-        const desiredSlug = toSlug(login || `acct-${user.id.slice(-8)}`);
+        const desiredSlug = buildPreferredPersonalWorkspaceSlug({
+          username: user.username,
+          email,
+          displayName: login || displayName,
+        });
 
         // find available slug (within transaction)
         let slug = desiredSlug;
@@ -314,7 +316,7 @@ export async function GET(req: NextRequest) {
           slug = `${desiredSlug}-${randomToken(3)}`;
         }
 
-        const accountName = `${(login || displayName || "CavBot").slice(0, 32)} Account`;
+        const accountName = buildPersonalWorkspaceName(login || displayName || "CavBot");
 
         const trialDays = 14;
         const trialEndsAt = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
@@ -389,6 +391,7 @@ export async function GET(req: NextRequest) {
             includeInDashboard: true,
           },
         });
+        createdWorkspace = true;
 
         memberships = await tx.membership.findMany({
           where: { userId: user.id },
@@ -411,7 +414,7 @@ export async function GET(req: NextRequest) {
         select: { id: true },
       });
 
-      return { user, active, firstProject, createdUser };
+      return { user, active, firstProject, createdUser, createdWorkspace };
     });
 
     // 5) Mint official CavBot session
@@ -450,6 +453,42 @@ export async function GET(req: NextRequest) {
       res.cookies.set("cb_active_project_id", String(result.firstProject.id), pointerCookieOpts);
       res.cookies.set("cb_pid", String(result.firstProject.id), pointerCookieOpts);
     }
+
+    if (result.createdWorkspace) {
+      await auditLogWrite({
+        request: req,
+        action: "ACCOUNT_CREATED",
+        accountId: result.active.accountId,
+        operatorUserId: result.user.id,
+        targetType: "auth",
+        targetId: result.user.id,
+        targetLabel: result.user.email || result.user.username || result.user.id,
+        metaJson: {
+          security_event: "oauth_workspace_created",
+          provider: "github",
+          location: geo.label,
+          geoRegion: geo.region,
+          geoCountry: geo.country,
+        },
+      });
+    }
+
+    await auditLogWrite({
+      request: req,
+      action: "AUTH_SIGNED_IN",
+      accountId: result.active.accountId,
+      operatorUserId: result.user.id,
+      targetType: "auth",
+      targetId: result.user.id,
+      targetLabel: result.user.email || result.user.username || result.user.id,
+      metaJson: {
+        security_event: result.createdUser ? "oauth_register" : "oauth_login",
+        method: "oauth_github",
+        location: geo.label,
+        geoRegion: geo.region,
+        geoCountry: geo.country,
+      },
+    });
 
     if (result.createdUser) {
       await sendSignupWelcomeEmail({
