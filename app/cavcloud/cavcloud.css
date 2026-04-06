@@ -124,8 +124,8 @@ body{ margin:0; }
   gap: 8px;
   font-size: 11px;
   font-weight: 760;
-  letter-spacing: .08em;
-  text-transform: uppercase;
+  letter-spacing: .02em;
+  text-transform: none;
   color: rgba(197,206,231,0.72);
 }
 .cavcloud-brandMenuMark{

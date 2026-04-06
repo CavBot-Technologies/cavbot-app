@@ -33,6 +33,7 @@ test("cavcloud and cavsafe footer restore surface quick tools and keep premium p
   assert.match(cloud, /companionIconWidth: 18/);
   assert.match(safe, /companionIconWidth: 18/);
   assert.match(cloud, /surfaceTitle = "CavCloud"/);
+  assert.equal(cloud.includes("CavCloud Storage"), false);
   assert.equal(cloud.includes('key: "Settings",\n    label: "Settings",\n    icon: "settings"'), false);
   assert.equal(safe.includes('key: "Settings",\n    label: "Settings",\n    icon: "settings"'), false);
   assert.equal(cloud.includes('className: "cavcloud-paneSubFolderName"'), false);
@@ -43,6 +44,7 @@ test("cavcloud and cavsafe footer restore surface quick tools and keep premium p
   assert.match(css, /\.cavcloud-surfaceQuickToolLauncher\{/);
   assert.match(css, /\.cavcloud-surfaceQuickToolRail\{[\s\S]*display: inline-flex;/);
   assert.match(css, /\.cavcloud-surfaceQuickToolGrid \.is-violet\{/);
+  assert.match(css, /\.cavcloud-brandMenuSurface\{[\s\S]*text-transform: none;/);
   assert.match(css, /\.cavcloud-surfaceLauncherActionIconMark\{[\s\S]*width: 18px;[\s\S]*height: 18px;/);
   assert.match(css, /\.cavcloud-paneTitleSelect\{[\s\S]*background-position: right 14px center;/);
   assert.match(css, /\.cavcloud-paneTitleSelect\{[\s\S]*appearance: none;/);
