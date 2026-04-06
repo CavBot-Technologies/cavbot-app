@@ -11386,57 +11386,60 @@ function ek(e) {
               children: "No storage data yet."
             })]
           }), (0, t.jsxs)("div", {
-            className: "cavcloud-railCard",
+            className: "cavcloud-railCard cavcloud-mountQuickCard",
             children: [t.jsx("div", {
               className: "cavcloud-railTitle",
               children: "Start Mount"
             }), t.jsx("div", {
-              className: "cavcloud-settingsSub",
+              className: "cavcloud-settingsSub cavcloud-mountQuickIntro",
               children: "Mount a folder or file and run it in CavCode Viewer."
             }), canUseMountFeature ? (0, t.jsxs)(t.Fragment, {
-              children: [t.jsx("select", {
-                className: "cavcloud-paneTitleSelect",
-                value: mountQuickKind,
-                onChange: e => setMountQuickKind("file" === String(e.currentTarget.value) ? "file" : "folder"),
-                disabled: ew || eC || mountBusy,
-                "aria-label": "Choose mount source type",
-                children: [t.jsx("option", {
-                  value: "folder",
-                  children: "Folder"
-                }), t.jsx("option", {
-                  value: "file",
-                  children: "File"
+              children: [t.jsxs("div", {
+                className: "cavcloud-mountQuickControls",
+                children: [t.jsx("div", {
+                  className: "cavcloud-mountQuickSelectWrap",
+                  children: t.jsx("select", {
+                    className: "cavcloud-paneTitleSelect cavcloud-mountQuickSelect",
+                    value: mountQuickKind,
+                    onChange: e => setMountQuickKind("file" === String(e.currentTarget.value) ? "file" : "folder"),
+                    disabled: ew || eC || mountBusy,
+                    "aria-label": "Choose mount source type",
+                    children: [t.jsx("option", {
+                      value: "folder",
+                      children: "Folder"
+                    }), t.jsx("option", {
+                      value: "file",
+                      children: "File"
+                    })]
+                  })
+                }), t.jsx("div", {
+                  className: "cavcloud-mountQuickSelectWrap",
+                  children: t.jsx("select", {
+                    className: "cavcloud-paneTitleSelect cavcloud-mountQuickSelect",
+                    value: mountQuickTarget?.id || mountQuickTargetId,
+                    onChange: e => setMountQuickTargetId(String(e.currentTarget.value || "")),
+                    disabled: ew || eC || mountBusy || !mountQuickOptions.length,
+                    "aria-label": "Choose a folder or file to mount",
+                    children: mountQuickOptions.length ? mountQuickOptions.map(e => t.jsx("option", {
+                      value: e.id,
+                      children: `${e.name}: ${F(e.path)}`
+                    }, e.id)) : t.jsx("option", {
+                      value: "",
+                      children: "No mount targets in this folder"
+                    })
+                  })
+                }), t.jsxs("div", {
+                  className: "cavcloud-mountQuickEntry",
+                  children: [t.jsx("span", {
+                    className: "cavcloud-mountQuickEntryLabel",
+                    children: "Entry"
+                  }), t.jsx("span", {
+                    className: "cavcloud-mountQuickEntryValue",
+                    children: mountQuickTarget ? "file" === mountQuickTarget.kind ? mountQuickTarget.entryPath : "/index.html" : "—"
+                  })]
                 })]
-              }), t.jsx("select", {
-                className: "cavcloud-paneTitleSelect",
-                value: mountQuickTarget?.id || mountQuickTargetId,
-                onChange: e => setMountQuickTargetId(String(e.currentTarget.value || "")),
-                disabled: ew || eC || mountBusy || !mountQuickOptions.length,
-                "aria-label": "Choose a folder or file to mount",
-                children: mountQuickOptions.length ? mountQuickOptions.map(e => t.jsx("option", {
-                  value: e.id,
-                  children: "file" === e.kind ? `${e.name} (${F(e.path)})` : `${e.name} (${F(e.path)})`
-                }, e.id)) : t.jsx("option", {
-                  value: "",
-                  children: "No mount targets in this folder"
-                })
-              }), t.jsx("div", {
-                className: "cavcloud-homeRow",
-                children: mountQuickTarget ? (0, t.jsxs)(t.Fragment, {
-                  children: [t.jsx("span", {
-                    children: "Entry"
-                  }), t.jsx("span", {
-                    children: "file" === mountQuickTarget.kind ? mountQuickTarget.entryPath : "/index.html"
-                  })]
-                }) : (0, t.jsxs)(t.Fragment, {
-                  children: [t.jsx("span", {
-                    children: "Entry"
-                  }), t.jsx("span", {
-                    children: "—"
-                  })]
-                })
               }), t.jsx("button", {
-                className: "cavcloud-btn cavcloud-btnGhost",
+                className: "cavcloud-btn cavcloud-btnGhost cavcloud-mountQuickAction",
                 disabled: ew || eC || mountBusy || !mountQuickTarget,
                 onClick: () => void runQuickMountToCavCodeViewer(),
                 children: mountBusy ? (0, t.jsxs)("span", {

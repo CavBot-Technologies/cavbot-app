@@ -1014,6 +1014,69 @@ body{ margin:0; }
   outline: 1px solid var(--cc-accent-strong);
   outline-offset: 2px;
 }
+.cavcloud-mountQuickCard{
+  gap: 0;
+}
+.cavcloud-mountQuickIntro{
+  margin-top: 4px;
+}
+.cavcloud-mountQuickControls{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+}
+.cavcloud-mountQuickSelectWrap{
+  position: relative;
+  width: 100%;
+}
+.cavcloud-mountQuickSelect{
+  width: 100%;
+  min-width: 0;
+  padding-right: 38px;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: none;
+}
+.cavcloud-mountQuickSelectWrap::after{
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  width: 11px;
+  height: 11px;
+  background-color: currentColor;
+  -webkit-mask: url("/icons/chevron-right-svgrepo-com.svg") center / contain no-repeat;
+  mask: url("/icons/chevron-right-svgrepo-com.svg") center / contain no-repeat;
+  transform: translateY(-50%) rotate(90deg);
+  pointer-events: none;
+  opacity: .76;
+}
+.cavcloud-mountQuickSelectWrap:focus-within::after{
+  opacity: 1;
+}
+.cavcloud-mountQuickEntry{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: rgba(247,251,255,.9);
+}
+.cavcloud-mountQuickEntryLabel{
+  font-size: 11px;
+  color: rgba(197,206,231,.72);
+}
+.cavcloud-mountQuickEntryValue{
+  font-size: 11px;
+  color: rgba(247,251,255,.92);
+  word-break: break-word;
+}
+.cavcloud-mountQuickAction{
+  margin-top: 20px;
+  align-self: flex-start;
+}
+.cavcloud-mountQuickCard .cavcloud-mountGate{
+  margin-top: 20px;
+}
 .cavcloud-restorationStatusNativeSelect{
   font-size: 11px;
   line-height: 1.1;
@@ -3900,6 +3963,12 @@ body{ margin:0; }
 }
 .cavcloud-opDash :is(button, [role="button"], a):is(:disabled, [aria-disabled="true"]){
   cursor: pointer;
+}
+.cavcloud-root .cavcloud-homeDash.cavcloud-opDash{
+  border: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
 }
 .cavcloud-opCard{
   min-height: 100%;
