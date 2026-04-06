@@ -7916,8 +7916,6 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 }
 
 .cc-pm-itemDanger{
-  border-color: transparent;
-  background: rgba(255,120,120,.08);
   color: rgba(255,216,216,.96);
 }
 
