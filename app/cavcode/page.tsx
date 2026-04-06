@@ -15,6 +15,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { DiffEditorProps, EditorProps } from "@monaco-editor/react";
 import type * as MonacoType from "monaco-editor";
 import type { WorkspaceNode } from "@/src/lib/cavTerminal";
@@ -6797,12 +6798,15 @@ export default function CavCodePage() {
         type="button"
         className="cc-skills-cardIconBtn is-installed cc-skills-cardManageBtn"
         onClick={(event) => {
+          event.preventDefault();
           event.stopPropagation();
-          setAgentManageMenuId(args.agentId);
+          setAgentManageMenuId((prev) => (prev === args.agentId ? "" : args.agentId));
         }}
         disabled={Boolean(savingAgentId)}
         title={`Manage ${args.agentName}`}
         aria-label={`Manage ${args.agentName}`}
+        aria-haspopup="dialog"
+        aria-expanded={agentManageMenuId === args.agentId}
       >
         <svg className="cc-skills-cardManageDots" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
           <circle cx="3.5" cy="8" r="1.2" fill="currentColor" />
@@ -18786,7 +18790,7 @@ export default function CavCodePage() {
               : managedCustomAgent
                 ? "Saved in My Agents. Enable it any time."
                 : "Available in the operator catalog.";
-            return (
+            const modal = (
               <div className="cc-modal cc-agentManageModal">
                 <button
                   type="button"
@@ -18901,6 +18905,10 @@ export default function CavCodePage() {
                 </div>
               </div>
             );
+            if (typeof document !== "undefined") {
+              return createPortal(modal, document.body);
+            }
+            return modal;
           })() : null}
 
           {cloudConnectOpen ? (

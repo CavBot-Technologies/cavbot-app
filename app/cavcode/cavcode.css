@@ -7085,7 +7085,8 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 [data-cc-backdrop="true"]{
   position: fixed;
   inset: 0;
-  z-index: calc(var(--z-pop) - 1);
+  z-index: 0;
+  border: 0;
   background: rgba(0,0,0,.55);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -7114,6 +7115,8 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 [data-cc-modal-card="true"],
 .cc-modal [role="document"],
 .cc-modal [data-cc-card="true"]{
+  position: relative;
+  z-index: 1;
   width: min(520px, 94vw);
   border-radius: 22px;
   border: 1px solid rgba(255,255,255,.14);
