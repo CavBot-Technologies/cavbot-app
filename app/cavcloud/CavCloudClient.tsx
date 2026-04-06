@@ -19,6 +19,7 @@ import { copyTextToClipboard } from "@/lib/clipboard";
 import { countDriveListingItems, debugDriveLog, getDriveDebugEnabled, useDriveChildren } from "@/lib/cavdrive/liveData.client";
 import { formatSnippetForThumbnail, getExtensionLabel, isTextLikeFile } from "@/lib/filePreview";
 import { selectDesktopItemMap, shouldClearDesktopSelectionFromTarget } from "@/lib/hooks/useDesktopSelection";
+import { getPlanLimits, resolvePlanIdFromTier } from "@/lib/plans";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 import { buildCavGuardDecision } from "@/src/lib/cavguard/cavGuard.registry";
 import { emitGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
@@ -603,23 +604,42 @@ function resolveCavcloudPlanTier(e) {
   if ("PREMIUM" === a || "PRO" === a || "PAID" === a) return "PREMIUM";
   return "FREE";
 }
-function resolveCachedPlanTier() {
-  if ("undefined" == typeof window || "undefined" == typeof globalThis.__cbLocalStore) return "FREE";
+function readCachedCavcloudPlanState() {
+  let e = {
+    planTier: "FREE",
+    trialActive: !1,
+    trialDaysLeft: 0
+  };
+  if ("undefined" == typeof window || "undefined" == typeof globalThis.__cbLocalStore) return e;
   try {
-    let e = JSON.parse(String(globalThis.__cbLocalStore.getItem("cb_shell_plan_snapshot_v1") || "{}")),
-      a = String(e?.planTier || "").trim();
-    if (a) return resolveCavcloudPlanTier({
-      tierEffective: a
-    });
+    let a = A(globalThis.__cbLocalStore.getItem("cb_shell_plan_snapshot_v1"));
+    if (a && "object" == typeof a && !Array.isArray(a)) {
+      let l = resolveCavcloudPlanTier({
+          tierEffective: String(a?.planTier || "").trim()
+        }),
+        t = !!a?.trialActive,
+        s = Number(a?.trialDaysLeft);
+      return {
+        planTier: l,
+        trialActive: t,
+        trialDaysLeft: t && Number.isFinite(s) && s > 0 ? Math.max(0, Math.trunc(s)) : 0
+      };
+    }
   } catch {}
   try {
-    let e = JSON.parse(String(globalThis.__cbLocalStore.getItem("cb_plan_context_v1") || "{}")),
-      a = String(e?.planKey || e?.planLabel || "").trim();
-    if (a) return resolveCavcloudPlanTier({
-      tierEffective: a
-    });
+    let a = A(globalThis.__cbLocalStore.getItem("cb_plan_context_v1"));
+    if (a && "object" == typeof a && !Array.isArray(a)) {
+      let l = resolveCavcloudPlanTier({
+        tierEffective: String(a?.planKey || a?.planLabel || "").trim()
+      });
+      return {
+        planTier: l,
+        trialActive: !!a?.trialActive,
+        trialDaysLeft: 0
+      };
+    }
   } catch {}
-  return "FREE";
+  return e;
 }
 function resolveCavcloudTrialState(e) {
   let a = !!e?.trialActive,
@@ -634,6 +654,38 @@ function resolveCavcloudTrialState(e) {
     active: a,
     daysLeft: t
   };
+}
+function resolveCavcloudStorageLimitBytes(e, a = !1) {
+  if (a) return null;
+  let l = getPlanLimits(resolvePlanIdFromTier(e)).storageGb;
+  if ("unlimited" === l) return null;
+  let t = Number(l || 0) * 1024 * 1024 * 1024;
+  return Number.isFinite(t) && t > 0 ? Math.trunc(t) : null;
+}
+function readInitialCavcloudTreeSnapshot(e) {
+  if ("undefined" == typeof window || "undefined" == typeof globalThis.__cbLocalStore) return null;
+  try {
+    let a = A(globalThis.__cbLocalStore.getItem(e)),
+      l = R(a?.payload),
+      t = R(l?.folder);
+    if (!l || !t) return null;
+    let s = T(String(t.path || a?.folderPath || "/"));
+    return {
+      folder: {
+        ...t,
+        path: s
+      },
+      breadcrumbs: Array.isArray(l.breadcrumbs) ? l.breadcrumbs : [],
+      folders: Array.isArray(l.folders) ? l.folders : [],
+      files: Array.isArray(l.files) ? l.files : [],
+      trash: Array.isArray(l.trash) ? l.trash : [],
+      usage: R(l.usage),
+      activity: W(l.activity),
+      storageHistory: H(l.storageHistory)
+    };
+  } catch {
+    return null;
+  }
 }
 function R(e) {
   return !e || "object" != typeof e || Array.isArray(e) ? null : e;
@@ -1591,10 +1643,12 @@ function ek(e) {
       if (!e) throw Error("useCavCloudPreview must be used inside CavCloudPreviewProvider.");
       return e;
     }(),
+    [initialTreeSnapshot] = (0, c.useState)(() => readInitialCavcloudTreeSnapshot(treeCacheKey)),
+    [cachedPlanState] = (0, c.useState)(() => readCachedCavcloudPlanState()),
     [S, J] = (0, c.useState)(() => pathName.startsWith("/cavcloud/dashboard") ? "Dashboard" : "Explore"),
-    [z, q] = (0, c.useState)("/"),
-    [en, ey] = (0, c.useState)(null),
-    [eC, ek] = (0, c.useState)(!0),
+    [z, q] = (0, c.useState)(() => T(String(initialTreeSnapshot?.folder?.path || "/"))),
+    [en, ey] = (0, c.useState)(() => initialTreeSnapshot),
+    [eC, ek] = (0, c.useState)(() => !initialTreeSnapshot),
     [ew, eS] = (0, c.useState)(!1),
     [eM, eI] = (0, c.useState)(""),
     [e$, eL] = (0, c.useState)(""),
@@ -1615,10 +1669,10 @@ function ek(e) {
     [e_, eW] = (0, c.useState)(""),
     [eH, eG] = (0, c.useState)(""),
     [profilePublicEnabled, setProfilePublicEnabled] = (0, c.useState)("unknown"),
-    [eK, eJ] = (0, c.useState)(() => resolveCachedPlanTier()),
+    [eK, eJ] = (0, c.useState)(cachedPlanState.planTier),
     [memberRole, setMemberRole] = (0, c.useState)(isOwner ? "OWNER" : "ANON"),
-    [eV, eZ] = (0, c.useState)(!1),
-    [ez, eq] = (0, c.useState)(0),
+    [eV, eZ] = (0, c.useState)(() => !!cachedPlanState.trialActive),
+    [ez, eq] = (0, c.useState)(() => Math.max(0, Math.trunc(Number(cachedPlanState.trialDaysLeft || 0)) || 0)),
     [eY, eQ] = (0, c.useState)([]),
     [eX, e0] = (0, c.useState)(!1),
     [e1, e2] = (0, c.useState)(""),
@@ -1826,7 +1880,7 @@ function ek(e) {
     copyLinkModalInputRef = (0, c.useRef)(null),
     treeLoadRequestRef = (0, c.useRef)(0),
     galleryLoadRequestRef = (0, c.useRef)(0),
-    treeHasLoadedRef = (0, c.useRef)(!1),
+    treeHasLoadedRef = (0, c.useRef)(!!initialTreeSnapshot),
     folderLoadAbortRef = (0, c.useRef)(null),
     folderNavLockRef = (0, c.useRef)({
       path: "",
@@ -3616,20 +3670,35 @@ function ek(e) {
       };
     }, [tSyncedScoped, syncedTimeline]),
     tN = "Explore" === S || "Folders" === S || "Files" === S || "Gallery" === S || "Shared" === S || "Starred" === S || ("Trash" === S && "restorations" !== a1),
+    tUsage = (0, c.useMemo)(() => {
+      let e = R(en?.usage),
+        a = resolveCavcloudStorageLimitBytes(eK, eV);
+      if (!e) return {
+        usedBytes: 0,
+        limitBytes: a
+      };
+      let l = Number(e.usedBytes),
+        t = null == e.limitBytes ? a : Math.max(0, Number(e.limitBytes || 0));
+      return {
+        ...e,
+        usedBytes: Number.isFinite(l) && l > 0 ? Math.max(0, Math.trunc(l)) : 0,
+        limitBytes: Number.isFinite(t) ? t : null
+      };
+    }, [en?.usage, eK, eV]),
     tUsedRatio = (0, c.useMemo)(() => {
-      if (!en?.usage) return 0;
+      if (!tUsage) return 0;
       let {
         usedBytes: e,
         limitBytes: a
-      } = en.usage;
+      } = tUsage;
       if (null == a || a <= 0) return 0;
       return Math.max(0, Math.min(1, e / a));
-    }, [en?.usage]),
+    }, [tUsage]),
     tC = (0, c.useMemo)(() => Math.round(100 * tUsedRatio), [tUsedRatio]),
     tk = tC >= 80 && tC < 100,
     tw = tC >= 100,
-    tS = P(en?.usage?.limitBytes ?? null),
-    tM = P(en?.usage?.usedBytes ?? 0),
+    tS = P(tUsage?.limitBytes ?? null),
+    tM = P(tUsage?.usedBytes ?? 0),
     tI = (0, c.useMemo)(() => {
       let e = {
         code: 0,
@@ -3675,10 +3744,10 @@ function ek(e) {
       return t.length ? l < e && t.push(`${L.other.color} ${l}deg ${e}deg`) : (t.push(`${L.folder.color} 0deg ${e}deg`), l = e), t.push(`rgba(255,255,255,0.12) ${e}deg 360deg`), `conic-gradient(${t.join(", ")})`;
     }, [tRingMixCounts, tRingMixTotal, tUsedRatio]),
     tA = P((0, c.useMemo)(() => {
-      let e = en?.usage?.usedBytes ?? 0,
-        a = en?.usage?.limitBytes ?? null;
+      let e = tUsage?.usedBytes ?? 0,
+        a = tUsage?.limitBytes ?? null;
       return null == a ? null : Math.max(0, a - e);
-    }, [en?.usage?.limitBytes, en?.usage?.usedBytes])),
+    }, [tUsage])),
     tT = G(tM),
     tO = G(tA),
     tF = G(tS),
