@@ -1931,19 +1931,6 @@ function ek(e) {
       }
       J(e);
     }, [S, cancelPendingFolderSelect, isOwner, openCavGuardByAction, w]),
-    openCavSafe = (0, c.useCallback)(() => {
-      if (!isOwner) {
-        openCavGuardByAction("CAVSAFE_OWNER_ONLY");
-        return;
-      }
-      if ("FREE" === String(eK || "").trim().toUpperCase()) {
-        openCavGuardByAction("CAVSAFE_PLAN_REQUIRED", {
-          plan: "FREE"
-        });
-        return;
-      }
-      cancelPendingFolderSelect(), null != folderLoadAbortRef.current && (folderLoadAbortRef.current.abort(), folderLoadAbortRef.current = null), w(), l.push("/cavsafe");
-    }, [cancelPendingFolderSelect, isOwner, eK, l, openCavGuardByAction, w]),
     closeCavGuardModal = (0, c.useCallback)(() => {
       setCavGuardDecision(null);
     }, []),
@@ -2941,7 +2928,7 @@ function ek(e) {
           username: String(a?.username || "").trim()
         },
         tInitials = String(a?.initials || "").trim();
-      eD(l.name), eW(l.email), eG(l.username), eB(resolveCavcloudGreetingName(l)), eU(resolveCavcloudInitials({
+      eD(l.name), eW(l.email), eG(l.username), eB(l.name || resolveCavcloudGreetingName(l)), eU(resolveCavcloudInitials({
         ...l,
         initials: tInitials
       })), "boolean" == typeof a?.publicProfileEnabled && setProfilePublicEnabled(a.publicProfileEnabled ? "public" : "private");
@@ -7834,6 +7821,9 @@ function ek(e) {
     openPlans = (0, c.useCallback)(() => {
       l.push("/plan");
     }, [l]),
+    openArcade = (0, c.useCallback)(() => {
+      l.push("/cavbot-arcade");
+    }, [l]),
     openSurfaceSettings = (0, c.useCallback)(() => {
       setSettingsPage(1), l2("Settings");
     }, [l2]);
@@ -7873,15 +7863,7 @@ function ek(e) {
         onOpenPlans: openPlans,
         onLogout: logoutToAuth,
         surface: "cavcloud",
-        galleryActive: "Gallery" === S,
-        onOpenGallery: () => l2("Gallery"),
-        onOpenCompanion: openCavSafe,
-        companionLabel: "Open CavSafe",
-        companionIconSrc: "/icons/security-svgrepo-com.svg",
-        companionIconAlt: "CavSafe icon",
-        companionIconClassName: "cavcloud-surfaceLauncherActionIconCavsafe",
-        companionIconWidth: 18,
-        companionIconHeight: 18,
+        onOpenArcade: openArcade,
         cavAiSurface: "cavcloud",
         cavAiContextLabel: "CavCloud context"
       })]

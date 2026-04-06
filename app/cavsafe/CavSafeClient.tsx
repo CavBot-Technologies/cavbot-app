@@ -1517,13 +1517,6 @@ function ek() {
       }
       J(e);
     }, [S, cancelPendingFolderSelect, w]),
-    openCavCloud = (0, c.useCallback)(() => {
-      cancelPendingFolderSelect(), null != folderLoadAbortRef.current && (folderLoadAbortRef.current.abort(), folderLoadAbortRef.current = null), w();
-      try {
-        globalThis.__cbSessionStore.setItem("cb_surface_nav", "cavsafe_to_cavcloud"), globalThis.__cbSessionStore.setItem("cb_surface_nav_ts", String(Date.now()));
-      } catch {}
-      l.push("/cavcloud");
-    }, [cancelPendingFolderSelect, l, w]),
     l4 = (0, c.useCallback)(() => {
       null != lY.current && (window.clearTimeout(lY.current), lY.current = null), as(!1);
     }, []),
@@ -2394,7 +2387,7 @@ function ek() {
           username: String(a?.username || "").trim()
         },
         tInitials = String(a?.initials || "").trim();
-      eD(l.name), eW(l.email), eG(l.username), eB(resolveCavsafeGreetingName(l)), eU(resolveCavsafeInitials({
+      eD(l.name), eW(l.email), eG(l.username), eB(l.name || resolveCavsafeGreetingName(l)), eU(resolveCavsafeInitials({
         ...l,
         initials: tInitials
       })), "boolean" == typeof a?.publicProfileEnabled && setProfilePublicEnabled(a.publicProfileEnabled ? "public" : "private");
@@ -5979,6 +5972,9 @@ function ek() {
     openPlans = (0, c.useCallback)(() => {
       l.push("/plan");
     }, [l]),
+    openArcade = (0, c.useCallback)(() => {
+      l.push("/cavbot-arcade");
+    }, [l]),
     openSurfaceSettings = (0, c.useCallback)(() => {
       setSettingsPage(1), l2("Settings");
     }, [l2]);
@@ -6024,15 +6020,7 @@ function ek() {
         onOpenPlans: openPlans,
         onLogout: logoutToAuth,
         surface: "cavsafe",
-        galleryActive: "Gallery" === S,
-        onOpenGallery: () => l2("Gallery"),
-        onOpenCompanion: openCavCloud,
-        companionLabel: "Open CavCloud",
-        companionIconSrc: "/logo/cavbot-logomark.svg",
-        companionIconAlt: "CavCloud logomark",
-        companionIconClassName: "cavcloud-surfaceLauncherActionIconMark",
-        companionIconWidth: 16,
-        companionIconHeight: 16,
+        onOpenArcade: openArcade,
         cavAiSurface: "cavsafe",
         cavAiContextLabel: "CavSafe context"
       })]

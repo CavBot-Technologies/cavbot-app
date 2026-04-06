@@ -6782,21 +6782,6 @@ export default function CavCodePage() {
     const currentManagedPublishedAgent = menuOpen ? managedPublishedAgent : null;
     const currentManagedBuiltInAgent = menuOpen ? managedBuiltInAgent : null;
     const agentName = currentManagedCustomAgent?.name || currentManagedPublishedAgent?.name || currentManagedBuiltInAgent?.name || args.agentName;
-    const agentSummary = currentManagedCustomAgent?.summary || currentManagedPublishedAgent?.summary || currentManagedBuiltInAgent?.summary || "";
-    const placementLabel = currentManagedCustomAgent
-      ? describeAgentPlacement(currentManagedCustomAgent.surface)
-      : currentManagedPublishedAgent
-        ? describeAgentPlacement(currentManagedPublishedAgent.surface)
-        : null;
-    const statusLabel = managedCustomAgentPublicationState === "published"
-      ? "Approved by HQ"
-      : managedCustomAgentPublicationState === "review"
-        ? "In review"
-        : currentManagedCustomAgent
-          ? "Private"
-          : currentManagedPublishedAgent
-            ? "Published operator agent"
-            : "Installed";
     return (
       <span className={`cc-skills-cardActionWrap ${menuOpen ? "is-open" : ""}`} data-agent-manage-id={args.agentId}>
         <span className={`cc-skills-cardActionStatus is-${args.status}`} aria-hidden="true">
@@ -6845,16 +6830,9 @@ export default function CavCodePage() {
             role="menu"
             aria-label={`Manage ${agentName}`}
           >
-            <div className="cc-popover-title">Manage {agentName}</div>
-            <div className="cc-agentManageInlineMeta">
-              <span className="cc-agentManageInlineStatus">{statusLabel}</span>
-              {placementLabel ? <span className="cc-agentManageInlinePlacement">{placementLabel}</span> : null}
-            </div>
-            {agentSummary ? <div className="cc-agentManageInlineSummary">{agentSummary}</div> : null}
-
             <button
               type="button"
-              className="cc-pm-item"
+              className={`cc-pm-item${managedAgentInstalled ? " cc-pm-itemDanger" : ""}`}
               role="menuitem"
               onClick={(event) => {
                 event.preventDefault();
@@ -6940,12 +6918,6 @@ export default function CavCodePage() {
               </>
             ) : null}
 
-            {managedCustomAgentPublicationState === "review" ? (
-              <div className="cc-agentManageInlineNote">HQ review is pending.</div>
-            ) : null}
-            {managedCustomAgentPublicationState === "published" ? (
-              <div className="cc-agentManageInlineNote">Approved and published for operators.</div>
-            ) : null}
           </div>
         ) : null}
       </span>
