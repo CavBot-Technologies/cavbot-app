@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import type { CoderCreditLedger, CoderCreditWallet, SubscriptionStatus } from "@prisma/client";
 
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { ALIBABA_QWEN_CODER_MODEL_ID } from "@/src/lib/ai/model-catalog";
@@ -149,6 +150,68 @@ type QwenPlanConfig = {
   stage2Credits: number;
 };
 
+const QWEN_CREDIT_SCHEMA_TABLE_HINTS = [
+  "coder_credit_wallets",
+  "coder_credit_ledger",
+  "coder_usage_snapshots",
+  "coder_plan_events",
+  "coder_context_snapshots",
+  "CoderCreditWallet",
+  "CoderCreditLedger",
+  "CoderUsageSnapshot",
+  "CoderPlanEvent",
+  "CoderContextSnapshot",
+] as const;
+
+const QWEN_CREDIT_SCHEMA_COLUMN_HINTS = [
+  "planTier",
+  "billingCycleStart",
+  "billingCycleEnd",
+  "monthlyAllocation",
+  "rolloverAllocation",
+  "totalAvailable",
+  "totalUsed",
+  "totalRemaining",
+  "stagedModeEnabled",
+  "stage1Allocation",
+  "stage1Used",
+  "stage1ExhaustedAt",
+  "cooldownEndsAt",
+  "stage2Allocation",
+  "stage2Used",
+  "exhaustedAt",
+  "resetSource",
+  "lastRecomputedAt",
+  "walletId",
+  "requestId",
+  "modelName",
+  "estimatedCredits",
+  "creditsCharged",
+  "chargeReason",
+  "chargeState",
+  "reservedAt",
+  "finalizedAt",
+  "percentUsed",
+  "percentRemaining",
+  "estimatedTasksLeft",
+  "oldPlan",
+  "newPlan",
+  "eventType",
+  "eventSource",
+  "sessionId",
+  "conversationId",
+  "activeModel",
+  "currentContextTokens",
+  "maxContextTokens",
+  "percentFull",
+  "compactionCount",
+  "updatedAt",
+  "createdAt",
+] as const;
+
+let qwenCreditSchemaReady = false;
+let qwenCreditSchemaReadyPromise: Promise<void> | null = null;
+
 function s(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -177,6 +240,235 @@ function envBool(name: string, fallback: boolean): boolean {
   const raw = s(process.env[name]).toLowerCase();
   if (!raw) return fallback;
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
+export function isQwenCoderCreditSchemaMismatchError(err: unknown): boolean {
+  const message = String(
+    (err as { meta?: { message?: unknown }; message?: unknown })?.meta?.message
+      || (err as { message?: unknown })?.message
+      || "",
+  );
+  if (message.includes("QWEN_WALLET_CREATE_FAILED")) return true;
+  return isSchemaMismatchError(err, {
+    tables: [...QWEN_CREDIT_SCHEMA_TABLE_HINTS],
+    columns: [...QWEN_CREDIT_SCHEMA_COLUMN_HINTS],
+  });
+}
+
+async function ensureQwenCoderCreditSchema() {
+  if (qwenCreditSchemaReady) return;
+  if (qwenCreditSchemaReadyPromise) {
+    await qwenCreditSchemaReadyPromise;
+    return;
+  }
+
+  qwenCreditSchemaReadyPromise = (async () => {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "coder_credit_wallets" (
+        "id" TEXT NOT NULL,
+        "accountId" TEXT NOT NULL,
+        "userId" TEXT NOT NULL,
+        "planTier" VARCHAR(32) NOT NULL DEFAULT 'free',
+        "billingCycleStart" TIMESTAMP(3) NOT NULL,
+        "billingCycleEnd" TIMESTAMP(3) NOT NULL,
+        "monthlyAllocation" INTEGER NOT NULL DEFAULT 0,
+        "rolloverAllocation" INTEGER NOT NULL DEFAULT 0,
+        "totalAvailable" INTEGER NOT NULL DEFAULT 0,
+        "totalUsed" INTEGER NOT NULL DEFAULT 0,
+        "totalRemaining" INTEGER NOT NULL DEFAULT 0,
+        "stagedModeEnabled" BOOLEAN NOT NULL DEFAULT FALSE,
+        "stage1Allocation" INTEGER NOT NULL DEFAULT 0,
+        "stage1Used" INTEGER NOT NULL DEFAULT 0,
+        "stage1ExhaustedAt" TIMESTAMP(3),
+        "cooldownEndsAt" TIMESTAMP(3),
+        "stage2Allocation" INTEGER NOT NULL DEFAULT 0,
+        "stage2Used" INTEGER NOT NULL DEFAULT 0,
+        "exhaustedAt" TIMESTAMP(3),
+        "resetSource" VARCHAR(64),
+        "lastRecomputedAt" TIMESTAMP(3),
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "coder_credit_wallets_pkey" PRIMARY KEY ("id")
+      );
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "coder_credit_ledger" (
+        "id" TEXT NOT NULL,
+        "walletId" TEXT NOT NULL,
+        "accountId" TEXT NOT NULL,
+        "userId" TEXT NOT NULL,
+        "conversationId" VARCHAR(120),
+        "taskId" VARCHAR(120),
+        "requestId" VARCHAR(120) NOT NULL,
+        "modelName" VARCHAR(120) NOT NULL,
+        "rawInputTokens" INTEGER NOT NULL DEFAULT 0,
+        "rawContextTokens" INTEGER NOT NULL DEFAULT 0,
+        "rawOutputTokens" INTEGER NOT NULL DEFAULT 0,
+        "compactionTokens" INTEGER NOT NULL DEFAULT 0,
+        "runtimeSeconds" INTEGER NOT NULL DEFAULT 0,
+        "estimatedCredits" INTEGER NOT NULL DEFAULT 0,
+        "creditsCharged" INTEGER NOT NULL DEFAULT 0,
+        "chargeReason" VARCHAR(64) NOT NULL DEFAULT 'success',
+        "chargeState" VARCHAR(24) NOT NULL DEFAULT 'PENDING',
+        "reservedAt" TIMESTAMP(3),
+        "finalizedAt" TIMESTAMP(3),
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "coder_credit_ledger_pkey" PRIMARY KEY ("id")
+      );
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "coder_usage_snapshots" (
+        "id" TEXT NOT NULL,
+        "walletId" TEXT,
+        "accountId" TEXT NOT NULL,
+        "userId" TEXT NOT NULL,
+        "billingCycleStart" TIMESTAMP(3) NOT NULL,
+        "percentUsed" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "percentRemaining" DOUBLE PRECISION NOT NULL DEFAULT 100,
+        "estimatedTasksLeft" INTEGER,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "coder_usage_snapshots_pkey" PRIMARY KEY ("id")
+      );
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "coder_plan_events" (
+        "id" TEXT NOT NULL,
+        "accountId" TEXT NOT NULL,
+        "userId" TEXT NOT NULL,
+        "oldPlan" VARCHAR(32),
+        "newPlan" VARCHAR(32) NOT NULL,
+        "eventType" VARCHAR(40) NOT NULL,
+        "eventSource" VARCHAR(80),
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "coder_plan_events_pkey" PRIMARY KEY ("id")
+      );
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "coder_context_snapshots" (
+        "id" TEXT NOT NULL,
+        "accountId" TEXT NOT NULL,
+        "userId" TEXT NOT NULL,
+        "sessionId" VARCHAR(120),
+        "conversationId" VARCHAR(120),
+        "activeModel" VARCHAR(120) NOT NULL DEFAULT '${ALIBABA_QWEN_CODER_MODEL_ID}',
+        "currentContextTokens" INTEGER NOT NULL DEFAULT 0,
+        "maxContextTokens" INTEGER NOT NULL DEFAULT 0,
+        "percentFull" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "compactionCount" INTEGER NOT NULL DEFAULT 0,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "coder_context_snapshots_pkey" PRIMARY KEY ("id")
+      );
+    `);
+
+    const alterStatements = [
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "id" TEXT;`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT '';`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "userId" TEXT NOT NULL DEFAULT '';`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "planTier" VARCHAR(32) NOT NULL DEFAULT 'free';`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "billingCycleStart" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "billingCycleEnd" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "monthlyAllocation" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "rolloverAllocation" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "totalAvailable" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "totalUsed" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "totalRemaining" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "stagedModeEnabled" BOOLEAN NOT NULL DEFAULT FALSE;`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "stage1Allocation" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "stage1Used" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "stage1ExhaustedAt" TIMESTAMP(3);`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "cooldownEndsAt" TIMESTAMP(3);`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "stage2Allocation" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "stage2Used" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "exhaustedAt" TIMESTAMP(3);`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "resetSource" VARCHAR(64);`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "lastRecomputedAt" TIMESTAMP(3);`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;`,
+      `ALTER TABLE "coder_credit_wallets" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "id" TEXT;`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "walletId" TEXT NOT NULL DEFAULT '';`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT '';`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "userId" TEXT NOT NULL DEFAULT '';`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "conversationId" VARCHAR(120);`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "taskId" VARCHAR(120);`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "requestId" VARCHAR(120) NOT NULL DEFAULT '';`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "modelName" VARCHAR(120) NOT NULL DEFAULT '${ALIBABA_QWEN_CODER_MODEL_ID}';`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "rawInputTokens" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "rawContextTokens" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "rawOutputTokens" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "compactionTokens" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "runtimeSeconds" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "estimatedCredits" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "creditsCharged" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "chargeReason" VARCHAR(64) NOT NULL DEFAULT 'success';`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "chargeState" VARCHAR(24) NOT NULL DEFAULT 'PENDING';`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "reservedAt" TIMESTAMP(3);`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "finalizedAt" TIMESTAMP(3);`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;`,
+      `ALTER TABLE "coder_credit_ledger" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;`,
+      `ALTER TABLE "coder_usage_snapshots" ADD COLUMN IF NOT EXISTS "id" TEXT;`,
+      `ALTER TABLE "coder_usage_snapshots" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT '';`,
+      `ALTER TABLE "coder_usage_snapshots" ADD COLUMN IF NOT EXISTS "userId" TEXT NOT NULL DEFAULT '';`,
+      `ALTER TABLE "coder_usage_snapshots" ADD COLUMN IF NOT EXISTS "walletId" TEXT;`,
+      `ALTER TABLE "coder_usage_snapshots" ADD COLUMN IF NOT EXISTS "billingCycleStart" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;`,
+      `ALTER TABLE "coder_usage_snapshots" ADD COLUMN IF NOT EXISTS "percentUsed" DOUBLE PRECISION NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_usage_snapshots" ADD COLUMN IF NOT EXISTS "percentRemaining" DOUBLE PRECISION NOT NULL DEFAULT 100;`,
+      `ALTER TABLE "coder_usage_snapshots" ADD COLUMN IF NOT EXISTS "estimatedTasksLeft" INTEGER;`,
+      `ALTER TABLE "coder_usage_snapshots" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;`,
+      `ALTER TABLE "coder_usage_snapshots" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;`,
+      `ALTER TABLE "coder_plan_events" ADD COLUMN IF NOT EXISTS "id" TEXT;`,
+      `ALTER TABLE "coder_plan_events" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT '';`,
+      `ALTER TABLE "coder_plan_events" ADD COLUMN IF NOT EXISTS "userId" TEXT NOT NULL DEFAULT '';`,
+      `ALTER TABLE "coder_plan_events" ADD COLUMN IF NOT EXISTS "oldPlan" VARCHAR(32);`,
+      `ALTER TABLE "coder_plan_events" ADD COLUMN IF NOT EXISTS "newPlan" VARCHAR(32) NOT NULL DEFAULT 'free';`,
+      `ALTER TABLE "coder_plan_events" ADD COLUMN IF NOT EXISTS "eventType" VARCHAR(40) NOT NULL DEFAULT 'unknown';`,
+      `ALTER TABLE "coder_plan_events" ADD COLUMN IF NOT EXISTS "eventSource" VARCHAR(80);`,
+      `ALTER TABLE "coder_plan_events" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;`,
+      `ALTER TABLE "coder_context_snapshots" ADD COLUMN IF NOT EXISTS "id" TEXT;`,
+      `ALTER TABLE "coder_context_snapshots" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT '';`,
+      `ALTER TABLE "coder_context_snapshots" ADD COLUMN IF NOT EXISTS "userId" TEXT NOT NULL DEFAULT '';`,
+      `ALTER TABLE "coder_context_snapshots" ADD COLUMN IF NOT EXISTS "sessionId" VARCHAR(120);`,
+      `ALTER TABLE "coder_context_snapshots" ADD COLUMN IF NOT EXISTS "conversationId" VARCHAR(120);`,
+      `ALTER TABLE "coder_context_snapshots" ADD COLUMN IF NOT EXISTS "activeModel" VARCHAR(120) NOT NULL DEFAULT '${ALIBABA_QWEN_CODER_MODEL_ID}';`,
+      `ALTER TABLE "coder_context_snapshots" ADD COLUMN IF NOT EXISTS "currentContextTokens" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_context_snapshots" ADD COLUMN IF NOT EXISTS "maxContextTokens" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_context_snapshots" ADD COLUMN IF NOT EXISTS "percentFull" DOUBLE PRECISION NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_context_snapshots" ADD COLUMN IF NOT EXISTS "compactionCount" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "coder_context_snapshots" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "coder_wallet_cycle_unique" ON "coder_credit_wallets"("accountId", "userId", "billingCycleStart", "billingCycleEnd");`,
+      `CREATE INDEX IF NOT EXISTS "coder_credit_wallets_accountId_userId_createdAt_idx" ON "coder_credit_wallets"("accountId", "userId", "createdAt");`,
+      `CREATE INDEX IF NOT EXISTS "coder_credit_wallets_accountId_userId_billingCycleStart_billingCycleEnd_idx" ON "coder_credit_wallets"("accountId", "userId", "billingCycleStart", "billingCycleEnd");`,
+      `CREATE INDEX IF NOT EXISTS "coder_credit_wallets_accountId_billingCycleStart_billingCycleEnd_idx" ON "coder_credit_wallets"("accountId", "billingCycleStart", "billingCycleEnd");`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "coder_ledger_request_unique" ON "coder_credit_ledger"("accountId", "userId", "requestId");`,
+      `CREATE INDEX IF NOT EXISTS "coder_credit_ledger_walletId_createdAt_idx" ON "coder_credit_ledger"("walletId", "createdAt");`,
+      `CREATE INDEX IF NOT EXISTS "coder_credit_ledger_accountId_userId_createdAt_idx" ON "coder_credit_ledger"("accountId", "userId", "createdAt");`,
+      `CREATE INDEX IF NOT EXISTS "coder_credit_ledger_accountId_requestId_createdAt_idx" ON "coder_credit_ledger"("accountId", "requestId", "createdAt");`,
+      `CREATE INDEX IF NOT EXISTS "coder_credit_ledger_accountId_chargeState_createdAt_idx" ON "coder_credit_ledger"("accountId", "chargeState", "createdAt");`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "coder_usage_snapshot_cycle_unique" ON "coder_usage_snapshots"("accountId", "userId", "billingCycleStart");`,
+      `CREATE INDEX IF NOT EXISTS "coder_usage_snapshots_accountId_userId_updatedAt_idx" ON "coder_usage_snapshots"("accountId", "userId", "updatedAt");`,
+      `CREATE INDEX IF NOT EXISTS "coder_usage_snapshots_walletId_updatedAt_idx" ON "coder_usage_snapshots"("walletId", "updatedAt");`,
+      `CREATE INDEX IF NOT EXISTS "coder_plan_events_accountId_userId_createdAt_idx" ON "coder_plan_events"("accountId", "userId", "createdAt");`,
+      `CREATE INDEX IF NOT EXISTS "coder_plan_events_accountId_eventType_createdAt_idx" ON "coder_plan_events"("accountId", "eventType", "createdAt");`,
+      `CREATE INDEX IF NOT EXISTS "coder_context_snapshots_accountId_userId_sessionId_createdAt_idx" ON "coder_context_snapshots"("accountId", "userId", "sessionId", "createdAt");`,
+      `CREATE INDEX IF NOT EXISTS "coder_context_snapshots_accountId_userId_createdAt_idx" ON "coder_context_snapshots"("accountId", "userId", "createdAt");`,
+    ];
+
+    for (const statement of alterStatements) {
+      await prisma.$executeRawUnsafe(statement);
+    }
+
+    qwenCreditSchemaReady = true;
+  })().catch((error) => {
+    qwenCreditSchemaReadyPromise = null;
+    throw error;
+  });
+
+  await qwenCreditSchemaReadyPromise;
 }
 
 function utcMonthWindow(now = new Date()): { start: Date; end: Date } {
@@ -867,6 +1159,7 @@ export async function getQwenCoderWallet(args: {
   now?: Date;
 }): Promise<CoderCreditWallet> {
   const now = args.now || new Date();
+  await ensureQwenCoderCreditSchema();
   return prisma.$transaction(async (tx) => {
     const wallet = await ensureWalletTx({
       tx,
@@ -913,6 +1206,7 @@ export async function reserveQwenCoderCredits(args: {
   now?: Date;
 }): Promise<QwenCoderReserveResult> {
   const now = args.now || new Date();
+  await ensureQwenCoderCreditSchema();
   return prisma.$transaction(async (tx) => {
     const accountId = s(args.accountId);
     const userId = s(args.userId);
@@ -1059,6 +1353,32 @@ function deriveEntitlementFromFallback(planId: PlanId, now: Date): QwenCoderEnti
   };
 }
 
+export function buildQwenCoderPopoverFallbackState(args: {
+  planId: PlanId;
+  now?: Date;
+}): QwenCoderPopoverState {
+  const now = args.now || new Date();
+  const entitlement = deriveEntitlementFromFallback(args.planId, now);
+  return {
+    planId: args.planId,
+    planLabel: args.planId === "premium_plus" ? "Premium+" : args.planId === "premium" ? "Premium" : "Free",
+    entitlement,
+    billingCycleStart: cycleDateIso(entitlement.billingCycleStart),
+    billingCycleEnd: cycleDateIso(entitlement.billingCycleEnd),
+    resetAt: cycleDateIso(entitlement.resetAt),
+    cooldownEndsAt: entitlement.cooldownEndsAt ? cycleDateIso(entitlement.cooldownEndsAt) : null,
+    usage: {
+      creditsUsed: entitlement.creditsUsed,
+      creditsLeft: entitlement.creditsRemaining,
+      creditsTotal: entitlement.totalAvailable,
+      percentUsed: entitlement.percentUsed,
+      percentRemaining: entitlement.percentRemaining,
+    },
+    contextWindow: null,
+    recentUsage: [],
+  };
+}
+
 async function loadLedgerAndWalletForFinalize(args: {
   tx: Tx;
   accountId: string;
@@ -1088,6 +1408,7 @@ function resolvePlanIdFromWalletTier(planTier: string): PlanId {
 }
 
 export async function finalizeQwenCoderCharge(input: QwenCoderFinalizeInput): Promise<QwenCoderFinalizeResult> {
+  await ensureQwenCoderCreditSchema();
   return prisma.$transaction(async (tx) => {
     const accountId = s(input.accountId);
     const userId = s(input.userId);
@@ -1216,6 +1537,7 @@ export async function getQwenCoderPopoverState(args: {
   now?: Date;
 }): Promise<QwenCoderPopoverState> {
   const now = args.now || new Date();
+  await ensureQwenCoderCreditSchema();
   const { wallet, entitlement } = await getQwenCoderEntitlement({
     accountId: args.accountId,
     userId: args.userId,
@@ -1298,19 +1620,21 @@ export async function captureQwenCoderContextSnapshot(args: {
   const currentContextTokens = Math.max(0, asInt(args.currentContextTokens, 0));
   const percentFull = Math.max(0, Math.min(100, Number(((currentContextTokens / maxContextTokens) * 100).toFixed(2))));
 
-  await prisma.coderContextSnapshot.create({
-    data: {
-      accountId: s(args.accountId),
-      userId: s(args.userId),
-      sessionId: s(args.sessionId) || null,
-      conversationId: s(args.conversationId) || null,
-      activeModel: s(args.activeModel).slice(0, 120),
-      currentContextTokens,
-      maxContextTokens,
-      percentFull,
-      compactionCount: Math.max(0, asInt(args.compactionCount, 0)),
-    },
-  }).catch(() => {
+  await ensureQwenCoderCreditSchema()
+    .then(() => prisma.coderContextSnapshot.create({
+      data: {
+        accountId: s(args.accountId),
+        userId: s(args.userId),
+        sessionId: s(args.sessionId) || null,
+        conversationId: s(args.conversationId) || null,
+        activeModel: s(args.activeModel).slice(0, 120),
+        currentContextTokens,
+        maxContextTokens,
+        percentFull,
+        compactionCount: Math.max(0, asInt(args.compactionCount, 0)),
+      },
+    }))
+    .catch(() => {
     // Non-blocking telemetry snapshot.
   });
 }
@@ -1322,6 +1646,7 @@ export async function handleBillingCycleReset(args: {
   now?: Date;
 }): Promise<{ processedUsers: number }> {
   const now = args.now || new Date();
+  await ensureQwenCoderCreditSchema();
   const accountId = s(args.accountId);
   const users = s(args.userId)
     ? [{ userId: s(args.userId) }]
@@ -1361,6 +1686,7 @@ export async function applyPlanTransition(args: {
   now?: Date;
 }): Promise<void> {
   const now = args.now || new Date();
+  await ensureQwenCoderCreditSchema();
   const accountId = s(args.accountId);
   const userId = s(args.userId);
 

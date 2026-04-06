@@ -4,7 +4,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireAiRequestContext } from "@/src/lib/ai/ai.guard";
-import { getQwenCoderPopoverState } from "@/src/lib/ai/qwen-coder-credits.server";
+import {
+  buildQwenCoderPopoverFallbackState,
+  getQwenCoderPopoverState,
+  isQwenCoderCreditSchemaMismatchError,
+} from "@/src/lib/ai/qwen-coder-credits.server";
 import { ALIBABA_QWEN_CODER_MODEL_ID } from "@/src/lib/ai/model-catalog";
 import { buildGuardDecisionPayload } from "@/src/lib/cavguard/cavGuard.server";
 
@@ -30,6 +34,42 @@ function json(payload: unknown, init?: number | ResponseInit) {
   });
 }
 
+function buildPopoverPayload(args: {
+  requestId: string;
+  state: Awaited<ReturnType<typeof getQwenCoderPopoverState>>;
+  ctx: Awaited<ReturnType<typeof requireAiRequestContext>>;
+  degraded?: boolean;
+}) {
+  const nextActionId = args.state.entitlement.nextActionId;
+  const guardDecision = nextActionId
+    ? buildGuardDecisionPayload({
+        actionId: nextActionId,
+        role: args.ctx.memberRole || undefined,
+        plan: args.ctx.planId === "premium_plus" ? "PREMIUM_PLUS" : args.ctx.planId === "premium" ? "PREMIUM" : "FREE",
+        flags: {
+          qwenResetAt: args.state.entitlement.resetAt,
+          qwenCooldownEndsAt: args.state.entitlement.cooldownEndsAt,
+          qwenCoderEntitlement: args.state.entitlement,
+        },
+      })?.guardDecision || null
+    : null;
+
+  return {
+    ok: true,
+    ...(args.degraded ? { degraded: true } : {}),
+    requestId: args.requestId,
+    qwenCoder: args.state,
+    guardDecision,
+    modelAvailability: {
+      [ALIBABA_QWEN_CODER_MODEL_ID]: {
+        selectable: args.state.entitlement.selectable,
+        state: args.state.entitlement.state,
+        nextActionId: args.state.entitlement.nextActionId,
+      },
+    },
+  };
+}
+
 export async function GET(req: NextRequest) {
   const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
   try {
@@ -38,40 +78,22 @@ export async function GET(req: NextRequest) {
       req,
       surface: "cavcode",
     });
-    const state = await getQwenCoderPopoverState({
-      accountId: ctx.accountId,
-      userId: ctx.userId,
-      planId: ctx.planId,
-      sessionId,
-    });
-
-    const nextActionId = state.entitlement.nextActionId;
-    const guardDecision = nextActionId
-      ? buildGuardDecisionPayload({
-          actionId: nextActionId,
-          role: ctx.memberRole || undefined,
-          plan: ctx.planId === "premium_plus" ? "PREMIUM_PLUS" : ctx.planId === "premium" ? "PREMIUM" : "FREE",
-          flags: {
-            qwenResetAt: state.entitlement.resetAt,
-            qwenCooldownEndsAt: state.entitlement.cooldownEndsAt,
-            qwenCoderEntitlement: state.entitlement,
-          },
-        })?.guardDecision || null
-      : null;
-
-    return json({
-      ok: true,
-      requestId,
-      qwenCoder: state,
-      guardDecision,
-      modelAvailability: {
-        [ALIBABA_QWEN_CODER_MODEL_ID]: {
-          selectable: state.entitlement.selectable,
-          state: state.entitlement.state,
-          nextActionId: state.entitlement.nextActionId,
-        },
-      },
-    });
+    try {
+      const state = await getQwenCoderPopoverState({
+        accountId: ctx.accountId,
+        userId: ctx.userId,
+        planId: ctx.planId,
+        sessionId,
+      });
+      return json(buildPopoverPayload({ requestId, state, ctx }));
+    } catch (error) {
+      if (!isQwenCoderCreditSchemaMismatchError(error)) throw error;
+      console.warn("[qwen-coder/popover] degraded to fallback state", error);
+      const state = buildQwenCoderPopoverFallbackState({
+        planId: ctx.planId,
+      });
+      return json(buildPopoverPayload({ requestId, state, ctx, degraded: true }));
+    }
   } catch (error) {
     if (isApiAuthError(error)) {
       return json({ ok: false, requestId, error: error.code, message: error.message }, error.status);
