@@ -33,7 +33,9 @@ test("cavai settings route returns plan context and uses AI request context", ()
   const source = fs.readFileSync(cavaiSettingsRoutePath, "utf8");
   assert.equal(source.includes("requireAiRequestContext"), true);
   assert.equal(source.includes("planId: ctx.planId"), true);
-  assert.equal(source.includes("{ ok: true, settings, planId: ctx.planId }"), true);
+  assert.equal(source.includes("agentRegistry"), true);
+  assert.equal(source.includes("publishedAgents"), true);
+  assert.equal(source.includes("ownedPublishedSourceAgentIds"), true);
 });
 
 test("companion/image and newly added system model ids are pinned in the model catalog", () => {

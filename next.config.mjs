@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  allowedDevOrigins: ["admin.localhost", "admin.127.0.0.1"],
   images: {
     remotePatterns: [
       {

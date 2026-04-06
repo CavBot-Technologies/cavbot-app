@@ -335,6 +335,11 @@ function buildBillingEmailLabel(planId: PlanId, email: string | null | undefined
   return planId === "free" ? "Account not billed" : "—";
 }
 
+function safePlanLimit(planId: PlanId, key: "seats" | "websites") {
+  const value = PLANS?.[planId]?.limits?.[key];
+  return typeof value === "number" ? value : null;
+}
+
 
 /* =========================
  CARD BRAND ICONS
@@ -798,7 +803,13 @@ function BillingClientInner() {
       setSummary(s);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setErr(message || "Failed to load billing.");
+      const normalized = String(message || "").trim().toUpperCase();
+      if (normalized === "ACCOUNT_CONTEXT_REQUIRED" || normalized === "ACCOUNT_NOT_FOUND") {
+        setSummary(null);
+        setErr("");
+        return;
+      }
+      setErr("Billing details are temporarily unavailable.");
     }
   }, []);
 
@@ -891,6 +902,13 @@ function BillingClientInner() {
 
 
   const currentPlanId = summary?.computed.currentPlanId ?? bootPlanId;
+  const hasBillingContext = Boolean(summary?.account?.id);
+  const seatLimitValue = hasBillingContext
+    ? (summary?.computed?.seatLimit ?? null)
+    : safePlanLimit(currentPlanId, "seats");
+  const websiteLimitValue = hasBillingContext
+    ? (summary?.computed?.websiteLimit ?? null)
+    : safePlanLimit(currentPlanId, "websites");
   const pending = summary?.account?.pendingDowngradePlanId
     ? {
         toPlan: summary.account.pendingDowngradePlanId,
@@ -1239,13 +1257,13 @@ function BillingClientInner() {
 
               <article className="sx-billDetailCard">
                 <div className="sx-billDetailLabel">Seat limit</div>
-                <div className="sx-billDetailValue">{fmtLimit(summary?.computed?.seatLimit ?? null)}</div>
+                <div className="sx-billDetailValue">{fmtLimit(seatLimitValue)}</div>
                 <div className="sx-billDetailTag">Active seats: {summary?.computed?.seatsUsed ?? 0}</div>
               </article>
 
               <article className="sx-billDetailCard">
                 <div className="sx-billDetailLabel">Site limit</div>
-                <div className="sx-billDetailValue">{fmtLimit(summary?.computed?.websiteLimit ?? null)}</div>
+                <div className="sx-billDetailValue">{fmtLimit(websiteLimitValue)}</div>
                 <div className="sx-billDetailTag">Assigned: {summary?.computed?.websitesUsed ?? 0}</div>
               </article>
             </div>

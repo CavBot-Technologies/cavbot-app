@@ -127,6 +127,7 @@ model User {
   coderUsageSnapshots            CoderUsageSnapshot[]
   coderPlanEvents                CoderPlanEvent[]
   coderContextSnapshots          CoderContextSnapshot[]
+  staffProfile                   StaffProfile?
 
   @@index([createdAt])
   @@index([lastLoginAt])
@@ -2884,6 +2885,146 @@ model AuditLog {
   @@index([createdAt])
 }
 
+model StaffProfile {
+  id                String               @id @default(cuid())
+  userId            String               @unique
+  staffCode         String               @unique @db.VarChar(16)
+  systemRole        StaffSystemRole      @default(MEMBER)
+  positionTitle     String               @default("Staff") @db.VarChar(120)
+  status            StaffStatus          @default(INVITED)
+  onboardingStatus  StaffOnboardingStatus @default(PENDING)
+  invitedEmail      String?              @db.VarChar(191)
+  invitedByUserId   String?
+  createdByUserId   String?
+  notes             String?              @db.Text
+  scopes            String[]             @default([])
+  metadataJson      Json?
+  lastAdminLoginAt  DateTime?
+  lastAdminStepUpAt DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([systemRole, status])
+  @@index([status, createdAt])
+  @@index([invitedEmail])
+  @@index([lastAdminLoginAt])
+}
+
+model StaffInvite {
+  id                 String          @id @default(cuid())
+  email              String
+  normalizedEmail    String          @db.VarChar(191)
+  tokenHash          String          @unique @db.VarChar(128)
+  systemRole         StaffSystemRole @default(MEMBER)
+  positionTitle      String          @db.VarChar(120)
+  status             StaffInviteStatus @default(PENDING)
+  invitedByUserId    String?
+  invitedByStaffCode String?         @db.VarChar(16)
+  inviteeUserId      String?
+  acceptedStaffId    String?
+  expiresAt          DateTime
+  acceptedAt         DateTime?
+  revokedAt          DateTime?
+  message            String?         @db.Text
+  metaJson           Json?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@index([normalizedEmail, status])
+  @@index([status, expiresAt])
+  @@index([inviteeUserId, status])
+}
+
+model StaffSequence {
+  key       String   @id @db.VarChar(32)
+  lastValue Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+model AdminAuditLog {
+  id          String        @id @default(cuid())
+  actorStaffId String?
+  actorUserId String?
+  action      String        @db.VarChar(64)
+  actionLabel String        @db.VarChar(160)
+  entityType  String        @db.VarChar(64)
+  entityId    String?       @db.VarChar(191)
+  entityLabel String?       @db.VarChar(191)
+  severity    AuditSeverity @default(info)
+  ip          String?       @db.VarChar(96)
+  userAgent   String?       @db.Text
+  requestHost String?       @db.VarChar(191)
+  sessionKey  String?       @db.VarChar(120)
+  beforeJson  Json?
+  afterJson   Json?
+  metaJson    Json?
+  createdAt   DateTime      @default(now())
+
+  @@index([actorStaffId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model AdminEvent {
+  id           String   @id @default(cuid())
+  name         String   @db.VarChar(80)
+  actorStaffId String?
+  actorUserId  String?
+  subjectUserId String?
+  accountId    String?
+  projectId    Int?
+  siteId       String?
+  origin       String?  @db.Text
+  sessionKey   String?  @db.VarChar(120)
+  planTier     String?  @db.VarChar(32)
+  environment  String?  @db.VarChar(40)
+  status       String?  @db.VarChar(40)
+  result       String?  @db.VarChar(40)
+  country      String?  @db.VarChar(8)
+  region       String?  @db.VarChar(80)
+  metaJson     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([name, createdAt])
+  @@index([accountId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([siteId, createdAt])
+  @@index([actorStaffId, createdAt])
+  @@index([subjectUserId, createdAt])
+  @@index([sessionKey, createdAt])
+}
+
+model AdminMetricRollup {
+  id          String            @id @default(cuid())
+  metric      String            @db.VarChar(80)
+  bucket      AdminMetricBucket
+  bucketStart DateTime
+  scopeKey    String            @db.VarChar(191)
+  value       Int               @default(0)
+  accountId   String?
+  projectId   Int?
+  siteId      String?
+  origin      String?           @db.Text
+  planTier    String?           @db.VarChar(32)
+  status      String?           @db.VarChar(40)
+  result      String?           @db.VarChar(40)
+  metaKey     String?           @db.VarChar(120)
+  metaJson    Json?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@unique([metric, bucket, bucketStart, scopeKey], name: "admin_metric_rollup_metric_bucket_scope")
+  @@index([bucket, bucketStart])
+  @@index([metric, bucket, bucketStart])
+  @@index([accountId, bucket, bucketStart])
+  @@index([projectId, bucket, bucketStart])
+  @@index([siteId, bucket, bucketStart])
+}
+
 model UsernameHistory {
   id             String   @id @default(cuid())
   userId         String
@@ -2933,6 +3074,41 @@ enum MemberRole {
   OWNER
   ADMIN
   MEMBER
+}
+
+enum StaffSystemRole {
+  OWNER
+  ADMIN
+  MEMBER
+  READ_ONLY
+}
+
+enum StaffStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+  DISABLED
+  ARCHIVED
+}
+
+enum StaffOnboardingStatus {
+  PENDING
+  READY
+  COMPLETED
+}
+
+enum StaffInviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+  CANCELED
+}
+
+enum AdminMetricBucket {
+  MINUTE_5
+  HOURLY
+  DAILY
 }
 
 enum WorkspaceInviteStatus {

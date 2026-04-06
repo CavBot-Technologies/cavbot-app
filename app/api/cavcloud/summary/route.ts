@@ -1,9 +1,14 @@
 import type { Prisma } from "@prisma/client";
 
 import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
+import {
+  findLatestEntitledSubscription,
+  isTrialSeatEntitled,
+  resolveEffectivePlanId as resolveEffectiveAccountPlanId,
+} from "@/lib/accountPlan.server";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
-import { getPlanLimits, resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
+import { getPlanLimits, type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -56,24 +61,19 @@ type AccountPlanShape = {
   trialEndsAt: Date | null;
 };
 
-function resolveEffectivePlanId(account: AccountPlanShape | null): PlanId {
-  const base = resolvePlanIdFromTier(String(account?.tier || "FREE"));
-  const trialEndsAtMs = account?.trialEndsAt ? new Date(account.trialEndsAt).getTime() : 0;
-  if (account?.trialSeatActive && Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now()) {
-    return "premium_plus";
-  }
-  return base;
-}
-
 function planLimitBytes(account: AccountPlanShape | null, planId: PlanId): number | null {
-  const trialEndsAtMs = account?.trialEndsAt ? new Date(account.trialEndsAt).getTime() : 0;
-  const trialActive = Boolean(account?.trialSeatActive) && Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now();
-  if (trialActive) return null;
+  if (isTrialSeatEntitled(account)) return null;
   return storageLimitBytesForPlan(planId);
 }
 
-function degradedSummaryPayload(account: AccountPlanShape | null = null) {
-  const planId = resolveEffectivePlanId(account);
+function degradedSummaryPayload(
+  account: AccountPlanShape | null = null,
+  subscription: { tier?: unknown; status?: unknown; currentPeriodEnd?: Date | null } | null = null,
+) {
+  const planId = resolveEffectiveAccountPlanId({
+    account,
+    subscription,
+  });
   const limitBytes = planLimitBytes(account, planId);
   return {
     ok: true,
@@ -99,24 +99,28 @@ async function buildDegradedSummaryResponse(req: Request) {
   requireAccountContext(sess);
   requireUser(sess);
 
-  const account = await prisma.account
-    .findUnique({
-      where: { id: String(sess.accountId || "") },
-      select: { tier: true, trialSeatActive: true, trialEndsAt: true },
-    })
-    .catch((error) => {
-      if (
-        isSchemaMismatchError(error, {
-          tables: ["Account"],
-          columns: ["trialSeatActive", "trialEndsAt", "tier"],
-        })
-      ) {
+  const accountId = String(sess.accountId || "");
+  const [account, entitledSubscription] = await Promise.all([
+    prisma.account
+      .findUnique({
+        where: { id: accountId },
+        select: { tier: true, trialSeatActive: true, trialEndsAt: true },
+      })
+      .catch((error) => {
+        if (
+          isSchemaMismatchError(error, {
+            tables: ["Account"],
+            columns: ["trialSeatActive", "trialEndsAt", "tier"],
+          })
+        ) {
+          return null;
+        }
         return null;
-      }
-      return null;
-    });
+      }),
+    findLatestEntitledSubscription(accountId),
+  ]);
 
-  return jsonNoStore(degradedSummaryPayload(account), 200);
+  return jsonNoStore(degradedSummaryPayload(account, entitledSubscription), 200);
 }
 
 export async function GET(req: Request) {
@@ -164,9 +168,11 @@ export async function GET(req: Request) {
         }
         throw error;
       });
+    const entitledSubscriptionPromise = findLatestEntitledSubscription(accountId);
 
-    const [account, folderCount, fileCount, imageCount, videoCount, bytesAgg] = await Promise.all([
+    const [account, entitledSubscription, folderCount, fileCount, imageCount, videoCount, bytesAgg] = await Promise.all([
       accountPromise,
+      entitledSubscriptionPromise,
       prisma.cavCloudFolder.count({
         where: { accountId, deletedAt: null, path: { not: "/" } },
       }),
@@ -187,7 +193,10 @@ export async function GET(req: Request) {
 
     const usedBig = bytesAgg._sum.bytes ?? BigInt(0);
     const usedBytes = toSafeNumber(usedBig);
-    const planId = resolveEffectivePlanId(account);
+    const planId = resolveEffectiveAccountPlanId({
+      account,
+      subscription: entitledSubscription,
+    });
     const limitBytes = planLimitBytes(account, planId);
     const remainingBytes = limitBytes == null ? null : Math.max(0, limitBytes - usedBytes);
     const otherCount = Math.max(0, fileCount - imageCount - videoCount);

@@ -390,6 +390,25 @@ test("step_up_required risk decision can still be fulfilled with a valid challen
   assert.equal(solved.ok, true);
 });
 
+test("login risk escalates into step up after three failed attempts on the same staff session", () => {
+  __resetCavbotVerifyForTests();
+  const req = makeRequest("sess_hq_login");
+
+  for (let i = 0; i < 3; i += 1) {
+    recordVerifyActionFailure(req, { actionType: "login", sessionIdHint: "sess_hq_login" });
+  }
+
+  const risk = evaluateVerifyRisk(req, {
+    actionType: "login",
+    route: "/sign-in",
+    sessionIdHint: "sess_hq_login",
+    mutate: false,
+  });
+
+  assert.equal(risk.decision, "step_up_required");
+  assert.equal(risk.challengeRequired, true);
+});
+
 test("OTP fallback can issue verification grants", async () => {
   __resetCavbotVerifyForTests();
   const req = makeRequest("sess_otp");
@@ -421,15 +440,24 @@ test("OTP fallback can issue verification grants", async () => {
 });
 
 test("modal source keeps verify entrypoint, shape-rendering, and no click-jank hooks", () => {
-  const authSource = read("app/auth/page.tsx");
+  const authSource = read("app/auth/AuthPageClient.tsx");
   const recoverySource = read("app/users/recovery/page.tsx");
   const teamSource = read("app/settings/sections/TeamClient.tsx");
   const modalSource = read("components/CavBotVerifyModal.tsx");
+  const adminSignInSource = read("app/admin-internal/sign-in/AdminSignInClient.tsx");
+  const adminForgotSource = read("app/admin-internal/forgot-staff-id/page.tsx");
+  const adminAuthHeroSource = read("components/admin/AdminAuthHero.tsx");
   const glyphSource = read("lib/cavbotVerify/wordmarkGlyphs.ts");
 
   assert.equal(authSource.includes("CavBotVerifyModal"), true);
   assert.equal(recoverySource.includes("CavBotVerifyModal"), true);
   assert.equal(teamSource.includes("CavBotVerifyModal"), true);
+  assert.equal(adminSignInSource.includes("AdminAuthHero"), true);
+  assert.equal(adminForgotSource.includes("AdminAuthHero"), true);
+  assert.equal(adminSignInSource.includes('brandTitle="CavBot HQ"'), true);
+  assert.equal(adminSignInSource.includes("x-cavbot-verify-grant"), true);
+  assert.equal(adminSignInSource.includes("x-cavbot-verify-session"), true);
+  assert.equal(adminAuthHeroSource.includes("hq-authVerifyShieldIcon"), true);
 
   assert.equal(modalSource.includes("Use email code instead"), true);
   assert.equal(modalSource.includes("window.addEventListener(\"click\""), false);

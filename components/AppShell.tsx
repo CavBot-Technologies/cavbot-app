@@ -2,14 +2,15 @@
 "use client";
 
 
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { CavPadDock } from "./CavPad";
 import type { CavPadSite } from "./CavPad";
 import { CavGuardModal } from "./CavGuardModal";
 import { CavBotVerifyModal } from "./CavBotVerifyModal";
+import { OperatorIdRevealModal } from "@/components/notifications/OperatorIdRevealModal";
 import CavAiCenterLauncher, { type AiCenterSurface } from "@/components/cavai/CavAiCenterLauncher";
 import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import { LockIcon } from "@/components/LockIcon";
@@ -21,13 +22,21 @@ import {
   traceRenderCount,
 } from "@/lib/dev/routePerf";
 import {
+  formatNotificationExpiry,
+  NotificationActionMeta,
   NotificationFilter,
+  NotificationJoinRole,
   NotificationRaw,
   NotificationRow,
   NOTIFICATION_FILTERS,
   filterNotifications,
   isBackendOnlyNotificationRaw,
+  isOperatorIdReadyNotification,
+  isWorkspaceJoinApprovalAction,
   mapRawNotification,
+  normalizeNotificationActions,
+  normalizeNotificationJoinRole,
+  readNotificationShareMeta,
 } from "@/lib/notifications";
 import { buildCavGuardDecision } from "@/src/lib/cavguard/cavGuard.registry";
 import { CAV_GUARD_DECISION_EVENT, emitGuardDecisionFromPayload, readGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
@@ -35,6 +44,12 @@ import { normalizeGuardReturnPath } from "@/src/lib/cavguard/cavGuard.return";
 import type { CavGuardDecision } from "@/src/lib/cavguard/cavGuard.types";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
+
+const loadCavPadDock = () => import("./CavPad").then((mod) => mod.CavPadDock);
+const CavPadDock = dynamic(loadCavPadDock, {
+  ssr: false,
+  loading: () => null,
+});
 
 type WindowWithGlobals = Window & {
   __CB_NOTIF_SETTINGS__?: Record<string, unknown> | null;
@@ -243,17 +258,6 @@ function deriveAccountInitials(fullName?: string | null, username?: string | nul
   return "C";
 }
 
-function profileToneToAccentColor(tone: string): string {
-  const value = String(tone || "").trim().toLowerCase();
-  if (value === "violet") return "#8b5cff";
-  if (value === "blue") return "#4da3ff";
-  if (value === "white") return "#f7fbff";
-  if (value === "navy") return "#9fb6ff";
-  if (value === "transparent") return "#f7fbff";
-  return "#b9c85a";
-}
-
-
 function readInitials(): string {
   try {
     const v = (globalThis.__cbLocalStore.getItem("cb_account_initials") || "").trim();
@@ -426,120 +430,7 @@ async function apiJSON<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-type NotificationActionMeta = {
-  key: string;
-  label: string;
-  href: string;
-  method: "GET" | "POST" | "PATCH" | "DELETE";
-  body?: Record<string, unknown> | null;
-};
-
-type NotificationJoinRole = "member" | "admin";
-
-type NotificationShareMeta = {
-  permissionLabel: string | null;
-  expiresAtIso: string | null;
-};
-
 type VerifyActionType = "signup" | "login" | "reset" | "invite";
-
-function normalizeNotificationActions(meta: Record<string, unknown> | null | undefined): NotificationActionMeta[] {
-  if (!meta || typeof meta !== "object") return [];
-  const actionsRaw = meta.actions;
-  if (!actionsRaw || typeof actionsRaw !== "object" || Array.isArray(actionsRaw)) return [];
-
-  const actions = actionsRaw as Record<string, unknown>;
-  const out: NotificationActionMeta[] = [];
-
-  for (const [rawKey, row] of Object.entries(actions)) {
-    const key = String(rawKey || "").trim();
-    if (!key) continue;
-    if (!row || typeof row !== "object" || Array.isArray(row)) continue;
-    const parsed = row as Record<string, unknown>;
-    const href = String(parsed.href || "").trim();
-    if (!href) continue;
-
-    const label = String(parsed.label || "").trim();
-    const methodRaw = String(parsed.method || "GET").trim().toUpperCase();
-    const method = methodRaw === "POST" || methodRaw === "PATCH" || methodRaw === "DELETE"
-      ? methodRaw
-      : "GET";
-    const body = parsed.body && typeof parsed.body === "object" && !Array.isArray(parsed.body)
-      ? (parsed.body as Record<string, unknown>)
-      : null;
-
-    out.push({
-      key,
-      label: label || (
-        key === "saveToCavCloud"
-          ? "Save to CavCloud"
-          : key === "openInCavCode"
-            ? "Open in CavCode"
-            : key === "decline"
-              ? "Decline"
-              : key === "accept"
-                ? "Accept"
-                : key === "approve"
-                  ? "Approve"
-                  : key === "deny"
-                    ? "Deny"
-                    : key === "requestAccess"
-                      ? "Request access"
-                      : "Open"
-      ),
-      href,
-      method,
-      body,
-    });
-  }
-
-  return out;
-}
-
-function normalizeNotificationJoinRole(value: unknown): NotificationJoinRole {
-  return String(value || "").trim().toLowerCase() === "admin" ? "admin" : "member";
-}
-
-function isWorkspaceJoinApprovalAction(action: NotificationActionMeta): boolean {
-  if (!action || action.method === "GET") return false;
-  const key = String(action.key || "").trim().toLowerCase();
-  if (key !== "accept" && key !== "approve") return false;
-
-  const href = String(action.href || "").trim().toLowerCase();
-  if (!href) return false;
-  if (href === "/api/invites/respond" || href === "/api/access-requests/respond") return true;
-  if (href.includes("/api/workspaces/invites/") && href.endsWith("/accept")) return true;
-  if (href.includes("/api/workspaces/access-requests/") && href.endsWith("/approve")) return true;
-  return false;
-}
-
-function readNotificationShareMeta(meta: Record<string, unknown> | null | undefined): NotificationShareMeta {
-  if (!meta || typeof meta !== "object") {
-    return { permissionLabel: null, expiresAtIso: null };
-  }
-  const permissionLabelRaw = String(meta.permissionLabel || "").trim();
-  const permissionRaw = String(meta.permission || "").trim().toUpperCase();
-  const permissionLabel = permissionLabelRaw
-    || (permissionRaw === "EDIT" ? "Collaborate" : permissionRaw === "VIEW" ? "Read-only" : "");
-
-  const expiresAtIso = String(meta.expiresAtISO || "").trim();
-  return {
-    permissionLabel: permissionLabel || null,
-    expiresAtIso: expiresAtIso || null,
-  };
-}
-
-function formatNotificationExpiry(expiresAtIso: string | null | undefined): string {
-  const value = String(expiresAtIso || "").trim();
-  if (!value) return "";
-  const ts = Date.parse(value);
-  if (!Number.isFinite(ts)) return "";
-  const remainingMs = ts - Date.now();
-  if (remainingMs <= 0) return "Expired";
-  const days = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
-  if (days <= 1) return "Expires in 1 day";
-  return `Expires in ${days} days`;
-}
 
 export default function AppShell({
   title, // kept for compatibility (not shown in header)
@@ -639,6 +530,7 @@ export default function AppShell({
   const [notifActionBusyKey, setNotifActionBusyKey] = useState<string>("");
   const [notifActionErrorById, setNotifActionErrorById] = useState<Record<string, string>>({});
   const [notifActionRoleById, setNotifActionRoleById] = useState<Record<string, NotificationJoinRole>>({});
+  const [operatorIdRevealNotificationId, setOperatorIdRevealNotificationId] = useState<string | null>(null);
 
 
   const [notifToast, setNotifToast] = useState<{
@@ -666,6 +558,7 @@ export default function AppShell({
   const [memberRole, setMemberRole] = useState<MemberRole>(bootSnapshot?.memberRole || null);
   const [planResolved, setPlanResolved] = useState<boolean>(Boolean(bootSnapshot));
   const [authPlanVerified, setAuthPlanVerified] = useState(false);
+  const [sessionAuthenticated, setSessionAuthenticated] = useState(false);
   const [, setPlanResolveError] = useState<string>("");
 
 
@@ -711,6 +604,7 @@ export default function AppShell({
   const cavGuardRetryRef = useRef<(() => void | Promise<void>) | null>(null);
   const cavGuardRetryUsedRef = useRef(false);
   const cavGuardDismissHrefRef = useRef<string | null>(null);
+  const cavPadPendingOpenRef = useRef(false);
   const verifyResolverRef = useRef<((value: { ok: boolean }) => void) | null>(null);
   const [verifyRequest, setVerifyRequest] = useState<{
     actionType: VerifyActionType;
@@ -922,12 +816,24 @@ export default function AppShell({
   const publicProfileHref = useMemo(() => {
     return buildCanonicalPublicProfileHref(profileUsername);
   }, [profileUsername]);
-  const planStarColor = useMemo(() => profileToneToAccentColor(profileTone), [profileTone]);
   const profileMenuLabel = profilePublicEnabled === null
     ? "Profile"
     : profilePublicEnabled
       ? "Public Profile"
       : "Private Profile";
+  const profileDisplayName = useMemo(() => {
+    const full = String(profileFullName || "").trim();
+    if (full) return full;
+    const handle = String(profileUsername || "").trim().replace(/^@+/, "");
+    return handle ? `@${handle}` : "CavBot Account";
+  }, [profileFullName, profileUsername]);
+  const profilePlanLabel = useMemo(() => {
+    if (trialActive && trialDaysLeft > 0) return "FREE TRIAL";
+    if (planTier === "PREMIUM_PLUS") return "PREMIUM+";
+    if (planTier === "PREMIUM") return "PREMIUM PLAN";
+    return "FREE TIER";
+  }, [planTier, trialActive, trialDaysLeft]);
+  const planMenuLabel = planTier === "PREMIUM_PLUS" ? "See Plans" : "Upgrade Plan";
 
 
   // On mount: kill any leftover params you DO NOT want
@@ -988,6 +894,8 @@ export default function AppShell({
   useEffect(() => {
     function onOpenCavPadFromPriority() {
       if (!(showCavPad && authPlanVerified && memberRole)) return;
+      cavPadPendingOpenRef.current = false;
+      void loadCavPadDock();
       setCavPadOpen(true);
     }
 
@@ -1390,6 +1298,7 @@ export default function AppShell({
       const data = await res.json().catch(() => ({}));
       if (signal?.aborted) return;
       setAuthPlanVerified(true);
+      setSessionAuthenticated(Boolean(res.ok && data?.authenticated));
 
       // Initials: full name (first two names) -> username first letter.
       const nextFullName = String(data?.user?.displayName || "").trim();
@@ -1463,6 +1372,7 @@ export default function AppShell({
     } catch {
       if (signal?.aborted) return;
       setAuthPlanVerified(false);
+      setSessionAuthenticated(false);
       const cached = readShellPlanSnapshot();
       if (cached) {
         setPlanTier(cached.planTier);
@@ -1596,22 +1506,75 @@ export default function AppShell({
   }
 
   const authenticatedWorkspaceUser = authPlanVerified && Boolean(memberRole);
-  const notificationsOwnerAllowed = authPlanVerified && memberRole === "OWNER";
-  const shouldMountCavPad = showCavPad && authenticatedWorkspaceUser;
+  const notificationsEnabled = authPlanVerified && sessionAuthenticated;
+  const shouldMountCavPad = showCavPad && authenticatedWorkspaceUser && cavPadOpen;
+
+  useEffect(() => {
+    if (!showCavPad || !authenticatedWorkspaceUser) return;
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    let idleId: number | null = null;
+    let timerId: number | null = null;
+
+    const warmCavPad = () => {
+      void loadCavPadDock();
+    };
+
+    if (typeof idleWindow.requestIdleCallback === "function") {
+      idleId = idleWindow.requestIdleCallback(() => {
+        warmCavPad();
+      }, { timeout: 1400 });
+    } else {
+      timerId = window.setTimeout(() => {
+        warmCavPad();
+      }, 900);
+    }
+
+    return () => {
+      if (idleId !== null && typeof idleWindow.cancelIdleCallback === "function") {
+        idleWindow.cancelIdleCallback(idleId);
+      }
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+      }
+    };
+  }, [authenticatedWorkspaceUser, showCavPad]);
+
+  function onCavPadClick() {
+    if (!showCavPad) return;
+    if (authenticatedWorkspaceUser) {
+      cavPadPendingOpenRef.current = false;
+      void loadCavPadDock();
+      setCavPadOpen(true);
+      return;
+    }
+    cavPadPendingOpenRef.current = true;
+    void refreshAuthAndPlan();
+  }
+
+  useEffect(() => {
+    if (!cavPadPendingOpenRef.current || !showCavPad || !authPlanVerified) return;
+    cavPadPendingOpenRef.current = false;
+    if (!memberRole) return;
+    void loadCavPadDock();
+    setCavPadOpen(true);
+  }, [authPlanVerified, memberRole, showCavPad]);
 
   function onNotificationsToggle() {
-    if (notificationsOwnerAllowed) {
+    if (notificationsEnabled) {
       setNotifOpen((v) => !v);
       return;
     }
-    openCavGuardByAction("NOTIFICATIONS_OWNER_ONLY");
+    openCavGuardByAction("AUTH_REQUIRED");
   }
 
   function onNotificationsViewAll(event: ReactMouseEvent<HTMLAnchorElement>) {
-    if (notificationsOwnerAllowed) return;
+    if (notificationsEnabled) return;
     event.preventDefault();
     setNotifOpen(false);
-    openCavGuardByAction("NOTIFICATIONS_OWNER_ONLY");
+    openCavGuardByAction("AUTH_REQUIRED");
   }
 
   function onArcadeClick(event: ReactMouseEvent<HTMLAnchorElement>) {
@@ -1668,64 +1631,25 @@ export default function AppShell({
     router.push("/settings?tab=account");
   }
 
+  function onOpenPlans() {
+    try {
+      setAccountOpen(false);
+      setNotifOpen(false);
+      setRangeOpen(false);
+    } catch {}
+    recordClickIntent(upgradeHref, "account-plan");
+    recordNavigationStart(upgradeHref, "router.push");
+    router.push(upgradeHref);
+  }
+
   useEffect(() => {
     if (!publicProfileHref) return;
     prefetchRoute(publicProfileHref);
   }, [prefetchRoute, publicProfileHref]);
+  useEffect(() => {
+    prefetchRoute(upgradeHref);
+  }, [prefetchRoute, upgradeHref]);
 
-
-  // ===== PLAN WIDGET COPY + CTA (PER YOUR RULES) =====
-  const planWidget = useMemo(() => {
-    if (trialActive && trialDaysLeft > 0) {
-      const days = clampInt(trialDaysLeft, 1, 365);
-      return {
-        kind: "TRIAL" as const,
-        kicker: "FREE TRIAL",
-        title: `Trial active · ${days} day${days === 1 ? "" : "s"} left`,
-        sub: "Explore Premium features before you upgrade. Your workspace stays protected throughout your trial.",
-        ctaText: "Upgrade Now ↗",
-        ctaHref: upgradeHref,
-        isLink: true,
-      };
-    }
-
-
-    if (planTier === "FREE") {
-      return {
-        kind: "FREE" as const,
-        kicker: "FREE TIER",
-        title: "Unlock PREMIUM",
-        sub: "Higher scan capacity, priority alerts, and advanced diagnostics.",
-        ctaText: "Upgrade Now ↗",
-        ctaHref: upgradeHref,
-        isLink: true,
-      };
-    }
-
-
-    if (planTier === "PREMIUM") {
-      return {
-        kind: "PREMIUM" as const,
-        kicker: "PREMIUM PLAN",
-        title: "Unlock PREMIUM+",
-        sub: "Upgrade for contrast + audit depth, trend intelligence, and full workspace diagnostics.",
-        ctaText: "Upgrade to PREMIUM+ ↗",
-        ctaHref: upgradeHref,
-        isLink: true,
-      };
-    }
-
-
-    return {
-      kind: "PREMIUM_PLUS" as const,
-      kicker: "PREMIUM+",
-      title: "Full Access",
-      sub: "Your workspace is running with maximum monitoring, advanced coverage, and complete intelligence.",
-      ctaText: "View Plans",
-      ctaHref: upgradeHref,
-      isLink: true,
-    };
-  }, [trialActive, trialDaysLeft, planTier, upgradeHref]);
 
   // ==========================
   // NOTIFICATIONS: list + mark read + fade + toast + polling
@@ -1733,7 +1657,7 @@ export default function AppShell({
 
 
   const loadNotifList = useCallback(async (opts?: { unreadOnly?: boolean }) => {
-    if (!notificationsOwnerAllowed) {
+    if (!notificationsEnabled) {
       setNotifItems([]);
       setNotifCount(0);
       return;
@@ -1759,11 +1683,11 @@ export default function AppShell({
     // keep bubble accurate while open (real-time feel)
     const unreadCount = visible.reduce((acc, x) => acc + (x.unread ? 1 : 0), 0);
     setNotifCount(unreadCount);
-  }, [notificationsOwnerAllowed]);
+  }, [notificationsEnabled]);
 
 
   async function markRead(ids: string[]) {
-    if (!notificationsOwnerAllowed) return;
+    if (!notificationsEnabled) return;
     if (!ids.length) return;
     await apiJSON<{ ok: true }>("/api/notifications", {
       method: "POST",
@@ -1811,13 +1735,18 @@ export default function AppShell({
     }
   }
 
+  async function openOperatorIdRevealFromNotif(n: NotifItem) {
+    await onClickNotif(n);
+    setOperatorIdRevealNotificationId(n.id);
+  }
+
   async function runNotifAction(
     n: NotifItem,
     action: NotificationActionMeta,
     role?: NotificationJoinRole | null,
   ) {
-    if (!notificationsOwnerAllowed) {
-      openCavGuardByAction("NOTIFICATIONS_OWNER_ONLY");
+    if (!notificationsEnabled) {
+      openCavGuardByAction("AUTH_REQUIRED");
       return;
     }
     const busyKey = `${n.id}:${action.key}`;
@@ -1915,20 +1844,20 @@ export default function AppShell({
   // load list when opening or when unread filter changes while open
   useEffect(() => {
     if (!notifOpen) return;
-    if (!notificationsOwnerAllowed) return;
+    if (!notificationsEnabled) return;
     loadNotifList({ unreadOnly: notifUnreadOnly }).catch(() => {});
-  }, [notifOpen, notifUnreadOnly, notificationsOwnerAllowed, loadNotifList]);
+  }, [notifOpen, notifUnreadOnly, notificationsEnabled, loadNotifList]);
 
   // Prime notifications in the background so the panel opens with content immediately.
   useEffect(() => {
-    if (!notificationsOwnerAllowed) return;
+    if (!notificationsEnabled) return;
     loadNotifList({ unreadOnly: false }).catch(() => {});
-  }, [notificationsOwnerAllowed, loadNotifList]);
+  }, [notificationsEnabled, loadNotifList]);
 
 
   // Poll unread count + incoming toast (only if count increases and dropdown is closed)
   useEffect(() => {
-    if (!notificationsOwnerAllowed) {
+    if (!notificationsEnabled) {
       lastUnreadRef.current = 0;
       setNotifCount(0);
       return;
@@ -2029,10 +1958,10 @@ export default function AppShell({
       window.clearInterval(t);
       if (notifToastTimer.current) window.clearTimeout(notifToastTimer.current);
     };
-  }, [notifOpen, notificationsOwnerAllowed]);
+  }, [notifOpen, notificationsEnabled]);
 
   useEffect(() => {
-    if (!notificationsOwnerAllowed) {
+    if (!notificationsEnabled) {
       setNotifItems([]);
       setNotifCount(0);
       return;
@@ -2086,7 +2015,7 @@ export default function AppShell({
       mounted = false;
       window.removeEventListener("cb:notifications:refresh", onRefreshEvent as EventListener);
     };
-  }, [notifOpen, notifUnreadOnly, notificationsOwnerAllowed]);
+  }, [notifOpen, notifUnreadOnly, notificationsEnabled]);
 
   // Hydration safety valve: keep shell purely client-rendered after mount.
   if (!clientMounted) {
@@ -2305,114 +2234,92 @@ export default function AppShell({
             </Link>
           </div>
 
-
-          <div className="cb-side-plan" aria-label="Plan">
-            {planWidget.kind === "PREMIUM_PLUS" ? (
-              <div className="cb-upgrade-card cb-upgrade-card-static" aria-label={planWidget.kicker}>
-                <div className="cb-upgrade-top">
-                  <span className="cb-upgrade-kicker">{planWidget.kicker}</span>
-                  <Link
-                    className="cb-upgrade-badge cb-upgrade-badge-link"
-                    href="/settings?tab=account#sx-theme-switcher"
-                    data-cb-route-intent="/settings?tab=account#sx-theme-switcher"
-                    data-cb-perf-source="sidebar-plan-theme"
-                    aria-label="Open theme color switcher"
-                    style={{ color: planStarColor }}
-                    onMouseEnter={() => prefetchRoute("/settings?tab=account")}
-                    onFocus={() => prefetchRoute("/settings?tab=account")}
-                    onPointerDown={() => prefetchRoute("/settings?tab=account")}
-                    onClick={() => setNavOpen(false)}
-                  >
-                    <IconPremiumPlusStar />
-                  </Link>
-                </div>
-
-                <div className="cb-upgrade-body">
-                  <div className="cb-upgrade-title">{planWidget.title}</div>
-                  <div className="cb-upgrade-sub">{planWidget.sub}</div>
-                </div>
-
-                <div className="cb-upgrade-actions">
-                  <Link
-                    className="cb-upgrade-btn"
-                    href={planWidget.ctaHref}
-                    data-cb-route-intent={planWidget.ctaHref}
-                    data-cb-perf-source="sidebar-plan"
-                    aria-label={planWidget.ctaText}
-                    onMouseEnter={() => prefetchRoute(planWidget.ctaHref)}
-                    onFocus={() => prefetchRoute(planWidget.ctaHref)}
-                    onPointerDown={() => prefetchRoute(planWidget.ctaHref)}
-                    onClick={() => setNavOpen(false)}
-                  >
-                    {planWidget.ctaText}
-                  </Link>
-                </div>
-              </div>
-            ) : planWidget.isLink ? (
-              <Link
-                className="cb-upgrade-card"
-                href={planWidget.ctaHref}
-                data-cb-route-intent={planWidget.ctaHref}
-                data-cb-perf-source="sidebar-plan"
-                aria-label={planWidget.kicker}
-                onMouseEnter={() => prefetchRoute(planWidget.ctaHref)}
-                onFocus={() => prefetchRoute(planWidget.ctaHref)}
-                onPointerDown={() => prefetchRoute(planWidget.ctaHref)}
-                onClick={() => setNavOpen(false)}
+          <div className="cb-side-plan" aria-label="Account">
+            <div className="cb-account-wrap cb-side-account-wrap" ref={accountWrapRef}>
+              <button
+                className="cb-side-account"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={accountOpen}
+                aria-label="Open account menu"
+                onClick={() => setAccountOpen((v) => !v)}
               >
-                <div className="cb-upgrade-top">
-                  <span className="cb-upgrade-kicker">{planWidget.kicker}</span>
-                  <span className="cb-upgrade-badge" aria-hidden="true">
+                <span
+                  className="cb-account-chip cb-side-account-chip"
+                  data-tone={profileTone || "lime"}
+                  aria-hidden="true"
+                  style={{
+                    background: profileAvatar
+                      ? "transparent"
+                      : profileTone === "transparent"
+                      ? "transparent"
+                      : profileTone === "violet"
+                      ? "rgba(139,92,255,0.22)"
+                      : profileTone === "blue"
+                      ? "rgba(78,168,255,0.22)"
+                      : profileTone === "white"
+                      ? "rgba(255,255,255,0.92)"
+                      : profileTone === "navy"
+                      ? "rgba(1,3,15,0.78)"
+                      : "rgba(185,200,90,0.92)",
+                    overflow: "hidden",
+                    display: "grid",
+                    placeItems: "center",
+                  }}
+                >
+                  {profileAvatar ? (
                     <Image
-                      src="/icons/app/spark-svgrepo-com.svg"
+                      src={profileAvatar}
                       alt=""
-                      width={18}
-                      height={18}
-                      className="cb-upgrade-badgeIcon"
-                      priority
+                      width={96}
+                      height={96}
+                      quality={60}
+                      unoptimized
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        display: "block",
+                      }}
                     />
-                  </span>
+                  ) : (
+                    <span className="cb-account-initials">{accountInitials}</span>
+                  )}
+                </span>
+
+                <span className="cb-side-account-meta">
+                  <span className="cb-side-account-name">{profileDisplayName}</span>
+                  <span className="cb-side-account-plan">{profilePlanLabel}</span>
+                </span>
+
+                <span className="cb-side-account-spark" aria-hidden="true">
+                  <Image
+                    src="/icons/app/spark-svgrepo-com.svg"
+                    alt=""
+                    width={18}
+                    height={18}
+                    className="cb-upgrade-badgeIcon"
+                    priority
+                  />
+                </span>
+              </button>
+
+              {accountOpen && (
+                <div className="cb-menu cb-menu-right cb-account-menu" role="menu" aria-label="Account">
+                  <button className="cb-menu-item" type="button" role="menuitem" onClick={onOpenProfile}>
+                    {profileMenuLabel}
+                  </button>
+
+                  <button className="cb-menu-item" type="button" role="menuitem" onClick={onOpenPlans}>
+                    {planMenuLabel}
+                  </button>
+
+                  <button className="cb-menu-item danger" type="button" role="menuitem" onClick={onLogout}>
+                    Log out
+                  </button>
                 </div>
-
-
-                <div className="cb-upgrade-body">
-                  <div className="cb-upgrade-title">{planWidget.title}</div>
-                  <div className="cb-upgrade-sub">{planWidget.sub}</div>
-                </div>
-
-
-                <div className="cb-upgrade-actions">
-                  <span className="cb-upgrade-btn">{planWidget.ctaText}</span>
-                </div>
-              </Link>
-            ) : (
-              <div className="cb-upgrade-card" aria-label={planWidget.kicker}>
-                <div className="cb-upgrade-top">
-                  <span className="cb-upgrade-kicker">{planWidget.kicker}</span>
-                  <span className="cb-upgrade-badge" aria-hidden="true">
-                    <Image
-                      src="/icons/app/spark-svgrepo-com.svg"
-                      alt=""
-                      width={18}
-                      height={18}
-                      className="cb-upgrade-badgeIcon"
-                      priority
-                    />
-                  </span>
-                </div>
-
-
-                <div className="cb-upgrade-body">
-                  <div className="cb-upgrade-title">{planWidget.title}</div>
-                  <div className="cb-upgrade-sub">{planWidget.sub}</div>
-                </div>
-
-
-                <div className="cb-upgrade-actions">
-                  <span className="cb-upgrade-active">{planWidget.ctaText}</span>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </aside>
@@ -2473,12 +2380,24 @@ export default function AppShell({
                 />
               ) : null}
 
-              {shouldMountCavPad ? (
+              {showCavPad ? (
                 <button
                   className="cb-icon-btn-top"
                   type="button"
                   aria-label="Open CavPad"
-                  onClick={() => setCavPadOpen(true)}
+                  onClick={onCavPadClick}
+                  onMouseEnter={() => {
+                    void loadCavPadDock();
+                  }}
+                  onFocus={() => {
+                    void loadCavPadDock();
+                  }}
+                  onPointerDown={() => {
+                    void loadCavPadDock();
+                  }}
+                  onTouchStart={() => {
+                    void loadCavPadDock();
+                  }}
                   title="CavPad"
                 >
                   <IconCavPad />
@@ -2566,6 +2485,7 @@ export default function AppShell({
                 ? n.meta
                 : null;
               const actions = normalizeNotificationActions(meta);
+              const canRevealOperatorId = isOperatorIdReadyNotification({ kind: n.kind, meta });
               const openAction = actions.find((action) => action.key === "open") || null;
               const shareMeta = readNotificationShareMeta(meta);
               const expiryLabel = formatNotificationExpiry(shareMeta.expiresAtIso);
@@ -2586,6 +2506,10 @@ export default function AppShell({
                     type="button"
                     className="cb-notif-link cb-notif-link-btn cb-notif-itemPrimary"
                     onClick={() => {
+                      if (canRevealOperatorId) {
+                        void openOperatorIdRevealFromNotif(n);
+                        return;
+                      }
                       if (openAction) {
                         void runNotifAction(n, openAction);
                         return;
@@ -2621,6 +2545,22 @@ export default function AppShell({
                       ›
                     </div>
                   </button>
+
+                  {canRevealOperatorId ? (
+                    <div className="cb-notif-actions" role="group" aria-label="Staff ID notification actions">
+                      <button
+                        type="button"
+                        className="cb-notif-inlineLink"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void openOperatorIdRevealFromNotif(n);
+                        }}
+                      >
+                        View staff ID
+                      </button>
+                    </div>
+                  ) : null}
 
                   {actions.length ? (
                     <div className="cb-notif-actions" role="group" aria-label="Notification actions">
@@ -2700,76 +2640,12 @@ export default function AppShell({
   ) : null}
 </div>
 
+            <OperatorIdRevealModal
+              open={Boolean(operatorIdRevealNotificationId)}
+              notificationId={operatorIdRevealNotificationId}
+              onClose={() => setOperatorIdRevealNotificationId(null)}
+            />
 
-{/* ACCOUNT */}
-<div className="cb-account-wrap" ref={accountWrapRef}>
-                <button
-                  className="cb-account"
-                  type="button"
-                  aria-haspopup="menu"
-                  aria-expanded={accountOpen}
-                  onClick={() => setAccountOpen((v) => !v)}
-                  title="Account"
-                >
-                <span
-                  className="cb-account-chip"
-                  data-tone={profileTone || "lime"}
-                  aria-hidden="true"
-                  style={{
-                      background: profileAvatar
-                        ? "transparent"
-                        : profileTone === "transparent"
-                        ? "transparent"
-                        : profileTone === "violet"
-                        ? "rgba(139,92,255,0.22)"
-                        : profileTone === "blue"
-                        ? "rgba(78,168,255,0.22)"
-                        : profileTone === "white"
-                        ? "rgba(255,255,255,0.92)"
-                        : profileTone === "navy"
-                        ? "rgba(1,3,15,0.78)"
-                        : "rgba(185,200,90,0.92)",
-                      overflow: "hidden",
-                      display: "grid",
-                      placeItems: "center",
-                    }}
-                  >
-                    {profileAvatar ? (
-                      <Image
-                        src={profileAvatar}
-                        alt=""
-                        width={96}
-                        height={96}
-                        quality={60}
-                        unoptimized
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                          display: "block",
-                        }}
-                      />
-                    ) : (
-                      <span className="cb-account-initials">{accountInitials}</span>
-                    )}
-                  </span>
-
-
-                </button>
-
-
-                {accountOpen && (
-                  <div className="cb-menu cb-menu-right" role="menu" aria-label="Account">
-                    <button className="cb-menu-item" type="button" role="menuitem" onClick={onOpenProfile}>
-                      {profileMenuLabel}
-                    </button>
-
-                    <button className="cb-menu-item danger" type="button" role="menuitem" onClick={onLogout}>
-                      Log out
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
           </header>
@@ -2883,22 +2759,5 @@ function IconArcadeCabinet() {
       priority
       unoptimized
     />
-  );
-}
-
-function IconPremiumPlusStar() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      className="cb-upgrade-badgeStar"
-      aria-hidden="true"
-    >
-      <path
-        fill="currentColor"
-        d="M12 2.4l2.9 5.87 6.48.94-4.69 4.57 1.11 6.45L12 17.2 6.2 20.23l1.11-6.45L2.62 9.21l6.48-.94L12 2.4z"
-      />
-    </svg>
   );
 }

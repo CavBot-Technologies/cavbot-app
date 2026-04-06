@@ -10,7 +10,6 @@ import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } fro
 
 import "../../components/CavBotLoadingScreen.css";
 import CavBotLoadingScreen from "../../components/CavBotLoadingScreen";
-import CavMobileMenu from "../../components/CavMobileMenu";
 
 type DeviceMode = "desktop" | "tablet" | "phone";
 type SourceMode = "cavcloud" | "cavsafe";
@@ -569,22 +568,6 @@ export default function LivePage() {
 
   const [booting, setBooting] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-
-  const diag = useMemo(() => {
-    const issues: string[] = [];
-    const hasHtml = Boolean(html.trim());
-    if (hasHtml) {
-      if (!/<html[\s>]/i.test(html) && !/<!doctype/i.test(html)) {
-        issues.push("No <html> or <!doctype> detected — rendering will be wrapped.");
-      }
-      if (!/<body[\s>]/i.test(html)) {
-        issues.push("No <body> tag detected — rendering will be wrapped.");
-      }
-    }
-    const statusLabel = !hasHtml ? "No HTML loaded" : issues.length ? "Needs attention" : "Posture clean";
-    return { issues, statusLabel };
-  }, [html]);
-  const hasHtmlInput = Boolean(html.trim());
   const hasManualPreview = Boolean(html.trim() || css.trim() || js.trim());
   const isPreviewLive = mountMode ? mountBootstrapped : hasManualPreview;
   const accountInitials = useMemo(
@@ -1706,6 +1689,105 @@ export default function LivePage() {
     if (strict.length) return strict;
     return cavAllFiles.filter((f) => !isHtmlNode(f));
   }, [cavAllFiles]);
+  const renderDeviceTabs = (className = "") => (
+    <div className={`ccv-seg ccv-deviceSeg ${className}`.trim()} role="tablist" aria-label="Device">
+      <button
+        className={`ccv-segBtn ccv-deviceSegBtn ${device === "desktop" ? "is-on" : ""}`}
+        onClick={() => setDevice("desktop")}
+        role="tab"
+        aria-selected={device === "desktop"}
+        aria-label="Desktop"
+        title="Desktop"
+      >
+        <Image
+          src="/icons/app/cavcode-viewer/desktop-svgrepo-com.svg"
+          alt=""
+          width={18}
+          height={18}
+          className="ccv-deviceSegIcon"
+        />
+      </button>
+      <button
+        className={`ccv-segBtn ccv-deviceSegBtn ${device === "tablet" ? "is-on" : ""}`}
+        onClick={() => setDevice("tablet")}
+        role="tab"
+        aria-selected={device === "tablet"}
+        aria-label="Tablet"
+        title="Tablet"
+      >
+        <Image
+          src="/icons/app/cavcode-viewer/tablet-svgrepo-com.svg"
+          alt=""
+          width={18}
+          height={18}
+          className="ccv-deviceSegIcon"
+        />
+      </button>
+      <button
+        className={`ccv-segBtn ccv-deviceSegBtn ${device === "phone" ? "is-on" : ""}`}
+        onClick={() => setDevice("phone")}
+        role="tab"
+        aria-selected={device === "phone"}
+        aria-label="Phone"
+        title="Phone"
+      >
+        <Image
+          src="/icons/app/cavcode-viewer/phone-svgrepo-com.svg"
+          alt=""
+          width={18}
+          height={18}
+          className="ccv-deviceSegIcon"
+        />
+      </button>
+    </div>
+  );
+  const renderPreviewToggleControls = () => (
+    <div className="ccv-controlStack">
+      <label className="ccv-toggle ccv-toggleRow">
+        <input
+          type="checkbox"
+          checked={disableJs}
+          onChange={(e) => setDisableJs(e.currentTarget.checked)}
+        />
+        <span className="ccv-toggleTextWrap">
+          <span className="ccv-toggleLabel">Disable JS</span>
+          <span className="ccv-toggleSub">Run preview without script execution.</span>
+        </span>
+        <span className="ccv-toggleTrack">
+          <span className="ccv-toggleThumb" />
+        </span>
+      </label>
+
+      <label className="ccv-toggle ccv-toggleRow">
+        <input
+          type="checkbox"
+          checked={blockExternal}
+          onChange={(e) => setBlockExternal(e.currentTarget.checked)}
+        />
+        <span className="ccv-toggleTextWrap">
+          <span className="ccv-toggleLabel">Block external requests</span>
+          <span className="ccv-toggleSub">Replace external assets with safe placeholders.</span>
+        </span>
+        <span className="ccv-toggleTrack">
+          <span className="ccv-toggleThumb" />
+        </span>
+      </label>
+    </div>
+  );
+  const renderPreviewMeta = (className = "") => (
+    <div className={`ccv-meta ${className}`.trim()}>
+      <div className="ccv-metaCard">
+        <span>Last update</span>
+        <b>{lastUpdated}</b>
+      </div>
+      <div className="ccv-metaCard">
+        <span>Status</span>
+        <b className={isPreviewLive ? "ok" : "muted"}>
+          {mountMode ? (mountBootstrapped ? "Mounted live" : "Mounting") : (hasManualPreview ? "Live" : "No preview")}
+        </b>
+      </div>
+    </div>
+  );
 
   if (booting) {
     return (
@@ -1718,15 +1800,14 @@ export default function LivePage() {
       {/* Header */}
       <header className="ccv-top" role="banner">
         <div className="ccv-topLeft">
-          <CavMobileMenu />
           <div className="ccv-titlebar" aria-label="CavCode Viewer">
             <Link className="ccv-markBadgeLink" href="/" aria-label="Back to Command Center">
               <span className="ccv-markBadge">
                 <Image
                   src="/logo/cavbot-logomark.svg"
                   alt=""
-                  width={30}
-                  height={30}
+                  width={24}
+                  height={24}
                   className="ccv-markBadgeImg"
                   priority
                   fetchPriority="high"
@@ -1739,56 +1820,7 @@ export default function LivePage() {
         </div>
 
         <div className="ccv-topRight" aria-label="Viewer controls">
-          <div className="ccv-seg" role="tablist" aria-label="Device">
-            <button
-              className={`ccv-segBtn ccv-deviceSegBtn ${device === "desktop" ? "is-on" : ""}`}
-              onClick={() => setDevice("desktop")}
-              role="tab"
-              aria-selected={device === "desktop"}
-              aria-label="Desktop"
-              title="Desktop"
-            >
-              <Image
-                src="/icons/app/cavcode-viewer/desktop-svgrepo-com.svg"
-                alt=""
-                width={18}
-                height={18}
-                className="ccv-deviceSegIcon"
-              />
-            </button>
-            <button
-              className={`ccv-segBtn ccv-deviceSegBtn ${device === "tablet" ? "is-on" : ""}`}
-              onClick={() => setDevice("tablet")}
-              role="tab"
-              aria-selected={device === "tablet"}
-              aria-label="Tablet"
-              title="Tablet"
-            >
-              <Image
-                src="/icons/app/cavcode-viewer/tablet-svgrepo-com.svg"
-                alt=""
-                width={18}
-                height={18}
-                className="ccv-deviceSegIcon"
-              />
-            </button>
-            <button
-              className={`ccv-segBtn ccv-deviceSegBtn ${device === "phone" ? "is-on" : ""}`}
-              onClick={() => setDevice("phone")}
-              role="tab"
-              aria-selected={device === "phone"}
-              aria-label="Phone"
-              title="Phone"
-            >
-              <Image
-                src="/icons/app/cavcode-viewer/phone-svgrepo-com.svg"
-                alt=""
-                width={18}
-                height={18}
-                className="ccv-deviceSegIcon"
-              />
-            </button>
-          </div>
+          <div className="ccv-deviceRailDesktop">{renderDeviceTabs()}</div>
 
           <button className="ccv-iconbtn" onClick={refreshPreview} title="Refresh" aria-label="Refresh">
             <Image
@@ -1871,6 +1903,10 @@ export default function LivePage() {
           </div>
         </div>
       </header>
+
+      <div className="ccv-mobileDeviceDock" aria-label="Mobile device controls">
+        {renderDeviceTabs("ccv-deviceRailMobile")}
+      </div>
 
       {/* Body */}
       <section className="ccv-body" aria-label="Viewer">
@@ -2075,14 +2111,20 @@ export default function LivePage() {
                 />
 
                 <div className="ccv-drop">
-                  <div className="ccv-dropTitle">Drag &amp; drop anywhere</div>
-                  <div className="ccv-dropSub">Drop a project folder or multiple files to render instantly.</div>
+                  <div className="ccv-dropTitle">
+                    <span className="ccv-dropCopyDesktop">Drag &amp; drop anywhere</span>
+                    <span className="ccv-dropCopyMobile">Choose files from your device</span>
+                  </div>
+                  <div className="ccv-dropSub">
+                    <span className="ccv-dropCopyDesktop">Drop a project folder or multiple files to render instantly.</span>
+                    <span className="ccv-dropCopyMobile">Use the button below to load HTML, CSS, or JS files on mobile.</span>
+                  </div>
                 </div>
 
                 <div className="ccv-uploadSpacer" aria-hidden="true" />
 
-                <div className="ccv-uploadViewRow">
-                  <button className="ccv-btn" onClick={() => fileInputRef.current?.click()}>
+                <div className="ccv-uploadViewRow ccv-uploadDesktopActionRow">
+                  <button className="ccv-btn ccv-uploadDesktopAction" onClick={() => fileInputRef.current?.click()}>
                     Choose File
                   </button>
                 </div>
@@ -2142,59 +2184,9 @@ export default function LivePage() {
               </div>
             </div>
 
-            <div className="ccv-block ccv-elegantBlock">
-              <div className={hasHtmlInput ? "ccv-diag" : "ccv-diag is-empty"}>
-                <div className="ccv-diagHead">
-                  <div className="ccv-diagLabel">Markup posture</div>
-                  <div className={`ccv-diagStatus ${diag.issues.length ? "bad" : hasHtmlInput ? "good" : "muted"}`}>
-                    {diag.statusLabel}
-                  </div>
-                </div>
-                {diag.issues.length ? (
-                  <ul className="ccv-diagList">
-                    {diag.issues.map((i, idx) => (
-                      <li key={`${i}-${idx}`}>{i}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className={hasHtmlInput ? "ccv-diagSub" : "ccv-diagSub is-empty"}>
-                    {hasHtmlInput ? "No issues detected. Ready to render." : "Paste or load HTML to begin."}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="ccv-block ccv-elegantBlock">
-              <div className="ccv-controlStack">
-                <label className="ccv-toggle ccv-toggleRow">
-                  <input
-                    type="checkbox"
-                    checked={disableJs}
-                    onChange={(e) => setDisableJs(e.currentTarget.checked)}
-                  />
-                  <span className="ccv-toggleTextWrap">
-                    <span className="ccv-toggleLabel">Disable JS</span>
-                    <span className="ccv-toggleSub">Run preview without script execution.</span>
-                  </span>
-                  <span className="ccv-toggleTrack">
-                    <span className="ccv-toggleThumb" />
-                  </span>
-                </label>
-
-                <label className="ccv-toggle ccv-toggleRow">
-                  <input
-                    type="checkbox"
-                    checked={blockExternal}
-                    onChange={(e) => setBlockExternal(e.currentTarget.checked)}
-                  />
-                  <span className="ccv-toggleTextWrap">
-                    <span className="ccv-toggleLabel">Block external requests</span>
-                    <span className="ccv-toggleSub">Replace external assets with safe placeholders.</span>
-                  </span>
-                  <span className="ccv-toggleTrack">
-                    <span className="ccv-toggleThumb" />
-                  </span>
-                </label>
+            <div className="ccv-block ccv-elegantBlock ccv-previewSupportDesktopBlock ccv-blockNoDivider">
+              <div className="ccv-previewSupportDesktop">
+                {renderPreviewToggleControls()}
               </div>
             </div>
 
@@ -2210,18 +2202,7 @@ export default function LivePage() {
               </div>
             ) : null}
 
-            <div className="ccv-meta">
-              <div className="ccv-metaCard">
-                <span>Last update</span>
-                <b>{lastUpdated}</b>
-              </div>
-              <div className="ccv-metaCard">
-                <span>Status</span>
-                <b className={isPreviewLive ? "ok" : "muted"}>
-                  {mountMode ? (mountBootstrapped ? "Mounted live" : "Mounting") : (hasManualPreview ? "Live" : "No preview")}
-                </b>
-              </div>
-            </div>
+            {renderPreviewMeta("ccv-previewMetaDesktop")}
           </div>
         </aside>
 
@@ -2274,6 +2255,12 @@ export default function LivePage() {
                 }
               />
             )}
+          </div>
+          <div className="ccv-mobilePreviewSupport" aria-label="Preview support">
+            <div className="ccv-mobilePreviewSupportCard">
+              {renderPreviewToggleControls()}
+            </div>
+            {renderPreviewMeta("ccv-metaMobile")}
           </div>
         </section>
       </section>

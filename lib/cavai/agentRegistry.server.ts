@@ -114,6 +114,49 @@ type RawRegistryRow = {
 };
 
 let tableReady = false;
+let tableReadyPromise: Promise<void> | null = null;
+const registrySyncFingerprintByScope = new Map<string, string>();
+const registrySyncPromiseByScope = new Map<string, Promise<void>>();
+const AGENT_REGISTRY_CATALOG_FINGERPRINT = AGENT_CATALOG
+  .map((entry) => [
+    entry.id,
+    entry.planTier,
+    entry.installable ? "1" : "0",
+    entry.visibility,
+    entry.displayOrder,
+  ].join(":"))
+  .join("|");
+const REQUIRED_AGENT_REGISTRY_COLUMNS = [
+  "account_id",
+  "user_id",
+  "id",
+  "name",
+  "slug",
+  "summary",
+  "icon_src",
+  "action_key",
+  "cavcode_action",
+  "center_action",
+  "category",
+  "bank",
+  "visibility",
+  "plan_tier",
+  "installable",
+  "available_to_modes",
+  "hidden_system",
+  "locked",
+  "shared_with_caven",
+  "shared_with_cavai",
+  "shared_with_companion",
+  "support_for_caven",
+  "surface",
+  "mode",
+  "default_installed",
+  "installed_state",
+  "display_order",
+  "created_at",
+  "updated_at",
+] as const;
 
 function s(value: unknown): string {
   return String(value ?? "").trim();
@@ -153,8 +196,69 @@ function lockedForPlan(entry: AgentCatalogEntry, accountPlanTier: AgentPlanTier)
   return !isAgentPlanEligible(entry.planTier, accountPlanTier);
 }
 
+function rowMatchesCatalogEntry(
+  row: RawRegistryRow | undefined,
+  entry: AgentCatalogEntry,
+  accountPlanTier: AgentPlanTier,
+): boolean {
+  if (!row) return false;
+  const expectedModes = [...entry.availableToModes].map((mode) => s(mode).toLowerCase()).filter(Boolean);
+  const actualModes = normalizeModes(row.available_to_modes);
+  return s(row.name) === entry.name
+    && s(row.slug) === entry.slug
+    && s(row.summary) === (entry.summary || "")
+    && s(row.icon_src) === (entry.iconSrc || "")
+    && s(row.action_key) === (entry.actionKey || "")
+    && s(row.cavcode_action) === (entry.cavcodeAction || "")
+    && s(row.center_action) === (entry.centerAction || "")
+    && s(row.category) === entry.category
+    && s(row.bank) === entry.bank
+    && s(row.visibility) === entry.visibility
+    && normalizeAgentPlanTier(row.plan_tier) === entry.planTier
+    && bool(row.installable) === entry.installable
+    && actualModes.length === expectedModes.length
+    && actualModes.every((mode, index) => mode === expectedModes[index])
+    && bool(row.hidden_system) === entry.hiddenSystem
+    && bool(row.locked) === lockedForPlan(entry, accountPlanTier)
+    && bool(row.shared_with_caven) === entry.sharedWithCaven
+    && bool(row.shared_with_cavai) === entry.sharedWithCavai
+    && bool(row.shared_with_companion) === entry.sharedWithCompanion
+    && bool(row.support_for_caven) === entry.supportForCaven
+    && s(row.surface) === entry.surface
+    && s(row.mode) === entry.mode
+    && bool(row.default_installed) === entry.defaultInstalled
+    && Math.max(0, Math.trunc(Number(row.display_order) || 0)) === entry.displayOrder;
+}
+
+async function agentRegistrySchemaReady(): Promise<boolean> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ column_name: string | null }>>(
+      Prisma.sql`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'agent_registry'
+      `,
+    );
+    if (!rows.length) return false;
+    const existing = new Set(rows.map((row) => s(row.column_name)));
+    return REQUIRED_AGENT_REGISTRY_COLUMNS.every((columnName) => existing.has(columnName));
+  } catch {
+    return false;
+  }
+}
+
 async function ensureAgentRegistryTable() {
   if (tableReady) return;
+  if (tableReadyPromise) {
+    await tableReadyPromise;
+    return;
+  }
+  tableReadyPromise = (async () => {
+  if (await agentRegistrySchemaReady()) {
+    tableReady = true;
+    return;
+  }
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS agent_registry (
@@ -297,6 +401,11 @@ async function ensureAgentRegistryTable() {
   `);
 
   tableReady = true;
+  })().catch((error) => {
+    tableReadyPromise = null;
+    throw error;
+  });
+  await tableReadyPromise;
 }
 
 async function readRegistryRows(args: { accountId: string; userId: string }): Promise<RawRegistryRow[]> {
@@ -381,13 +490,38 @@ export async function seedAndSyncAgentRegistry(args: {
   const accountId = s(args.accountId);
   const userId = s(args.userId);
   if (!accountId || !userId) return;
+  const scopeKey = `${accountId}:${userId}`;
+  const normalizedLegacyInstalledIds = [
+    ...new Set(
+      (Array.isArray(args.legacyInstalledAgentIds) ? args.legacyInstalledAgentIds : [])
+        .map((id) => s(id).toLowerCase())
+        .filter(Boolean),
+    ),
+  ].sort();
+  const fingerprint = [
+    AGENT_REGISTRY_CATALOG_FINGERPRINT,
+    toPlanTier(args.planId),
+    normalizedLegacyInstalledIds.join(","),
+  ].join("|");
+  if (registrySyncFingerprintByScope.get(scopeKey) === fingerprint) return;
+
+  const existingSync = registrySyncPromiseByScope.get(scopeKey);
+  if (existingSync) {
+    await existingSync;
+    if (registrySyncFingerprintByScope.get(scopeKey) === fingerprint) return;
+  }
+
+  const syncPromise = (async () => {
 
   await ensureAgentRegistryTable();
 
   const existing = await readRegistryRows({ accountId, userId });
   const existingInstalled = new Map<string, boolean>();
+  const existingById = new Map<string, RawRegistryRow>();
   for (const row of existing) {
-    existingInstalled.set(s(row.id).toLowerCase(), bool(row.installed_state));
+    const normalizedId = s(row.id).toLowerCase();
+    existingInstalled.set(normalizedId, bool(row.installed_state));
+    existingById.set(normalizedId, row);
   }
 
   const legacyInstalledSet = new Set(
@@ -400,6 +534,7 @@ export async function seedAndSyncAgentRegistry(args: {
 
   for (const entry of AGENT_CATALOG) {
     const existingState = existingInstalled.get(entry.id);
+    const existingRow = existingById.get(entry.id);
     const initialInstalled = entry.hiddenSystem
       ? true
       : existingState !== undefined
@@ -411,6 +546,10 @@ export async function seedAndSyncAgentRegistry(args: {
               && entry.visibility === "visible"
               && isAgentPlanEligible(entry.planTier, planTier)
             ));
+
+    if (rowMatchesCatalogEntry(existingRow, entry, planTier)) {
+      continue;
+    }
 
     await prisma.$executeRaw(
       Prisma.sql`
@@ -515,6 +654,16 @@ export async function seedAndSyncAgentRegistry(args: {
         AND hidden_system = TRUE
     `,
   );
+    registrySyncFingerprintByScope.set(scopeKey, fingerprint);
+  })();
+  registrySyncPromiseByScope.set(scopeKey, syncPromise);
+  try {
+    await syncPromise;
+  } finally {
+    if (registrySyncPromiseByScope.get(scopeKey) === syncPromise) {
+      registrySyncPromiseByScope.delete(scopeKey);
+    }
+  }
 }
 
 export async function listAgentRegistryRows(args: {

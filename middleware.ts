@@ -8,6 +8,14 @@ import {
   RESERVED_ROUTE_SLUGS,
 } from "@/lib/username";
 import { isUnsafePathname, sanitizeQueryParamValue } from "@/lib/security/userInput";
+import {
+  fromAdminInternalPath,
+  isAdminHost,
+  isAdminInternalPath,
+  isAdminPublicPath,
+  sanitizeAdminNextPath,
+  toAdminInternalPath,
+} from "@/lib/admin/config";
 
 /**
  * CavBot Launch Middleware (Next.js App Router)
@@ -19,6 +27,8 @@ import { isUnsafePathname, sanitizeQueryParamValue } from "@/lib/security/userIn
 
 const SESSION_COOKIE_NAME =
   process.env.CAVBOT_SESSION_COOKIE_NAME || "cavbot_session";
+const ADMIN_SESSION_COOKIE_NAME =
+  process.env.CAVBOT_ADMIN_SESSION_COOKIE_NAME || "cavbot_admin_session";
 
 const OWNER_USERNAME = normalizeUsername(process.env.CAVBOT_OWNER_USERNAME || "");
 
@@ -27,6 +37,23 @@ const STATUS_PROBE_HEADER = "x-cavbot-status-probe";
 
 const ALWAYS_PUBLIC_STATUS_PATHS = ["/status", "/status/history", "/status/incidents"];
 const UTF8_ENCODER = new TextEncoder();
+
+type VerifiedUserSessionPayload = {
+  sub?: string;
+  systemRole?: string;
+  memberRole?: string;
+  exp?: number;
+  v?: number;
+};
+
+type VerifiedAdminSessionPayload = {
+  sub?: string;
+  staffId?: string;
+  staffCode?: string;
+  role?: string;
+  exp?: number;
+  v?: number;
+};
 
 function isStatusPublicPath(pathname: string) {
   if (ALWAYS_PUBLIC_STATUS_PATHS.includes(pathname)) return true;
@@ -44,6 +71,48 @@ function badRequestResponse() {
       "Content-Type": "text/plain; charset=utf-8",
     },
   });
+}
+
+function isLocalhostHost(host: string) {
+  const normalized = String(host || "").trim().toLowerCase();
+  return (
+    normalized.includes("localhost") ||
+    normalized.startsWith("127.0.0.1") ||
+    normalized.startsWith("0.0.0.0") ||
+    normalized.startsWith("[::1]")
+  );
+}
+
+function cookieShouldBeSecure(req: NextRequest) {
+  if (process.env.NODE_ENV === "production") return true;
+
+  const allowDevSecure = String(process.env.CAVBOT_DEV_SECURE_COOKIE || "").trim() === "1";
+  if (!allowDevSecure) return false;
+
+  const host = String(req.headers.get("host") || "").trim();
+  const proto = String(req.headers.get("x-forwarded-proto") || "").trim().toLowerCase();
+  return !isLocalhostHost(host) && proto === "https";
+}
+
+function expireCookie(res: NextResponse, req: NextRequest, name: string) {
+  res.cookies.set(name, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: cookieShouldBeSecure(req),
+    path: "/",
+    expires: new Date(0),
+    maxAge: 0,
+  });
+}
+
+function applyAuthCookieCleanup(
+  res: NextResponse,
+  req: NextRequest,
+  options: { clearUser?: boolean; clearAdmin?: boolean },
+) {
+  if (options.clearUser) expireCookie(res, req, SESSION_COOKIE_NAME);
+  if (options.clearAdmin) expireCookie(res, req, ADMIN_SESSION_COOKIE_NAME);
+  return res;
 }
 
 function sanitizeQueryParamsInPlace(url: URL): boolean {
@@ -194,7 +263,7 @@ function timingSafeEqual(a: string, b: string): boolean {
   return out === 0;
 }
 
-async function parseVerifiedSessionPayload(token: string): Promise<null | { memberRole?: string; exp?: number; v?: number }> {
+async function parseVerifiedSessionPayload(token: string): Promise<null | VerifiedUserSessionPayload> {
   const secret = String(process.env.CAVBOT_SESSION_SECRET || "").trim();
   if (!secret) return null;
 
@@ -206,10 +275,33 @@ async function parseVerifiedSessionPayload(token: string): Promise<null | { memb
 
   try {
     const decoded = new TextDecoder().decode(base64UrlToBytes(payloadB64));
-    const payload = JSON.parse(decoded) as { memberRole?: string; exp?: number; v?: number };
+    const payload = JSON.parse(decoded) as VerifiedUserSessionPayload;
     if (!payload || payload.v !== 1) return null;
     const exp = Number(payload.exp || 0);
     if (!Number.isFinite(exp) || exp <= Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+async function parseVerifiedAdminSessionPayload(token: string): Promise<null | VerifiedAdminSessionPayload> {
+  const secret = String(process.env.CAVBOT_ADMIN_SESSION_SECRET || process.env.CAVBOT_SESSION_SECRET || "").trim();
+  if (!secret) return null;
+
+  const [payloadB64, sig] = String(token || "").trim().split(".");
+  if (!payloadB64 || !sig) return null;
+
+  const expectedSig = await hmacSha256(secret, payloadB64);
+  if (!timingSafeEqual(sig, expectedSig)) return null;
+
+  try {
+    const decoded = new TextDecoder().decode(base64UrlToBytes(payloadB64));
+    const payload = JSON.parse(decoded) as VerifiedAdminSessionPayload;
+    if (!payload || payload.v !== 1) return null;
+    const exp = Number(payload.exp || 0);
+    if (!Number.isFinite(exp) || exp <= Math.floor(Date.now() / 1000)) return null;
+    if (!payload.sub || !payload.staffId || !payload.staffCode || !payload.role) return null;
     return payload;
   } catch {
     return null;
@@ -233,6 +325,96 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(sanitizedUrl, 308);
     }
     return badRequestResponse();
+  }
+
+  const host = String(req.headers.get("x-forwarded-host") || req.headers.get("host") || "").trim();
+
+  if (!isAdminHost(host) && isAdminInternalPath(pathname)) {
+    return new NextResponse("Not Found", {
+      status: 404,
+      headers: {
+        "Cache-Control": "no-store, max-age=0",
+        Pragma: "no-cache",
+        Expires: "0",
+        "Content-Type": "text/plain; charset=utf-8",
+      },
+    });
+  }
+
+  if (isAdminHost(host)) {
+    const visiblePath = fromAdminInternalPath(pathname);
+
+    if (
+      visiblePath.startsWith("/_next/") ||
+      visiblePath.startsWith("/favicon") ||
+      visiblePath === "/robots.txt" ||
+      visiblePath === "/sitemap.xml" ||
+      PUBLIC_FILE.test(visiblePath)
+    ) {
+      return NextResponse.next();
+    }
+
+    if (visiblePath.startsWith("/api/")) {
+      return NextResponse.next();
+    }
+
+    const rawAdminToken = String(req.cookies.get(ADMIN_SESSION_COOKIE_NAME)?.value || "").trim();
+    const rawUserToken = String(req.cookies.get(SESSION_COOKIE_NAME)?.value || "").trim();
+    const [userSessionPayload, adminSessionPayload] = await Promise.all([
+      rawUserToken ? parseVerifiedSessionPayload(rawUserToken) : Promise.resolve(null),
+      rawAdminToken ? parseVerifiedAdminSessionPayload(rawAdminToken) : Promise.resolve(null),
+    ]);
+
+    const hasValidUserSession = Boolean(
+      userSessionPayload &&
+      userSessionPayload.systemRole === "user" &&
+      userSessionPayload.sub &&
+      userSessionPayload.memberRole,
+    );
+    const hasValidAdminSession = Boolean(adminSessionPayload);
+    const sameAdminIdentity = Boolean(
+      hasValidUserSession &&
+      hasValidAdminSession &&
+      userSessionPayload?.sub &&
+      adminSessionPayload?.sub &&
+      userSessionPayload.sub === adminSessionPayload.sub,
+    );
+    const hasFullAdminAuth = hasValidUserSession && hasValidAdminSession && sameAdminIdentity;
+    const clearUserCookie = Boolean(rawUserToken) && !hasValidUserSession;
+    const clearAdminCookie = Boolean(rawAdminToken) && (!hasValidAdminSession || !sameAdminIdentity);
+
+    if ((visiblePath === "/sign-in" || visiblePath === "/forgot-staff-id") && hasFullAdminAuth) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/overview";
+      url.search = "";
+      return applyAuthCookieCleanup(NextResponse.redirect(url, 307), req, {
+        clearUser: clearUserCookie,
+        clearAdmin: clearAdminCookie,
+      });
+    }
+
+    if (!isAdminPublicPath(visiblePath) && !hasFullAdminAuth) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/sign-in";
+      url.search = `next=${encodeURIComponent(sanitizeAdminNextPath(`${visiblePath}${search || ""}`))}`;
+      return applyAuthCookieCleanup(NextResponse.redirect(url, 307), req, {
+        clearUser: clearUserCookie,
+        clearAdmin: clearAdminCookie,
+      });
+    }
+
+    let adminResponse: NextResponse;
+    if (!isAdminInternalPath(pathname)) {
+      const url = req.nextUrl.clone();
+      url.pathname = toAdminInternalPath(visiblePath);
+      adminResponse = NextResponse.rewrite(url);
+    } else {
+      adminResponse = NextResponse.next();
+    }
+    return applyAuthCookieCleanup(adminResponse, req, {
+      clearUser: clearUserCookie,
+      clearAdmin: clearAdminCookie,
+    });
   }
 
   // ------------------------------------------------------------

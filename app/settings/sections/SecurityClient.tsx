@@ -145,8 +145,19 @@ function inferBrowser(row: SessionRow): BrowserKey {
   return guessBrowserFromLabel(row.label);
 }
 
+function decodeSessionLocation(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const normalized = raw.replace(/\+/g, " ");
+  try {
+    return decodeURIComponent(normalized);
+  } catch {
+    return normalized;
+  }
+}
+
 function renderSessionLocation(row: SessionRow) {
-  const location = String(row.location || "").trim();
+  const location = decodeSessionLocation(row.location || "");
   if (location) return location;
   const ip = String(row.ip || "").trim();
   if (ip) return `Approximate network location (IP ${ip})`;
@@ -904,14 +915,14 @@ export default function SecurityClient() {
                         <div className="sx-secSessMain">
                           <div className="sx-secSessTitle">
                             <span className="sx-secSessLabel">{s.label}</span>
-                          </div>
-
-                          <div className="sx-secSessMeta">
-                            <span className="sx-secLoc">{renderSessionLocation(s)}</span>
                             <span className="sx-secSessState" data-tone={s.isCurrent ? "active" : "default"}>
                               <span className="sx-secStateDot" aria-hidden="true" />
                               <span className="sx-secWhen">{s.statusText}</span>
                             </span>
+                          </div>
+
+                          <div className="sx-secSessMeta">
+                            <span className="sx-secLoc">{renderSessionLocation(s)}</span>
                           </div>
                         </div>
 

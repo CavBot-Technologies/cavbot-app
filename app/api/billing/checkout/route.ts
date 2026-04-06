@@ -10,13 +10,12 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import {
   requireSession,
-  requireAccountContext,
-  requireAccountRole,
   isApiAuthError,
 } from "@/lib/apiAuth";
 import { getStripe } from "@/lib/stripeClient";
 import { getAppUrl, priceIdFor, type StripePlanId, type StripeBilling } from "@/lib/stripe";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
 
 
 export const runtime = "nodejs";
@@ -78,8 +77,8 @@ function readIdempotencyKey(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const sess = await requireSession(req);
-    requireAccountContext(sess);
-    await requireAccountRole(sess, ["OWNER", "ADMIN"]);
+    const billingCtx = await resolveBillingAccountContext(sess);
+    requireBillingManageRole(billingCtx);
 
 
     const body = (await readSanitizedJson(req, null)) as CheckoutBody | null;
@@ -90,8 +89,8 @@ export async function POST(req: NextRequest) {
 
 
     const billing = normalizeBilling(body?.billing);
-    const accountId = sess.accountId!;
-    const operatorUserId = sess.sub;
+    const accountId = billingCtx.accountId;
+    const operatorUserId = billingCtx.userId;
 
 
     const appUrl = getAppUrl();

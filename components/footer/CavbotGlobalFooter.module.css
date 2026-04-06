@@ -33,6 +33,18 @@
   align-items: center;
 }
 
+.developerDisclosure {
+  display: block;
+}
+
+.developerDisclosure > summary {
+  list-style: none;
+}
+
+.developerDisclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
 .center {
   min-height: 1px;
 }
@@ -244,12 +256,22 @@
   position: absolute;
   left: max(12px, var(--safe-left));
   bottom: calc(var(--cb-global-footer-height) + var(--safe-bottom) + 8px);
-  width: min(200px, calc(100vw - 24px));
+  width: min(264px, calc(100vw - 24px));
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(4, 10, 28, 0.96);
   border-radius: 12px;
   box-shadow: none;
-  padding: 8px;
+  padding: 10px;
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.developerDisclosure[open] .developerPanel {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
 }
 
 .developerHeader {
@@ -282,7 +304,7 @@
 .developerLinks {
   margin-top: 0;
   display: grid;
-  gap: 4px;
+  gap: 6px;
 }
 
 .developerLink {
@@ -295,9 +317,10 @@
   font-weight: 400;
   line-height: 1.35;
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
+  gap: 10px;
   text-align: left;
-  padding: 8px 10px;
+  padding: 10px;
   transition: background 140ms ease, color 140ms ease;
 }
 
@@ -306,17 +329,45 @@
   color: rgba(247, 251, 255, 0.96);
 }
 
+.developerLinkIcon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.developerLinkIconImage {
+  width: 15px;
+  height: 15px;
+  display: block;
+  filter: brightness(0) invert(1);
+  opacity: 0.92;
+}
+
+.developerLinkBody {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
 .developerLinkTitle {
   display: inline-flex;
   align-items: center;
   font-size: 12px;
-  font-weight: 400;
+  font-weight: 600;
   line-height: 1.35;
   letter-spacing: 0.02em;
 }
 
 .developerLinkSub {
+  display: block;
   font-size: 11px;
+  line-height: 1.45;
   color: rgba(136, 144, 170, 0.94);
 }
 
@@ -389,6 +440,6 @@
 
   .developerPanel {
     left: max(8px, var(--safe-left));
-    width: min(200px, calc(100vw - 16px));
+    width: min(264px, calc(100vw - 16px));
   }
 }

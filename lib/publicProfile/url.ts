@@ -1,5 +1,7 @@
 import { normalizeUsername } from "@/lib/username";
 
+const CANONICAL_PUBLIC_PROFILE_ORIGIN = "https://app.cavbot.io";
+
 function normalizePublicProfileUsername(rawUsername: unknown): string {
   return normalizeUsername(String(rawUsername || "").trim().replace(/^@+/, "")).trim().toLowerCase();
 }
@@ -7,7 +9,7 @@ function normalizePublicProfileUsername(rawUsername: unknown): string {
 export function buildCanonicalPublicProfileHref(rawUsername: unknown): string {
   const username = normalizePublicProfileUsername(rawUsername);
   if (!username) return "";
-  return `/${encodeURIComponent(username)}`;
+  return `${CANONICAL_PUBLIC_PROFILE_ORIGIN}/${encodeURIComponent(username)}`;
 }
 
 export function openCanonicalPublicProfileWindow(args: {

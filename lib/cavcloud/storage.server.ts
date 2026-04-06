@@ -7,7 +7,8 @@ import { pipeline } from "stream/promises";
 
 import { Prisma } from "@prisma/client";
 
-import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
+import { findLatestEntitledSubscription, resolveEffectivePlanId as resolveEffectiveAccountPlanId } from "@/lib/accountPlan.server";
+import type { PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { buildZipBuffer } from "@/lib/cavcloud/zip.server";
 import { preferredMimeType } from "@/lib/fileMime";
@@ -848,22 +849,24 @@ async function accountPlanSnapshot(accountId: string, tx: DbClient = prisma): Pr
   limitBytes: bigint | null;
   perFileMaxBytes: bigint;
 }> {
-  const account = await tx.account.findUnique({
-    where: { id: accountId },
-    select: {
-      tier: true,
-      trialSeatActive: true,
-      trialEndsAt: true,
-    },
-  });
+  const [account, entitledSubscription] = await Promise.all([
+    tx.account.findUnique({
+      where: { id: accountId },
+      select: {
+        tier: true,
+        trialSeatActive: true,
+        trialEndsAt: true,
+      },
+    }),
+    findLatestEntitledSubscription(accountId, tx),
+  ]);
 
   if (!account) throw new CavCloudError("ACCOUNT_NOT_FOUND", 404, "account not found");
 
-  let planId = resolvePlanIdFromTier(account.tier);
-  const trialEndsAtMs = account.trialEndsAt ? new Date(account.trialEndsAt).getTime() : 0;
-  if (account.trialSeatActive && Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now()) {
-    planId = "premium_plus";
-  }
+  const planId = resolveEffectiveAccountPlanId({
+    account,
+    subscription: entitledSubscription,
+  });
 
   const limitBytes = storageLimitBytesForPlan(planId);
   const perFileMaxBytes = perFileLimitBytesForPlan(planId);
@@ -2362,15 +2365,23 @@ export async function getRootFolder(args: { accountId: string }) {
   return mapFolder(root);
 }
 
+async function resolveFolderIdWithRootAlias(accountId: string, folderId: string) {
+  const normalizedFolderId = String(folderId || "").trim();
+  if (!normalizedFolderId) throw new CavCloudError("FOLDER_ID_REQUIRED", 400);
+  if (normalizedFolderId.toLowerCase() !== "root") return normalizedFolderId;
+  const root = await ensureRootFolder(accountId);
+  await ensureOfficialSyncedFolders(accountId);
+  return String(root.id || "").trim();
+}
+
 export async function getFolderChildrenById(args: {
   accountId: string;
   folderId: string;
   listing?: CavCloudListingPreferences;
 }) {
   const accountId = String(args.accountId || "").trim();
-  const folderId = String(args.folderId || "").trim();
+  const folderId = await resolveFolderIdWithRootAlias(accountId, args.folderId);
   if (!accountId) throw new CavCloudError("ACCOUNT_REQUIRED", 400);
-  if (!folderId) throw new CavCloudError("FOLDER_ID_REQUIRED", 400);
   return loadFolderChildrenPayload({
     accountId,
     folderWhere: {
@@ -2389,9 +2400,8 @@ export async function searchFolderChildren(args: {
   listing?: CavCloudListingPreferences;
 }) {
   const accountId = String(args.accountId || "").trim();
-  const folderId = String(args.folderId || "").trim();
+  const folderId = await resolveFolderIdWithRootAlias(accountId, args.folderId);
   if (!accountId) throw new CavCloudError("ACCOUNT_REQUIRED", 400);
-  if (!folderId) throw new CavCloudError("FOLDER_ID_REQUIRED", 400);
   return loadFolderChildrenPayload({
     accountId,
     folderWhere: {

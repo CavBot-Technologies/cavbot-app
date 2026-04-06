@@ -1,6 +1,7 @@
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import { hasRequestIntegrityHeader } from "@/lib/security/requestIntegrity";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import type { PlanId } from "@/lib/plans";
 import { requireAiRequestContext } from "@/src/lib/ai/ai.guard";
 import {
   DEFAULT_CAVEN_SETTINGS,
@@ -12,10 +13,81 @@ import {
   buildFallbackAgentRegistryUiSnapshot,
   getAgentRegistryUiSnapshot,
 } from "@/lib/cavai/agentRegistry.server";
+import {
+  parseAdminAgentTelemetryPayload,
+  syncAdminTrackedAgents,
+} from "@/lib/admin/agentIntelligence.server";
+import {
+  listOwnedPublishedOperatorSourceAgentIds,
+  listPublishedOperatorAgents,
+} from "@/lib/cavai/operatorAgents.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+async function loadAgentRegistryResponse(args: {
+  accountId: string;
+  userId: string;
+  planId?: PlanId;
+  installedAgentIds: string[];
+}) {
+  let degraded = false;
+  let agentRegistry = buildFallbackAgentRegistryUiSnapshot({
+    planId: args.planId,
+    installedAgentIds: args.installedAgentIds,
+  });
+  let publishedAgents: unknown[] = [];
+  let ownedPublishedSourceAgentIds: string[] = [];
+
+  const [agentRegistryResult, publishedAgentsResult, ownedPublishedSourceAgentIdsResult] = await Promise.allSettled([
+    getAgentRegistryUiSnapshot({
+      accountId: args.accountId,
+      userId: args.userId,
+      planId: args.planId,
+      legacyInstalledAgentIds: args.installedAgentIds,
+    }),
+    listPublishedOperatorAgents({
+      excludeUserId: args.userId,
+      limit: 120,
+    }),
+    listOwnedPublishedOperatorSourceAgentIds({
+      userId: args.userId,
+      limit: 240,
+    }),
+  ]);
+
+  if (agentRegistryResult.status === "fulfilled") {
+    agentRegistry = agentRegistryResult.value;
+  } else {
+    degraded = true;
+    console.error("[cavai/settings] getAgentRegistryUiSnapshot failed, using catalog fallback", agentRegistryResult.reason);
+  }
+
+  if (publishedAgentsResult.status === "fulfilled") {
+    publishedAgents = publishedAgentsResult.value;
+  } else {
+    degraded = true;
+    console.error("[cavai/settings] listPublishedOperatorAgents failed, using empty fallback", publishedAgentsResult.reason);
+  }
+
+  if (ownedPublishedSourceAgentIdsResult.status === "fulfilled") {
+    ownedPublishedSourceAgentIds = ownedPublishedSourceAgentIdsResult.value;
+  } else {
+    degraded = true;
+    console.error(
+      "[cavai/settings] listOwnedPublishedOperatorSourceAgentIds failed, using empty fallback",
+      ownedPublishedSourceAgentIdsResult.reason,
+    );
+  }
+
+  return {
+    degraded,
+    agentRegistry,
+    publishedAgents,
+    ownedPublishedSourceAgentIds,
+  };
+}
 
 export async function GET(req: Request) {
   try {
@@ -36,23 +108,22 @@ export async function GET(req: Request) {
       console.error("[cavai/settings] getCavenSettings failed, using defaults", err);
     }
 
-    let agentRegistry = buildFallbackAgentRegistryUiSnapshot({
+    const related = await loadAgentRegistryResponse({
+      accountId: String(ctx.accountId || ""),
+      userId: String(ctx.userId || ""),
       planId: ctx.planId,
       installedAgentIds: settings.installedAgentIds,
     });
-    try {
-      agentRegistry = await getAgentRegistryUiSnapshot({
-        accountId: String(ctx.accountId || ""),
-        userId: String(ctx.userId || ""),
-        planId: ctx.planId,
-        legacyInstalledAgentIds: settings.installedAgentIds,
-      });
-    } catch (err) {
-      degraded = true;
-      console.error("[cavai/settings] getAgentRegistryUiSnapshot failed, using catalog fallback", err);
-    }
+    degraded = degraded || related.degraded;
 
-    const baseResponse = { ok: true, settings, planId: ctx.planId, agentRegistry };
+    const baseResponse = {
+      ok: true,
+      settings,
+      planId: ctx.planId,
+      agentRegistry: related.agentRegistry,
+      publishedAgents: related.publishedAgents,
+      ownedPublishedSourceAgentIds: related.ownedPublishedSourceAgentIds,
+    };
     return jsonNoStore(degraded ? { ...baseResponse, degraded: true } : baseResponse, 200);
   } catch (err) {
     return cavcloudErrorResponse(err, "Failed to load Caven settings.");
@@ -77,6 +148,11 @@ async function saveSettings(req: Request) {
   if (!parsed.ok) {
     return jsonNoStore({ ok: false, error: "BAD_SETTINGS_PAYLOAD", message: parsed.error }, 400);
   }
+  let degraded = false;
+  const bodyRecord = body && typeof body === "object" && !Array.isArray(body)
+    ? (body as Record<string, unknown>)
+    : {};
+  const agentTelemetry = parseAdminAgentTelemetryPayload(bodyRecord.agentTelemetry);
 
   const settings = await updateCavenSettings({
     accountId: String(ctx.accountId || ""),
@@ -84,26 +160,37 @@ async function saveSettings(req: Request) {
     patch: parsed.patch,
     planId: ctx.planId,
   });
+  if (parsed.patch.customAgents !== undefined) {
+    try {
+      await syncAdminTrackedAgents({
+        accountId: String(ctx.accountId || ""),
+        userId: String(ctx.userId || ""),
+        agents: settings.customAgents,
+        telemetry: agentTelemetry,
+      });
+    } catch (err) {
+      degraded = true;
+      console.error("[cavai/settings] syncAdminTrackedAgents failed after save, using best-effort fallback", err);
+    }
+  }
 
-  let agentRegistry = buildFallbackAgentRegistryUiSnapshot({
+  const related = await loadAgentRegistryResponse({
+    accountId: String(ctx.accountId || ""),
+    userId: String(ctx.userId || ""),
     planId: ctx.planId,
     installedAgentIds: settings.installedAgentIds,
   });
-  let degraded = false;
-  try {
-    agentRegistry = await getAgentRegistryUiSnapshot({
-      accountId: String(ctx.accountId || ""),
-      userId: String(ctx.userId || ""),
-      planId: ctx.planId,
-      legacyInstalledAgentIds: settings.installedAgentIds,
-    });
-  } catch (err) {
-    degraded = true;
-    console.error("[cavai/settings] getAgentRegistryUiSnapshot failed after save, using catalog fallback", err);
-  }
+  degraded = degraded || related.degraded;
 
-  const baseResponse = { ok: true, settings, planId: ctx.planId };
-  return jsonNoStore(degraded ? { ...baseResponse, agentRegistry, degraded: true } : { ...baseResponse, agentRegistry }, 200);
+  const baseResponse = {
+    ok: true,
+    settings,
+    planId: ctx.planId,
+    agentRegistry: related.agentRegistry,
+    publishedAgents: related.publishedAgents,
+    ownedPublishedSourceAgentIds: related.ownedPublishedSourceAgentIds,
+  };
+  return jsonNoStore(degraded ? { ...baseResponse, degraded: true } : baseResponse, 200);
 }
 
 export async function PATCH(req: Request) {

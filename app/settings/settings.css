@@ -2363,6 +2363,8 @@
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.26),
     0 5px 12px rgba(190,210,245,0.11);
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+  transform-origin: center;
 }
 
 .sx-toneDot::after{
@@ -2371,6 +2373,36 @@
   inset: 0;
   pointer-events: none;
   background: linear-gradient(160deg, rgba(255,255,255,0.34), rgba(255,255,255,0.08) 36%, transparent 60%);
+}
+
+.sx-toneSwatch:hover .sx-toneDot,
+.sx-toneSwatch:focus-visible .sx-toneDot{
+  animation: sx-tone-dot-hover 1.05s ease-in-out infinite alternate;
+  border-color: rgba(255,255,255,0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.28),
+    0 12px 20px rgba(190,210,245,0.22);
+}
+
+@keyframes sx-tone-dot-hover{
+  from{
+    transform: translateY(0) scale(1);
+  }
+  to{
+    transform: translateY(-3px) scale(1.16);
+  }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .sx-toneDot{
+    transition: border-color .18s ease, box-shadow .18s ease;
+  }
+
+  .sx-toneSwatch:hover .sx-toneDot,
+  .sx-toneSwatch:focus-visible .sx-toneDot{
+    animation: none;
+    transform: scale(1.1);
+  }
 }
 
 .sx-toneHint{

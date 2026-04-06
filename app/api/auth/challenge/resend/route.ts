@@ -13,6 +13,7 @@ import {
   updateAuthTokenRecord,
 } from "@/lib/authDb";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { readCoarseRequestGeo } from "@/lib/requestGeo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,19 +45,6 @@ function sha256Hex(s: string) {
 
 function newEmailCode() {
   return String(randomInt(0, 1000000)).padStart(6, "0");
-}
-
-function safeStr(v: unknown): string {
-  if (v == null) return "";
-  return String(v);
-}
-
-function readCloudflareGeo(req: NextRequest) {
-  const countryRaw = safeStr(req.headers.get("cf-ipcountry")).trim();
-  const country = countryRaw && countryRaw !== "XX" ? countryRaw : "";
-  const region = safeStr(req.headers.get("cf-region")).trim() || safeStr(req.headers.get("cf-region-code")).trim();
-  const label = [region, country].map((s) => String(s || "").trim()).filter(Boolean).join(", ");
-  return { country: country || null, region: region || null, label: label || (country ? country : null) };
 }
 
 export async function POST(req: NextRequest) {
@@ -102,7 +90,7 @@ export async function POST(req: NextRequest) {
     const codeHash = sha256Hex(code);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    const geo = readCloudflareGeo(req);
+    const geo = readCoarseRequestGeo(req);
 
     await updateAuthTokenRecord(pool, {
       id: row.id,

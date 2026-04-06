@@ -9,12 +9,11 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import {
   requireSession,
-  requireAccountContext,
-  requireAccountRole,
   isApiAuthError,
 } from "@/lib/apiAuth";
 import { getStripe } from "@/lib/stripeClient";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
 
 
 export const runtime = "nodejs";
@@ -50,11 +49,11 @@ function readIdempotencyKey(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const sess = await requireSession(req);
-    requireAccountContext(sess);
-    await requireAccountRole(sess, ["OWNER", "ADMIN"]); // hardened
+    const billingCtx = await resolveBillingAccountContext(sess);
+    requireBillingManageRole(billingCtx);
 
 
-    const accountId = sess.accountId!;
+    const accountId = billingCtx.accountId;
 
 
   const body = (await readSanitizedJson(req, null)) as

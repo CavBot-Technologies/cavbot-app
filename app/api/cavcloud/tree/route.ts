@@ -1,10 +1,11 @@
 import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
+import { findLatestEntitledSubscription, resolveEffectivePlanId as resolveEffectiveAccountPlanId } from "@/lib/accountPlan.server";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import { getCavCloudSettings, toCavCloudListingPreferences } from "@/lib/cavcloud/settings.server";
 import { getTree, getTreeLite } from "@/lib/cavcloud/storage.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
-import { getPlanLimits, resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
+import { getPlanLimits, type PlanId } from "@/lib/plans";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -102,26 +103,28 @@ function isCavCloudTreeSchemaMismatch(err: unknown) {
 }
 
 async function fallbackTreeForMissingTables(accountId: string) {
-  const account = await prisma.account.findUnique({
-    where: { id: accountId },
-    select: { tier: true, trialSeatActive: true, trialEndsAt: true },
-  }).catch((error) => {
-    if (
-      isSchemaMismatchError(error, {
-        tables: ["Account"],
-        columns: ["tier", "trialSeatActive", "trialEndsAt"],
-      })
-    ) {
-      return null;
-    }
-    throw error;
-  });
+  const [account, entitledSubscription] = await Promise.all([
+    prisma.account.findUnique({
+      where: { id: accountId },
+      select: { tier: true, trialSeatActive: true, trialEndsAt: true },
+    }).catch((error) => {
+      if (
+        isSchemaMismatchError(error, {
+          tables: ["Account"],
+          columns: ["tier", "trialSeatActive", "trialEndsAt"],
+        })
+      ) {
+        return null;
+      }
+      throw error;
+    }),
+    findLatestEntitledSubscription(accountId),
+  ]);
 
-  let planId: PlanId = resolvePlanIdFromTier(account?.tier || "FREE");
-  const trialEndsAtMs = account?.trialEndsAt ? new Date(account.trialEndsAt).getTime() : 0;
-  if (account?.trialSeatActive && Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now()) {
-    planId = "premium_plus";
-  }
+  const planId: PlanId = resolveEffectiveAccountPlanId({
+    account,
+    subscription: entitledSubscription,
+  });
 
   const limitBytes = storageLimitBytesForPlan(planId);
   const perFileMaxBytes = perFileMaxBytesForPlan(planId);

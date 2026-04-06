@@ -11,7 +11,12 @@ export async function sendEmail({ to, subject, html }: SendEmailArgs) {
 
   // DEV fallback: log it so you can test instantly
   if (!RESEND_API_KEY) {
-    console.log("RESEND_API_KEY missing. Email send skipped in dev mode.");
+    console.log("[email:dev-preview]", JSON.stringify({
+      to,
+      from: MAIL_FROM,
+      subject,
+      html,
+    }));
     return { ok: true, dev: true };
   }
 

@@ -4,5 +4,72 @@ compatibility_date = "2026-01-05"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = ".vercel/output/static"
 
+# Production-safe runtime variables belong here.
+# Keep secrets encrypted in the Cloudflare Pages dashboard.
 [env.production.vars]
+CAVBOT_OWNER_EMAIL = "cavbotadm@gmail.com"
+CAVBOT_OWNER_USERNAME = "cavbot"
+CAVBOT_PBKDF2_ITERS = "310000"
+
+CAVBOT_APP_ORIGIN = "https://app.cavbot.io"
+APP_URL = "https://app.cavbot.io"
+NEXT_PUBLIC_APP_ORIGIN = "https://app.cavbot.io"
+NEXT_PUBLIC_APP_URL = "https://app.cavbot.io"
+AUTH_REDIRECT_BASE_URL = "https://app.cavbot.io"
+ALLOWED_ORIGINS = "https://app.cavbot.io,https://www.cavbot.io,https://cavbot.io"
+
+CAVBOT_PROJECT_ID = "cavbot"
 CAVBOT_API_BASE_URL = "https://api.cavbot.io"
+NEXT_PUBLIC_CAVBOT_PROJECT_KEY = "cavbot_pk_gHn737DTf4afJ2xGpBFzZQ"
+CAVBOT_PUBLIC_SIGNUP = "1"
+NEXT_PUBLIC_CAVBOT_LIVE_MODE = "0"
+NEXT_PUBLIC_CAVBOT_DISABLE_EVENTS = "1"
+
+GITHUB_CLIENT_ID = "Ov23liFMyN2fIb2OfQPZ"
+GOOGLE_CLIENT_ID = "209267391174-hg6spvmmf7cdmlkl2ceprfl1lhdvp8u8.apps.googleusercontent.com"
+
+MAIL_FROM = "CavBot Security <no-reply@cavbot.io>"
+CAVBOT_MAIL_FROM = "CavBot Security <no-reply@cavbot.io>"
+RESEND_SIGNUP_TEMPLATE_ALIAS = "cavbot-sign-up"
+RESEND_SIGNUP_TEMPLATE_ID = "59f44d4a-f71a-400e-89a2-fd0372b9d725"
+CAVBOT_SIGNUP_MAIL_FROM = "Cavendish Pierre-Louis <cavendishpierrelouis@cavbot.io>"
+CAVBOT_SIGNUP_REPLY_TO = "CavBot Support <support@cavbot.io>"
+CAVBOT_SIGNUP_WELCOME_SUBJECT = "Welcome to CavBot!"
+
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = "pk_live_51SsIgA0H03R4PCfTE71vHIXAcwrTiXITwassSUpLsl7aMn4HmpcstFXO6tCi2FxCXClrPPQcUMHN6Af4NEDtPhLo00XiNpm18i"
+STRIPE_PRICE_PREMIUM_MONTHLY = "price_1TFrz00H03R4PCfTuespQclp"
+STRIPE_PRICE_PREMIUM_ANNUAL = "price_1TFrz00H03R4PCfTxaVv1WbT"
+STRIPE_PRICE_PREMIUM_PLUS_MONTHLY = "price_1TFryv0H03R4PCfTXoryONOH"
+STRIPE_PRICE_PREMIUM_PLUS_ANNUAL = "price_1TFryv0H03R4PCfTHiYeCa25"
+
+CAVCLOUD_R2_ENDPOINT = "https://e7c8426afddfba2ab94c35e64e98c66e.r2.cloudflarestorage.com"
+CAVCLOUD_R2_ACCESS_KEY_ID = "3ad7b2d54158a24d09d7d2aa083f2aa3"
+CAVCLOUD_R2_BUCKET = "cavcloud-storage"
+CAVCLOUD_R2_REGION = "auto"
+CAVCLOUD_GATEWAY_ORIGIN = "https://gateway.cavendishpierrelouis.workers.dev"
+
+GOOGLE_DRIVE_CLIENT_ID = "117160679914-7v7vo9gu8a7rl8h6m4aois98v42iaakr.apps.googleusercontent.com"
+GOOGLE_DRIVE_REDIRECT_URI = "https://app.cavbot.io/api/integrations/google-drive/callback"
+GOOGLE_DRIVE_SCOPES = "https://www.googleapis.com/auth/drive.readonly"
+
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+DEEPSEEK_MODEL = "deepseek-chat"
+DEEPSEEK_REASONING_MODEL = "deepseek-reasoner"
+
+ALIBABA_QWEN_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+ALIBABA_PLUS_MODEL = "qwen3.5-plus"
+ALIBABA_MAX_MODEL = "qwen3-max"
+ALIBABA_QWEN_CODER_MODEL = "qwen3-coder"
+ALIBABA_ASR_MODEL = "qwen3-asr-flash"
+ALIBABA_FLASH_MODEL = "qwen3.5-flash"
+ALIBABA_ASR_REALTIME_MODEL = "qwen3-asr-flash-realtime"
+ALIBABA_TTS_REALTIME_MODEL = "qwen3-tts-instruct-flash-realtime"
+ALIBABA_OMNI_REALTIME_MODEL = "qwen3-omni-flash-realtime"
+ALIBABA_EMBEDDING_MODEL = "text-embedding-v4"
+ALIBABA_RERANK_MODEL = "qwen3-rerank"
+
+CAVBOT_CDN_BASE_URL = "https://cdn.cavbot.io"
+NEXT_PUBLIC_CAVBOT_CDN_BASE_URL = "https://cdn.cavbot.io"
+NEXT_PUBLIC_EMBED_API_URL = "https://app.cavbot.io"
+NEXT_PUBLIC_WIDGET_CONFIG_ORIGIN = "https://app.cavbot.io"
+NEXT_PUBLIC_CAVBOT_RUNTIME_BOOT = "1"

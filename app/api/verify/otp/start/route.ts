@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { assertWriteOrigin } from "@/lib/apiAuth";
+import { assertWriteOrigin, getSession } from "@/lib/apiAuth";
+import { recordAdminEventSafe } from "@/lib/admin/events";
 import { parseVerifyActionType, startVerifyOtp } from "@/lib/auth/cavbotVerify";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
@@ -37,6 +38,7 @@ type OtpStartBody = {
 export async function POST(req: Request) {
   try {
     assertWriteOrigin(req);
+    const session = await getSession(req);
     const body = (await readSanitizedJson(req, ({}))) as OtpStartBody;
 
     const actionType = parseVerifyActionType(body?.actionType);
@@ -51,6 +53,17 @@ export async function POST(req: Request) {
       sessionIdHint: body?.sessionId ? String(body.sessionId) : "",
       identifier: body?.identifier ? String(body.identifier) : "",
       email: body?.email ? String(body.email) : "",
+    });
+
+    await recordAdminEventSafe({
+      name: "cavverify_started",
+      actorUserId: session?.systemRole === "user" ? session.sub : null,
+      accountId: session?.systemRole === "user" ? session.accountId || null : null,
+      sessionKey: result.ok ? (result.sessionId || (body?.sessionId ? String(body.sessionId) : null)) : (body?.sessionId ? String(body.sessionId) : null),
+      result: `otp:${result.ok ? "sent" : String(result.error || "failed")}`,
+      metaJson: {
+        actionType,
+      },
     });
 
     const status = result.ok ? 200 : result.error === "RATE_LIMITED" ? 429 : 400;

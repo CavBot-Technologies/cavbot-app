@@ -1,11 +1,11 @@
 import { requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
+import { findLatestEntitledSubscription, resolveEffectivePlanId as resolveEffectiveAccountPlanId } from "@/lib/accountPlan.server";
 import { notifyCavCloudStorageThresholds, notifyCavCloudUploadFailure } from "@/lib/cavcloud/notifications.server";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import { upsertTextFile } from "@/lib/cavcloud/storage.server";
 import { upsertTextFile as upsertCavsafeTextFile } from "@/lib/cavsafe/storage.server";
 import { assertCavCloudActionAllowed, getCavCloudOperatorContext } from "@/lib/cavcloud/permissions.server";
 import { assertCavPadSyncTargetEnabled } from "@/lib/cavpad/server";
-import { resolvePlanIdFromTier } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
@@ -42,12 +42,6 @@ function isCavPadFolderPath(folderPath: string): boolean {
   return normalized === "/Synced/CavPad" || normalized.startsWith("/Synced/CavPad/");
 }
 
-function isTrialSeatActiveNow(trialSeatActive: boolean | null | undefined, trialEndsAt: Date | string | null | undefined): boolean {
-  if (!trialSeatActive || !trialEndsAt) return false;
-  const endsAtMs = new Date(trialEndsAt).getTime();
-  return Number.isFinite(endsAtMs) && endsAtMs > Date.now();
-}
-
 export async function POST(req: Request) {
   let accountId = "";
   let userId = "";
@@ -82,18 +76,23 @@ export async function POST(req: Request) {
         target: "cavcloud",
       });
     }
-    const account = await prisma.account.findUnique({
-      where: {
-        id: sess.accountId,
-      },
-      select: {
-        tier: true,
-        trialSeatActive: true,
-        trialEndsAt: true,
-      },
+    const [account, entitledSubscription] = await Promise.all([
+      prisma.account.findUnique({
+        where: {
+          id: sess.accountId,
+        },
+        select: {
+          tier: true,
+          trialSeatActive: true,
+          trialEndsAt: true,
+        },
+      }),
+      findLatestEntitledSubscription(String(sess.accountId || "")),
+    ]);
+    const planId = resolveEffectiveAccountPlanId({
+      account,
+      subscription: entitledSubscription,
     });
-    const trialPlus = isTrialSeatActiveNow(account?.trialSeatActive, account?.trialEndsAt);
-    const planId = trialPlus ? "premium_plus" : resolvePlanIdFromTier(account?.tier || "FREE");
     const cavsafePlanEnabled = planId === "premium" || planId === "premium_plus";
     const normalizedFilePath = joinPath(normalizedFolderPath, name);
     const shouldMirrorToCavsafe = cavsafePlanEnabled

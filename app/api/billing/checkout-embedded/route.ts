@@ -4,10 +4,11 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
-import { requireSession, requireAccountContext, requireAccountRole, isApiAuthError } from "@/lib/apiAuth";
+import { requireSession, isApiAuthError } from "@/lib/apiAuth";
 import { getStripe } from "@/lib/stripeClient";
 import { getAppUrl, priceIdFor, type StripePlanId, type StripeBilling } from "@/lib/stripe";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,11 +81,11 @@ async function ensureStripeCustomer(args: { accountId: string; operatorEmail: st
 export async function POST(req: NextRequest) {
   try {
     const sess = await requireSession(req);
-    requireAccountContext(sess);
-    await requireAccountRole(sess, ["OWNER", "ADMIN"]);
+    const billingCtx = await resolveBillingAccountContext(sess);
+    requireBillingManageRole(billingCtx);
 
-    const accountId = sess.accountId!;
-    const operatorUserId = sess.sub;
+    const accountId = billingCtx.accountId;
+    const operatorUserId = billingCtx.userId;
 
     const body = (await readSanitizedJson(req, null)) as { targetPlan?: unknown; billing?: unknown } | null;
 

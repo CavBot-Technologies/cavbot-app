@@ -14,6 +14,7 @@ import {
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { readCoarseRequestGeo } from "@/lib/requestGeo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,34 +34,6 @@ function json<T>(data: T, init?: number | ResponseInit) {
     headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS },
   });
 }
-
-function safeStr(x: unknown) {
-  return typeof x === "string" ? x : x == null ? "" : String(x);
-}
-
-/* =========================
-  Cloudflare IP + Geo
-  ========================= */
-function readCloudflareGeo(req: NextRequest) {
-  const countryRaw = safeStr(req.headers.get("cf-ipcountry")).trim();
-  const regionRaw =
-    safeStr(req.headers.get("cf-region")).trim() || safeStr(req.headers.get("cf-region-code")).trim();
-
-
-  const country = countryRaw && countryRaw !== "XX" ? countryRaw : "";
-  const region = regionRaw || "";
-
-
-  const label = [region, country].map((s) => String(s || "").trim()).filter(Boolean).join(", ");
-
-
-  return {
-    country: country || null,
-    region: region || null,
-    label: label || (country ? country : null),
-  };
-}
-
 
 export async function PATCH(req: NextRequest) {
   try {
@@ -90,7 +63,7 @@ export async function PATCH(req: NextRequest) {
     }
 
 
-    const geo = readCloudflareGeo(req);
+    const geo = readCoarseRequestGeo(req);
 
 
     // Load auth record

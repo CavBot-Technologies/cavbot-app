@@ -9,6 +9,7 @@ import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
 import { auditLogWrite } from "@/lib/audit";
 import { withUsernameHistoryUserIdField } from "@/lib/auditModelCompat";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { readCoarseRequestGeo } from "@/lib/requestGeo";
 import {
   normalizeUsername,
   isReservedUsername,
@@ -35,27 +36,6 @@ function json(data: UsernameResponseBody, init?: number | ResponseInit) {
     ...resInit,
     headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS },
   });
-}
-
-function safeStr(x: unknown) {
-  return typeof x === "string" ? x : x == null ? "" : String(x);
-}
-
-function readCloudflareGeo(req: NextRequest) {
-  const countryRaw = safeStr(req.headers.get("cf-ipcountry")).trim();
-  const regionRaw =
-    safeStr(req.headers.get("cf-region")).trim() || safeStr(req.headers.get("cf-region-code")).trim();
-
-  const country = countryRaw && countryRaw !== "XX" ? countryRaw : "";
-  const region = regionRaw || "";
-
-  const label = [region, country].map((s) => String(s || "").trim()).filter(Boolean).join(", ");
-
-  return {
-    country: country || null,
-    region: region || null,
-    label: label || (country ? country : null),
-  };
 }
 
 const COOLDOWN_DAYS = 30;
@@ -88,7 +68,7 @@ export async function PATCH(req: NextRequest) {
       return json({ error: "USERNAME_RESERVED", message: "Choose a different username." }, 400);
     }
 
-    const geo = readCloudflareGeo(req);
+    const geo = readCoarseRequestGeo(req);
 
     const user = await prisma.user.findUnique({
       where: { id: userId },

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
-import { readWorkspace } from "@/lib/workspaceStore.server";
+import { resolveApiKeyWorkspace } from "@/lib/settings/apiKeyWorkspace.server";
 import { buildApiKeyInsertData, serializeApiKey } from "@/lib/apiKeys.server";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -33,19 +33,25 @@ export async function POST(req: NextRequest) {
   try {
     const session = await requireSettingsOwnerSession(req);
 
-    const workspace = await readWorkspace({ accountId: session.accountId });
-    const projectId = workspace.projectId;
-
     const body = (await readSanitizedJson(req, null)) as ApiKeyActionBody | null;
     const keyId = String(body?.keyId || "").trim();
     if (!keyId) return json({ ok: false, error: "KEY_ID_REQUIRED" }, 400);
 
     const existing = await prisma.apiKey.findFirst({
-      where: { id: keyId, projectId },
+      where: { id: keyId, accountId: session.accountId },
     });
 
     if (!existing) return json({ ok: false, error: "KEY_NOT_FOUND" }, 404);
     if (existing.status !== "ACTIVE") return json({ ok: false, error: "KEY_NOT_ACTIVE" }, 412);
+
+    let projectId = existing.projectId ?? null;
+    if (!projectId) {
+      const workspace = await resolveApiKeyWorkspace({ accountId: session.accountId });
+      projectId = workspace?.projectId ?? null;
+    }
+    if (!projectId) {
+      return json({ ok: false, error: "PROJECT_NOT_FOUND" }, 404);
+    }
 
     const insert = buildApiKeyInsertData({
       type: existing.type,
@@ -98,6 +104,7 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
     const message = error instanceof Error ? error.message : String(error);
+    console.error("[settings/api-keys/rotate] rotate failed", error);
     return json({ ok: false, error: "ROTATE_FAILED", message }, 500);
   }
 }

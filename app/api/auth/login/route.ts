@@ -13,6 +13,7 @@ import {
   findMembershipsForUser,
   findUserAuth,
   findUserByEmail,
+  findUserById,
   findUserByUsername,
   getAuthPool,
   pickPrimaryMembership,
@@ -33,6 +34,9 @@ import { createHash, randomInt } from "crypto";
 import { sendEmail } from "@/lib/email/sendEmail"; // <-- must exist (you already use email for password reset)
 import { normalizeUsername } from "@/lib/username";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
+import { prisma } from "@/lib/prisma";
+import { pickClientIp, readCoarseRequestGeo } from "@/lib/requestGeo";
+import { getAccountDisciplineState } from "@/lib/admin/accountDiscipline.server";
 
 
 export const dynamic = "force-dynamic";
@@ -60,9 +64,22 @@ function normalizeEmail(x: unknown) {
   return String(x ?? "").trim().toLowerCase();
 }
 
+function normalizeStaffCode(value: unknown) {
+  const digits = String(value ?? "").replace(/\D+/g, "");
+  if (!digits) return "";
+  return `CAV-${digits.padStart(6, "0").slice(-6)}`;
+}
+
 
 function safeString(x: unknown) {
   return typeof x === "string" ? x : String(x ?? "");
+}
+
+async function getRestrictedAccountError(accountId: string) {
+  const discipline = await getAccountDisciplineState(accountId);
+  if (discipline?.status === "REVOKED") return "ACCOUNT_REVOKED";
+  if (discipline?.status === "SUSPENDED") return "ACCOUNT_SUSPENDED";
+  return "";
 }
 
 type LoginBody = {
@@ -119,50 +136,6 @@ function normalizeRole(value: string | null | undefined): Role {
 
 
 const DEFAULT_PBKDF2_ITERS = Number(process.env.CAVBOT_PBKDF2_ITERS || 310_000);
-
-
-function safeStr(x: unknown) {
-  return typeof x === "string" ? x : x == null ? "" : String(x);
-}
-
-
-function pickClientIp(req: Request) {
-  const cfConn = safeStr(req.headers.get("cf-connecting-ip")).trim();
-  if (cfConn) return cfConn;
-
-
-  const tcip = safeStr(req.headers.get("true-client-ip")).trim();
-  if (tcip) return tcip;
-
-
-  const xff = safeStr(req.headers.get("x-forwarded-for")).trim();
-  if (xff) return xff.split(",")[0].trim();
-
-
-  const xr = safeStr(req.headers.get("x-real-ip")).trim();
-  if (xr) return xr;
-
-
-  return "";
-}
-
-
-function readCloudflareGeo(req: Request) {
-  const country = safeStr(req.headers.get("cf-ipcountry")).trim();
-  const region = safeStr(req.headers.get("cf-region")).trim() || safeStr(req.headers.get("cf-region-code")).trim();
-
-
-  const cleanCountry = country && country !== "XX" ? country : "";
-  const parts = [region, cleanCountry].map((s) => String(s || "").trim()).filter(Boolean);
-  const label = parts.join(", ");
-
-
-  return {
-    country: cleanCountry || null,
-    region: region || null,
-    label: label || (cleanCountry ? cleanCountry : null),
-  };
-}
 
 
 function sha256Hex(s: string) {
@@ -290,13 +263,23 @@ export async function POST(req: Request) {
       normalizedIdentifier.includes("@") && !normalizedIdentifier.startsWith("@");
     const email = treatAsEmail ? normalizeEmail(normalizedIdentifier) : "";
     const username = treatAsEmail ? "" : normalizeUsername(normalizedIdentifier);
+    const staffCode = treatAsEmail ? "" : normalizeStaffCode(normalizedIdentifier);
     const password = safeString(body?.password);
 
 
     if ((!email && !username) || !password) return reject({ ok: false, error: "missing_credentials" }, 400);
 
 
-    const user = email ? await findUserByEmail(pool, email) : await findUserByUsername(pool, username);
+    let user = email ? await findUserByEmail(pool, email) : await findUserByUsername(pool, username);
+    if (!user && staffCode) {
+      const staff = await prisma.staffProfile.findUnique({
+        where: { staffCode },
+        select: { userId: true },
+      });
+      if (staff?.userId) {
+        user = await findUserById(pool, staff.userId);
+      }
+    }
     const userAuth = user ? await findUserAuth(pool, user.id) : null;
     const memberships = user ? await findMembershipsForUser(pool, user.id) : [];
 
@@ -307,7 +290,7 @@ export async function POST(req: Request) {
       memberships.length
         ? pickPrimaryMembership(memberships)
         : null;
-    const geo = readCloudflareGeo(req);
+    const geo = readCoarseRequestGeo(req);
 
 
     const salt = String(userAuth.passwordSalt || "");
@@ -348,6 +331,10 @@ export async function POST(req: Request) {
 
 
     const active = activeCandidate ?? memberships[0];
+    {
+      const restriction = await getRestrictedAccountError(active.accountId);
+      if (restriction) return reject({ ok: false, error: restriction }, 403);
+    }
 
 
     await auditLogWrite({
@@ -378,7 +365,7 @@ export async function POST(req: Request) {
     if (email2fa) {
       const ua = String(req.headers.get("user-agent") || "");
       const ip = pickClientIp(req);
-      const geo = readCloudflareGeo(req);
+      const geo = readCoarseRequestGeo(req);
 
 
       const ch = await createEmail2faChallenge({

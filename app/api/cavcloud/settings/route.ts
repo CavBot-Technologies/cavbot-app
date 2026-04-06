@@ -1,4 +1,9 @@
 import { requireAccountContext, requireAccountRole, requireSession, requireUser } from "@/lib/apiAuth";
+import {
+  findLatestEntitledSubscription,
+  planTierTokenFromPlanId,
+  resolveEffectivePlanId as resolveEffectiveAccountPlanId,
+} from "@/lib/accountPlan.server";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import {
   DEFAULT_CAVCLOUD_SETTINGS,
@@ -13,8 +18,6 @@ import {
   updateCavCloudCollabPolicy,
 } from "@/lib/cavcloud/collabPolicy.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
-import { getCavCloudOperatorContext } from "@/lib/cavcloud/permissions.server";
-import { resolvePlanIdFromTier } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { buildGuardDecisionPayload } from "@/src/lib/cavguard/cavGuard.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -23,29 +26,25 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-function isTrialSeatActiveNow(trialSeatActive: boolean | null, trialEndsAt: Date | null) {
-  if (!trialSeatActive || !trialEndsAt) return false;
-  const endsAtMs = new Date(trialEndsAt).getTime();
-  return Number.isFinite(endsAtMs) && endsAtMs > Date.now();
-}
-
 async function resolveGuardPlan(accountIdRaw: string): Promise<"FREE" | "PREMIUM" | "PREMIUM_PLUS"> {
   const accountId = String(accountIdRaw || "").trim();
   if (!accountId) return "FREE";
-  const account = await prisma.account.findUnique({
-    where: { id: accountId },
-    select: {
-      tier: true,
-      trialSeatActive: true,
-      trialEndsAt: true,
-    },
-  });
+  const [account, entitledSubscription] = await Promise.all([
+    prisma.account.findUnique({
+      where: { id: accountId },
+      select: {
+        tier: true,
+        trialSeatActive: true,
+        trialEndsAt: true,
+      },
+    }),
+    findLatestEntitledSubscription(accountId),
+  ]);
   if (!account) return "FREE";
-  if (isTrialSeatActiveNow(account.trialSeatActive, account.trialEndsAt)) return "PREMIUM_PLUS";
-  const planId = resolvePlanIdFromTier(account.tier);
-  if (planId === "premium_plus") return "PREMIUM_PLUS";
-  if (planId === "premium") return "PREMIUM";
-  return "FREE";
+  return planTierTokenFromPlanId(resolveEffectiveAccountPlanId({
+    account,
+    subscription: entitledSubscription,
+  }));
 }
 
 async function buildOwnerSettingsGuard(args: {
@@ -59,6 +58,15 @@ async function buildOwnerSettingsGuard(args: {
     role: args.role || undefined,
     plan: guardPlan,
   });
+}
+
+function resolveSessionMemberRole(
+  sess: { memberRole?: unknown } | null | undefined,
+  fallback: "OWNER" | "ADMIN" | "MEMBER" | "ANON" = "ANON",
+) {
+  const normalized = String(sess?.memberRole || fallback).trim().toUpperCase();
+  if (normalized === "OWNER" || normalized === "ADMIN" || normalized === "MEMBER") return normalized;
+  return fallback;
 }
 
 function isCavCloudSettingsReadSchemaMismatch(err: unknown) {
@@ -87,7 +95,6 @@ async function buildDegradedSettingsResponse(req: Request) {
   const sess = await requireSession(req);
   requireAccountContext(sess);
   requireUser(sess);
-  requireAccountRole(sess, ["OWNER"]);
 
   return jsonNoStore(
     {
@@ -95,7 +102,7 @@ async function buildDegradedSettingsResponse(req: Request) {
       degraded: true,
       settings: { ...DEFAULT_CAVCLOUD_SETTINGS },
       collabPolicy: { ...DEFAULT_CAVCLOUD_COLLAB_POLICY },
-      memberRole: String(sess.memberRole || "OWNER").toUpperCase(),
+      memberRole: resolveSessionMemberRole(sess),
     },
     200,
   );
@@ -110,23 +117,19 @@ export async function GET(req: Request) {
 
     const accountId = String(sess.accountId || "");
     const userId = String(sess.sub || "");
-    const [settings, collabPolicy, operator] = await Promise.all([
+    const [settings, collabPolicy] = await Promise.all([
       getCavCloudSettings({
         accountId,
         userId,
       }),
       getCavCloudCollabPolicy(accountId),
-      getCavCloudOperatorContext({
-        accountId,
-        userId,
-      }),
     ]);
 
     return jsonNoStore({
       ok: true,
       settings,
       collabPolicy,
-      memberRole: operator.role,
+      memberRole: resolveSessionMemberRole(sess, "OWNER"),
     }, 200);
   } catch (err) {
     const status = Number((err as { status?: unknown })?.status || 0);
@@ -189,6 +192,7 @@ async function saveSettings(req: Request) {
 
   const accountId = String(sess.accountId || "");
   const userId = String(sess.sub || "");
+  const memberRole = resolveSessionMemberRole(sess, "OWNER");
   const body = (await readSanitizedJson(req, null)) as unknown;
   const payload = body && typeof body === "object" && !Array.isArray(body)
     ? (body as Record<string, unknown>)
@@ -210,17 +214,12 @@ async function saveSettings(req: Request) {
     Object.prototype.hasOwnProperty.call(collabParsed.patch, "enableContributorLinks")
     && Boolean(collabParsed.patch.enableContributorLinks);
 
-  const operator = await getCavCloudOperatorContext({
-    accountId,
-    userId,
-  });
-
   if (wantsArcadeAccessEnabled) {
     const guardPlan = await resolveGuardPlan(accountId);
     if (guardPlan !== "PREMIUM_PLUS") {
       const guardPayload = buildGuardDecisionPayload({
         actionId: "ARCADE_CONTROLS_PLAN_REQUIRED",
-        role: operator.role,
+        role: memberRole,
         plan: guardPlan,
       });
       return jsonNoStore(
@@ -242,12 +241,10 @@ async function saveSettings(req: Request) {
       patch: parsed.patch,
     }),
     Object.keys(collabParsed.patch).length
-      ? operator.role === "OWNER"
-        ? updateCavCloudCollabPolicy({
-            accountId,
-            patch: collabParsed.patch,
-          })
-        : Promise.reject(Object.assign(new Error("UNAUTHORIZED"), { code: "UNAUTHORIZED", status: 403 }))
+      ? updateCavCloudCollabPolicy({
+          accountId,
+          patch: collabParsed.patch,
+        })
       : getCavCloudCollabPolicy(accountId),
   ]);
 

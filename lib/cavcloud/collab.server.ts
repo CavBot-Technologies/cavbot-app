@@ -10,9 +10,10 @@ import type {
   Prisma,
 } from "@prisma/client";
 
+import { findLatestEntitledSubscription, resolveEffectivePlanId as resolveEffectiveAccountPlanId } from "@/lib/accountPlan.server";
 import { ApiAuthError } from "@/lib/apiAuth";
 import { CAVCLOUD_NOTIFICATION_KINDS } from "@/lib/notificationKinds";
-import { getPlanLimits, resolvePlanIdFromTier } from "@/lib/plans";
+import { getPlanLimits } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { notifyCavCloudCollabSignal } from "@/lib/cavcloud/notifications.server";
 import { writeCavCloudOperationLog } from "@/lib/cavcloud/operationLog.server";
@@ -185,16 +186,24 @@ async function ensureMemberSeatCapacity(args: {
   });
   if (existing?.id) return;
 
-  const account = await args.tx.account.findUnique({
-    where: {
-      id: args.accountId,
-    },
-    select: {
-      tier: true,
-    },
-  });
+  const [account, entitledSubscription] = await Promise.all([
+    args.tx.account.findUnique({
+      where: {
+        id: args.accountId,
+      },
+      select: {
+        tier: true,
+        trialSeatActive: true,
+        trialEndsAt: true,
+      },
+    }),
+    findLatestEntitledSubscription(args.accountId, args.tx),
+  ]);
 
-  const planId = resolvePlanIdFromTier(account?.tier || "FREE");
+  const planId = resolveEffectiveAccountPlanId({
+    account,
+    subscription: entitledSubscription,
+  });
   const seatLimit = Number(getPlanLimits(planId)?.seats ?? 0);
   if (seatLimit > 0) {
     const [membersCount, pendingInvitesCount] = await Promise.all([
