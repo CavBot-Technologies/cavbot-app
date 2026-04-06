@@ -765,10 +765,31 @@ a:focus{
   filter: brightness(0) invert(1);
 }
 
-.cb-fellow-activity-icon{
-  width: 22px;
-  height: 22px;
+.cb-side-tools-grid{
+  width: 18px;
+  height: 18px;
   display: block;
+}
+
+.cb-side-tools-grid rect{
+  stroke: rgba(255,255,255,0.34);
+  stroke-width: .5;
+}
+
+.cb-side-tools-grid .is-lime{
+  fill: rgba(198,214,97,0.98);
+}
+
+.cb-side-tools-grid .is-coral{
+  fill: rgba(255,164,114,0.98);
+}
+
+.cb-side-tools-grid .is-blue{
+  fill: rgba(104,185,255,0.98);
+}
+
+.cb-side-tools-grid .is-violet{
+  fill: rgba(182,120,255,0.98);
 }
 
 .cb-cavpad-icon{

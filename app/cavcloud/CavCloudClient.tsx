@@ -1680,6 +1680,7 @@ function ek(e) {
     [memberRole, setMemberRole] = (0, c.useState)(isOwner ? "OWNER" : "ANON"),
     [eV, eZ] = (0, c.useState)(() => !!cachedPlanState.trialActive),
     [ez, eq] = (0, c.useState)(() => Math.max(0, Math.trunc(Number(cachedPlanState.trialDaysLeft || 0)) || 0)),
+    [isCompactShell, setIsCompactShell] = (0, c.useState)(() => "undefined" != typeof window && !!window.matchMedia && window.matchMedia("(max-width: 980px)").matches),
     [mobileNavOpen, setMobileNavOpen] = (0, c.useState)(!1),
     [mobileSearchOpen, setMobileSearchOpen] = (0, c.useState)(!1),
     [eY, eQ] = (0, c.useState)([]),
@@ -7804,6 +7805,21 @@ function ek(e) {
     mountQuickOptions.some(e => e.id === mountQuickTargetId) || setMountQuickTargetId(String(mountQuickOptions[0]?.id || ""));
   }, [mountQuickOptions, mountQuickTargetId]);
   (0, c.useEffect)(() => {
+    if ("undefined" == typeof window || "function" != typeof window.matchMedia) return;
+    let e = window.matchMedia("(max-width: 980px)"),
+      a = () => {
+        setIsCompactShell(e.matches);
+      };
+    return a(), e.addEventListener ? (e.addEventListener("change", a), () => {
+      e.removeEventListener("change", a);
+    }) : (e.addListener(a), () => {
+      e.removeListener(a);
+    });
+  }, []);
+  (0, c.useEffect)(() => {
+    isCompactShell || (setMobileNavOpen(!1), setMobileSearchOpen(!1));
+  }, [isCompactShell]);
+  (0, c.useEffect)(() => {
     setMobileNavOpen(!1), setMobileSearchOpen(!1);
   }, [S]);
   (0, c.useEffect)(() => {
@@ -7868,14 +7884,14 @@ function ek(e) {
   return (0, t.jsxs)("div", {
     className: "cavcloud-root",
     "data-theme": eA,
-    children: [mobileNavOpen ? t.jsx("button", {
+    children: [isCompactShell && mobileNavOpen ? t.jsx("button", {
       type: "button",
       className: "cavcloud-sideBackdrop",
       "aria-label": "Close menu",
       onClick: () => setMobileNavOpen(!1)
     }) : null, (0, t.jsxs)("aside", {
       id: "cavcloud-mobile-nav",
-      className: `cavcloud-side ${mobileNavOpen ? "is-mobile-open" : ""}`,
+      className: `cavcloud-side ${isCompactShell && mobileNavOpen ? "is-mobile-open" : ""}`,
       children: [(0, t.jsxs)("div", {
         className: "cavcloud-brand",
         children: [t.jsx(CavSurfaceSidebarBrandMenu, {
@@ -7927,7 +7943,7 @@ function ek(e) {
         className: "cavcloud-top",
         children: [t.jsxs("div", {
           className: "cavcloud-title cavcloud-titleGreetingSlot",
-          children: [t.jsx("button", {
+          children: [isCompactShell ? t.jsx("button", {
             type: "button",
             className: "cavcloud-btn cavcloud-btnGhost cavcloud-btnIconOnly cavcloud-mobileHeaderBtn cavcloud-mobileMenuBtn",
             onClick: () => {
@@ -7957,13 +7973,13 @@ function ek(e) {
                 strokeLinecap: "round"
               })]
             })
-          }), t.jsx(CavSurfaceHeaderGreeting, {
+          }) : null, t.jsx(CavSurfaceHeaderGreeting, {
             accountName: eP,
             showVerified: surfaceVerified
           })]
         }), (0, t.jsxs)("div", {
           className: "cavcloud-actions",
-          children: [t.jsx("button", {
+          children: [isCompactShell ? t.jsx("button", {
             type: "button",
             className: `cavcloud-btn cavcloud-btnGhost cavcloud-btnIconOnly cavcloud-mobileHeaderBtn cavcloud-mobileSearchBtn ${mobileSearchOpen ? "is-active" : ""}`,
             onClick: () => {
@@ -7988,7 +8004,7 @@ function ek(e) {
                 strokeLinecap: "round"
               })]
             })
-          }), t.jsx("input", {
+          }) : null, isCompactShell ? null : t.jsx("input", {
             className: "cavcloud-search",
             value: eM,
             onChange: e => eI(e.currentTarget.value),
@@ -8033,7 +8049,7 @@ function ek(e) {
               unoptimized: !0
             })
           }), (0, t.jsxs)("button", {
-            className: "cavcloud-btn cavcloud-btnPrimary cavcloud-btnUpload",
+            className: `cavcloud-btn cavcloud-btnPrimary cavcloud-btnUpload ${isCompactShell ? "is-mobile" : ""}`,
             disabled: ew || eC,
             onClick: () => lh(!0),
             children: [t.jsx("svg", {
@@ -8046,13 +8062,13 @@ function ek(e) {
                 strokeWidth: "1.9",
                 strokeLinecap: "round"
               })
-            }), t.jsx("span", {
+            }), isCompactShell ? null : t.jsx("span", {
               className: "cavcloud-btnUploadLabel",
               children: "New"
             })]
           })]
         })]
-      }), mobileSearchOpen ? t.jsx("div", {
+      }), isCompactShell && mobileSearchOpen ? t.jsx("div", {
         className: "cavcloud-mobileSearchPanel",
         children: t.jsx("input", {
           className: "cavcloud-search cavcloud-searchMobile",

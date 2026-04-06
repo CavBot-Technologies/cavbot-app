@@ -925,13 +925,19 @@ export default function AppShell({
     const handle = String(profileUsername || "").trim().replace(/^@+/, "");
     return handle ? `@${handle}` : "CavBot Account";
   }, [profileFullName, profileUsername]);
+  const founderProfileShowsPremiumPlus = useMemo(() => {
+    const full = String(profileDisplayName || "").trim().toLowerCase();
+    const handle = String(profileUsername || "").trim().replace(/^@+/, "").toLowerCase();
+    return full === "cavbot admin" || handle === "cavbot";
+  }, [profileDisplayName, profileUsername]);
+  const profileShowsPremiumPlus = planTier === "PREMIUM_PLUS" || founderProfileShowsPremiumPlus;
   const profilePlanLabel = useMemo(() => {
-    if (trialActive && trialDaysLeft > 0) return "FREE TRIAL";
-    if (planTier === "PREMIUM_PLUS") return "PREMIUM+";
+    if (trialActive && trialDaysLeft > 0 && !profileShowsPremiumPlus) return "FREE TRIAL";
+    if (profileShowsPremiumPlus) return "PREMIUM+";
     if (planTier === "PREMIUM") return "PREMIUM PLAN";
     return "FREE TIER";
-  }, [planTier, trialActive, trialDaysLeft]);
-  const planMenuLabel = planTier === "PREMIUM_PLUS" ? "See Plans" : "Upgrade Plan";
+  }, [planTier, profileShowsPremiumPlus, trialActive, trialDaysLeft]);
+  const planMenuLabel = profileShowsPremiumPlus ? "See Plans" : "Upgrade Plan";
 
 
   // On mount: kill any leftover params you DO NOT want
@@ -2363,7 +2369,7 @@ export default function AppShell({
                 </span>
 
                 <span className="cb-side-account-spark" aria-hidden="true">
-                  {planTier === "PREMIUM_PLUS" ? (
+                  {profileShowsPremiumPlus ? (
                     <IconPremiumPlusStar />
                   ) : (
                     <Image
@@ -2752,16 +2758,12 @@ function IconBell() {
 
 function IconQuickToolsGrid() {
   return (
-    <Image
-      src="/icons/app/grid-svgrepo-com copy.svg"
-      alt=""
-      width={22}
-      height={22}
-      className="cb-fellow-activity-icon"
-      aria-hidden="true"
-      priority
-      unoptimized
-    />
+    <svg width="18" height="18" viewBox="0 0 18 18" className="cb-side-tools-grid" aria-hidden="true">
+      <rect x="1" y="1" width="6" height="6" rx="2" className="is-lime" />
+      <rect x="11" y="1" width="6" height="6" rx="2" className="is-coral" />
+      <rect x="1" y="11" width="6" height="6" rx="2" className="is-blue" />
+      <rect x="11" y="11" width="6" height="6" rx="2" className="is-violet" />
+    </svg>
   );
 }
 
