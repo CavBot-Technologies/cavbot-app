@@ -157,23 +157,6 @@ body{ margin:0; }
   object-fit: cover;
   display:block;
 }
-.cavcloud-brandTitle{
-  font-size: 14px;
-  font-weight: 750;
-  letter-spacing: .02em;
-  text-transform: none;
-}
-.cavcloud-brandTitleNameWrap{
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.cavcloud-brandTitlePrefix{
-  color: var(--cc-text);
-}
-.cavcloud-brandTitleAccent{
-  color: var(--cc-accent);
-}
 .cavcloud-verifiedBadge{
   display: inline-flex;
   align-items: center;
@@ -284,7 +267,15 @@ body{ margin:0; }
   width: 100%;
 }
 .cavcloud-surfaceFooterIcons{
-  width: 100%;
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.14));
+  box-shadow: inset 0 0 0 .5px rgba(255,255,255,0.04);
 }
 .cavcloud-surfaceFooterPlan{
   width: 100%;
@@ -414,83 +405,29 @@ body{ margin:0; }
 .cavcloud-sidePalette:hover .cavcloud-sidePaletteIcon{
   transform: rotate(-8deg) scale(1.05);
 }
-.cavcloud-sideLauncherStack{
-  width: 100%;
-}
-.cavcloud-surfaceLauncherWrap{
-  position: relative;
-}
-.cb-icon-btn.cavcloud-surfaceLauncherTrigger,
-.cb-icon-btn.cavcloud-surfaceFooterSettings{
+.cb-icon-btn.cavcloud-surfaceQuickTool{
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: rgba(255,255,255,0.02);
   color: rgba(247,251,255,0.94);
+  box-shadow: none;
 }
-.cb-icon-btn.cavcloud-surfaceLauncherTrigger:hover,
-.cb-icon-btn.cavcloud-surfaceLauncherTrigger.is-open,
-.cb-icon-btn.cavcloud-surfaceFooterSettings:hover{
+.cb-icon-btn.cavcloud-surfaceQuickTool:hover,
+.cb-icon-btn.cavcloud-surfaceQuickTool:focus-visible,
+.cb-icon-btn.cavcloud-surfaceQuickTool.is-active{
   transform: translateY(-1px);
-  border-color: transparent;
-  background: transparent;
+  border-color: rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
 }
-.cavcloud-surfaceLauncherTrigger:focus-visible{
-  outline: 1px solid rgba(255,255,255,0.3);
-  outline-offset: 3px;
+.cb-icon-btn.cavcloud-surfaceQuickTool:focus-visible{
+  outline: 1px solid rgba(255,255,255,0.24);
+  outline-offset: 2px;
 }
-.cavcloud-surfaceLauncherTriggerIcon{
-  width: 22px;
-  height: 22px;
-  display: block;
-}
-.cavcloud-surfaceLauncherMenu{
-  position: absolute;
-  left: calc(100% + 10px);
-  top: 0;
-  transform: none;
-  display: grid;
-  gap: 4px;
-  min-width: 180px;
-  padding: 8px;
-  z-index: 260;
-}
-.cavcloud-surfaceLauncherMenuItem{
-  width: 100%;
-}
-.cavcloud-surfaceLauncherMenuItemLead{
+.cavcloud-surfaceQuickToolIcon{
   width: 18px;
   height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 18px;
-}
-.cavcloud-surfaceLauncherMenuItemLead .cavcloud-surfaceLauncherActionIcon{
-  width: 18px;
-  height: 18px;
-}
-.cavcloud-surfaceLauncherMenuCavAiWrap{
-  display: block;
-}
-.cavcloud-surfaceLauncherMenuCavAiWrap > .cavcloud-surfaceLauncherMenuItemCavAi{
-  width: 100%;
-}
-.cavcloud-surfaceLauncherMenuItemCavAi{
-  position: relative;
-  padding-left: 38px;
-}
-.cavcloud-surfaceLauncherMenuItemCavAi::before{
-  content: "";
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  width: 18px;
-  height: 18px;
-  transform: translateY(-50%);
-  background-color: currentColor;
-  -webkit-mask: url("/icons/app/smart-optimization-svgrepo-com.svg") center / contain no-repeat;
-  mask: url("/icons/app/smart-optimization-svgrepo-com.svg") center / contain no-repeat;
-}
-.cavcloud-surfaceLauncherActionIcon{
-  width: 22px;
-  height: 22px;
   display: block;
   object-fit: contain;
 }
@@ -501,8 +438,9 @@ body{ margin:0; }
   width: 16px;
   height: 16px;
 }
-.cavcloud-surfaceLauncherActionCavAi{
-  display: inline-flex;
+.cavcloud-surfaceQuickToolCavAi{
+  display: inline-grid;
+  place-items: center;
 }
 .cavcloud-planLabel,
 .cavcloud-planValue,
@@ -529,77 +467,35 @@ body{ margin:0; }
   align-items:center;
   gap: 12px;
 }
-.cavcloud-titlePlanSlot{
-  flex: 0 0 auto;
-}
-.cavcloud-headerPlanButton{
-  min-width: 196px;
-  min-height: 48px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.10);
-  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.10));
-  color: rgba(247,251,255,0.94);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  transition: transform 180ms ease, border-color 180ms ease, filter 180ms ease;
-}
-.cavcloud-headerPlanButton:hover{
-  transform: translateY(-2px);
-  border-color: rgba(255,255,255,0.14);
-  filter: brightness(1.03);
-}
-.cavcloud-headerPlanButton:focus-visible{
-  outline: 1px solid rgba(255,255,255,0.28);
-  outline-offset: 3px;
-}
-.cavcloud-headerPlanChip{
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(145deg, rgba(185,200,90,0.22), rgba(78,168,255,0.16));
-  border: 1px solid rgba(255,255,255,0.08);
-}
-.cavcloud-headerPlanChipIcon{
-  display: block;
-}
-.cavcloud-headerPlanMeta{
-  min-width: 0;
+.cavcloud-titleGreetingSlot{
   flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
+  min-width: 0;
 }
-.cavcloud-headerPlanName{
-  width: 100%;
-  font-size: 13px;
-  font-weight: 760;
-  letter-spacing: -0.01em;
-  color: rgba(247,251,255,0.96);
-  text-align: left;
-  white-space: nowrap;
-}
-.cavcloud-headerPlanAction{
-  font-size: 10px;
-  font-weight: 780;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(197,206,231,0.74);
-}
-.cavcloud-headerPlanSpark{
-  width: 18px;
-  height: 18px;
+.cavcloud-headerGreeting{
+  min-width: 0;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
+  gap: 0;
+  font-size: 14px;
+  font-weight: 760;
+  letter-spacing: -.01em;
+  color: rgba(247,251,255,0.96);
+}
+.cavcloud-headerGreetingPrefix{
+  color: rgba(247,251,255,0.96);
+}
+.cavcloud-headerGreetingNameWrap{
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cavcloud-headerGreetingName{
+  max-width: min(32vw, 280px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--cc-accent);
 }
 .cavcloud-badgeWrap{
   width: 42px;
@@ -6004,17 +5900,10 @@ body{ margin:0; }
     order: 1;
     min-height: 0;
   }
-  .cavcloud-surfaceLauncherMenu{
-    left: auto;
-    right: 0;
-    top: auto;
-    bottom: calc(100% + 10px);
-    transform: none;
-  }
-  .cavcloud-titlePlanSlot{
+  .cavcloud-titleGreetingSlot{
     width: 100%;
   }
-  .cavcloud-headerPlanButton{
+  .cavcloud-headerGreeting{
     width: 100%;
   }
   .cavcloud-grid{

@@ -13,7 +13,7 @@ import { CavCloudCollaborateModal } from "@/components/cavcloud/CavCloudCollabor
 import CavCloudOperationalDashboard from "@/components/cavcloud/CavCloudOperationalDashboard";
 import CavCloudGoogleDriveImportModal from "@/components/cavcloud/CavCloudGoogleDriveImportModal";
 import {
-  CavSurfacePlanButton,
+  CavSurfaceHeaderGreeting,
   CavSurfaceSidebarBrandMenu,
   CavSurfaceSidebarFooter
 } from "@/components/cavcloud/CavSurfaceShellControls";
@@ -7845,9 +7845,7 @@ function ek(e) {
       children: [(0, t.jsxs)("div", {
         className: "cavcloud-brand",
         children: [t.jsx(CavSurfaceSidebarBrandMenu, {
-          surfaceTitle: surfaceTitle,
-          accountName: eP,
-          showVerified: surfaceVerified
+          surfaceTitle: surfaceTitle
         })]
       }), t.jsx("nav", {
         className: "cavcloud-nav",
@@ -7892,12 +7890,10 @@ function ek(e) {
       children: [(0, t.jsxs)("div", {
         className: "cavcloud-top",
         children: [t.jsx("div", {
-          className: "cavcloud-title cavcloud-titlePlanSlot",
-          children: t.jsx(CavSurfacePlanButton, {
-            planTier: eK,
-            trialActive: eV,
-            trialDaysLeft: ez,
-            onOpenPlans: openPlans
+          className: "cavcloud-title cavcloud-titleGreetingSlot",
+          children: t.jsx(CavSurfaceHeaderGreeting, {
+            accountName: eP,
+            showVerified: surfaceVerified
           })
         }), (0, t.jsxs)("div", {
           className: "cavcloud-actions",

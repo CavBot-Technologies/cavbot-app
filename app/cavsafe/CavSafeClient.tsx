@@ -11,7 +11,7 @@ import * as c from "react";
 import { CavCloudPreviewPanel } from "@/components/cavcloud/CavCloudPreviewPanel";
 import CavSafeOwnerCommandDashboard from "@/components/cavsafe/CavSafeOwnerCommandDashboard";
 import {
-  CavSurfacePlanButton,
+  CavSurfaceHeaderGreeting,
   CavSurfaceSidebarBrandMenu,
   CavSurfaceSidebarFooter
 } from "@/components/cavcloud/CavSurfaceShellControls";
@@ -5990,9 +5990,7 @@ function ek() {
       children: [(0, t.jsxs)("div", {
         className: "cavcloud-brand",
         children: [t.jsx(CavSurfaceSidebarBrandMenu, {
-          surfaceTitle: surfaceTitle,
-          accountName: eP,
-          showVerified: surfaceVerified
+          surfaceTitle: surfaceTitle
         })]
       }), t.jsx("nav", {
         className: "cavcloud-nav",
@@ -6043,12 +6041,10 @@ function ek() {
       children: [(0, t.jsxs)("div", {
         className: "cavcloud-top",
         children: [t.jsx("div", {
-          className: "cavcloud-title cavcloud-titlePlanSlot",
-          children: t.jsx(CavSurfacePlanButton, {
-            planTier: eK,
-            trialActive: eV,
-            trialDaysLeft: ez,
-            onOpenPlans: openPlans
+          className: "cavcloud-title cavcloud-titleGreetingSlot",
+          children: t.jsx(CavSurfaceHeaderGreeting, {
+            accountName: eP,
+            showVerified: surfaceVerified
           })
         }), (0, t.jsxs)("div", {
           className: "cavcloud-actions",
