@@ -4733,10 +4733,49 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   align-self: center;
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
+  min-width: 58px;
 }
 
 .cc-skills-cardActionWrap .cc-skills-cardIconBtn{
   margin-left: 0;
+}
+
+.cc-skills-cardActionStatus{
+  min-width: 22px;
+  min-height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: rgba(206,219,244,.9);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.cc-skills-cardActionStatus.is-private{
+  color: rgba(206,219,244,.82);
+}
+
+.cc-skills-cardActionStatus.is-review{
+  min-width: 56px;
+  color: rgba(188,205,236,.8);
+}
+
+.cc-skills-cardActionStatus.is-approved{
+  color: rgba(223,234,252,.92);
+}
+
+.cc-skills-cardActionStatusCheck{
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.cc-skills-cardActionStatusText{
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .cc-skills-cardManageBtn{
@@ -4744,6 +4783,9 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   height: 26px;
   border-radius: 6px;
   position: relative;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease, color 140ms ease;
 }
 
 .cc-skills-cardManageCheck,
@@ -4763,15 +4805,20 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-skills-cardManageDots{
-  opacity: 0;
-}
-
-.cc-skills-cardActionWrap:hover .cc-skills-cardManageCheck{
-  opacity: 0;
-}
-
-.cc-skills-cardActionWrap:hover .cc-skills-cardManageDots{
   opacity: 1;
+}
+
+.cc-skills-card:hover .cc-skills-cardActionStatus,
+.cc-skills-card:focus-within .cc-skills-cardActionStatus{
+  opacity: 0;
+  transform: translateY(-1px);
+  pointer-events: none;
+}
+
+.cc-skills-card:hover .cc-skills-cardManageBtn,
+.cc-skills-card:focus-within .cc-skills-cardManageBtn{
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .cc-skills-cardManageMenu{
@@ -4812,6 +4859,106 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-skills-cardManageMenuItemDanger{
   color: rgba(255,190,190,.95);
+}
+
+.cc-agentManageCard{
+  width: min(520px, 94vw);
+}
+
+.cc-agentManageBody{
+  gap: 12px;
+}
+
+.cc-agentManageStatusCard{
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(255,255,255,.04);
+}
+
+.cc-agentManageStatusCard.is-private{
+  border-color: rgba(210,222,247,.14);
+  background: rgba(255,255,255,.035);
+}
+
+.cc-agentManageStatusCard.is-review{
+  border-color: rgba(160,192,240,.22);
+  background: linear-gradient(160deg, rgba(53,86,144,.18), rgba(10,18,36,.94));
+}
+
+.cc-agentManageStatusCard.is-approved{
+  border-color: rgba(185,200,90,.22);
+  background: linear-gradient(160deg, rgba(185,200,90,.14), rgba(10,18,36,.94));
+}
+
+.cc-agentManageStatusTop{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cc-agentManageStatusLabel{
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(246,250,255,.96);
+  letter-spacing: .02em;
+}
+
+.cc-agentManageStatusMeta{
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: rgba(180,198,229,.78);
+}
+
+.cc-agentManageStatusSummary{
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(208,221,244,.9);
+}
+
+.cc-agentManageStatusNote,
+.cc-agentManageFootnote{
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(188,204,232,.82);
+}
+
+.cc-agentManageActionStack{
+  display: grid;
+  gap: 8px;
+}
+
+.cc-agentManageActionStack .cc-modal-btn{
+  width: 100%;
+}
+
+.cc-agentManageDangerBtn{
+  border-color: rgba(255,168,168,.22);
+  color: rgba(255,208,208,.95);
+  background: rgba(88,18,18,.14);
+}
+
+.cc-agentManageDangerBtn:hover{
+  border-color: rgba(255,168,168,.34);
+  background: rgba(118,24,24,.18);
+}
+
+@media (hover: none) {
+  .cc-skills-cardManageBtn{
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .cc-skills-cardActionWrap{
+    min-width: auto;
+    gap: 8px;
+  }
 }
 
 .cc-skills-empty{

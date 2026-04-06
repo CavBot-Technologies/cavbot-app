@@ -396,6 +396,34 @@ export async function listPublishedOperatorAgentIds(): Promise<string[]> {
   return rows.map((row) => row.id);
 }
 
+export async function listOwnedPublishedOperatorSourceAgentIds(args: {
+  userId: string;
+  limit?: number;
+}): Promise<string[]> {
+  const userId = s(args.userId);
+  if (!userId) return [];
+  await ensureOperatorAgentTables();
+  const limit = Math.max(1, Math.min(MAX_LIST_LIMIT, Math.trunc(Number(args.limit) || 240)));
+  const rows = await prisma.$queryRaw<Array<{ sourceAgentId: string | null }>>(
+    Prisma.sql`
+      SELECT "sourceAgentId"
+      FROM "OperatorPublishedAgent"
+      WHERE "sourceUserId" = ${userId}
+      ORDER BY "publishedAt" DESC, "updatedAt" DESC
+      LIMIT ${limit}
+    `
+  );
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const row of rows) {
+    const id = normalizeAgentId(row?.sourceAgentId);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
 export async function upsertPublishedOperatorAgent(args: {
   accountId: string;
   userId: string;

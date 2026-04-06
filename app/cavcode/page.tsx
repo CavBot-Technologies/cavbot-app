@@ -1769,6 +1769,19 @@ function normalizeInstalledAgentIdsFromUnknown(
   return [...orderedBuiltIn, ...orderedCustom];
 }
 
+function normalizeAgentIdListFromUnknown(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const rows: string[] = [];
+  for (const row of value) {
+    const id = String(row || "").trim().toLowerCase();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    rows.push(id);
+  }
+  return rows;
+}
+
 function toAgentSlug(input: string) {
   return String(input || "")
     .trim()
@@ -5783,9 +5796,11 @@ export default function CavCodePage() {
     ...EMPTY_AGENT_REGISTRY_SNAPSHOT,
   });
   const [publishedAgents, setPublishedAgents] = useState<PublishedOperatorAgentRecord[]>([]);
+  const [ownedPublishedSourceAgentIds, setOwnedPublishedSourceAgentIds] = useState<string[]>([]);
   const agentRegistrySnapshotRef = useRef<AgentRegistrySnapshot>({
     ...EMPTY_AGENT_REGISTRY_SNAPSHOT,
   });
+  const ownedPublishedSourceAgentIdsRef = useRef<string[]>([]);
   const [installedAgentIds, setInstalledAgentIds] = useState<string[]>([...DEFAULT_INSTALLED_AGENT_IDS]);
   const installedAgentIdsRef = useRef<string[]>([...DEFAULT_INSTALLED_AGENT_IDS]);
   const [loadingAgents, setLoadingAgents] = useState(false);
@@ -6697,6 +6712,10 @@ export default function CavCodePage() {
   }, [activeKeyboardShortcutsTab]);
   const customAgentIdSet = useMemo(() => new Set(customAgents.map((agent) => agent.id)), [customAgents]);
   const publishedAgentIdSet = useMemo(() => new Set(publishedAgents.map((agent) => agent.id)), [publishedAgents]);
+  const ownedPublishedSourceAgentIdSet = useMemo(
+    () => new Set(ownedPublishedSourceAgentIds.map((id) => String(id || "").trim().toLowerCase()).filter(Boolean)),
+    [ownedPublishedSourceAgentIds]
+  );
   const installedAgentSet = useMemo(() => new Set(installedAgentIds), [installedAgentIds]);
   const builtInRegistryCards = useMemo(
     () => flattenBuiltInRegistryCards(agentRegistrySnapshot),
@@ -6738,6 +6757,80 @@ export default function CavCodePage() {
   const visiblePublishedAgents = useMemo(
     () => publishedAgentCards.filter((agent) => (agent.surface === "all" || agent.surface === "cavcode") && matchesAgentQuery(agent)),
     [matchesAgentQuery, publishedAgentCards]
+  );
+  const describeAgentPlacement = useCallback((surface: "cavcode" | "center" | "all") => {
+    if (surface === "center") return "CavAi only";
+    if (surface === "cavcode") return "Caven only";
+    return "All surfaces";
+  }, []);
+  const resolveCustomAgentPublicationState = useCallback((agent: CustomCavenAgentRecord): "private" | "review" | "published" => {
+    if (ownedPublishedSourceAgentIdSet.has(agent.id)) return "published";
+    if (agent.publicationRequested) return "review";
+    return "private";
+  }, [ownedPublishedSourceAgentIdSet]);
+  const renderAgentManageTrigger = (args: {
+    agentId: string;
+    agentName: string;
+    status: "private" | "review" | "approved";
+    reviewLabel?: string;
+  }) => (
+    <span className="cc-skills-cardActionWrap" data-agent-manage-id={args.agentId}>
+      <span className={`cc-skills-cardActionStatus is-${args.status}`} aria-hidden="true">
+        {args.status === "review" ? (
+          <span className="cc-skills-cardActionStatusText">{args.reviewLabel || "In review"}</span>
+        ) : args.status === "private" ? (
+          <LockIcon width={15} height={15} aria-hidden="true" />
+        ) : (
+          <svg className="cc-skills-cardActionStatusCheck" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path
+              d="M3.25 8.5L6.5 11.75L12.75 4.75"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.9"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+      </span>
+      <button
+        type="button"
+        className="cc-skills-cardIconBtn is-installed cc-skills-cardManageBtn"
+        onClick={(event) => {
+          event.stopPropagation();
+          setAgentManageMenuId(args.agentId);
+        }}
+        disabled={Boolean(savingAgentId)}
+        title={`Manage ${args.agentName}`}
+        aria-label={`Manage ${args.agentName}`}
+      >
+        <svg className="cc-skills-cardManageDots" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <circle cx="3.5" cy="8" r="1.2" fill="currentColor" />
+          <circle cx="8" cy="8" r="1.2" fill="currentColor" />
+          <circle cx="12.5" cy="8" r="1.2" fill="currentColor" />
+        </svg>
+      </button>
+    </span>
+  );
+  const managedCustomAgent = useMemo(
+    () => customAgents.find((agent) => agent.id === agentManageMenuId) || null,
+    [agentManageMenuId, customAgents]
+  );
+  const managedPublishedAgent = useMemo(
+    () => publishedAgents.find((agent) => agent.id === agentManageMenuId) || null,
+    [agentManageMenuId, publishedAgents]
+  );
+  const managedBuiltInAgent = useMemo(
+    () => (agentManageMenuId ? builtInRegistryById.get(agentManageMenuId) || null : null),
+    [agentManageMenuId, builtInRegistryById]
+  );
+  const managedCustomAgentPublicationState = useMemo(
+    () => (managedCustomAgent ? resolveCustomAgentPublicationState(managedCustomAgent) : null),
+    [managedCustomAgent, resolveCustomAgentPublicationState]
+  );
+  const managedAgentInstalled = useMemo(
+    () => Boolean(agentManageMenuId && installedAgentSet.has(agentManageMenuId)),
+    [agentManageMenuId, installedAgentSet]
   );
   const cavenNativeUnlockedCards = useMemo(() => {
     const seen = new Set<string>();
@@ -6811,6 +6904,7 @@ export default function CavCodePage() {
     fallbackInstalled: string[];
     agentRegistry?: unknown;
     publishedAgents?: unknown;
+    ownedPublishedSourceAgentIds?: unknown;
     planId?: unknown;
   }) => {
     const nextRegistrySnapshot = args.agentRegistry !== undefined
@@ -6826,6 +6920,9 @@ export default function CavCodePage() {
     const nextBuiltInIdSet = new Set(nextBuiltInIds);
     const nextCustomAgents = normalizeCustomAgentsFromUnknown(args.settings.customAgents, nextBuiltInIdSet);
     const nextPublishedAgents = normalizePublishedOperatorAgentsFromUnknown(args.publishedAgents);
+    const nextOwnedPublishedSourceAgentIds = args.ownedPublishedSourceAgentIds !== undefined
+      ? normalizeAgentIdListFromUnknown(args.ownedPublishedSourceAgentIds)
+      : ownedPublishedSourceAgentIdsRef.current;
     const customIdSet = new Set(nextCustomAgents.map((agent) => agent.id));
     const publishedIdSet = new Set(nextPublishedAgents.map((agent) => agent.id));
     const normalizedInstalled = normalizeInstalledAgentIdsFromUnknown(
@@ -6838,6 +6935,8 @@ export default function CavCodePage() {
     const normalizedCavenIdeSettings = normalizeCavenIdeSettingsFromUnknown(args.settings);
     setCustomAgents(nextCustomAgents);
     setPublishedAgents(nextPublishedAgents);
+    setOwnedPublishedSourceAgentIds(nextOwnedPublishedSourceAgentIds);
+    ownedPublishedSourceAgentIdsRef.current = nextOwnedPublishedSourceAgentIds;
     setInstalledAgentIds(normalizedInstalled);
     setSettings(normalizedEditorSettings);
     setCavenIdeSettings(normalizedCavenIdeSettings);
@@ -6883,6 +6982,7 @@ export default function CavCodePage() {
         settings?: unknown;
         agentRegistry?: unknown;
         publishedAgents?: unknown;
+        ownedPublishedSourceAgentIds?: unknown;
         planId?: unknown;
         message?: unknown;
       };
@@ -6895,6 +6995,7 @@ export default function CavCodePage() {
         fallbackInstalled: installedAgentIdsRef.current,
         agentRegistry: body.agentRegistry,
         publishedAgents: body.publishedAgents,
+        ownedPublishedSourceAgentIds: body.ownedPublishedSourceAgentIds,
         planId: body.planId,
       });
       if (!silent) pushToast("Agents list refreshed.", "good");
@@ -6935,6 +7036,7 @@ export default function CavCodePage() {
           settings?: unknown;
           agentRegistry?: unknown;
           publishedAgents?: unknown;
+          ownedPublishedSourceAgentIds?: unknown;
           planId?: unknown;
           message?: unknown;
         };
@@ -6947,6 +7049,7 @@ export default function CavCodePage() {
           fallbackInstalled: installedAgentIds,
           agentRegistry: body.agentRegistry,
           publishedAgents: body.publishedAgents,
+          ownedPublishedSourceAgentIds: body.ownedPublishedSourceAgentIds,
           planId: body.planId,
         });
       } catch (err) {
@@ -6964,24 +7067,12 @@ export default function CavCodePage() {
 
   useEffect(() => {
     if (!agentManageMenuId) return;
-    const onMouseDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof HTMLElement)) {
-        setAgentManageMenuId("");
-        return;
-      }
-      const root = target.closest(`[data-agent-manage-id="${agentManageMenuId}"]`);
-      if (root) return;
-      setAgentManageMenuId("");
-    };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setAgentManageMenuId("");
     };
-    window.addEventListener("mousedown", onMouseDown);
     window.addEventListener("keydown", onKeyDown);
     return () => {
-      window.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [agentManageMenuId]);
@@ -7032,6 +7123,7 @@ export default function CavCodePage() {
           settings?: unknown;
           agentRegistry?: unknown;
           publishedAgents?: unknown;
+          ownedPublishedSourceAgentIds?: unknown;
           planId?: unknown;
           message?: unknown;
         };
@@ -7044,6 +7136,7 @@ export default function CavCodePage() {
           fallbackInstalled: nextIds,
           agentRegistry: body.agentRegistry,
           publishedAgents: body.publishedAgents,
+          ownedPublishedSourceAgentIds: body.ownedPublishedSourceAgentIds,
           planId: body.planId,
         });
         pushToast(`${agentName} ${install ? "installed" : "uninstalled"}.`, "good");
@@ -7097,6 +7190,7 @@ export default function CavCodePage() {
           settings?: unknown;
           agentRegistry?: unknown;
           publishedAgents?: unknown;
+          ownedPublishedSourceAgentIds?: unknown;
           planId?: unknown;
           message?: unknown;
         };
@@ -7109,6 +7203,7 @@ export default function CavCodePage() {
           fallbackInstalled: args.nextInstalledIds,
           agentRegistry: body.agentRegistry,
           publishedAgents: body.publishedAgents,
+          ownedPublishedSourceAgentIds: body.ownedPublishedSourceAgentIds,
           planId: body.planId,
         });
         pushToast(args.successToast, "good");
@@ -7174,6 +7269,38 @@ export default function CavCodePage() {
       },
     });
   }, [customAgents, installedAgentIds, persistCustomAgentRegistry, savingAgentId]);
+
+  const requestCustomAgentPublication = useCallback((agentId: string) => {
+    if (savingAgentId) return;
+    const previousCustom = [...customAgents];
+    const previousInstalled = [...installedAgentIds];
+    const target = customAgents.find((agent) => agent.id === agentId);
+    if (!target) return;
+    if (target.publicationRequested || ownedPublishedSourceAgentIdSet.has(agentId)) return;
+
+    const requestedAt = new Date().toISOString();
+    const nextCustom = customAgents.map((agent) =>
+      agent.id === agentId
+        ? {
+            ...agent,
+            publicationRequested: true,
+            publicationRequestedAt: requestedAt,
+          }
+        : agent
+    );
+    setCustomAgents(nextCustom);
+    setAgentManageMenuId("");
+    persistCustomAgentRegistry({
+      targetAgentId: agentId,
+      nextCustomAgents: nextCustom,
+      nextInstalledIds: previousInstalled,
+      successToast: `${target.name} sent to HQ for review.`,
+      onRollback: () => {
+        setCustomAgents(previousCustom);
+        setInstalledAgentIds(previousInstalled);
+      },
+    });
+  }, [customAgents, installedAgentIds, ownedPublishedSourceAgentIdSet, persistCustomAgentRegistry, savingAgentId]);
 
   const createAgentAiModelLabel = useMemo(
     () =>
@@ -7810,6 +7937,7 @@ export default function CavCodePage() {
           settings?: unknown;
           agentRegistry?: unknown;
           publishedAgents?: unknown;
+          ownedPublishedSourceAgentIds?: unknown;
           planId?: unknown;
           message?: unknown;
         };
@@ -7822,11 +7950,17 @@ export default function CavCodePage() {
           fallbackInstalled: nextInstalled,
           agentRegistry: body.agentRegistry,
           publishedAgents: body.publishedAgents,
+          ownedPublishedSourceAgentIds: body.ownedPublishedSourceAgentIds,
           planId: body.planId,
         });
         setAgentsSearchQuery("");
         closeCreateAgent();
-        pushToast(`${name} created and installed.`, "good");
+        pushToast(
+          createAgentPublicationRequested
+            ? `${name} created, installed, and sent to HQ for review.`
+            : `${name} created and installed.`,
+          "good"
+        );
       } catch (err) {
         setCustomAgents(previousCustom);
         setInstalledAgentIds(previousInstalled);
@@ -16284,50 +16418,11 @@ export default function CavCodePage() {
                           <div className="cc-skills-cardBody">
                             <div className="cc-skills-cardTitle">{agent.name}</div>
                           </div>
-                          <span className="cc-skills-cardActionWrap" data-agent-manage-id={agent.id}>
-                            <button
-                              type="button"
-                              className="cc-skills-cardIconBtn is-installed cc-skills-cardManageBtn"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setAgentManageMenuId((prev) => (prev === agent.id ? "" : agent.id));
-                              }}
-                              disabled={Boolean(savingAgentId)}
-                              title={`Manage ${agent.name}`}
-                              aria-label={`Manage ${agent.name}`}
-                            >
-                              <svg className="cc-skills-cardManageCheck" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                                <path
-                                  d="M3.25 8.5L6.5 11.75L12.75 4.75"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.9"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
-                              <svg className="cc-skills-cardManageDots" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                                <circle cx="3.5" cy="8" r="1.2" fill="currentColor" />
-                                <circle cx="8" cy="8" r="1.2" fill="currentColor" />
-                                <circle cx="12.5" cy="8" r="1.2" fill="currentColor" />
-                              </svg>
-                            </button>
-                            {agentManageMenuId === agent.id ? (
-                              <div className="cc-skills-cardManageMenu" role="menu" onClick={(event) => event.stopPropagation()}>
-                                <button
-                                  type="button"
-                                  className="cc-skills-cardManageMenuItem"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setAgentManageMenuId("");
-                                    toggleAgentInstalled(agent.id, false);
-                                  }}
-                                >
-                                  Uninstall
-                                </button>
-                              </div>
-                            ) : null}
-                          </span>
+                          {renderAgentManageTrigger({
+                            agentId: agent.id,
+                            agentName: agent.name,
+                            status: "approved",
+                          })}
                         </article>
                       ))}
                       {!cavenInstalledAgents.length ? <div className="cc-skills-empty">No installed agents match your search.</div> : null}
@@ -16374,50 +16469,11 @@ export default function CavCodePage() {
                           <div className="cc-skills-cardBody">
                             <div className="cc-skills-cardTitle">{agent.name}</div>
                           </div>
-                          <span className="cc-skills-cardActionWrap" data-agent-manage-id={agent.id}>
-                            <button
-                              type="button"
-                              className="cc-skills-cardIconBtn is-installed cc-skills-cardManageBtn"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setAgentManageMenuId((prev) => (prev === agent.id ? "" : agent.id));
-                              }}
-                              disabled={Boolean(savingAgentId)}
-                              title={`Manage ${agent.name}`}
-                              aria-label={`Manage ${agent.name}`}
-                            >
-                              <svg className="cc-skills-cardManageCheck" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                                <path
-                                  d="M3.25 8.5L6.5 11.75L12.75 4.75"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.9"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
-                              <svg className="cc-skills-cardManageDots" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                                <circle cx="3.5" cy="8" r="1.2" fill="currentColor" />
-                                <circle cx="8" cy="8" r="1.2" fill="currentColor" />
-                                <circle cx="12.5" cy="8" r="1.2" fill="currentColor" />
-                              </svg>
-                            </button>
-                            {agentManageMenuId === agent.id ? (
-                              <div className="cc-skills-cardManageMenu" role="menu" onClick={(event) => event.stopPropagation()}>
-                                <button
-                                  type="button"
-                                  className="cc-skills-cardManageMenuItem"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setAgentManageMenuId("");
-                                    toggleAgentInstalled(agent.id, false);
-                                  }}
-                                >
-                                  Uninstall
-                                </button>
-                              </div>
-                            ) : null}
-                          </span>
+                          {renderAgentManageTrigger({
+                            agentId: agent.id,
+                            agentName: agent.name,
+                            status: "approved",
+                          })}
                         </article>
                       ))}
                       {cavenSupportAvailableAgents.map((agent) => (
@@ -16545,144 +16601,34 @@ export default function CavCodePage() {
                           </div>
                         </div>
                       </button>
-                      {visibleCustomAgents.map((agent) => (
-                        <article key={agent.id} className="cc-skills-card" title={agent.summary}>
-                          <span
-                            className="cc-skills-cardIcon"
-                            data-agent-id={agent.id}
-                            aria-hidden="true"
-                            style={buildAgentIconSurfaceStyle(agent.iconBackground)}
-                          >
-                            <Image src={agent.iconSrc} alt="" width={22} height={22} unoptimized />
-                          </span>
-                          <div className="cc-skills-cardBody">
-                            <div className="cc-skills-cardTitle">{agent.name}</div>
-                            <div className="cc-skills-cardSummary">{agent.summary}</div>
-                            <div className="cc-skills-cardMeta">
-                              {(() => {
-                                const row = customAgents.find((item) => item.id === agent.id) || null;
-                                const placementLabel = row?.surface === "center"
-                                  ? "CavAi only"
-                                  : row?.surface === "cavcode"
-                                    ? "Caven only"
-                                    : "All surfaces";
-                                return row?.publicationRequested
-                                  ? `${placementLabel} · In review`
-                                  : placementLabel;
-                              })()}
-                            </div>
-                          </div>
-                          {installedAgentSet.has(agent.id) ? (
-                            <span className="cc-skills-cardActionWrap" data-agent-manage-id={agent.id}>
-                              <button
-                                type="button"
-                                className="cc-skills-cardIconBtn is-installed cc-skills-cardManageBtn"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setAgentManageMenuId((prev) => (prev === agent.id ? "" : agent.id));
-                                }}
-                                disabled={Boolean(savingAgentId)}
-                                title={`Manage ${agent.name}`}
-                                aria-label={`Manage ${agent.name}`}
-                              >
-                                <svg className="cc-skills-cardManageCheck" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                                  <path
-                                    d="M3.25 8.5L6.5 11.75L12.75 4.75"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1.9"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  />
-                                </svg>
-                                <svg className="cc-skills-cardManageDots" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                                  <circle cx="3.5" cy="8" r="1.2" fill="currentColor" />
-                                  <circle cx="8" cy="8" r="1.2" fill="currentColor" />
-                                  <circle cx="12.5" cy="8" r="1.2" fill="currentColor" />
-                                </svg>
-                              </button>
-                              {agentManageMenuId === agent.id ? (
-                                <div className="cc-skills-cardManageMenu" role="menu" onClick={(event) => event.stopPropagation()}>
-                                  <button
-                                    type="button"
-                                    className="cc-skills-cardManageMenuItem"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      setAgentManageMenuId("");
-                                      toggleAgentInstalled(agent.id, false);
-                                    }}
-                                  >
-                                    Uninstall
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="cc-skills-cardManageMenuItem"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      moveCustomAgentSurface(agent.id, "cavcode");
-                                    }}
-                                    disabled={agent.surface === "cavcode"}
-                                  >
-                                    Move to Caven
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="cc-skills-cardManageMenuItem"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      moveCustomAgentSurface(agent.id, "center");
-                                    }}
-                                    disabled={agent.surface === "center"}
-                                  >
-                                    Move to CavAi
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="cc-skills-cardManageMenuItem"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      moveCustomAgentSurface(agent.id, "all");
-                                    }}
-                                    disabled={agent.surface === "all"}
-                                  >
-                                    Move to All Surfaces
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="cc-skills-cardManageMenuItem cc-skills-cardManageMenuItemDanger"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      deleteCustomAgent(agent.id);
-                                    }}
-                                  >
-                                    Delete Agent
-                                  </button>
-                                </div>
-                              ) : null}
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              className="cc-skills-cardIconBtn"
-                              onClick={() => toggleAgentInstalled(agent.id, true)}
-                              disabled={Boolean(savingAgentId)}
-                              title={`Install ${agent.name}`}
-                              aria-label={`Install ${agent.name}`}
+                      {visibleCustomAgents.map((agent) => {
+                        const row = customAgents.find((item) => item.id === agent.id) || null;
+                        const publicationState = row ? resolveCustomAgentPublicationState(row) : "private";
+                        const placementLabel = describeAgentPlacement(row?.surface || agent.surface);
+                        return (
+                          <article key={agent.id} className="cc-skills-card" title={agent.summary}>
+                            <span
+                              className="cc-skills-cardIcon"
+                              data-agent-id={agent.id}
+                              aria-hidden="true"
+                              style={buildAgentIconSurfaceStyle(agent.iconBackground)}
                             >
-                              <Image
-                                src="/icons/app/cavcode/plus-large-svgrepo-com.svg"
-                                alt=""
-                                width={15}
-                                height={15}
-                                aria-hidden="true"
-                              />
-                            </button>
-                          )}
-                        </article>
-                      ))}
-                      {!visibleCustomAgents.length ? (
-                        <div className="cc-skills-empty">No private agents match your search yet.</div>
-                      ) : null}
+                              <Image src={agent.iconSrc} alt="" width={22} height={22} unoptimized />
+                            </span>
+                            <div className="cc-skills-cardBody">
+                              <div className="cc-skills-cardTitle">{agent.name}</div>
+                              <div className="cc-skills-cardSummary">{agent.summary}</div>
+                              <div className="cc-skills-cardMeta">{placementLabel}</div>
+                            </div>
+                            {renderAgentManageTrigger({
+                              agentId: agent.id,
+                              agentName: agent.name,
+                              status: publicationState === "published" ? "approved" : publicationState,
+                              reviewLabel: "In review",
+                            })}
+                          </article>
+                        );
+                      })}
                     </div>
 
                     <div className="cc-skills-sectionLabel">Published by other operators</div>
@@ -16702,58 +16648,19 @@ export default function CavCodePage() {
                             <div className="cc-skills-cardBody">
                               <div className="cc-skills-cardTitle">{agent.name}</div>
                               <div className="cc-skills-cardSummary">{agent.summary}</div>
-                              <div className="cc-skills-cardMeta">
-                                {published?.ownerUsername ? `by @${published.ownerUsername}` : `by ${published?.ownerName || "Operator"}`}
-                              </div>
+                            <div className="cc-skills-cardMeta">
+                              {published?.ownerUsername ? `by @${published.ownerUsername}` : `by ${published?.ownerName || "Operator"}`}
                             </div>
-                            {installedAgentSet.has(agent.id) ? (
-                              <span className="cc-skills-cardActionWrap" data-agent-manage-id={agent.id}>
-                                <button
-                                  type="button"
-                                  className="cc-skills-cardIconBtn is-installed cc-skills-cardManageBtn"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setAgentManageMenuId((prev) => (prev === agent.id ? "" : agent.id));
-                                  }}
-                                  disabled={Boolean(savingAgentId)}
-                                  title={`Manage ${agent.name}`}
-                                  aria-label={`Manage ${agent.name}`}
-                                >
-                                  <svg className="cc-skills-cardManageCheck" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                                    <path
-                                      d="M3.25 8.5L6.5 11.75L12.75 4.75"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="1.9"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                    />
-                                  </svg>
-                                  <svg className="cc-skills-cardManageDots" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                                    <circle cx="3.5" cy="8" r="1.2" fill="currentColor" />
-                                    <circle cx="8" cy="8" r="1.2" fill="currentColor" />
-                                    <circle cx="12.5" cy="8" r="1.2" fill="currentColor" />
-                                  </svg>
-                                </button>
-                                {agentManageMenuId === agent.id ? (
-                                  <div className="cc-skills-cardManageMenu" role="menu" onClick={(event) => event.stopPropagation()}>
-                                    <button
-                                      type="button"
-                                      className="cc-skills-cardManageMenuItem"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        setAgentManageMenuId("");
-                                        toggleAgentInstalled(agent.id, false);
-                                      }}
-                                    >
-                                      Uninstall
-                                    </button>
-                                  </div>
-                                ) : null}
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
+                          </div>
+                          {installedAgentSet.has(agent.id) ? (
+                            renderAgentManageTrigger({
+                              agentId: agent.id,
+                              agentName: agent.name,
+                              status: "approved",
+                            })
+                          ) : (
+                            <button
+                              type="button"
                                 className="cc-skills-cardIconBtn"
                                 onClick={() => toggleAgentInstalled(agent.id, true)}
                                 disabled={Boolean(savingAgentId)}
@@ -18852,6 +18759,153 @@ export default function CavCodePage() {
               </button>
             </div>
           </footer>
+
+          {agentManageMenuId && (managedCustomAgent || managedPublishedAgent || managedBuiltInAgent) ? (() => {
+            const agentId = agentManageMenuId;
+            const agentName = managedCustomAgent?.name || managedPublishedAgent?.name || managedBuiltInAgent?.name || "Agent";
+            const agentSummary = managedCustomAgent?.summary || managedPublishedAgent?.summary || managedBuiltInAgent?.summary || "";
+            const placementLabel = managedCustomAgent
+              ? describeAgentPlacement(managedCustomAgent.surface)
+              : managedPublishedAgent
+                ? describeAgentPlacement(managedPublishedAgent.surface)
+                : null;
+            const statusLabel = managedCustomAgentPublicationState === "published"
+              ? "Approved by HQ"
+              : managedCustomAgentPublicationState === "review"
+                ? "In review"
+                : managedCustomAgent
+                  ? "Private"
+                  : managedPublishedAgent
+                    ? "Published operator agent"
+                    : "Installed";
+            const statusTone = managedCustomAgentPublicationState === "published"
+              ? "approved"
+              : managedCustomAgentPublicationState === "review"
+                ? "review"
+                : managedCustomAgent
+                  ? "private"
+                  : "approved";
+            const activityLabel = managedAgentInstalled
+              ? "Active for your account now."
+              : managedCustomAgent
+                ? "Saved in My Agents. Enable it any time."
+                : "Available in the operator catalog.";
+            return (
+              <div className="cc-modal cc-agentManageModal">
+                <button
+                  type="button"
+                  className="cc-modal-backdrop"
+                  aria-label="Close manage agent modal"
+                  onClick={() => setAgentManageMenuId("")}
+                />
+                <div className="cc-modal-card cc-agentManageCard" role="dialog" aria-modal="true" aria-labelledby="cc-agent-manage-title">
+                  <div className="cc-modal-head">
+                    <div>
+                      <div className="cc-modal-title" id="cc-agent-manage-title">Manage {agentName}</div>
+                      <div className="cc-modal-sub">
+                        {managedCustomAgent
+                          ? "Your agent stays in My Agents, and HQ review status updates here."
+                          : managedPublishedAgent
+                            ? "Adjust whether this published operator agent is active for your account."
+                            : "Adjust how this installed agent behaves in Caven."}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="cc-modal-x"
+                      onClick={() => setAgentManageMenuId("")}
+                      aria-label="Close"
+                    >
+                      <span aria-hidden="true">×</span>
+                    </button>
+                  </div>
+                  <div className="cc-modal-body cc-agentManageBody">
+                    <div className={`cc-agentManageStatusCard is-${statusTone}`}>
+                      <div className="cc-agentManageStatusTop">
+                        <span className="cc-agentManageStatusLabel">{statusLabel}</span>
+                        {placementLabel ? <span className="cc-agentManageStatusMeta">{placementLabel}</span> : null}
+                      </div>
+                      {agentSummary ? <div className="cc-agentManageStatusSummary">{agentSummary}</div> : null}
+                      <div className="cc-agentManageStatusNote">{activityLabel}</div>
+                    </div>
+
+                    <div className="cc-agentManageActionStack">
+                      <button
+                        type="button"
+                        className="cc-modal-btn"
+                        onClick={() => {
+                          setAgentManageMenuId("");
+                          toggleAgentInstalled(agentId, !managedAgentInstalled);
+                        }}
+                        disabled={Boolean(savingAgentId)}
+                      >
+                        {managedAgentInstalled ? "Disable agent" : "Enable agent"}
+                      </button>
+
+                      {managedCustomAgent ? (
+                        <>
+                          {managedCustomAgentPublicationState === "private" ? (
+                            <button
+                              type="button"
+                              className="cc-modal-btn"
+                              onClick={() => requestCustomAgentPublication(agentId)}
+                              disabled={Boolean(savingAgentId)}
+                            >
+                              Send for review
+                            </button>
+                          ) : null}
+
+                          <button
+                            type="button"
+                            className="cc-modal-btn"
+                            onClick={() => moveCustomAgentSurface(agentId, "cavcode")}
+                            disabled={Boolean(savingAgentId) || managedCustomAgent.surface === "cavcode"}
+                          >
+                            Change surface to Caven
+                          </button>
+                          <button
+                            type="button"
+                            className="cc-modal-btn"
+                            onClick={() => moveCustomAgentSurface(agentId, "center")}
+                            disabled={Boolean(savingAgentId) || managedCustomAgent.surface === "center"}
+                          >
+                            Change surface to CavAi
+                          </button>
+                          <button
+                            type="button"
+                            className="cc-modal-btn"
+                            onClick={() => moveCustomAgentSurface(agentId, "all")}
+                            disabled={Boolean(savingAgentId) || managedCustomAgent.surface === "all"}
+                          >
+                            Change surface to all surfaces
+                          </button>
+                          <button
+                            type="button"
+                            className="cc-modal-btn cc-agentManageDangerBtn"
+                            onClick={() => deleteCustomAgent(agentId)}
+                            disabled={Boolean(savingAgentId)}
+                          >
+                            Delete agent
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
+
+                    {managedCustomAgentPublicationState === "review" ? (
+                      <div className="cc-agentManageFootnote">
+                        HQ review is pending. You can still use this agent while it waits for approval.
+                      </div>
+                    ) : null}
+                    {managedCustomAgentPublicationState === "published" ? (
+                      <div className="cc-agentManageFootnote">
+                        HQ approved this agent. The published copy is now available under <strong>Published by other operators</strong>.
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            );
+          })() : null}
 
           {cloudConnectOpen ? (
             <div className="cc-modal cc-cloudConnect-modal">
