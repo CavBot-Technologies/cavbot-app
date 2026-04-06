@@ -8,7 +8,10 @@ import {
   parseCavenSettingsPatch,
   updateCavenSettings,
 } from "@/lib/cavai/cavenSettings.server";
-import { getAgentRegistryUiSnapshot } from "@/lib/cavai/agentRegistry.server";
+import {
+  buildFallbackAgentRegistryUiSnapshot,
+  getAgentRegistryUiSnapshot,
+} from "@/lib/cavai/agentRegistry.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,24 +23,37 @@ export async function GET(req: Request) {
       req,
       surface: "cavcode",
     });
+    let settings = { ...DEFAULT_CAVEN_SETTINGS };
+    let degraded = false;
     try {
-      const settings = await getCavenSettings({
+      settings = await getCavenSettings({
         accountId: String(ctx.accountId || ""),
         userId: String(ctx.userId || ""),
         planId: ctx.planId,
       });
-      const agentRegistry = await getAgentRegistryUiSnapshot({
+    } catch (err) {
+      degraded = true;
+      console.error("[cavai/settings] getCavenSettings failed, using defaults", err);
+    }
+
+    let agentRegistry = buildFallbackAgentRegistryUiSnapshot({
+      planId: ctx.planId,
+      installedAgentIds: settings.installedAgentIds,
+    });
+    try {
+      agentRegistry = await getAgentRegistryUiSnapshot({
         accountId: String(ctx.accountId || ""),
         userId: String(ctx.userId || ""),
         planId: ctx.planId,
         legacyInstalledAgentIds: settings.installedAgentIds,
       });
-      const baseResponse = { ok: true, settings, planId: ctx.planId };
-      return jsonNoStore({ ...baseResponse, agentRegistry }, 200);
     } catch (err) {
-      console.error("[cavai/settings] getCavenSettings failed, using defaults", err);
-      return jsonNoStore({ ok: true, settings: { ...DEFAULT_CAVEN_SETTINGS }, planId: ctx.planId, degraded: true }, 200);
+      degraded = true;
+      console.error("[cavai/settings] getAgentRegistryUiSnapshot failed, using catalog fallback", err);
     }
+
+    const baseResponse = { ok: true, settings, planId: ctx.planId, agentRegistry };
+    return jsonNoStore(degraded ? { ...baseResponse, degraded: true } : baseResponse, 200);
   } catch (err) {
     return cavcloudErrorResponse(err, "Failed to load Caven settings.");
   }
@@ -69,15 +85,25 @@ async function saveSettings(req: Request) {
     planId: ctx.planId,
   });
 
-  const agentRegistry = await getAgentRegistryUiSnapshot({
-    accountId: String(ctx.accountId || ""),
-    userId: String(ctx.userId || ""),
+  let agentRegistry = buildFallbackAgentRegistryUiSnapshot({
     planId: ctx.planId,
-    legacyInstalledAgentIds: settings.installedAgentIds,
+    installedAgentIds: settings.installedAgentIds,
   });
+  let degraded = false;
+  try {
+    agentRegistry = await getAgentRegistryUiSnapshot({
+      accountId: String(ctx.accountId || ""),
+      userId: String(ctx.userId || ""),
+      planId: ctx.planId,
+      legacyInstalledAgentIds: settings.installedAgentIds,
+    });
+  } catch (err) {
+    degraded = true;
+    console.error("[cavai/settings] getAgentRegistryUiSnapshot failed after save, using catalog fallback", err);
+  }
 
   const baseResponse = { ok: true, settings, planId: ctx.planId };
-  return jsonNoStore({ ...baseResponse, agentRegistry }, 200);
+  return jsonNoStore(degraded ? { ...baseResponse, agentRegistry, degraded: true } : { ...baseResponse, agentRegistry }, 200);
 }
 
 export async function PATCH(req: Request) {
