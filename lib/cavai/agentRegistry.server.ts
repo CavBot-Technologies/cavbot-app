@@ -12,6 +12,7 @@ import {
   DEFAULT_INSTALLED_AGENT_IDS,
   INSTALLABLE_AGENT_CATALOG,
   INSTALLABLE_AGENT_ID_SET,
+  HIDDEN_SYSTEM_AGENT_IDS,
   isAgentPlanEligible,
   normalizeAgentPlanTier,
 } from "@/lib/cavai/agentCatalog";
@@ -508,6 +509,109 @@ export async function getAgentRegistryUiSnapshot(args: {
       available: orderCards(companionAvailable),
     },
     hiddenSystemIds,
+  };
+}
+
+export function buildFallbackAgentRegistryUiSnapshot(args: {
+  planId?: PlanId;
+  installedAgentIds?: string[];
+}): AgentRegistryUiSnapshot {
+  const planTier = toPlanTier(args.planId);
+  const installedSet = new Set(
+    (Array.isArray(args.installedAgentIds) && args.installedAgentIds.length
+      ? args.installedAgentIds
+      : DEFAULT_INSTALLED_AGENT_IDS
+    )
+      .map((id) => s(id).toLowerCase())
+      .filter((id) => INSTALLABLE_AGENT_ID_SET.has(id)),
+  );
+
+  const visibleInstallable = INSTALLABLE_AGENT_CATALOG.filter(
+    (entry) => entry.installable && entry.visibility === "visible",
+  );
+
+  const cavenInstalled: AgentRegistryRow[] = [];
+  const cavenAvailable: AgentRegistryRow[] = [];
+  const cavenPremiumLocked: AgentRegistryRow[] = [];
+  const cavenSupport: AgentRegistryRow[] = [];
+  const cavaiInstalled: AgentRegistryRow[] = [];
+  const cavaiAvailable: AgentRegistryRow[] = [];
+  const cavaiLocked: AgentRegistryRow[] = [];
+  const companionInstalled: AgentRegistryRow[] = [];
+  const companionAvailable: AgentRegistryRow[] = [];
+
+  for (const entry of visibleInstallable) {
+    const locked = lockedForPlan(entry, planTier);
+    const installed = installedSet.has(entry.id) && !locked;
+    const row: AgentRegistryRow = {
+      id: entry.id,
+      name: entry.name,
+      slug: entry.slug,
+      summary: entry.summary,
+      iconSrc: entry.iconSrc,
+      actionKey: entry.actionKey,
+      cavcodeAction: entry.cavcodeAction,
+      centerAction: entry.centerAction,
+      category: entry.category,
+      bank: entry.bank,
+      visibility: entry.visibility,
+      planTier: entry.planTier,
+      installable: entry.installable,
+      hiddenSystem: entry.hiddenSystem,
+      availableToModes: [...entry.availableToModes],
+      locked,
+      sharedWithCaven: entry.sharedWithCaven,
+      sharedWithCavai: entry.sharedWithCavai,
+      sharedWithCompanion: entry.sharedWithCompanion,
+      supportForCaven: entry.supportForCaven,
+      surface: entry.surface,
+      mode: entry.mode,
+      defaultInstalled: entry.defaultInstalled,
+      installedState: installed,
+      displayOrder: entry.displayOrder,
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    };
+
+    if (row.bank === "caven_native") {
+      if (row.locked) cavenPremiumLocked.push(row);
+      else if (row.installedState) cavenInstalled.push(row);
+      else cavenAvailable.push(row);
+      continue;
+    }
+
+    if (row.bank === "cavai_work") {
+      cavenSupport.push(row);
+      if (row.locked) cavaiLocked.push(row);
+      else if (row.installedState) cavaiInstalled.push(row);
+      else cavaiAvailable.push(row);
+      continue;
+    }
+
+    if (row.bank === "companion") {
+      if (row.installedState) companionInstalled.push(row);
+      else if (!row.locked) companionAvailable.push(row);
+    }
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    caven: {
+      installed: orderCards(cavenInstalled),
+      available: orderCards(cavenAvailable),
+      support: orderCards(cavenSupport),
+      premiumLocked: orderCards(cavenPremiumLocked),
+    },
+    cavai: {
+      installed: orderCards(cavaiInstalled),
+      available: orderCards(cavaiAvailable),
+      locked: orderCards(cavaiLocked),
+    },
+    companion: {
+      installed: orderCards(companionInstalled),
+      available: orderCards(companionAvailable),
+    },
+    hiddenSystemIds: [...HIDDEN_SYSTEM_AGENT_IDS],
   };
 }
 
