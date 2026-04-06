@@ -13935,7 +13935,8 @@ export default function CavCodePage() {
                       onClick={() => closeCreateAgent()}
                       disabled={createAgentAiBusy || Boolean(savingAgentId)}
                     >
-                      Back to agents
+                      <span className="cc-agentCreateBackIcon" aria-hidden="true" />
+                      <span>Back to agents</span>
                     </button>
                     <div className="cc-agentCreateAiControls" data-agent-create-ai="true" ref={createAgentAiControlsRef}>
                       <div className={`cc-agentCreateAiControl ${createAgentAiControlMenu === "model" ? "is-open" : ""}`}>
@@ -14154,23 +14155,10 @@ export default function CavCodePage() {
                 </div>
 
                 {skillsPageView === "agents" && createAgentOpen ? (() => {
-                  const triggerCount = createAgentTriggers
-                    .split(/[\n,]/g)
-                    .map((row) => row.trim())
-                    .filter(Boolean)
-                    .slice(0, 12)
-                    .length;
                   const draftName = createAgentName.trim() || "Untitled Agent";
                   const draftSummary =
                     createAgentSummary.trim()
                     || "Give your agent a clear mission so people know exactly when to bring it in.";
-                  const draftSurfaceLabel =
-                    createAgentSurface === "cavcode"
-                      ? "Caven only"
-                      : createAgentSurface === "center"
-                        ? "CavAi only"
-                        : "All surfaces";
-                  const draftSlug = `custom_${toAgentSlug(createAgentName.trim()) || "agent"}`;
                   const createAgentBusy = Boolean(savingAgentId);
 
                   return (
@@ -14182,10 +14170,6 @@ export default function CavCodePage() {
                               <div>
                                 <span className="cc-agentCreateEyebrow">Caven Agent Studio</span>
                                 <h3>Create Agent</h3>
-                              </div>
-                              <div className="cc-agentCreateHeroPills" aria-hidden="true">
-                                <span className="cc-agentCreateHeroPill">Instant install</span>
-                                <span className="cc-agentCreateHeroPill">Grounded profile</span>
                               </div>
                             </div>
                             <p className="cc-agentCreateSub">
@@ -14219,30 +14203,8 @@ export default function CavCodePage() {
                               <div className="cc-agentCreateIdentityKicker">Agent identity</div>
                               <div className="cc-agentCreateIdentityNameRow">
                                 <h4 className="cc-agentCreateIdentityName">{draftName}</h4>
-                                <span className="cc-agentCreateIdentitySlug">{draftSlug}</span>
                               </div>
                               <p className="cc-agentCreateIdentitySummary">{draftSummary}</p>
-                              <div className="cc-agentCreateIdentityMeta">
-                                <span className="cc-agentCreateIdentityChip">{draftSurfaceLabel}</span>
-                                <span className="cc-agentCreateIdentityChip">
-                                  {triggerCount} trigger phrase{triggerCount === 1 ? "" : "s"}
-                                </span>
-                                <span className="cc-agentCreateIdentityChip">
-                                  {createAgentIconSvg ? "SVG ready" : "SVG required"}
-                                </span>
-                              </div>
-                              <div className="cc-agentCreateIdentityActions">
-                                <button
-                                  type="button"
-                                  className="cc-agentCreateUploadBtn"
-                                  onClick={() => createAgentIconInputRef.current?.click()}
-                                >
-                                  Upload SVG icon
-                                </button>
-                                <p className="cc-agentCreateIdentityCaption">
-                                  Installed in Caven as soon as you create it.
-                                </p>
-                              </div>
                             </div>
 
                             <input
@@ -14368,13 +14330,16 @@ export default function CavCodePage() {
                           </section>
 
                           <fieldset className="cc-agentCreateSection cc-agentCreateSection--surface" aria-describedby="cc-agent-create-surface-note">
-                            <legend className="cc-agentCreateSectionLegend">
-                              <span className="cc-agentCreateSectionEyebrow">Placement</span>
-                              <span className="cc-agentCreateSectionTitle">Choose the launch surface</span>
-                            </legend>
-                            <p id="cc-agent-create-surface-note" className="cc-agentCreateSectionNote">
-                              Decide where users can meet this agent.
-                            </p>
+                            <legend className="cc-agentCreateSectionLegend">Placement</legend>
+                            <div className="cc-agentCreateSectionHead">
+                              <div>
+                                <span className="cc-agentCreateSectionEyebrow">Placement</span>
+                                <h4 className="cc-agentCreateSectionTitle">Choose the launch surface</h4>
+                              </div>
+                              <p id="cc-agent-create-surface-note" className="cc-agentCreateSectionNote">
+                                Decide where users can meet this agent.
+                              </p>
+                            </div>
                             <div className="cc-agentCreateSurfaceGrid">
                               <label className={`cc-agentCreateSurfaceCard ${createAgentSurface === "all" ? "is-selected" : ""}`}>
                                 <input
@@ -14447,9 +14412,6 @@ export default function CavCodePage() {
                           {createAgentError ? <div className="cc-agentCreateError" role="alert">{createAgentError}</div> : null}
 
                           <div className="cc-agentCreateActions">
-                            <p className="cc-agentCreateActionsCopy">
-                              Create the agent now, then refine install state and placement from the agents shelf.
-                            </p>
                             <div className="cc-agentCreateActionsRow">
                               <button
                                 type="button"
