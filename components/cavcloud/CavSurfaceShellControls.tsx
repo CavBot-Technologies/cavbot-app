@@ -18,15 +18,7 @@ type CavSurfaceHeaderGreetingProps = {
 
 type CavSurfaceQuickToolsProps = {
   surface: "cavcloud" | "cavsafe";
-  galleryActive?: boolean;
-  onOpenGallery: () => void;
-  onOpenCompanion: () => void;
-  companionLabel: string;
-  companionIconSrc: string;
-  companionIconAlt: string;
-  companionIconClassName?: string;
-  companionIconWidth?: number;
-  companionIconHeight?: number;
+  onOpenArcade: () => void;
   cavAiSurface: AiCenterSurface;
   cavAiContextLabel: string;
 };
@@ -152,11 +144,10 @@ function useSurfaceProfileIdentity(fallbackAccountName: string) {
   const displayName = useMemo(() => {
     const full = s(snapshot.fullName);
     if (full) return full;
-    const fallback = s(fallbackAccountName);
-    if (fallback) return fallback;
     const handle = s(snapshot.username);
     if (handle) return `@${handle}`;
-    return "CavBot Account";
+    const fallback = s(fallbackAccountName);
+    return fallback || "CavBot Account";
   }, [fallbackAccountName, snapshot.fullName, snapshot.username]);
 
   const greetingName = useMemo(() => {
@@ -164,8 +155,9 @@ function useSurfaceProfileIdentity(fallbackAccountName: string) {
     if (full) return full;
     const fallback = s(fallbackAccountName);
     if (fallback) return fallback;
-    return "there";
-  }, [fallbackAccountName, snapshot.fullName]);
+    const handle = s(snapshot.username);
+    return handle ? `@${handle}` : "CavBot";
+  }, [fallbackAccountName, snapshot.fullName, snapshot.username]);
 
   const initials = useMemo(() => {
     const resolved = deriveAccountInitials(snapshot.fullName, snapshot.username, snapshot.storedInitials);
@@ -255,14 +247,14 @@ function resolvePlanActionLabel(planTier: SurfacePlanTier) {
   return planTier === "PREMIUM_PLUS" ? "See Plans" : "Upgrade Plan";
 }
 
-function IconGear() {
+function IconHelp() {
   return (
     <Image
-      src="/icons/app/settings-svgrepo-com.svg"
+      src="/icons/app/help-outline-svgrepo-com.svg"
       alt=""
-      width={18}
-      height={18}
-      className="cb-settings-icon cavcloud-surfaceQuickToolIcon cavcloud-surfaceQuickToolIconSettings"
+      width={22}
+      height={22}
+      className="cb-help-icon"
       aria-hidden="true"
       priority
       unoptimized
@@ -270,46 +262,42 @@ function IconGear() {
   );
 }
 
-function IconGallerySquares() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" className="cavcloud-surfaceQuickToolGrid" aria-hidden="true">
-      <rect x="1" y="1" width="6" height="6" rx="2" className="is-lime" />
-      <rect x="11" y="1" width="6" height="6" rx="2" className="is-coral" />
-      <rect x="1" y="11" width="6" height="6" rx="2" className="is-blue" />
-      <rect x="11" y="11" width="6" height="6" rx="2" className="is-violet" />
-    </svg>
-  );
-}
-
-function IconGalleryPalette() {
+function IconGear() {
   return (
     <Image
-      src="/icons/color-palette.png"
+      src="/icons/app/settings-svgrepo-com.svg"
       alt=""
-      width={18}
-      height={18}
-      className="cavcloud-surfaceQuickToolIcon cavcloud-surfaceQuickToolIconGallery"
+      width={22}
+      height={22}
+      className="cb-settings-icon"
       aria-hidden="true"
+      priority
       unoptimized
     />
   );
 }
 
-function IconPremiumPlusStar() {
+function IconArcadeCabinet() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" className="cb-upgrade-badgeStar" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M12 2.4l2.9 5.87 6.48.94-4.69 4.57 1.11 6.45L12 17.2 6.2 20.23l1.11-6.45L2.62 9.21l6.48-.94L12 2.4z"
-      />
-    </svg>
+    <Image
+      src="/icons/app/game-control-2-svgrepo-com.svg"
+      alt=""
+      width={28}
+      height={28}
+      className="cb-arcade-icon"
+      aria-hidden="true"
+      priority
+      unoptimized
+    />
   );
 }
+
 export function CavSurfaceSidebarBrandMenu(props: CavSurfaceSidebarBrandMenuProps) {
   return (
     <div className="cavcloud-brandMenuWrap">
       <div className="cavcloud-brandMenuTrigger cavcloud-brandMenuTriggerStatic">
         <span className="cavcloud-brandMenuSurface">
+          <span className="cavcloud-brandMenuSurfaceLabel">{props.surfaceTitle}</span>
           <Image
             src="/logo/cavbot-logomark.svg"
             alt=""
@@ -319,7 +307,6 @@ export function CavSurfaceSidebarBrandMenu(props: CavSurfaceSidebarBrandMenuProp
             priority
             unoptimized
           />
-          <span>{props.surfaceTitle}</span>
         </span>
       </div>
     </div>
@@ -342,9 +329,7 @@ export function CavSurfaceHeaderGreeting(props: CavSurfaceHeaderGreetingProps) {
 
 export function CavSurfaceSidebarFooter(props: CavSurfaceSidebarFooterProps) {
   const [accountOpen, setAccountOpen] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(false);
   const accountWrapRef = useRef<HTMLDivElement | null>(null);
-  const toolsWrapRef = useRef<HTMLDivElement | null>(null);
   const profile = useSurfaceProfileIdentity(props.accountName);
   const planStatusLabel = useMemo(
     () => resolvePlanStatusLabel(props.planTier, props.trialActive, props.trialDaysLeft),
@@ -353,84 +338,49 @@ export function CavSurfaceSidebarFooter(props: CavSurfaceSidebarFooterProps) {
   const planActionLabel = useMemo(() => resolvePlanActionLabel(props.planTier), [props.planTier]);
 
   usePopoverDismiss(accountOpen, setAccountOpen, accountWrapRef);
-  usePopoverDismiss(toolsOpen, setToolsOpen, toolsWrapRef);
 
   return (
     <div className="cb-side-bottom cavcloud-sideFoot cavcloud-surfaceFooter" aria-label="Sidebar footer">
       <div className="cb-side-icons cavcloud-surfaceFooterIcons" aria-label="Quick tools">
-        <div className="cavcloud-surfaceQuickToolLauncher" ref={toolsWrapRef}>
-          <button
-            type="button"
-            className={`cb-icon-btn cavcloud-surfaceQuickTool cavcloud-surfaceQuickToolLauncherBtn ${toolsOpen ? "is-active" : ""}`}
-            aria-label="Open surface tools"
-            title="Open surface tools"
-            aria-expanded={toolsOpen}
-            onClick={() => setToolsOpen((prev) => !prev)}
-          >
-            <IconGallerySquares />
-          </button>
+        <button
+          type="button"
+          className="cb-icon-btn cb-icon-btn-arcade cavcloud-surfaceQuickTool"
+          aria-label="CavBot Arcade"
+          title="CavBot Arcade"
+          onClick={props.onOpenArcade}
+        >
+          <IconArcadeCabinet />
+        </button>
 
-          {toolsOpen ? (
-            <div className="cavcloud-surfaceQuickToolRail" role="group" aria-label="Surface tools">
-              <button
-                type="button"
-                className="cb-icon-btn cavcloud-surfaceQuickTool"
-                aria-label={props.companionLabel}
-                title={props.companionLabel}
-                onClick={() => {
-                  setToolsOpen(false);
-                  props.onOpenCompanion();
-                }}
-              >
-                <Image
-                  src={props.companionIconSrc}
-                  alt={props.companionIconAlt}
-                  width={props.companionIconWidth || 18}
-                  height={props.companionIconHeight || 18}
-                  className={["cavcloud-surfaceQuickToolIcon", props.companionIconClassName || ""].filter(Boolean).join(" ")}
-                  aria-hidden="true"
-                  unoptimized
-                />
-              </button>
+        <CavAiCenterLauncher
+          surface={props.cavAiSurface}
+          contextLabel={props.cavAiContextLabel}
+          triggerClassName="cb-icon-btn cavcloud-surfaceQuickTool cavcloud-surfaceQuickToolCavAi"
+          triggerAriaLabel={`Open CavAi for ${props.cavAiContextLabel}`}
+          iconOnly
+          iconSizePx={20}
+        />
 
-              <button
-                type="button"
-                className={`cb-icon-btn cavcloud-surfaceQuickTool ${props.galleryActive ? "is-active" : ""}`}
-                aria-label="Open gallery"
-                title="Open gallery"
-                aria-pressed={props.galleryActive ? true : undefined}
-                onClick={() => {
-                  setToolsOpen(false);
-                  props.onOpenGallery();
-                }}
-              >
-                <IconGalleryPalette />
-              </button>
+        <a
+          className="cb-icon-btn cavcloud-surfaceQuickTool"
+          href="https://cavbot.io/help-center"
+          target="_blank"
+          rel="noreferrer noopener"
+          aria-label="Help Center"
+          title="Help Center"
+        >
+          <IconHelp />
+        </a>
 
-              <CavAiCenterLauncher
-                surface={props.cavAiSurface}
-                contextLabel={props.cavAiContextLabel}
-                triggerClassName="cb-icon-btn cavcloud-surfaceQuickTool cavcloud-surfaceQuickToolCavAi"
-                triggerAriaLabel={`Open CavAi for ${props.cavAiContextLabel}`}
-                iconOnly
-                iconSizePx={18}
-              />
-
-              <button
-                type="button"
-                className="cb-icon-btn cavcloud-surfaceQuickTool"
-                aria-label={`Open ${props.surface === "cavcloud" ? "CavCloud" : "CavSafe"} settings`}
-                title="Open settings"
-                onClick={() => {
-                  setToolsOpen(false);
-                  props.onOpenSettings();
-                }}
-              >
-                <IconGear />
-              </button>
-            </div>
-          ) : null}
-        </div>
+        <button
+          type="button"
+          className="cb-icon-btn cavcloud-surfaceQuickTool"
+          aria-label={`Open ${props.surface === "cavcloud" ? "CavCloud" : "CavSafe"} settings`}
+          title="Open settings"
+          onClick={props.onOpenSettings}
+        >
+          <IconGear />
+        </button>
       </div>
 
       <div className="cb-side-plan cavcloud-surfaceFooterPlan" aria-label="Account">
@@ -475,18 +425,14 @@ export function CavSurfaceSidebarFooter(props: CavSurfaceSidebarFooterProps) {
             </span>
 
             <span className="cb-side-account-spark" aria-hidden="true">
-              {props.planTier === "PREMIUM_PLUS" ? (
-                <IconPremiumPlusStar />
-              ) : (
-                <Image
-                  src="/icons/app/spark-svgrepo-com.svg"
-                  alt=""
-                  width={18}
-                  height={18}
-                  className="cb-upgrade-badgeIcon"
-                  unoptimized
-                />
-              )}
+              <Image
+                src="/icons/app/spark-svgrepo-com.svg"
+                alt=""
+                width={18}
+                height={18}
+                className="cb-upgrade-badgeIcon"
+                unoptimized
+              />
             </span>
           </button>
 

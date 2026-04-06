@@ -255,6 +255,10 @@ let m = "cb_cavsafe_activity",
     key: "Trash",
     label: "Recently deleted",
     icon: "trash"
+  }, {
+    key: "Settings",
+    label: "Settings",
+    icon: "settings"
   }],
   I = {
     code: "#8b5cff",
@@ -1513,6 +1517,13 @@ function ek() {
       }
       J(e);
     }, [S, cancelPendingFolderSelect, w]),
+    openCavCloud = (0, c.useCallback)(() => {
+      cancelPendingFolderSelect(), null != folderLoadAbortRef.current && (folderLoadAbortRef.current.abort(), folderLoadAbortRef.current = null), w();
+      try {
+        globalThis.__cbSessionStore.setItem("cb_surface_nav", "cavsafe_to_cavcloud"), globalThis.__cbSessionStore.setItem("cb_surface_nav_ts", String(Date.now()));
+      } catch {}
+      l.push("/cavcloud");
+    }, [cancelPendingFolderSelect, l, w]),
     l4 = (0, c.useCallback)(() => {
       null != lY.current && (window.clearTimeout(lY.current), lY.current = null), as(!1);
     }, []),
@@ -2383,7 +2394,7 @@ function ek() {
           username: String(a?.username || "").trim()
         },
         tInitials = String(a?.initials || "").trim();
-      eD(l.name), eW(l.email), eG(l.username), eB(l.name || resolveCavsafeGreetingName(l)), eU(resolveCavsafeInitials({
+      eD(l.name), eW(l.email), eG(l.username), eB(resolveCavsafeGreetingName(l)), eU(resolveCavsafeInitials({
         ...l,
         initials: tInitials
       })), "boolean" == typeof a?.publicProfileEnabled && setProfilePublicEnabled(a.publicProfileEnabled ? "public" : "private");
@@ -5968,21 +5979,28 @@ function ek() {
     openPlans = (0, c.useCallback)(() => {
       l.push("/plan");
     }, [l]),
-    openCavCloud = (0, c.useCallback)(() => {
-      cancelPendingFolderSelect(), null != folderLoadAbortRef.current && (folderLoadAbortRef.current.abort(), folderLoadAbortRef.current = null), w();
-      try {
-        globalThis.__cbSessionStore.setItem("cb_surface_nav", "cavsafe_to_cavcloud"), globalThis.__cbSessionStore.setItem("cb_surface_nav_ts", String(Date.now()));
-      } catch {}
-      l.push("/cavcloud");
-    }, [cancelPendingFolderSelect, l, w]),
+    openArcade = (0, c.useCallback)(() => {
+      l.push("/cavbot-arcade");
+    }, [l]),
     openSurfaceSettings = (0, c.useCallback)(() => {
       setSettingsPage(1), l2("Settings");
-    }, [l2]);
+    }, [l2]),
+    [mobileNavOpen, setMobileNavOpen] = (0, c.useState)(!1),
+    [mobileSearchOpen, setMobileSearchOpen] = (0, c.useState)(!1);
+  (0, c.useEffect)(() => {
+    setMobileNavOpen(!1), setMobileSearchOpen(!1);
+  }, [S]);
   return (0, t.jsxs)("div", {
     className: "cavcloud-root",
     "data-theme": eA,
-    children: [(0, t.jsxs)("aside", {
-      className: "cavcloud-side",
+    children: [mobileNavOpen ? t.jsx("button", {
+      type: "button",
+      className: "cavcloud-sideBackdrop",
+      "aria-label": "Close menu",
+      onClick: () => setMobileNavOpen(!1)
+    }) : null, (0, t.jsxs)("aside", {
+      id: "cavsafe-mobile-nav",
+      className: `cavcloud-side ${mobileNavOpen ? "is-mobile-open" : ""}`,
       children: [(0, t.jsxs)("div", {
         className: "cavcloud-brand",
         children: [t.jsx(CavSurfaceSidebarBrandMenu, {
@@ -5998,10 +6016,10 @@ function ek() {
             className: `cavcloud-navItem ${isActive ? "is-active" : ""}`,
             onClick: () => {
               if ("Settings" === e.key) {
-                l2("Settings");
+                l2("Settings"), setMobileNavOpen(!1);
                 return;
               }
-              l2(e.key);
+              l2(e.key), setMobileNavOpen(!1);
             },
             "aria-current": isActive ? "page" : void 0,
             children: [t.jsx(eg, {
@@ -6020,15 +6038,7 @@ function ek() {
         onOpenPlans: openPlans,
         onLogout: logoutToAuth,
         surface: "cavsafe",
-        galleryActive: "Gallery" === S,
-        onOpenGallery: () => l2("Gallery"),
-        onOpenCompanion: openCavCloud,
-        companionLabel: "Open CavCloud",
-        companionIconSrc: "/logo/cavbot-logomark.svg",
-        companionIconAlt: "CavCloud logomark",
-        companionIconClassName: "cavcloud-surfaceLauncherActionIconMark",
-        companionIconWidth: 18,
-        companionIconHeight: 18,
+        onOpenArcade: openArcade,
         cavAiSurface: "cavsafe",
         cavAiContextLabel: "CavSafe context"
       })]
@@ -6036,15 +6046,70 @@ function ek() {
       className: "cavcloud-main",
       children: [(0, t.jsxs)("div", {
         className: "cavcloud-top",
-        children: [t.jsx("div", {
+        children: [t.jsxs("div", {
           className: "cavcloud-title cavcloud-titleGreetingSlot",
-          children: t.jsx(CavSurfaceHeaderGreeting, {
+          children: [t.jsx("button", {
+            type: "button",
+            className: "cavcloud-btn cavcloud-btnGhost cavcloud-btnIconOnly cavcloud-mobileHeaderBtn cavcloud-mobileMenuBtn",
+            onClick: () => {
+              setMobileSearchOpen(!1), setMobileNavOpen(e => !e);
+            },
+            "aria-label": mobileNavOpen ? "Close menu" : "Open menu",
+            "aria-expanded": mobileNavOpen,
+            "aria-controls": "cavsafe-mobile-nav",
+            children: (0, t.jsxs)("svg", {
+              viewBox: "0 0 24 24",
+              fill: "none",
+              "aria-hidden": "true",
+              children: [t.jsx("path", {
+                d: "M4 7h16",
+                stroke: "currentColor",
+                strokeWidth: "1.9",
+                strokeLinecap: "round"
+              }), t.jsx("path", {
+                d: "M4 12h16",
+                stroke: "currentColor",
+                strokeWidth: "1.9",
+                strokeLinecap: "round"
+              }), t.jsx("path", {
+                d: "M4 17h16",
+                stroke: "currentColor",
+                strokeWidth: "1.9",
+                strokeLinecap: "round"
+              })]
+            })
+          }), t.jsx(CavSurfaceHeaderGreeting, {
             accountName: eP,
             showVerified: surfaceVerified
-          })
+          })]
         }), (0, t.jsxs)("div", {
           className: "cavcloud-actions",
-          children: [t.jsx("input", {
+          children: [t.jsx("button", {
+            type: "button",
+            className: `cavcloud-btn cavcloud-btnGhost cavcloud-btnIconOnly cavcloud-mobileHeaderBtn cavcloud-mobileSearchBtn ${mobileSearchOpen ? "is-active" : ""}`,
+            onClick: () => {
+              setMobileNavOpen(!1), setMobileSearchOpen(e => !e);
+            },
+            "aria-label": mobileSearchOpen ? "Close search" : "Open search",
+            "aria-expanded": mobileSearchOpen,
+            children: (0, t.jsxs)("svg", {
+              viewBox: "0 0 24 24",
+              fill: "none",
+              "aria-hidden": "true",
+              children: [t.jsx("circle", {
+                cx: "11",
+                cy: "11",
+                r: "6.5",
+                stroke: "currentColor",
+                strokeWidth: "1.9"
+              }), t.jsx("path", {
+                d: "M16 16l4 4",
+                stroke: "currentColor",
+                strokeWidth: "1.9",
+                strokeLinecap: "round"
+              })]
+            })
+          }), t.jsx("input", {
             className: "cavcloud-search",
             value: eM,
             onChange: e => eI(e.currentTarget.value),
@@ -6087,10 +6152,22 @@ function ek() {
                 strokeWidth: "1.9",
                 strokeLinecap: "round"
               })
-            }), "New"]
+            }), t.jsx("span", {
+              className: "cavcloud-btnUploadLabel",
+              children: "New"
+            })]
           })]
         })]
-      }), t.jsx("input", {
+      }), mobileSearchOpen ? t.jsx("div", {
+        className: "cavcloud-mobileSearchPanel",
+        children: t.jsx("input", {
+          className: "cavcloud-search cavcloud-searchMobile",
+          value: eM,
+          onChange: e => eI(e.currentTarget.value),
+          placeholder: iw,
+          autoFocus: !0
+        })
+      }) : null, t.jsx("input", {
         ref: lV,
         className: "cavcloud-file",
         type: "file",
@@ -6673,7 +6750,16 @@ function ek() {
                 }), t.jsx("span", {
                   children: i_
                 })]
-              }) : "Explore" === S ? i_ : "Synced" === S ? (0, t.jsxs)("div", {
+              }) : "Explore" === S ? (0, t.jsxs)("div", {
+                className: "cavcloud-paneSubExplore",
+                children: [t.jsx("span", {
+                  className: "cavcloud-paneSubFolderName",
+                  children: iB
+                }), t.jsx("span", {
+                  className: "cavcloud-paneSubMeta",
+                  children: i_
+                })]
+              }) : "Synced" === S ? (0, t.jsxs)("div", {
                 className: "cavcloud-paneSubSynced",
                 children: [t.jsx("button", {
                   className: "cavcloud-galleryLayoutBtn",
