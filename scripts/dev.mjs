@@ -8,6 +8,7 @@
 // for the lifetime of the dev server.
 
 import { spawn, spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -441,6 +442,8 @@ const serverDir = path.join(root, ".next", "server");
 const chunksDir = path.join(serverDir, "chunks");
 const vendorDir = path.join(serverDir, "vendor-chunks");
 const chunksVendorDir = path.join(chunksDir, "vendor-chunks");
+const pagesManifestPath = path.join(serverDir, "pages-manifest.json");
+const prerenderManifestPath = path.join(nextDir, "prerender-manifest.json");
 
 function cleanNextOnBoot() {
   // Default behavior: always boot dev from a clean .next to avoid stale HMR/runtime chunk state.
@@ -487,7 +490,40 @@ function linkOne(chunkFile) {
   }
 }
 
+function writeJsonIfMissing(filePath, value) {
+  if (exists(filePath)) return;
+  try {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
+  } catch {
+    // ignore; Next may be writing the same file concurrently.
+  }
+}
+
+function createDevPrerenderManifest() {
+  return {
+    version: 4,
+    routes: {},
+    dynamicRoutes: {},
+    notFoundRoutes: [],
+    preview: {
+      previewModeId: randomBytes(16).toString("hex"),
+      previewModeSigningKey: randomBytes(32).toString("hex"),
+      previewModeEncryptionKey: randomBytes(32).toString("hex"),
+    },
+  };
+}
+
+function ensureDevManifestStubs() {
+  // App Router-only trees can still trip Next dev's filesystem checker when
+  // the legacy pages manifest has not been emitted yet. Seed the minimal
+  // manifests so admin-host rewrites do not boot into a half-rendered state.
+  writeJsonIfMissing(pagesManifestPath, {});
+  writeJsonIfMissing(prerenderManifestPath, createDevPrerenderManifest());
+}
+
 function runOnce() {
+  ensureDevManifestStubs();
   if (!exists(serverDir) || !exists(chunksDir)) return;
   let files = [];
   try {

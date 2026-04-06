@@ -55,6 +55,27 @@ const MAX_TTY_SEQ = 999;
 const CAVEN_AGENT_ID_SET = new Set<string>(CAVEN_AGENT_IDS);
 const AGENT_ID_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/;
 const AGENT_ACTION_KEY_RE = /^[a-z0-9][a-z0-9_]{1,63}$/;
+const REQUIRED_CAVEN_SETTINGS_COLUMNS = [
+  "accountId",
+  "userId",
+  "defaultModelId",
+  "inferenceSpeed",
+  "queueFollowUps",
+  "composerEnterBehavior",
+  "includeIdeContext",
+  "confirmBeforeApplyPatch",
+  "autoOpenResolvedFiles",
+  "showReasoningTimeline",
+  "telemetryOptIn",
+  "defaultReasoningLevel",
+  "asrAudioSkillEnabled",
+  "installedAgentIds",
+  "customAgents",
+  "editorSettings",
+  "terminalState",
+  "createdAt",
+  "updatedAt",
+] as const;
 
 export type CavenComposerEnterBehavior = (typeof COMPOSER_ENTER_BEHAVIORS)[number];
 export type CavenReasoningLevel = (typeof REASONING_LEVELS)[number];
@@ -148,6 +169,7 @@ export const DEFAULT_CAVEN_SETTINGS: CavenSettings = {
 type RawCavenSettingsRow = Partial<Record<keyof CavenSettings, unknown>>;
 
 let tableReady = false;
+let tableReadyPromise: Promise<void> | null = null;
 
 function s(value: unknown): string {
   return String(value ?? "").trim();
@@ -389,6 +411,24 @@ function normalizeCustomAgents(value: unknown): CavenCustomAgent[] {
   return rows;
 }
 
+async function cavenSettingsSchemaReady(): Promise<boolean> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ column_name: string | null }>>(
+      Prisma.sql`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'CavenSettings'
+      `,
+    );
+    if (!rows.length) return false;
+    const existing = new Set(rows.map((row) => s(row.column_name)));
+    return REQUIRED_CAVEN_SETTINGS_COLUMNS.every((columnName) => existing.has(columnName));
+  } catch {
+    return false;
+  }
+}
+
 function normalizeSettings(
   row: RawCavenSettingsRow | null | undefined,
   planId?: PlanId,
@@ -438,6 +478,15 @@ function normalizeSettings(
 
 async function ensureCavenSettingsTable() {
   if (tableReady) return;
+  if (tableReadyPromise) {
+    await tableReadyPromise;
+    return;
+  }
+  tableReadyPromise = (async () => {
+  if (await cavenSettingsSchemaReady()) {
+    tableReady = true;
+    return;
+  }
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "CavenSettings" (
       "accountId" TEXT NOT NULL,
@@ -553,6 +602,11 @@ async function ensureCavenSettingsTable() {
     ON "CavenSettings" ("userId");
   `);
   tableReady = true;
+  })().catch((error) => {
+    tableReadyPromise = null;
+    throw error;
+  });
+  await tableReadyPromise;
 }
 
 async function ensureSettingsRow(accountId: string, userId: string) {

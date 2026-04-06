@@ -2,7 +2,7 @@ import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { requireSession, requireUser, isApiAuthError } from "@/lib/apiAuth";
 import { buildGuardDecisionPayload } from "@/src/lib/cavguard/cavGuard.server";
 
 export const runtime = "nodejs";
@@ -26,14 +26,7 @@ function s(v: unknown) {
 export async function POST(req: NextRequest) {
   try {
     const sess = await requireSession(req);
-    requireAccountContext(sess);
-    if (sess.memberRole !== "OWNER") {
-      const guardPayload = buildGuardDecisionPayload({
-        actionId: "NOTIFICATIONS_OWNER_ONLY",
-        role: sess.memberRole || "ANON",
-      });
-      return json({ ok: false, error: "UNAUTHORIZED", ...(guardPayload || {}) }, 403);
-    }
+    requireUser(sess);
 
     const userId = s(sess.sub);
     const accountId = s(sess.accountId) || null;
@@ -51,7 +44,7 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     if (isApiAuthError(error)) {
       const guardPayload = buildGuardDecisionPayload({
-        actionId: error.status === 403 ? "NOTIFICATIONS_OWNER_ONLY" : "AUTH_REQUIRED",
+        actionId: "AUTH_REQUIRED",
       });
       return json({ ok: false, error: error.code, ...(guardPayload || {}) }, error.status);
     }
