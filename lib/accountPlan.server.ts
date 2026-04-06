@@ -4,14 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
 
 type AccountPlanRecord = {
-  tier?: string | null;
+  tier?: unknown;
   trialSeatActive?: boolean | null;
   trialEndsAt?: Date | string | null;
 };
 
 type SubscriptionPlanRecord = {
-  tier?: string | null;
-  status?: string | null;
+  tier?: unknown;
+  status?: unknown;
   currentPeriodEnd?: Date | string | null;
 };
 
