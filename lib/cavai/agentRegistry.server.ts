@@ -191,6 +191,106 @@ async function ensureAgentRegistryTable() {
     );
   `);
 
+  const alterStatements = [
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS name VARCHAR(160) NOT NULL DEFAULT '';`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS slug VARCHAR(160) NOT NULL DEFAULT '';`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS summary TEXT;`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS icon_src TEXT;`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS action_key VARCHAR(64);`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS cavcode_action VARCHAR(64);`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS center_action VARCHAR(64);`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS category VARCHAR(48) NOT NULL DEFAULT 'mode_feature';`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS bank VARCHAR(48) NOT NULL DEFAULT 'none';`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS visibility VARCHAR(24) NOT NULL DEFAULT 'visible';`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS plan_tier VARCHAR(24) NOT NULL DEFAULT 'free';`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS installable BOOLEAN NOT NULL DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS available_to_modes JSONB NOT NULL DEFAULT '[]'::jsonb;`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS hidden_system BOOLEAN NOT NULL DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS locked BOOLEAN NOT NULL DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS shared_with_caven BOOLEAN NOT NULL DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS shared_with_cavai BOOLEAN NOT NULL DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS shared_with_companion BOOLEAN NOT NULL DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS support_for_caven BOOLEAN NOT NULL DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS surface VARCHAR(24) NOT NULL DEFAULT 'all';`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS mode VARCHAR(24) NOT NULL DEFAULT 'general';`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS default_installed BOOLEAN NOT NULL DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS installed_state BOOLEAN NOT NULL DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0;`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;`,
+    `ALTER TABLE agent_registry ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;`,
+    `ALTER TABLE agent_registry ALTER COLUMN available_to_modes SET DEFAULT '[]'::jsonb;`,
+    `ALTER TABLE agent_registry ALTER COLUMN category SET DEFAULT 'mode_feature';`,
+    `ALTER TABLE agent_registry ALTER COLUMN bank SET DEFAULT 'none';`,
+    `ALTER TABLE agent_registry ALTER COLUMN visibility SET DEFAULT 'visible';`,
+    `ALTER TABLE agent_registry ALTER COLUMN plan_tier SET DEFAULT 'free';`,
+    `ALTER TABLE agent_registry ALTER COLUMN installable SET DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ALTER COLUMN hidden_system SET DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ALTER COLUMN locked SET DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ALTER COLUMN shared_with_caven SET DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ALTER COLUMN shared_with_cavai SET DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ALTER COLUMN shared_with_companion SET DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ALTER COLUMN support_for_caven SET DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ALTER COLUMN surface SET DEFAULT 'all';`,
+    `ALTER TABLE agent_registry ALTER COLUMN mode SET DEFAULT 'general';`,
+    `ALTER TABLE agent_registry ALTER COLUMN default_installed SET DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ALTER COLUMN installed_state SET DEFAULT FALSE;`,
+    `ALTER TABLE agent_registry ALTER COLUMN display_order SET DEFAULT 0;`,
+    `ALTER TABLE agent_registry ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;`,
+    `ALTER TABLE agent_registry ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;`,
+  ];
+
+  for (const statement of alterStatements) {
+    await prisma.$executeRawUnsafe(statement);
+  }
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE agent_registry
+    SET
+      name = COALESCE(name, ''),
+      slug = COALESCE(slug, ''),
+      category = COALESCE(category, 'mode_feature'),
+      bank = COALESCE(bank, 'none'),
+      visibility = COALESCE(visibility, 'visible'),
+      plan_tier = COALESCE(plan_tier, 'free'),
+      installable = COALESCE(installable, FALSE),
+      available_to_modes = COALESCE(available_to_modes, '[]'::jsonb),
+      hidden_system = COALESCE(hidden_system, FALSE),
+      locked = COALESCE(locked, FALSE),
+      shared_with_caven = COALESCE(shared_with_caven, FALSE),
+      shared_with_cavai = COALESCE(shared_with_cavai, FALSE),
+      shared_with_companion = COALESCE(shared_with_companion, FALSE),
+      support_for_caven = COALESCE(support_for_caven, FALSE),
+      surface = COALESCE(surface, 'all'),
+      mode = COALESCE(mode, 'general'),
+      default_installed = COALESCE(default_installed, FALSE),
+      installed_state = COALESCE(installed_state, FALSE),
+      display_order = COALESCE(display_order, 0),
+      created_at = COALESCE(created_at, CURRENT_TIMESTAMP),
+      updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)
+    WHERE
+      name IS NULL
+      OR slug IS NULL
+      OR category IS NULL
+      OR bank IS NULL
+      OR visibility IS NULL
+      OR plan_tier IS NULL
+      OR installable IS NULL
+      OR available_to_modes IS NULL
+      OR hidden_system IS NULL
+      OR locked IS NULL
+      OR shared_with_caven IS NULL
+      OR shared_with_cavai IS NULL
+      OR shared_with_companion IS NULL
+      OR support_for_caven IS NULL
+      OR surface IS NULL
+      OR mode IS NULL
+      OR default_installed IS NULL
+      OR installed_state IS NULL
+      OR display_order IS NULL
+      OR created_at IS NULL
+      OR updated_at IS NULL;
+  `);
+
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS agent_registry_lookup_idx
     ON agent_registry (account_id, user_id, bank, installable, installed_state, updated_at DESC);
