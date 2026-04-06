@@ -3020,23 +3020,19 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   align-items: start;
 }
 
-.cc-agentCreateHeadWrap,
-.cc-agentCreateIdentityCard,
-.cc-agentCreateSection{
-  border: 1px solid rgba(255,255,255,.10);
-  background:
-    linear-gradient(180deg, rgba(10,14,28,.94), rgba(6,9,20,.92));
-  border-radius: 18px;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.03),
-    0 12px 28px rgba(0,0,0,.12);
-}
-
 .cc-agentCreateHeadWrap{
   padding: 0;
   border: 0;
   background: transparent;
   border-radius: 0;
+  box-shadow: none;
+}
+
+.cc-agentCreateIdentityCard,
+.cc-agentCreateSection{
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.03);
+  border-radius: 18px;
   box-shadow: none;
 }
 
