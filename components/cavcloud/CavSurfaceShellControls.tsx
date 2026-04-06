@@ -18,7 +18,15 @@ type CavSurfaceHeaderGreetingProps = {
 
 type CavSurfaceQuickToolsProps = {
   surface: "cavcloud" | "cavsafe";
-  onOpenArcade: () => void;
+  galleryActive?: boolean;
+  onOpenGallery: () => void;
+  onOpenCompanion: () => void;
+  companionLabel: string;
+  companionIconSrc: string;
+  companionIconAlt: string;
+  companionIconClassName?: string;
+  companionIconWidth?: number;
+  companionIconHeight?: number;
   cavAiSurface: AiCenterSurface;
   cavAiContextLabel: string;
 };
@@ -247,20 +255,6 @@ function resolvePlanActionLabel(planTier: SurfacePlanTier) {
   return planTier === "PREMIUM_PLUS" ? "See Plans" : "Upgrade Plan";
 }
 
-function IconHelp() {
-  return (
-    <Image
-      src="/icons/app/help-outline-svgrepo-com.svg"
-      alt=""
-      width={22}
-      height={22}
-      className="cb-help-icon"
-      aria-hidden="true"
-      unoptimized
-    />
-  );
-}
-
 function IconGear() {
   return (
     <Image
@@ -275,17 +269,14 @@ function IconGear() {
   );
 }
 
-function IconArcadeCabinet() {
+function IconGallerySquares() {
   return (
-    <Image
-      src="/icons/app/game-control-2-svgrepo-com.svg"
-      alt=""
-      width={28}
-      height={28}
-      className="cb-arcade-icon"
-      aria-hidden="true"
-      unoptimized
-    />
+    <span className="cavcloud-surfaceQuickToolGrid" aria-hidden="true">
+      <span className="cavcloud-surfaceQuickToolGridCell is-lime" />
+      <span className="cavcloud-surfaceQuickToolGridCell is-coral" />
+      <span className="cavcloud-surfaceQuickToolGridCell is-blue" />
+      <span className="cavcloud-surfaceQuickToolGridCell is-violet" />
+    </span>
   );
 }
 
@@ -352,12 +343,31 @@ export function CavSurfaceSidebarFooter(props: CavSurfaceSidebarFooterProps) {
       <div className="cb-side-icons cavcloud-surfaceFooterIcons" aria-label="Quick tools">
         <button
           type="button"
-          className="cb-icon-btn cb-icon-btn-arcade cavcloud-surfaceQuickTool"
-          aria-label="CavBot Arcade"
-          title="CavBot Arcade"
-          onClick={props.onOpenArcade}
+          className="cb-icon-btn cavcloud-surfaceQuickTool"
+          aria-label={props.companionLabel}
+          title={props.companionLabel}
+          onClick={props.onOpenCompanion}
         >
-          <IconArcadeCabinet />
+          <Image
+            src={props.companionIconSrc}
+            alt={props.companionIconAlt}
+            width={props.companionIconWidth || 18}
+            height={props.companionIconHeight || 18}
+            className={["cavcloud-surfaceQuickToolIcon", props.companionIconClassName || ""].filter(Boolean).join(" ")}
+            aria-hidden="true"
+            unoptimized
+          />
+        </button>
+
+        <button
+          type="button"
+          className={`cb-icon-btn cavcloud-surfaceQuickTool ${props.galleryActive ? "is-active" : ""}`}
+          aria-label="Open gallery"
+          title="Open gallery"
+          aria-pressed={props.galleryActive ? true : undefined}
+          onClick={props.onOpenGallery}
+        >
+          <IconGallerySquares />
         </button>
 
         <CavAiCenterLauncher
@@ -368,17 +378,6 @@ export function CavSurfaceSidebarFooter(props: CavSurfaceSidebarFooterProps) {
           iconOnly
           iconSizePx={20}
         />
-
-        <a
-          className="cb-icon-btn cavcloud-surfaceQuickTool"
-          href="https://cavbot.io/help-center"
-          target="_blank"
-          rel="noreferrer noopener"
-          aria-label="Help Center"
-          title="Help Center"
-        >
-          <IconHelp />
-        </a>
 
         <button
           type="button"

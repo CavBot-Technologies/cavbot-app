@@ -7821,9 +7821,19 @@ function ek(e) {
     openPlans = (0, c.useCallback)(() => {
       l.push("/plan");
     }, [l]),
-    openArcade = (0, c.useCallback)(() => {
-      l.push("/cavbot-arcade");
-    }, [l]),
+    openCavSafe = (0, c.useCallback)(() => {
+      if (!isOwner) {
+        openCavGuardByAction("CAVSAFE_OWNER_ONLY");
+        return;
+      }
+      if ("FREE" === String(eK || "").trim().toUpperCase()) {
+        openCavGuardByAction("CAVSAFE_PLAN_REQUIRED", {
+          plan: "FREE"
+        });
+        return;
+      }
+      cancelPendingFolderSelect(), null != folderLoadAbortRef.current && (folderLoadAbortRef.current.abort(), folderLoadAbortRef.current = null), w(), l.push("/cavsafe");
+    }, [cancelPendingFolderSelect, isOwner, eK, l, openCavGuardByAction, w]),
     openSurfaceSettings = (0, c.useCallback)(() => {
       setSettingsPage(1), l2("Settings");
     }, [l2]);
@@ -7863,7 +7873,15 @@ function ek(e) {
         onOpenPlans: openPlans,
         onLogout: logoutToAuth,
         surface: "cavcloud",
-        onOpenArcade: openArcade,
+        galleryActive: "Gallery" === S,
+        onOpenGallery: () => l2("Gallery"),
+        onOpenCompanion: openCavSafe,
+        companionLabel: "Open CavSafe",
+        companionIconSrc: "/icons/security-svgrepo-com.svg",
+        companionIconAlt: "CavSafe icon",
+        companionIconClassName: "cavcloud-surfaceLauncherActionIconCavsafe",
+        companionIconWidth: 18,
+        companionIconHeight: 18,
         cavAiSurface: "cavcloud",
         cavAiContextLabel: "CavCloud context"
       })]
