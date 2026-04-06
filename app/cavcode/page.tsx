@@ -1539,7 +1539,7 @@ function buildAgentIconSurfaceStyle(hex: string | null | undefined): React.CSSPr
   return {
     ["--cc-agent-icon-bg" as const]: `linear-gradient(135deg, ${mixAgentHexColors(color, "#FFFFFF", 0.16)}, ${mixAgentHexColors(color, "#050915", 0.12)})`,
     ["--cc-agent-icon-border" as const]: rgbaFromAgentHex(mixAgentHexColors(color, "#FFFFFF", 0.28), 0.58),
-  };
+  } as React.CSSProperties & Record<"--cc-agent-icon-bg" | "--cc-agent-icon-border", string>;
 }
 
 function svgToDataUri(svg: string): string {
