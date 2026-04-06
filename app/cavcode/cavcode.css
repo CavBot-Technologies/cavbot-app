@@ -2650,27 +2650,26 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-agentCreateBackBtn{
-  border: 1px solid rgba(255,255,255,.16);
-  background: rgba(8,12,28,.86);
-  color: rgba(237,244,255,.92);
-  border-radius: 12px;
+  border: 0;
+  background: transparent;
+  color: rgba(197,206,231,.76);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-family: "Manrope", var(--font-sans);
+  gap: 8px;
+  font-family: var(--font-sans);
   font-size: 12px;
-  font-weight: 800;
-  letter-spacing: .01em;
+  font-weight: 700;
+  letter-spacing: 0;
   line-height: 1;
-  padding: 10px 14px;
+  padding: 0;
   cursor: pointer;
-  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+  transition: color 140ms ease, transform 140ms ease;
 }
 
 .cc-agentCreateBackBtn:hover,
 .cc-agentCreateBackBtn:focus-visible{
-  border-color: rgba(255,255,255,.24);
-  background: rgba(10,15,32,.96);
+  color: rgba(242,247,255,.96);
   transform: translateY(-1px);
 }
 
@@ -2678,6 +2677,15 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   opacity: .56;
   cursor: not-allowed;
   transform: none;
+}
+
+.cc-agentCreateBackIcon{
+  width: 13px;
+  height: 13px;
+  display: inline-block;
+  background-color: currentColor;
+  -webkit-mask: url("/icons/chevron-left-svgrepo-com.svg") center / contain no-repeat;
+  mask: url("/icons/chevron-left-svgrepo-com.svg") center / contain no-repeat;
 }
 
 .cc-agentCreateAiControls{
@@ -2716,8 +2724,8 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-agentCreateAiIconBtn:hover,
 .cc-agentCreateAiIconBtn:focus-visible{
   color: rgba(255,255,255,.98);
-  border-color: rgba(185,200,90,.22);
-  background: rgba(185,200,90,.10);
+  border-color: rgba(255,255,255,.18);
+  background: rgba(255,255,255,.08);
   transform: translateY(-1px);
 }
 
@@ -2762,7 +2770,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   text-align: left;
   cursor: pointer;
   padding: 9px 10px;
-  font-family: "Manrope", var(--font-sans);
+  font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: .01em;
@@ -2779,14 +2787,14 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-agentCreateAiMenuItem.is-on{
-  border-color: rgba(185,200,90,.22);
-  background: rgba(185,200,90,.12);
+  border-color: rgba(255,255,255,.18);
+  background: rgba(255,255,255,.09);
   color: rgba(248,252,255,.98);
 }
 
 .cc-agentCreateAiMenuItem.is-working{
-  border-color: rgba(185,200,90,.18);
-  background: rgba(185,200,90,.10);
+  border-color: rgba(255,255,255,.16);
+  background: rgba(255,255,255,.08);
   color: rgba(247,251,255,.96);
 }
 
@@ -2873,13 +2881,11 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   max-height: 16px;
   display: block;
   flex: 0 0 16px;
-  background: #b9c85a;
+  background: rgba(247,251,255,.96);
   -webkit-mask: url("/icons/app/smart-optimization-svgrepo-com.svg") center / contain no-repeat;
   mask: url("/icons/app/smart-optimization-svgrepo-com.svg") center / contain no-repeat;
-  filter: drop-shadow(0 0 5px rgba(185,200,90,.22));
-  animation:
-    cc-agentCreateAi-color-loop 6.4s ease-in-out infinite,
-    cc-agentCreateAi-breathe 2.8s ease-in-out infinite;
+  filter: none;
+  animation: none;
 }
 
 .cc-agentCreateAiIconSvg{
@@ -2906,7 +2912,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   border: 1px solid rgba(255,255,255,.16);
   background: rgba(1,4,16,.66);
   color: rgba(247,251,255,.96);
-  font-family: "Manrope", var(--font-sans);
+  font-family: var(--font-sans);
   font-size: 12px;
   line-height: 1.55;
   padding: 11px 12px;
@@ -2914,8 +2920,8 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-agentCreateAiPromptInput:focus{
-  border-color: rgba(185,200,90,.28);
-  box-shadow: 0 0 0 3px rgba(185,200,90,.08);
+  border-color: rgba(255,255,255,.22);
+  box-shadow: 0 0 0 3px rgba(255,255,255,.05);
 }
 
 .cc-agentCreateAiPromptHint{
@@ -2963,7 +2969,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   background: rgba(255,255,255,.04);
   color: rgba(247,251,255,.9);
   padding: 0 12px;
-  font-family: "Manrope", var(--font-sans);
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: .01em;
@@ -2975,8 +2981,8 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-agentCreateAiPromptBtn.is-primary{
-  border-color: rgba(185,200,90,.26);
-  background: rgba(185,200,90,.14);
+  border-color: rgba(255,255,255,.18);
+  background: rgba(255,255,255,.10);
   color: rgba(247,251,255,.96);
 }
 
@@ -3001,7 +3007,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   margin-top: 18px;
   width: 100%;
   padding-bottom: 34px;
-  font-family: "Manrope", var(--font-sans);
+  font-family: var(--font-sans);
 }
 
 .cc-agentCreatePanelInner{
@@ -3012,9 +3018,9 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-agentCreateHero{
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(320px, .92fr);
-  gap: 16px;
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
+  gap: 14px;
+  align-items: start;
 }
 
 .cc-agentCreateHeadWrap,
@@ -3023,21 +3029,19 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   border: 1px solid rgba(255,255,255,.10);
   background:
     linear-gradient(180deg, rgba(10,14,28,.94), rgba(6,9,20,.92));
-  border-radius: 20px;
+  border-radius: 18px;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.03),
-    0 18px 36px rgba(0,0,0,.14);
+    0 12px 28px rgba(0,0,0,.12);
 }
 
 .cc-agentCreateHeadWrap{
-  padding: 24px 24px 22px;
+  padding: 20px 20px 18px;
 }
 
 .cc-agentCreateHead{
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
+  display: grid;
+  gap: 10px;
 }
 
 .cc-agentCreateEyebrow,
@@ -3047,58 +3051,39 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   font-weight: 800;
   letter-spacing: .16em;
   text-transform: uppercase;
-  color: rgba(185,200,90,.78);
+  color: rgba(197,206,231,.58);
 }
 
 .cc-agentCreateHead h3{
-  margin: 12px 0 0;
-  font-family: "Sora", var(--font-sans);
-  font-size: 32px;
-  line-height: .98;
-  letter-spacing: -.04em;
+  margin: 10px 0 0;
+  font-family: var(--font-sans);
+  font-size: 27px;
+  line-height: 1;
+  letter-spacing: -.03em;
   color: rgba(246,250,255,.98);
-  font-weight: 700;
-}
-
-.cc-agentCreateHeroPills{
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.cc-agentCreateHeroPill{
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.03);
-  border-radius: 999px;
-  color: rgba(228,237,252,.9);
-  font-size: 11px;
   font-weight: 800;
-  letter-spacing: .01em;
-  padding: 8px 11px;
 }
 
 .cc-agentCreateSub{
-  margin: 16px 0 0;
+  margin: 12px 0 0;
   max-width: 56ch;
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.7;
   color: rgba(182,197,224,.84);
 }
 
 .cc-agentCreateIdentityCard{
-  padding: 22px;
+  padding: 18px;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 18px;
+  gap: 16px;
   align-items: flex-start;
 }
 
 .cc-agentCreateIconBox{
-  width: 96px;
-  height: 96px;
-  border-radius: 24px;
+  width: 84px;
+  height: 84px;
+  border-radius: 20px;
   border: 1px dashed rgba(255,255,255,.20);
   background: rgba(10,15,34,.92);
   display: inline-flex;
@@ -3112,7 +3097,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-agentCreateIconBox:hover,
 .cc-agentCreateIconBox:focus-visible{
-  border-color: rgba(185,200,90,.30);
+  border-color: rgba(255,255,255,.28);
   background: rgba(12,17,36,.98);
   transform: translateY(-1px);
 }
@@ -3127,7 +3112,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   object-fit: contain;
   display: block;
   background: transparent;
-  padding: 16px;
+  padding: 14px;
 }
 
 .cc-agentCreateIconPlaceholderGlyph{
@@ -3152,103 +3137,25 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-agentCreateIdentityNameRow{
-  display: flex;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  gap: 10px 12px;
+  display: block;
   margin-top: 10px;
 }
 
 .cc-agentCreateIdentityName{
   margin: 0;
-  font-family: "Sora", var(--font-sans);
-  font-size: 26px;
-  line-height: 1.04;
+  font-family: var(--font-sans);
+  font-size: 22px;
+  line-height: 1.06;
   letter-spacing: -.03em;
   color: rgba(246,250,255,.98);
-  font-weight: 700;
-}
-
-.cc-agentCreateIdentitySlug{
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.03);
-  padding: 0 10px;
-  color: rgba(203,214,236,.82);
-  font-size: 11px;
   font-weight: 800;
-  letter-spacing: .08em;
-  text-transform: uppercase;
 }
 
 .cc-agentCreateIdentitySummary{
-  margin: 14px 0 0;
-  font-size: 14px;
-  line-height: 1.65;
-  color: rgba(182,197,224,.84);
-}
-
-.cc-agentCreateIdentityMeta{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.cc-agentCreateIdentityChip{
-  display: inline-flex;
-  align-items: center;
-  min-height: 30px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.03);
-  color: rgba(232,239,252,.88);
-  padding: 0 11px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .02em;
-}
-
-.cc-agentCreateIdentityActions{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 18px;
-}
-
-.cc-agentCreateUploadBtn{
-  border: 1px solid rgba(255,255,255,.16);
-  background: rgba(255,255,255,.04);
-  color: rgba(241,247,255,.94);
-  border-radius: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: "Manrope", var(--font-sans);
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1;
-  padding: 11px 14px;
-  cursor: pointer;
-  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
-}
-
-.cc-agentCreateUploadBtn:hover,
-.cc-agentCreateUploadBtn:focus-visible{
-  border-color: rgba(185,200,90,.24);
-  background: rgba(185,200,90,.10);
-  transform: translateY(-1px);
-}
-
-.cc-agentCreateIdentityCaption{
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.55;
-  color: rgba(170,184,210,.72);
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(182,197,224,.80);
 }
 
 .cc-agentCreateIconInput{
@@ -3262,57 +3169,61 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-agentCreateSection{
-  padding: 22px;
+  padding: 20px;
 }
 
 .cc-agentCreateSectionHead{
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px 22px;
-  margin-bottom: 18px;
+  display: grid;
+  gap: 12px;
+  margin-bottom: 30px;
 }
 
 .cc-agentCreateSectionHead h4,
 .cc-agentCreateSectionTitle{
   display: block;
   margin: 10px 0 0;
-  font-family: "Sora", var(--font-sans);
-  font-size: 20px;
+  font-family: var(--font-sans);
+  font-size: 18px;
   line-height: 1.1;
   letter-spacing: -.02em;
   color: rgba(246,250,255,.98);
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .cc-agentCreateSectionLegend{
+  position: absolute;
+  width: 1px;
+  height: 1px;
   padding: 0;
-  margin: 0;
+  margin: -1px;
+  overflow: hidden;
   border: 0;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .cc-agentCreateSectionNote{
   margin: 0;
-  max-width: 32ch;
+  max-width: 42ch;
   font-size: 13px;
   line-height: 1.6;
   color: rgba(179,194,220,.78);
 }
 
 .cc-agentCreateSection--surface .cc-agentCreateSectionNote{
-  margin-top: 14px;
-  max-width: 44ch;
+  margin-top: 0;
+  max-width: 42ch;
 }
 
 .cc-agentCreateFieldGrid{
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.24fr);
-  gap: 16px 18px;
+  gap: 28px 18px;
 }
 
 .cc-agentCreateField{
   display: grid;
-  gap: 8px;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -3324,14 +3235,14 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   display: block;
   margin: 0;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   color: rgba(237,245,255,.96);
 }
 
 .cc-agentCreateFieldNote{
   margin: 0;
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.65;
   color: rgba(170,184,210,.72);
 }
 
@@ -3343,9 +3254,9 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   background: rgba(9,14,30,.88);
   color: rgba(241,248,255,.95);
   border-radius: 14px;
-  font-family: "Manrope", var(--font-sans);
+  font-family: var(--font-sans);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.5;
   padding: 14px 15px;
   outline: none;
@@ -3357,9 +3268,9 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-agentCreateInput:focus{
-  border-color: rgba(185,200,90,.26);
+  border-color: rgba(255,255,255,.22);
   background: rgba(10,15,32,.96);
-  box-shadow: 0 0 0 3px rgba(185,200,90,.08);
+  box-shadow: 0 0 0 3px rgba(255,255,255,.05);
 }
 
 .cc-agentCreateTextarea{
@@ -3407,8 +3318,8 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-agentCreateSurfaceCard.is-selected{
-  border-color: rgba(185,200,90,.26);
-  background: rgba(185,200,90,.08);
+  border-color: rgba(255,255,255,.20);
+  background: rgba(255,255,255,.05);
 }
 
 .cc-agentCreateSurfaceInput{
@@ -3444,18 +3355,18 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-agentCreateSurfaceCard.is-selected .cc-agentCreateSurfaceCheck{
-  border-color: rgba(185,200,90,.34);
-  background: rgba(185,200,90,.10);
-  box-shadow: inset 0 0 0 5px rgba(185,200,90,.72);
+  border-color: rgba(255,255,255,.34);
+  background: rgba(255,255,255,.08);
+  box-shadow: inset 0 0 0 5px rgba(247,251,255,.82);
 }
 
 .cc-agentCreateSurfaceTitle{
-  font-family: "Sora", var(--font-sans);
-  font-size: 18px;
+  font-family: var(--font-sans);
+  font-size: 17px;
   line-height: 1.14;
   letter-spacing: -.02em;
   color: rgba(247,251,255,.98);
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .cc-agentCreateSurfaceDesc{
@@ -3477,17 +3388,9 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-agentCreateActions{
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
   padding: 4px 4px 0;
-}
-
-.cc-agentCreateActionsCopy{
-  margin: 0;
-  max-width: 42ch;
-  font-size: 13px;
-  line-height: 1.6;
-  color: rgba(179,194,220,.78);
 }
 
 .cc-agentCreateActionsRow{
@@ -3505,9 +3408,9 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-family: "Manrope", var(--font-sans);
+  font-family: var(--font-sans);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   padding: 0 16px;
   cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
@@ -4174,18 +4077,11 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   .cc-agentCreateSurfaceGrid{
     grid-template-columns: 1fr;
   }
-  .cc-agentCreateSectionHead{
-    flex-direction: column;
-  }
   .cc-agentCreateSectionNote{
     max-width: none;
   }
   .cc-agentCreateActions{
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .cc-agentCreateActionsCopy{
-    max-width: none;
+    justify-content: flex-end;
   }
   .cc-skills-head h2{
     font-size: 24px;
@@ -4225,22 +4121,16 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   .cc-agentCreateAiControls{
     align-self: flex-end;
   }
-  .cc-agentCreateHead{
-    flex-direction: column;
-  }
-  .cc-agentCreateHeroPills{
-    justify-content: flex-start;
-  }
   .cc-agentCreateHead h3{
-    font-size: 28px;
+    font-size: 24px;
   }
   .cc-agentCreateIdentityCard{
     grid-template-columns: 1fr;
   }
   .cc-agentCreateIconBox{
-    width: 88px;
-    height: 88px;
-    border-radius: 22px;
+    width: 84px;
+    height: 84px;
+    border-radius: 20px;
   }
   .cc-agentCreateIdentityName{
     font-size: 22px;
@@ -4249,7 +4139,6 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   .cc-agentCreateSectionTitle{
     font-size: 18px;
   }
-  .cc-agentCreateIdentityActions,
   .cc-agentCreateActionsRow{
     flex-direction: column;
     align-items: stretch;
