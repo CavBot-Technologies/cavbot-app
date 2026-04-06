@@ -319,7 +319,7 @@ export function CavSurfaceSidebarBrandMenu(props: CavSurfaceSidebarBrandMenuProp
             priority
             unoptimized
           />
-          <span>{props.surfaceTitle}</span>
+          <span className="cavcloud-brandMenuSurfaceLabel">{props.surfaceTitle}</span>
         </span>
       </div>
     </div>
