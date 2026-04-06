@@ -5738,9 +5738,6 @@ export default function CavCodePage() {
   const [projectCollabUserId, setProjectCollabUserId] = useState<string>("");
   const [projectCollabRole, setProjectCollabRole] = useState<"VIEWER" | "EDITOR" | "ADMIN">("VIEWER");
   const [projectCollabSubmitting, setProjectCollabSubmitting] = useState<boolean>(false);
-  const settingsEditorSectionRef = useRef<HTMLDivElement | null>(null);
-  const settingsCollaboratorsSectionRef = useRef<HTMLDivElement | null>(null);
-  const settingsSectionRef = useRef<"editor" | "collaborators">("editor");
   const keyboardShortcutsSearchRef = useRef<HTMLInputElement | null>(null);
   const shortcutChordRef = useRef<string>("");
   const shortcutChordTimerRef = useRef<number | null>(null);
@@ -6641,18 +6638,6 @@ export default function CavCodePage() {
     if (activity !== "settings") return;
     void loadProjectCollaborators();
   }, [activity, loadProjectCollaborators]);
-  useEffect(() => {
-    settingsSectionRef.current = settingsSection;
-  }, [settingsSection]);
-  useEffect(() => {
-    if (activity !== "settings") return;
-    const target = settingsSectionRef.current === "editor" ? settingsEditorSectionRef.current : settingsCollaboratorsSectionRef.current;
-    if (!target) return;
-    const frame = window.requestAnimationFrame(() => {
-      target.scrollIntoView({ block: "start" });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [activity]);
 
   const activeTab = useMemo(() => tabs.find((tab) => tab.id === activeFileId) || null, [activeFileId, tabs]);
   const primaryTab = activeTab;
@@ -8587,11 +8572,6 @@ export default function CavCodePage() {
   }, []);
   const scrollSettingsSection = useCallback((section: "editor" | "collaborators") => {
     setSettingsSection(section);
-    const target = section === "editor" ? settingsEditorSectionRef.current : settingsCollaboratorsSectionRef.current;
-    if (!target) return;
-    window.requestAnimationFrame(() => {
-      target.scrollIntoView({ block: "start", behavior: "smooth" });
-    });
   }, []);
   const openSettingsSidebar = useCallback(() => {
     setSidebarOpen(true);
@@ -15247,15 +15227,16 @@ export default function CavCodePage() {
                     </button>
                   </div>
 
-                  <div className="cc-set-card cc-set-cardSettings" ref={settingsEditorSectionRef}>
-                    <div className="cc-set-head">
-                      <div>
-                        <div className="cc-set-title">Editor</div>
-                        <div className="cc-set-note">Keep CavCode tight, readable, and consistent across your workspace.</div>
+                  {settingsSection === "editor" ? (
+                    <div className="cc-set-card cc-set-cardSettings">
+                      <div className="cc-set-head">
+                        <div>
+                          <div className="cc-set-title">Editor</div>
+                          <div className="cc-set-note">Keep CavCode tight, readable, and consistent across your workspace.</div>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="cc-set-stack">
+                      <div className="cc-set-stack">
                       <div className="cc-set-row cc-set-rowDetailed">
                         <div className="cc-set-copy">
                           <span className="cc-set-label">Font Size</span>
@@ -15440,122 +15421,125 @@ export default function CavCodePage() {
                           onChange={(e) => setSettings((s) => ({ ...s, telemetry: e.target.checked }))}
                         />
                       </label>
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
 
-                  <div className="cc-set-card cc-set-cardSettings" ref={settingsCollaboratorsSectionRef}>
-                    <div className="cc-set-head">
-                      <div>
-                        <div className="cc-set-title">Project Collaborators</div>
-                        <div className="cc-set-note">Invite workspace members into this project without leaving CavCode.</div>
-                      </div>
-                    </div>
-                    {!projectIdFromQuery ? (
-                      <div className="cc-set-note">
-                        Open CavCode with a project context to manage collaborators.
-                      </div>
-                    ) : (
-                      <>
-                        <div className="cc-set-note">
-                          {`Project #${projectIdFromQuery}`}
+                  {settingsSection === "collaborators" ? (
+                    <div className="cc-set-card cc-set-cardSettings">
+                      <div className="cc-set-head">
+                        <div>
+                          <div className="cc-set-title">Project Collaborators</div>
+                          <div className="cc-set-note">Invite workspace members into this project without leaving CavCode.</div>
                         </div>
+                      </div>
+                      {!projectIdFromQuery ? (
+                        <div className="cc-set-note">
+                          Open CavCode with a project context to manage collaborators.
+                        </div>
+                      ) : (
+                        <>
+                          <div className="cc-set-note">
+                            {`Project #${projectIdFromQuery}`}
+                          </div>
 
-                        <label className="cc-set-row cc-set-rowStack">
-                          <span className="cc-set-label">Workspace member</span>
-                          <span className="cc-set-selectWrap">
-                            <select
-                              className="cc-set-input cc-set-inputWide cc-set-select"
-                              value={projectCollabUserId}
-                              onChange={(e) => setProjectCollabUserId(e.target.value)}
-                              disabled={projectCollabBusy || projectCollabSubmitting || !workspaceMemberOptions.length}
-                            >
-                              {workspaceMemberOptions.length ? null : <option value="">No workspace members</option>}
-                              {workspaceMemberOptions.map((member) => (
-                                <option key={member.userId} value={member.userId}>
-                                  {member.displayName ? `${member.displayName} (${member.email})` : member.email}
-                                </option>
-                              ))}
-                            </select>
-                            <span className="cc-set-selectChevron" aria-hidden="true">
-                              <Image src="/icons/app/cavcode/arrow-down-svgrepo-com.svg" alt="" width={10} height={10} />
+                          <label className="cc-set-row cc-set-rowStack">
+                            <span className="cc-set-label">Workspace member</span>
+                            <span className="cc-set-selectWrap">
+                              <select
+                                className="cc-set-input cc-set-inputWide cc-set-select"
+                                value={projectCollabUserId}
+                                onChange={(e) => setProjectCollabUserId(e.target.value)}
+                                disabled={projectCollabBusy || projectCollabSubmitting || !workspaceMemberOptions.length}
+                              >
+                                {workspaceMemberOptions.length ? null : <option value="">No workspace members</option>}
+                                {workspaceMemberOptions.map((member) => (
+                                  <option key={member.userId} value={member.userId}>
+                                    {member.displayName ? `${member.displayName} (${member.email})` : member.email}
+                                  </option>
+                                ))}
+                              </select>
+                              <span className="cc-set-selectChevron" aria-hidden="true">
+                                <Image src="/icons/app/cavcode/arrow-down-svgrepo-com.svg" alt="" width={10} height={10} />
+                              </span>
                             </span>
-                          </span>
-                        </label>
+                          </label>
 
-                        <label className="cc-set-row cc-set-rowStack">
-                          <span className="cc-set-label">Role</span>
-                          <span className="cc-set-selectWrap">
-                            <select
-                              className="cc-set-input cc-set-inputWide cc-set-select"
-                              value={projectCollabRole}
-                              onChange={(e) => {
-                                const next = String(e.target.value || "").toUpperCase();
-                                setProjectCollabRole(next === "EDITOR" || next === "ADMIN" ? next : "VIEWER");
-                              }}
+                          <label className="cc-set-row cc-set-rowStack">
+                            <span className="cc-set-label">Role</span>
+                            <span className="cc-set-selectWrap">
+                              <select
+                                className="cc-set-input cc-set-inputWide cc-set-select"
+                                value={projectCollabRole}
+                                onChange={(e) => {
+                                  const next = String(e.target.value || "").toUpperCase();
+                                  setProjectCollabRole(next === "EDITOR" || next === "ADMIN" ? next : "VIEWER");
+                                }}
+                                disabled={projectCollabBusy || projectCollabSubmitting}
+                              >
+                                <option value="VIEWER">Viewer</option>
+                                <option value="EDITOR">Editor</option>
+                                <option value="ADMIN">Admin</option>
+                              </select>
+                              <span className="cc-set-selectChevron" aria-hidden="true">
+                                <Image src="/icons/app/cavcode/arrow-down-svgrepo-com.svg" alt="" width={10} height={10} />
+                              </span>
+                            </span>
+                          </label>
+
+                          <div className="cc-run-actions">
+                            <button
+                              className="cc-run-btn cc-run-btn2"
+                              onClick={() => void addProjectCollaborator()}
+                              disabled={projectCollabBusy || projectCollabSubmitting || !projectCollabUserId}
+                            >
+                              {projectCollabSubmitting ? "Saving..." : "Save collaborator"}
+                            </button>
+                          </div>
+
+                          {projectCollabError ? <div className="cc-set-note is-error">{projectCollabError}</div> : null}
+                          {projectCollabStatus ? <div className="cc-set-note is-success">{projectCollabStatus}</div> : null}
+
+                          <div className="cc-set-subtitle">Current collaborators</div>
+                          {projectCollaborators.length ? (
+                            <div className="cc-collabList">
+                              {projectCollaborators.map((collaborator) => (
+                                <div key={collaborator.userId} className="cc-collabRow">
+                                  <div>
+                                    <div className="cc-collabName">
+                                      {collaborator.displayName || collaborator.email || collaborator.userId}
+                                    </div>
+                                    <div className="cc-collabMeta">{collaborator.role}</div>
+                                  </div>
+                                  <button
+                                    className="cc-run-btn cc-collabRevokeBtn"
+                                    onClick={() => void revokeProjectCollaborator(collaborator.userId)}
+                                    disabled={projectCollabBusy || projectCollabSubmitting}
+                                  >
+                                    Revoke
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="cc-set-note">
+                              {projectCollabBusy ? "Loading collaborators..." : "No project collaborators set."}
+                            </div>
+                          )}
+
+                          <div className="cc-run-actions">
+                            <button
+                              className="cc-run-btn"
+                              onClick={() => void loadProjectCollaborators()}
                               disabled={projectCollabBusy || projectCollabSubmitting}
                             >
-                              <option value="VIEWER">Viewer</option>
-                              <option value="EDITOR">Editor</option>
-                              <option value="ADMIN">Admin</option>
-                            </select>
-                            <span className="cc-set-selectChevron" aria-hidden="true">
-                              <Image src="/icons/app/cavcode/arrow-down-svgrepo-com.svg" alt="" width={10} height={10} />
-                            </span>
-                          </span>
-                        </label>
-
-                        <div className="cc-run-actions">
-                          <button
-                            className="cc-run-btn cc-run-btn2"
-                            onClick={() => void addProjectCollaborator()}
-                            disabled={projectCollabBusy || projectCollabSubmitting || !projectCollabUserId}
-                          >
-                            {projectCollabSubmitting ? "Saving..." : "Save collaborator"}
-                          </button>
-                        </div>
-
-                        {projectCollabError ? <div className="cc-set-note is-error">{projectCollabError}</div> : null}
-                        {projectCollabStatus ? <div className="cc-set-note is-success">{projectCollabStatus}</div> : null}
-
-                        <div className="cc-set-subtitle">Current collaborators</div>
-                        {projectCollaborators.length ? (
-                          <div className="cc-collabList">
-                            {projectCollaborators.map((collaborator) => (
-                              <div key={collaborator.userId} className="cc-collabRow">
-                                <div>
-                                  <div className="cc-collabName">
-                                    {collaborator.displayName || collaborator.email || collaborator.userId}
-                                  </div>
-                                  <div className="cc-collabMeta">{collaborator.role}</div>
-                                </div>
-                                <button
-                                  className="cc-run-btn cc-collabRevokeBtn"
-                                  onClick={() => void revokeProjectCollaborator(collaborator.userId)}
-                                  disabled={projectCollabBusy || projectCollabSubmitting}
-                                >
-                                  Revoke
-                                </button>
-                              </div>
-                            ))}
+                              {projectCollabBusy ? "Refreshing..." : "Refresh"}
+                            </button>
                           </div>
-                        ) : (
-                          <div className="cc-set-note">
-                            {projectCollabBusy ? "Loading collaborators..." : "No project collaborators set."}
-                          </div>
-                        )}
-
-                        <div className="cc-run-actions">
-                          <button
-                            className="cc-run-btn"
-                            onClick={() => void loadProjectCollaborators()}
-                            disabled={projectCollabBusy || projectCollabSubmitting}
-                          >
-                            {projectCollabBusy ? "Refreshing..." : "Refresh"}
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                        </>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               </>
             ) : activity === "live" ? (
