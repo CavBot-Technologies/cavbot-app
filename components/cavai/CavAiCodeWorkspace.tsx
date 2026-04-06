@@ -1766,6 +1766,14 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   const hasPendingPrompt = submitting && Boolean(s(pendingPromptText));
   const hasInlineEdit = Boolean(inlineEditDraft);
   const hasExistingThread = Boolean(sessionId || visibleMessages.length || currentSession || hasPendingPrompt || hasInlineEdit);
+  const showCodePanelEmptyLogo =
+    !cavenInteractionLocked
+    && viewMode !== "history"
+    && !loadingMessages
+    && !hasPendingPrompt
+    && !hasInlineEdit
+    && !visibleMessages.length
+    && !hasQueuedPrompts;
   const promptPlaceholder = promptFocused
     ? ""
     : hasExistingThread
@@ -4732,8 +4740,8 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
               })}
             </div>
           ) : (
-            <div className={styles.chatStream}>
-              {!cavenInteractionLocked && Boolean(sessionId) && !visibleMessages.length && !loadingMessages && !hasPendingPrompt && !hasInlineEdit ? (
+            <div className={[styles.chatStream, showCodePanelEmptyLogo ? styles.chatStreamEmpty : ""].filter(Boolean).join(" ")}>
+              {showCodePanelEmptyLogo ? (
                 <div className={styles.emptyLarge}>
                   <span className={styles.codePanelEmptyLogo} role="img" aria-label={heroLine}>
                     <span className={styles.codePanelEmptyLogoGlyph} aria-hidden="true" />

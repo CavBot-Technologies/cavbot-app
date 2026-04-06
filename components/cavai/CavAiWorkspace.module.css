@@ -1839,6 +1839,11 @@
   gap: 12px;
 }
 
+.chatStreamEmpty {
+  min-height: 100%;
+  align-content: center;
+}
+
 .queueStack {
   display: grid;
   gap: 10px;
