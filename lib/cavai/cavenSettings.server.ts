@@ -76,6 +76,7 @@ export type CavenCustomAgent = {
   triggers: string[];
   instructions: string;
   iconSvg: string;
+  iconBackground: string | null;
   createdAt: string;
 };
 
@@ -296,6 +297,19 @@ function normalizeAgentIconSvg(value: unknown): string {
   return raw;
 }
 
+function normalizeAgentIconBackground(value: unknown): string | null {
+  const raw = s(value).replace(/\s+/g, "");
+  if (!raw) return null;
+  const normalized = raw.toLowerCase();
+  const match = normalized.match(/^#?([a-f0-9]{3}|[a-f0-9]{6}|[a-f0-9]{8})$/i);
+  if (!match) return null;
+  const token = match[1];
+  if (token.length === 3) {
+    return `#${token.split("").map((part) => `${part}${part}`).join("")}`.toUpperCase();
+  }
+  return `#${token.slice(0, 6)}`.toUpperCase();
+}
+
 function normalizeCustomAgents(value: unknown): CavenCustomAgent[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
@@ -326,6 +340,7 @@ function normalizeCustomAgents(value: unknown): CavenCustomAgent[] {
       ? row.triggers.map((item) => s(item)).filter(Boolean).slice(0, MAX_AGENT_TRIGGERS)
       : [];
     const iconSvg = normalizeAgentIconSvg(row.iconSvg);
+    const iconBackground = normalizeAgentIconBackground(row.iconBackground);
 
     const createdAtRaw = s(row.createdAt);
     const createdAtParsed = Date.parse(createdAtRaw);
@@ -342,6 +357,7 @@ function normalizeCustomAgents(value: unknown): CavenCustomAgent[] {
       triggers: triggerList,
       instructions: instructions.slice(0, 12000),
       iconSvg,
+      iconBackground,
       createdAt,
     });
     seen.add(id);
