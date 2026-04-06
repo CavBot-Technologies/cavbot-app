@@ -2656,12 +2656,9 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0;
-  line-height: 1;
+  width: 18px;
+  height: 18px;
+  font-size: 0;
   padding: 0;
   cursor: pointer;
   transition: color 140ms ease, transform 140ms ease;
@@ -2692,10 +2689,10 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px;
-  border: 1px solid rgba(255,255,255,.12);
-  border-radius: 14px;
-  background: rgba(8,12,28,.84);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   position: relative;
   z-index: 2147483150;
 }
@@ -3036,7 +3033,11 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-agentCreateHeadWrap{
-  padding: 20px 20px 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .cc-agentCreateHead{
@@ -3055,7 +3056,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-agentCreateHead h3{
-  margin: 10px 0 0;
+  margin: 0;
   font-family: var(--font-sans);
   font-size: 27px;
   line-height: 1;
@@ -3138,13 +3139,13 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-agentCreateIdentityNameRow{
   display: block;
-  margin-top: 10px;
+  margin-top: 18px;
 }
 
 .cc-agentCreateIdentityName{
   margin: 0;
   font-family: var(--font-sans);
-  font-size: 22px;
+  font-size: 18px;
   line-height: 1.06;
   letter-spacing: -.03em;
   color: rgba(246,250,255,.98);
@@ -3178,10 +3179,15 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   margin-bottom: 30px;
 }
 
+.cc-agentCreateSectionHead > div{
+  display: grid;
+  gap: 18px;
+}
+
 .cc-agentCreateSectionHead h4,
 .cc-agentCreateSectionTitle{
   display: block;
-  margin: 10px 0 0;
+  margin: 0;
   font-family: var(--font-sans);
   font-size: 18px;
   line-height: 1.1;
@@ -3390,7 +3396,8 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   align-items: center;
   justify-content: flex-end;
   gap: 16px;
-  padding: 4px 4px 0;
+  margin-top: 18px;
+  padding: 0 4px 0;
 }
 
 .cc-agentCreateActionsRow{

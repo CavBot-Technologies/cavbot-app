@@ -14011,10 +14011,11 @@ export default function CavCodePage() {
                       type="button"
                       className="cc-agentCreateBackBtn"
                       onClick={() => closeCreateAgent()}
+                      aria-label="Back to agents"
+                      title="Back to agents"
                       disabled={createAgentAiBusy || Boolean(savingAgentId)}
                     >
                       <span className="cc-agentCreateBackIcon" aria-hidden="true" />
-                      <span>Back to agents</span>
                     </button>
                     <div className="cc-agentCreateAiControls" data-agent-create-ai="true" ref={createAgentAiControlsRef}>
                       <div className={`cc-agentCreateAiControl ${createAgentAiControlMenu === "model" ? "is-open" : ""}`}>
@@ -14246,7 +14247,6 @@ export default function CavCodePage() {
                           <div className="cc-agentCreateHeadWrap">
                             <div className="cc-agentCreateHead">
                               <div>
-                                <span className="cc-agentCreateEyebrow">Caven Agent Studio</span>
                                 <h3>Create Agent</h3>
                               </div>
                             </div>
@@ -14278,7 +14278,7 @@ export default function CavCodePage() {
                             </button>
 
                             <div className="cc-agentCreateIdentityBody">
-                              <div className="cc-agentCreateIdentityKicker">Agent identity</div>
+                              <div className="cc-agentCreateIdentityKicker">Agent avatar</div>
                               <div className="cc-agentCreateIdentityNameRow">
                                 <h4 className="cc-agentCreateIdentityName">{draftName}</h4>
                               </div>
