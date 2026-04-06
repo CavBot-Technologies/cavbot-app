@@ -4228,9 +4228,12 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-agentCreateReviewInfoBtnIcon{
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   display: block;
+  background-color: currentColor;
+  -webkit-mask: url("/icons/app/info-square-svgrepo-com.svg") center / contain no-repeat;
+  mask: url("/icons/app/info-square-svgrepo-com.svg") center / contain no-repeat;
 }
 
 .cc-agentCreateReviewInfoPanel{

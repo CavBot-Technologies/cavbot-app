@@ -16320,10 +16320,10 @@ export default function CavCodePage() {
                             <div className="cc-agentCreateSectionHead cc-agentCreateSectionHead--tight">
                               <div>
                                 <span className="cc-agentCreateSectionEyebrow">Review</span>
-                                <h4 id="cc-agent-create-review-title">Offer this agent for publication review</h4>
+                                <h4 id="cc-agent-create-review-title">Submit for publication review</h4>
                               </div>
                               <p className="cc-agentCreateSectionNote">
-                                Private by default. Turn this on if you want CavBot HQ to review it for possible release to other operators.
+                                Private unless you submit it for HQ review.
                               </p>
                             </div>
                             <div className="cc-agentCreateReviewCard">
@@ -16338,9 +16338,9 @@ export default function CavCodePage() {
                                   <span className="cc-agentCreateReviewToggleTick" />
                                 </span>
                                 <span className="cc-agentCreateReviewToggleCopy">
-                                  <span className="cc-agentCreateReviewToggleTitle">Put this agent up for review</span>
+                                  <span className="cc-agentCreateReviewToggleTitle">Submit for HQ review</span>
                                   <span className="cc-agentCreateReviewToggleHint">
-                                    CavBot can review the agent, store the submitted profile, and decide whether it can be published to the shared operator catalog.
+                                    HQ can review this agent for release in the shared operator catalog.
                                   </span>
                                 </span>
                               </label>
@@ -16351,24 +16351,20 @@ export default function CavCodePage() {
                                 aria-label="Publication review information"
                                 aria-expanded={createAgentPublicationInfoOpen}
                               >
-                                <svg viewBox="0 0 20 20" aria-hidden="true" className="cc-agentCreateReviewInfoBtnIcon">
-                                  <circle cx="10" cy="10" r="7.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-                                  <path d="M10 8.05v4.35" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                                  <circle cx="10" cy="5.7" r="1" fill="currentColor" />
-                                </svg>
+                                <span aria-hidden="true" className="cc-agentCreateReviewInfoBtnIcon" />
                               </button>
                             </div>
                             {createAgentPublicationInfoOpen ? (
                               <div className="cc-agentCreateReviewInfoPanel" role="note">
-                                <div className="cc-agentCreateReviewInfoTitle">What this means</div>
+                                <div className="cc-agentCreateReviewInfoTitle">Review terms</div>
                                 <p>
-                                  CavBot stores the submitted agent profile, icon, triggers, and operating instructions so HQ can review it.
+                                  CavBot retains the submitted profile, icon, triggers, and instructions for review.
                                 </p>
                                 <p>
-                                  If HQ approves it later, a published copy can appear under <strong>Published by other operators</strong> for other users.
+                                  If approved, CavBot can publish an operator-ready copy under <strong>Published by other operators</strong>.
                                 </p>
                                 <p>
-                                  Do not submit secrets, private credentials, or instructions you do not want CavBot to review for publication.
+                                  Submit only content you authorize CavBot to review and publish. Never include secrets or private credentials.
                                 </p>
                               </div>
                             ) : null}
