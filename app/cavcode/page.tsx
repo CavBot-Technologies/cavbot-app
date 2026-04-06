@@ -13928,6 +13928,15 @@ export default function CavCodePage() {
                       </button>
                     </>
                     ) : (
+                    <div className="cc-agentCreateToolbar">
+                    <button
+                      type="button"
+                      className="cc-agentCreateBackBtn"
+                      onClick={() => closeCreateAgent()}
+                      disabled={createAgentAiBusy || Boolean(savingAgentId)}
+                    >
+                      Back to agents
+                    </button>
                     <div className="cc-agentCreateAiControls" data-agent-create-ai="true" ref={createAgentAiControlsRef}>
                       <div className={`cc-agentCreateAiControl ${createAgentAiControlMenu === "model" ? "is-open" : ""}`}>
                         <button
@@ -14140,128 +14149,330 @@ export default function CavCodePage() {
                         ) : null}
                       </div>
                     </div>
+                    </div>
                   )) : null}
                 </div>
 
-                {skillsPageView === "agents" && createAgentOpen ? (
-                  <section className="cc-agentCreatePanel" role="region" aria-label="Create Agent">
-                    <div className="cc-agentCreatePanelInner">
-                      <div className="cc-agentCreateHead">
-                        <h3>Create Agent</h3>
-                      </div>
-                      <p className="cc-agentCreateSub">Define an agent profile and install it instantly in Caven.</p>
-                      <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-icon-input">Icon (SVG only)</label>
-                      <div className="cc-agentCreateIconRow">
-                        <button
-                          type="button"
-                          className="cc-agentCreateIconBox"
-                          onClick={() => createAgentIconInputRef.current?.click()}
-                          aria-label="Upload agent icon"
+                {skillsPageView === "agents" && createAgentOpen ? (() => {
+                  const triggerCount = createAgentTriggers
+                    .split(/[\n,]/g)
+                    .map((row) => row.trim())
+                    .filter(Boolean)
+                    .slice(0, 12)
+                    .length;
+                  const draftName = createAgentName.trim() || "Untitled Agent";
+                  const draftSummary =
+                    createAgentSummary.trim()
+                    || "Give your agent a clear mission so people know exactly when to bring it in.";
+                  const draftSurfaceLabel =
+                    createAgentSurface === "cavcode"
+                      ? "Caven only"
+                      : createAgentSurface === "center"
+                        ? "CavAi only"
+                        : "All surfaces";
+                  const draftSlug = `custom_${toAgentSlug(createAgentName.trim()) || "agent"}`;
+                  const createAgentBusy = Boolean(savingAgentId);
+
+                  return (
+                    <section className="cc-agentCreatePanel" role="region" aria-label="Create Agent">
+                      <div className="cc-agentCreatePanelInner">
+                        <header className="cc-agentCreateHero">
+                          <div className="cc-agentCreateHeadWrap">
+                            <div className="cc-agentCreateHead">
+                              <div>
+                                <span className="cc-agentCreateEyebrow">Caven Agent Studio</span>
+                                <h3>Create Agent</h3>
+                              </div>
+                              <div className="cc-agentCreateHeroPills" aria-hidden="true">
+                                <span className="cc-agentCreateHeroPill">Instant install</span>
+                                <span className="cc-agentCreateHeroPill">Grounded profile</span>
+                              </div>
+                            </div>
+                            <p className="cc-agentCreateSub">
+                              Shape an install-ready specialist with a clear role, operating voice, and launch surface.
+                            </p>
+                          </div>
+
+                          <div className="cc-agentCreateIdentityCard">
+                            <button
+                              type="button"
+                              className="cc-agentCreateIconBox cc-agentCreateIconBox--hero"
+                              onClick={() => createAgentIconInputRef.current?.click()}
+                              aria-label="Upload agent icon"
+                            >
+                              {createAgentIconSvg ? (
+                                <Image
+                                  src={svgToDataUri(createAgentIconSvg)}
+                                  alt=""
+                                  width={70}
+                                  height={70}
+                                  className="cc-agentCreateIconPreview"
+                                  unoptimized
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                <span className="cc-agentCreateIconPlaceholderGlyph" aria-hidden="true" />
+                              )}
+                            </button>
+
+                            <div className="cc-agentCreateIdentityBody">
+                              <div className="cc-agentCreateIdentityKicker">Agent identity</div>
+                              <div className="cc-agentCreateIdentityNameRow">
+                                <h4 className="cc-agentCreateIdentityName">{draftName}</h4>
+                                <span className="cc-agentCreateIdentitySlug">{draftSlug}</span>
+                              </div>
+                              <p className="cc-agentCreateIdentitySummary">{draftSummary}</p>
+                              <div className="cc-agentCreateIdentityMeta">
+                                <span className="cc-agentCreateIdentityChip">{draftSurfaceLabel}</span>
+                                <span className="cc-agentCreateIdentityChip">
+                                  {triggerCount} trigger phrase{triggerCount === 1 ? "" : "s"}
+                                </span>
+                                <span className="cc-agentCreateIdentityChip">
+                                  {createAgentIconSvg ? "SVG ready" : "SVG required"}
+                                </span>
+                              </div>
+                              <div className="cc-agentCreateIdentityActions">
+                                <button
+                                  type="button"
+                                  className="cc-agentCreateUploadBtn"
+                                  onClick={() => createAgentIconInputRef.current?.click()}
+                                >
+                                  Upload SVG icon
+                                </button>
+                                <p className="cc-agentCreateIdentityCaption">
+                                  Installed in Caven as soon as you create it.
+                                </p>
+                              </div>
+                            </div>
+
+                            <input
+                              ref={createAgentIconInputRef}
+                              id="cc-agent-create-icon-input"
+                              className="cc-agentCreateIconInput"
+                              type="file"
+                              accept=".svg,image/svg+xml"
+                              onChange={(event) => void onCreateAgentIconUpload(event)}
+                            />
+                          </div>
+                        </header>
+
+                        <form
+                          className="cc-agentCreateForm"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            createCustomAgent();
+                          }}
                         >
-                          {createAgentIconSvg ? (
-                            <Image
-                              src={svgToDataUri(createAgentIconSvg)}
-                              alt=""
-                              width={70}
-                              height={70}
-                              className="cc-agentCreateIconPreview"
-                              unoptimized
-                              aria-hidden="true"
-                            />
-                          ) : (
-                            <span
-                              className="cc-agentCreateIconPlaceholderGlyph"
-                              aria-hidden="true"
-                            />
-                          )}
-                        </button>
-                        <input
-                          ref={createAgentIconInputRef}
-                          id="cc-agent-create-icon-input"
-                          className="cc-agentCreateIconInput"
-                          type="file"
-                          accept=".svg,image/svg+xml"
-                          onChange={(event) => void onCreateAgentIconUpload(event)}
-                        />
+                          <section className="cc-agentCreateSection" aria-labelledby="cc-agent-create-identity-title">
+                            <div className="cc-agentCreateSectionHead">
+                              <div>
+                                <span className="cc-agentCreateSectionEyebrow">Identity</span>
+                                <h4 id="cc-agent-create-identity-title">How the agent shows up</h4>
+                              </div>
+                              <p className="cc-agentCreateSectionNote">
+                                Make the role easy to read before anyone opens the agent.
+                              </p>
+                            </div>
+                            <div className="cc-agentCreateFieldGrid">
+                              <div className="cc-agentCreateField">
+                                <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-name">Name</label>
+                                <p id="cc-agent-create-name-note" className="cc-agentCreateFieldNote">
+                                  Short, sharp, and easy to scan inside the agent shelf.
+                                </p>
+                                <input
+                                  id="cc-agent-create-name"
+                                  className="cc-agentCreateInput"
+                                  aria-describedby="cc-agent-create-name-note"
+                                  value={createAgentName}
+                                  onChange={(event) => {
+                                    setCreateAgentName(event.currentTarget.value);
+                                    if (createAgentError) setCreateAgentError("");
+                                  }}
+                                  placeholder="Error Explainer"
+                                  maxLength={64}
+                                />
+                              </div>
+
+                              <div className="cc-agentCreateField cc-agentCreateField--wide">
+                                <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-summary">Description</label>
+                                <p id="cc-agent-create-summary-note" className="cc-agentCreateFieldNote">
+                                  Summarize the outcome this agent owns for the team.
+                                </p>
+                                <textarea
+                                  id="cc-agent-create-summary"
+                                  className="cc-agentCreateInput cc-agentCreateTextarea cc-agentCreateTextarea--short"
+                                  aria-describedby="cc-agent-create-summary-note"
+                                  value={createAgentSummary}
+                                  onChange={(event) => {
+                                    setCreateAgentSummary(event.currentTarget.value);
+                                    if (createAgentError) setCreateAgentError("");
+                                  }}
+                                  placeholder="Explain failures, isolate root cause, and suggest safe next steps."
+                                  rows={3}
+                                  maxLength={220}
+                                />
+                              </div>
+                            </div>
+                          </section>
+
+                          <section className="cc-agentCreateSection" aria-labelledby="cc-agent-create-behavior-title">
+                            <div className="cc-agentCreateSectionHead">
+                              <div>
+                                <span className="cc-agentCreateSectionEyebrow">Behavior</span>
+                                <h4 id="cc-agent-create-behavior-title">How the agent should think and respond</h4>
+                              </div>
+                              <p className="cc-agentCreateSectionNote">
+                                Capture the cues that wake it up and the rules it should follow.
+                              </p>
+                            </div>
+                            <div className="cc-agentCreateFieldGrid">
+                              <div className="cc-agentCreateField">
+                                <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-triggers">Trigger phrases</label>
+                                <p id="cc-agent-create-triggers-note" className="cc-agentCreateFieldNote">
+                                  Add phrases users naturally say when they need this specialist.
+                                </p>
+                                <input
+                                  id="cc-agent-create-triggers"
+                                  className="cc-agentCreateInput"
+                                  aria-describedby="cc-agent-create-triggers-note"
+                                  value={createAgentTriggers}
+                                  onChange={(event) => {
+                                    setCreateAgentTriggers(event.currentTarget.value);
+                                    if (createAgentError) setCreateAgentError("");
+                                  }}
+                                  placeholder="e.g. explain stack trace, summarize PR, debug failing test"
+                                  maxLength={240}
+                                />
+                              </div>
+
+                              <div className="cc-agentCreateField cc-agentCreateField--wide">
+                                <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-instructions">Instructions</label>
+                                <p id="cc-agent-create-instructions-note" className="cc-agentCreateFieldNote">
+                                  Define the agent&apos;s operating principles, tone, guardrails, and output expectations.
+                                </p>
+                                <textarea
+                                  id="cc-agent-create-instructions"
+                                  className="cc-agentCreateInput cc-agentCreateTextarea cc-agentCreateTextarea--tall"
+                                  aria-describedby="cc-agent-create-instructions-note"
+                                  value={createAgentInstructions}
+                                  onChange={(event) => {
+                                    setCreateAgentInstructions(event.currentTarget.value);
+                                    if (createAgentError) setCreateAgentError("");
+                                  }}
+                                  placeholder="You are a precise debugging partner. Explain the failure, identify the likely root cause, and propose the safest next move before suggesting larger changes."
+                                  rows={7}
+                                  maxLength={2400}
+                                />
+                              </div>
+                            </div>
+                          </section>
+
+                          <fieldset className="cc-agentCreateSection cc-agentCreateSection--surface" aria-describedby="cc-agent-create-surface-note">
+                            <legend className="cc-agentCreateSectionLegend">
+                              <span className="cc-agentCreateSectionEyebrow">Placement</span>
+                              <span className="cc-agentCreateSectionTitle">Choose the launch surface</span>
+                            </legend>
+                            <p id="cc-agent-create-surface-note" className="cc-agentCreateSectionNote">
+                              Decide where users can meet this agent.
+                            </p>
+                            <div className="cc-agentCreateSurfaceGrid">
+                              <label className={`cc-agentCreateSurfaceCard ${createAgentSurface === "all" ? "is-selected" : ""}`}>
+                                <input
+                                  className="cc-agentCreateSurfaceInput"
+                                  type="radio"
+                                  name="cc-agent-create-surface"
+                                  value="all"
+                                  checked={createAgentSurface === "all"}
+                                  onChange={() => {
+                                    setCreateAgentSurface("all");
+                                    if (createAgentError) setCreateAgentError("");
+                                  }}
+                                />
+                                <span className="cc-agentCreateSurfaceCardTop">
+                                  <span className="cc-agentCreateSurfaceKicker">Everywhere</span>
+                                  <span className="cc-agentCreateSurfaceCheck" aria-hidden="true" />
+                                </span>
+                                <span className="cc-agentCreateSurfaceTitle">All surfaces</span>
+                                <span className="cc-agentCreateSurfaceDesc">
+                                  Install once and keep the agent available anywhere Caven appears.
+                                </span>
+                              </label>
+
+                              <label className={`cc-agentCreateSurfaceCard ${createAgentSurface === "cavcode" ? "is-selected" : ""}`}>
+                                <input
+                                  className="cc-agentCreateSurfaceInput"
+                                  type="radio"
+                                  name="cc-agent-create-surface"
+                                  value="cavcode"
+                                  checked={createAgentSurface === "cavcode"}
+                                  onChange={() => {
+                                    setCreateAgentSurface("cavcode");
+                                    if (createAgentError) setCreateAgentError("");
+                                  }}
+                                />
+                                <span className="cc-agentCreateSurfaceCardTop">
+                                  <span className="cc-agentCreateSurfaceKicker">Workspace</span>
+                                  <span className="cc-agentCreateSurfaceCheck" aria-hidden="true" />
+                                </span>
+                                <span className="cc-agentCreateSurfaceTitle">Caven</span>
+                                <span className="cc-agentCreateSurfaceDesc">
+                                  Keep the agent focused on hands-on creation and workspace execution inside Caven.
+                                </span>
+                              </label>
+
+                              <label className={`cc-agentCreateSurfaceCard ${createAgentSurface === "center" ? "is-selected" : ""}`}>
+                                <input
+                                  className="cc-agentCreateSurfaceInput"
+                                  type="radio"
+                                  name="cc-agent-create-surface"
+                                  value="center"
+                                  checked={createAgentSurface === "center"}
+                                  onChange={() => {
+                                    setCreateAgentSurface("center");
+                                    if (createAgentError) setCreateAgentError("");
+                                  }}
+                                />
+                                <span className="cc-agentCreateSurfaceCardTop">
+                                  <span className="cc-agentCreateSurfaceKicker">Conversation</span>
+                                  <span className="cc-agentCreateSurfaceCheck" aria-hidden="true" />
+                                </span>
+                                <span className="cc-agentCreateSurfaceTitle">CavAi</span>
+                                <span className="cc-agentCreateSurfaceDesc">
+                                  Reserve the agent for conversational planning, guidance, and centered collaboration.
+                                </span>
+                              </label>
+                            </div>
+                          </fieldset>
+
+                          {createAgentError ? <div className="cc-agentCreateError" role="alert">{createAgentError}</div> : null}
+
+                          <div className="cc-agentCreateActions">
+                            <p className="cc-agentCreateActionsCopy">
+                              Create the agent now, then refine install state and placement from the agents shelf.
+                            </p>
+                            <div className="cc-agentCreateActionsRow">
+                              <button
+                                type="button"
+                                className="cc-agentCreateBtn"
+                                onClick={() => closeCreateAgent()}
+                                disabled={createAgentBusy}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="submit"
+                                className="cc-agentCreateBtn cc-agentCreateBtnPrimary"
+                                disabled={createAgentBusy}
+                              >
+                                {createAgentBusy ? "Creating..." : "Create Agent"}
+                              </button>
+                            </div>
+                          </div>
+                        </form>
                       </div>
-                      <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-name">Name</label>
-                      <input
-                        id="cc-agent-create-name"
-                        className="cc-agentCreateInput"
-                        value={createAgentName}
-                        onChange={(event) => {
-                          setCreateAgentName(event.currentTarget.value);
-                          if (createAgentError) setCreateAgentError("");
-                        }}
-                        placeholder="Agent name"
-                        maxLength={64}
-                      />
-                      <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-summary">Description</label>
-                      <textarea
-                        id="cc-agent-create-summary"
-                        className="cc-agentCreateInput cc-agentCreateTextarea"
-                        value={createAgentSummary}
-                        onChange={(event) => {
-                          setCreateAgentSummary(event.currentTarget.value);
-                          if (createAgentError) setCreateAgentError("");
-                        }}
-                        placeholder="What this agent does"
-                        rows={2}
-                        maxLength={220}
-                      />
-                      <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-triggers">Trigger phrases</label>
-                      <input
-                        id="cc-agent-create-triggers"
-                        className="cc-agentCreateInput"
-                        value={createAgentTriggers}
-                        onChange={(event) => setCreateAgentTriggers(event.currentTarget.value)}
-                        placeholder="e.g. explain stack trace, summarize PR"
-                        maxLength={240}
-                      />
-                      <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-instructions">Instructions</label>
-                      <textarea
-                        id="cc-agent-create-instructions"
-                        className="cc-agentCreateInput cc-agentCreateTextarea"
-                        value={createAgentInstructions}
-                        onChange={(event) => {
-                          setCreateAgentInstructions(event.currentTarget.value);
-                          if (createAgentError) setCreateAgentError("");
-                        }}
-                        placeholder="Core system instructions for this agent."
-                        rows={5}
-                        maxLength={2400}
-                      />
-                      <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-surface">Surface</label>
-                      <select
-                        id="cc-agent-create-surface"
-                        className="cc-agentCreateInput cc-agentCreateSelect"
-                        value={createAgentSurface}
-                        onChange={(event) =>
-                          setCreateAgentSurface(
-                            event.currentTarget.value === "center"
-                              ? "center"
-                              : event.currentTarget.value === "cavcode"
-                                ? "cavcode"
-                                : "all"
-                          )
-                        }
-                      >
-                        <option value="all">All surfaces</option>
-                        <option value="cavcode">Caven</option>
-                        <option value="center">CavAi</option>
-                      </select>
-                      {createAgentError ? <div className="cc-agentCreateError">{createAgentError}</div> : null}
-                      <div className="cc-agentCreateActions">
-                        <button type="button" className="cc-agentCreateBtn" onClick={() => closeCreateAgent()}>
-                          Cancel
-                        </button>
-                        <button type="button" className="cc-agentCreateBtn cc-agentCreateBtnPrimary" onClick={() => createCustomAgent()}>
-                          Create Agent
-                        </button>
-                      </div>
-                    </div>
-                  </section>
-                ) : null}
+                    </section>
+                  );
+                })() : null}
 
                 {skillsPageView === "agents" && !createAgentOpen ? (
                   <>
