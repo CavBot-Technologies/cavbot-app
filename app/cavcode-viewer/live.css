@@ -866,6 +866,11 @@ body{
   font-weight: 800;
   color: rgba(247,251,255,.90);
 }
+
+.ccv-dropCopyMobile{
+  display: none;
+}
+
 .ccv-dropSub{
   margin-top: 6px;
   font-size: 12px;
@@ -928,6 +933,22 @@ body{
 }
 .ccv-meta .muted{ color: rgba(197,206,231,.72); }
 .ccv-meta .ok{ color: #5cff9a; }
+
+.ccv-mobilePreviewSupport{
+  display: none;
+}
+
+.ccv-mobilePreviewSupportCard{
+  border: 1px solid rgba(255,255,255,.10);
+  background: var(--ccv-header-bg);
+  border-radius: var(--ccv-radius-panel);
+  padding: 12px;
+}
+
+.ccv-metaMobile{
+  padding: 0;
+  border-top: 0;
+}
 
 /* Preview side */
 .ccv-previewHead{
@@ -1181,14 +1202,35 @@ body{
     padding: 12px;
   }
 
+  .ccv-dropCopyDesktop{
+    display: none;
+  }
+
+  .ccv-dropCopyMobile{
+    display: block;
+  }
+
   .ccv-meta{
     grid-template-columns: 1fr;
+  }
+
+  .ccv-previewSupportDesktopBlock,
+  .ccv-previewSupportDesktop,
+  .ccv-previewMetaDesktop{
+    display: none;
   }
 
   .ccv-frame{
     height: auto;
     min-height: 460px;
     flex: 0;
+  }
+
+  .ccv-mobilePreviewSupport{
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 12px;
   }
 
   .ccv-frame.is-desktop{
@@ -1213,6 +1255,14 @@ body{
 
   .ccv-uploadViewRow{
     justify-content: stretch;
+  }
+
+  .ccv-uploadDesktopActionRow{
+    justify-content: center;
+  }
+
+  .ccv-uploadDesktopAction{
+    min-width: 148px;
   }
 
   .ccv-uploadTag{

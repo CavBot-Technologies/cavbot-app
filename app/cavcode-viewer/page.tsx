@@ -1757,6 +1757,53 @@ export default function LivePage() {
       </button>
     </div>
   );
+  const renderPreviewToggleControls = () => (
+    <div className="ccv-controlStack">
+      <label className="ccv-toggle ccv-toggleRow">
+        <input
+          type="checkbox"
+          checked={disableJs}
+          onChange={(e) => setDisableJs(e.currentTarget.checked)}
+        />
+        <span className="ccv-toggleTextWrap">
+          <span className="ccv-toggleLabel">Disable JS</span>
+          <span className="ccv-toggleSub">Run preview without script execution.</span>
+        </span>
+        <span className="ccv-toggleTrack">
+          <span className="ccv-toggleThumb" />
+        </span>
+      </label>
+
+      <label className="ccv-toggle ccv-toggleRow">
+        <input
+          type="checkbox"
+          checked={blockExternal}
+          onChange={(e) => setBlockExternal(e.currentTarget.checked)}
+        />
+        <span className="ccv-toggleTextWrap">
+          <span className="ccv-toggleLabel">Block external requests</span>
+          <span className="ccv-toggleSub">Replace external assets with safe placeholders.</span>
+        </span>
+        <span className="ccv-toggleTrack">
+          <span className="ccv-toggleThumb" />
+        </span>
+      </label>
+    </div>
+  );
+  const renderPreviewMeta = (className = "") => (
+    <div className={`ccv-meta ${className}`.trim()}>
+      <div className="ccv-metaCard">
+        <span>Last update</span>
+        <b>{lastUpdated}</b>
+      </div>
+      <div className="ccv-metaCard">
+        <span>Status</span>
+        <b className={isPreviewLive ? "ok" : "muted"}>
+          {mountMode ? (mountBootstrapped ? "Mounted live" : "Mounting") : (hasManualPreview ? "Live" : "No preview")}
+        </b>
+      </div>
+    </div>
+  );
 
   if (booting) {
     return (
@@ -2080,14 +2127,20 @@ export default function LivePage() {
                 />
 
                 <div className="ccv-drop">
-                  <div className="ccv-dropTitle">Drag &amp; drop anywhere</div>
-                  <div className="ccv-dropSub">Drop a project folder or multiple files to render instantly.</div>
+                  <div className="ccv-dropTitle">
+                    <span className="ccv-dropCopyDesktop">Drag &amp; drop anywhere</span>
+                    <span className="ccv-dropCopyMobile">Choose files from your device</span>
+                  </div>
+                  <div className="ccv-dropSub">
+                    <span className="ccv-dropCopyDesktop">Drop a project folder or multiple files to render instantly.</span>
+                    <span className="ccv-dropCopyMobile">Use the button below to load HTML, CSS, or JS files on mobile.</span>
+                  </div>
                 </div>
 
                 <div className="ccv-uploadSpacer" aria-hidden="true" />
 
-                <div className="ccv-uploadViewRow">
-                  <button className="ccv-btn" onClick={() => fileInputRef.current?.click()}>
+                <div className="ccv-uploadViewRow ccv-uploadDesktopActionRow">
+                  <button className="ccv-btn ccv-uploadDesktopAction" onClick={() => fileInputRef.current?.click()}>
                     Choose File
                   </button>
                 </div>
@@ -2169,37 +2222,9 @@ export default function LivePage() {
               </div>
             </div>
 
-            <div className="ccv-block ccv-elegantBlock">
-              <div className="ccv-controlStack">
-                <label className="ccv-toggle ccv-toggleRow">
-                  <input
-                    type="checkbox"
-                    checked={disableJs}
-                    onChange={(e) => setDisableJs(e.currentTarget.checked)}
-                  />
-                  <span className="ccv-toggleTextWrap">
-                    <span className="ccv-toggleLabel">Disable JS</span>
-                    <span className="ccv-toggleSub">Run preview without script execution.</span>
-                  </span>
-                  <span className="ccv-toggleTrack">
-                    <span className="ccv-toggleThumb" />
-                  </span>
-                </label>
-
-                <label className="ccv-toggle ccv-toggleRow">
-                  <input
-                    type="checkbox"
-                    checked={blockExternal}
-                    onChange={(e) => setBlockExternal(e.currentTarget.checked)}
-                  />
-                  <span className="ccv-toggleTextWrap">
-                    <span className="ccv-toggleLabel">Block external requests</span>
-                    <span className="ccv-toggleSub">Replace external assets with safe placeholders.</span>
-                  </span>
-                  <span className="ccv-toggleTrack">
-                    <span className="ccv-toggleThumb" />
-                  </span>
-                </label>
+            <div className="ccv-block ccv-elegantBlock ccv-previewSupportDesktopBlock">
+              <div className="ccv-previewSupportDesktop">
+                {renderPreviewToggleControls()}
               </div>
             </div>
 
@@ -2215,18 +2240,7 @@ export default function LivePage() {
               </div>
             ) : null}
 
-            <div className="ccv-meta">
-              <div className="ccv-metaCard">
-                <span>Last update</span>
-                <b>{lastUpdated}</b>
-              </div>
-              <div className="ccv-metaCard">
-                <span>Status</span>
-                <b className={isPreviewLive ? "ok" : "muted"}>
-                  {mountMode ? (mountBootstrapped ? "Mounted live" : "Mounting") : (hasManualPreview ? "Live" : "No preview")}
-                </b>
-              </div>
-            </div>
+            {renderPreviewMeta("ccv-previewMetaDesktop")}
           </div>
         </aside>
 
@@ -2279,6 +2293,12 @@ export default function LivePage() {
                 }
               />
             )}
+          </div>
+          <div className="ccv-mobilePreviewSupport" aria-label="Preview support">
+            <div className="ccv-mobilePreviewSupportCard">
+              {renderPreviewToggleControls()}
+            </div>
+            {renderPreviewMeta("ccv-metaMobile")}
           </div>
         </section>
       </section>
