@@ -16476,10 +16476,10 @@ export default function CavCodePage() {
                             <div className="cc-agentCreateSectionHead cc-agentCreateSectionHead--tight">
                               <div>
                                 <span className="cc-agentCreateSectionEyebrow">Review</span>
-                                <h4 id="cc-agent-create-review-title">Submit for publication review</h4>
+                                <h4 id="cc-agent-create-review-title">Submit for publication</h4>
                               </div>
                               <p className="cc-agentCreateSectionNote">
-                                Private unless you submit it for HQ review.
+                                Private unless you submit it to CavBot HQ for review.
                               </p>
                             </div>
                             <div className="cc-agentCreateReviewCard">
@@ -16494,9 +16494,8 @@ export default function CavCodePage() {
                                   <span className="cc-agentCreateReviewToggleTick" />
                                 </span>
                                 <span className="cc-agentCreateReviewToggleCopy">
-                                  <span className="cc-agentCreateReviewToggleTitle">Submit for HQ review</span>
-                                  <span className="cc-agentCreateReviewToggleHint">
-                                    HQ can review this agent for release in the shared operator catalog.
+                                  <span className="cc-agentCreateReviewToggleTitle">
+                                    I agree to allow CavBot HQ to access, review, and verify this agent before it is considered for public release.
                                   </span>
                                 </span>
                               </label>
