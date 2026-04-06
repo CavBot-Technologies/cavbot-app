@@ -86,14 +86,6 @@ type DriveChildrenResponse = {
   files?: DriveFileRow[];
 };
 
-const CAVCODE_VIEWER_MOBILE_NAV_ITEMS = [
-  { label: "Home", href: "/" },
-  { label: "CavCode", href: "/cavcode" },
-  { label: "CavCode Viewer", href: "/cavcode-viewer" },
-  { label: "CavCloud", href: "/cavcloud" },
-  { label: "CavTools", href: "/cavtools" },
-];
-
 function safeJsonParse<T>(raw: string | null): T | null {
   if (!raw) return null;
   try {
@@ -522,7 +514,6 @@ export default function LivePage() {
   const [disableJs, setDisableJs] = useState<boolean>(false);
   const [blockExternal, setBlockExternal] = useState<boolean>(false);
   const [accountOpen, setAccountOpen] = useState(false);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [profileFullName, setProfileFullName] = useState<string>("");
   const [profileUsername, setProfileUsername] = useState<string>("");
   const [profileAvatar, setProfileAvatar] = useState<string>("");
@@ -719,10 +710,7 @@ export default function LivePage() {
     }
 
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setAccountOpen(false);
-        setMobileNavOpen(false);
-      }
+      if (e.key === "Escape") setAccountOpen(false);
     }
 
     window.addEventListener("mousedown", onDown);
@@ -1778,94 +1766,17 @@ export default function LivePage() {
 
   return (
     <main className="ccv-root">
-      <div
-        className={`ccv-mobileNavBackdrop ${mobileNavOpen ? "is-open" : ""}`}
-        aria-hidden={!mobileNavOpen}
-        onClick={() => setMobileNavOpen(false)}
-      />
-      <aside
-        id="ccv-mobile-drawer"
-        className={`ccv-mobileNavDrawer ${mobileNavOpen ? "is-open" : ""}`}
-        aria-label="CavBot viewer navigation"
-        aria-hidden={!mobileNavOpen}
-      >
-        <div className="ccv-mobileNavHead">
-          <Link
-            className="ccv-mobileNavBrand"
-            href="/"
-            aria-label="Back to Command Center"
-            onClick={() => setMobileNavOpen(false)}
-          >
-            <span className="ccv-markBadge ccv-mobileNavBrandMark">
-              <Image
-                src="/logo/cavbot-logomark.svg"
-                alt=""
-                width={28}
-                height={28}
-                className="ccv-markBadgeImg"
-                unoptimized
-              />
-            </span>
-            <span className="ccv-mobileNavBrandText">CavCode Viewer</span>
-          </Link>
-          <button
-            type="button"
-            className="ccv-iconbtn ccv-mobileNavClose"
-            onClick={() => setMobileNavOpen(false)}
-            aria-label="Close navigation drawer"
-            title="Close drawer"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-        <nav className="ccv-mobileNavLinks" aria-label="Viewer quick links">
-          {CAVCODE_VIEWER_MOBILE_NAV_ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="ccv-mobileNavLink"
-              onClick={() => setMobileNavOpen(false)}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-      </aside>
-
       {/* Header */}
       <header className="ccv-top" role="banner">
         <div className="ccv-topLeft">
-          <button
-            type="button"
-            className="ccv-iconbtn ccv-mobileMenuBtn"
-            onClick={() => {
-              setAccountOpen(false);
-              setMobileNavOpen((open) => !open);
-            }}
-            aria-label="Open navigation drawer"
-            title="Menu"
-            aria-expanded={mobileNavOpen}
-            aria-controls="ccv-mobile-drawer"
-          >
-            <Image
-              src="/icons/menu-svgrepo-com.svg"
-              alt=""
-              width={18}
-              height={18}
-              className="ccv-iconbtnImg ccv-mobileMenuIcon"
-              unoptimized
-            />
-          </button>
           <div className="ccv-titlebar" aria-label="CavCode Viewer">
             <Link className="ccv-markBadgeLink" href="/" aria-label="Back to Command Center">
               <span className="ccv-markBadge">
                 <Image
                   src="/logo/cavbot-logomark.svg"
                   alt=""
-                  width={30}
-                  height={30}
+                  width={24}
+                  height={24}
                   className="ccv-markBadgeImg"
                   priority
                   fetchPriority="high"
