@@ -2652,7 +2652,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-agentCreateBackBtn{
   border: 0;
   background: transparent;
-  color: rgba(197,206,231,.76);
+  color: rgba(242,247,255,.9);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2677,12 +2677,12 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-agentCreateBackIcon{
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   display: inline-block;
   background-color: currentColor;
-  -webkit-mask: url("/icons/chevron-left-svgrepo-com.svg") center / contain no-repeat;
-  mask: url("/icons/chevron-left-svgrepo-com.svg") center / contain no-repeat;
+  -webkit-mask: url("/icons/back-svgrepo-com.svg") center / contain no-repeat;
+  mask: url("/icons/back-svgrepo-com.svg") center / contain no-repeat;
 }
 
 .cc-agentCreateAiControls{
@@ -3080,9 +3080,9 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-agentCreateIconBox{
   width: 84px;
   height: 84px;
-  border-radius: 20px;
-  border: 1px dashed rgba(255,255,255,.20);
-  background: rgba(10,15,34,.92);
+  border-radius: 12px;
+  border: 1px dashed rgba(234,240,255,.12);
+  background: rgba(0,0,0,.28);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3094,8 +3094,8 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-agentCreateIconBox:hover,
 .cc-agentCreateIconBox:focus-visible{
-  border-color: rgba(255,255,255,.28);
-  background: rgba(12,17,36,.98);
+  border-color: rgba(234,240,255,.18);
+  background: rgba(0,0,0,.36);
   transform: translateY(-1px);
 }
 
@@ -3252,15 +3252,16 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   width: 100%;
   display: block;
   box-sizing: border-box;
-  border: 1px solid rgba(255,255,255,.14);
-  background: rgba(9,14,30,.88);
-  color: rgba(241,248,255,.95);
-  border-radius: 14px;
+  border: 1px solid rgba(234,240,255,.12);
+  background: rgba(0,0,0,.28);
+  color: rgba(234,240,255,.92);
+  border-radius: 10px;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.5;
-  padding: 14px 15px;
+  padding: 0 12px;
+  min-height: 46px;
   outline: none;
   transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
@@ -3271,21 +3272,22 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-agentCreateInput:focus{
   border-color: rgba(255,255,255,.22);
-  background: rgba(10,15,32,.96);
+  background: rgba(0,0,0,.36);
   box-shadow: 0 0 0 3px rgba(255,255,255,.05);
 }
 
 .cc-agentCreateTextarea{
-  min-height: 126px;
+  min-height: 110px;
+  padding: 12px;
   resize: vertical;
 }
 
 .cc-agentCreateTextarea--short{
-  min-height: 112px;
+  min-height: 110px;
 }
 
 .cc-agentCreateTextarea--tall{
-  min-height: 206px;
+  min-height: 178px;
 }
 
 .cc-agentCreateSection--surface{
@@ -4133,7 +4135,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   .cc-agentCreateIconBox{
     width: 84px;
     height: 84px;
-    border-radius: 20px;
+    border-radius: 12px;
   }
   .cc-agentCreateIdentityName{
     font-size: 22px;
