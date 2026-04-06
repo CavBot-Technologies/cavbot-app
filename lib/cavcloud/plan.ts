@@ -42,15 +42,51 @@ function hasPaidSubscriptionStatus(status: unknown) {
   return normalized === "ACTIVE" || normalized === "TRIALING" || normalized === "PAST_DUE";
 }
 
-function planRank(planId: PlanId) {
+export function cavcloudPlanRank(planId: PlanId) {
   if (planId === "premium_plus") return 3;
   if (planId === "premium") return 2;
   return 1;
 }
 
+export function cavcloudTierTokenForPlanId(planId: PlanId) {
+  if (planId === "premium_plus") return "PREMIUM_PLUS";
+  if (planId === "premium") return "PREMIUM";
+  return "FREE";
+}
+
 export function isCavCloudTrialSeatActive(account?: CavCloudPlanAccountInput | null) {
   const endsAtMs = parseEndsAt(account?.trialEndsAt);
   return Boolean(account?.trialSeatActive) && endsAtMs !== null && endsAtMs > Date.now();
+}
+
+export function mergeCavCloudPlanAccounts(
+  ...accounts: Array<CavCloudPlanAccountInput | null | undefined>
+): CavCloudPlanAccountInput | null {
+  const rows = accounts.filter((account): account is CavCloudPlanAccountInput => Boolean(account));
+  if (rows.length === 0) return null;
+
+  let bestTier: string | undefined;
+  let bestRank = 0;
+
+  for (const row of rows) {
+    const rawTier = String(row.tier || "").trim();
+    if (!rawTier) continue;
+    const rank = cavcloudPlanRank(resolvePlanIdFromTier(rawTier));
+    if (!bestTier || rank > bestRank) {
+      bestTier = rawTier;
+      bestRank = rank;
+    }
+  }
+
+  const trialRow = rows.find((row) => isCavCloudTrialSeatActive(row))
+    ?? rows.find((row) => row.trialSeatActive != null || row.trialEndsAt != null)
+    ?? rows[0];
+
+  return {
+    tier: bestTier ?? rows[0]?.tier,
+    trialSeatActive: trialRow?.trialSeatActive ?? rows[0]?.trialSeatActive ?? null,
+    trialEndsAt: trialRow?.trialEndsAt ?? rows[0]?.trialEndsAt ?? null,
+  };
 }
 
 export function resolveCavCloudEffectivePlan(args: {
@@ -71,7 +107,7 @@ export function resolveCavCloudEffectivePlan(args: {
   if (hasPaidSubscriptionStatus(subscription?.status)) {
     const accountPlanId = resolvePlanIdFromTier(account?.tier || "FREE");
     const subscriptionPlanId = resolvePlanIdFromTier(subscription?.tier || "FREE");
-    const winningPlanId = planRank(subscriptionPlanId) >= planRank(accountPlanId)
+    const winningPlanId = cavcloudPlanRank(subscriptionPlanId) >= cavcloudPlanRank(accountPlanId)
       ? subscriptionPlanId
       : accountPlanId;
     if (winningPlanId !== "free") {

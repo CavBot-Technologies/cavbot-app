@@ -2,6 +2,8 @@
 import { NextResponse } from "next/server";
 import { getSession, isApiAuthError } from "@/lib/apiAuth";
 import type { CavbotSession } from "@/lib/apiAuth";
+import { cavcloudTierTokenForPlanId } from "@/lib/cavcloud/plan";
+import { getCavCloudPlanContext } from "@/lib/cavcloud/plan.server";
 import {
   clearExpiredTrialSeat,
   findAccountById,
@@ -88,7 +90,11 @@ type AccountWithComputed = PrismaAccount & {
   trialDaysLeft: number;
 };
 
-function computeEffectiveTier(account: PrismaAccount) {
+function computeEffectiveTier(account?: {
+  tier?: string | null;
+  trialSeatActive?: boolean | null;
+  trialEndsAt?: string | Date | null;
+} | null) {
   const now = Date.now();
   const endsAtMs = account?.trialEndsAt ? new Date(account.trialEndsAt).getTime() : 0;
 
@@ -161,8 +167,17 @@ export async function GET(req: Request) {
 
       account = accountRecord;
 
-      // Compute effective tier for UI + gates
-      const eff = computeEffectiveTier(account);
+      const fallbackEff = computeEffectiveTier(account);
+      const resolvedPlan = await getCavCloudPlanContext(accountId).catch(() => null);
+      const resolvedTrialDetails = computeEffectiveTier(resolvedPlan?.account);
+      const eff = resolvedPlan
+        ? {
+            trialActive: resolvedPlan.trialActive,
+            tierEffective: cavcloudTierTokenForPlanId(resolvedPlan.planId),
+            daysLeft: resolvedTrialDetails.daysLeft,
+          }
+        : fallbackEff;
+
       accountWithComputed = {
         ...account,
         tierEffective: eff.tierEffective, // "FREE" | "PREMIUM" | "PREMIUM_PLUS"

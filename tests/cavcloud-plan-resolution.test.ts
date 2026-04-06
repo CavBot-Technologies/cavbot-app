@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  cavcloudTierTokenForPlanId,
   cavcloudStorageLimitBytesForPlan,
+  mergeCavCloudPlanAccounts,
   resolveCavCloudEffectivePlan,
 } from "@/lib/cavcloud/plan";
 
@@ -63,4 +65,20 @@ test("falls back to account tier when there is no paid subscription", () => {
 
   assert.equal(resolved.planId, "premium");
   assert.equal(resolved.source, "account");
+});
+
+test("merges account plan inputs without dropping the higher tier", () => {
+  const merged = mergeCavCloudPlanAccounts(
+    { tier: "FREE", trialSeatActive: false, trialEndsAt: null },
+    { tier: "ENTERPRISE", trialSeatActive: false, trialEndsAt: null },
+  );
+
+  assert.equal(merged?.tier, "ENTERPRISE");
+  assert.equal(merged?.trialSeatActive, false);
+});
+
+test("maps CavCloud plan ids back to auth tier tokens", () => {
+  assert.equal(cavcloudTierTokenForPlanId("free"), "FREE");
+  assert.equal(cavcloudTierTokenForPlanId("premium"), "PREMIUM");
+  assert.equal(cavcloudTierTokenForPlanId("premium_plus"), "PREMIUM_PLUS");
 });
