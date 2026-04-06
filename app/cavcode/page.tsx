@@ -208,6 +208,7 @@ type IdeAgentCard = {
   name: string;
   summary: string;
   iconSrc: string;
+  iconBackground?: string | null;
   actionKey: string;
   surface: "cavcode" | "center" | "all";
   defaultInstalled: boolean;
@@ -259,6 +260,7 @@ type CustomCavenAgentRecord = {
   triggers: string[];
   instructions: string;
   iconSvg: string;
+  iconBackground: string | null;
   createdAt: string;
 };
 
@@ -290,6 +292,7 @@ const THEME_VALUES = THEME_OPTIONS.map((option) => option.value);
 const CAVCODE_WORKSPACE_STATE_SAVE_DEBOUNCE_MS = 650;
 const CAVEN_CUSTOM_AGENT_ICON_SRC = "/icons/app/cavcode/agents/custom-agent.svg";
 const MAX_CUSTOM_AGENT_ICON_SVG_CHARS = 120_000;
+const DEFAULT_CUSTOM_AGENT_ICON_BACKGROUND = "#4EA8FF";
 const AGENT_CREATE_PROMPT_HINT_INTERVAL_MS = 6800;
 const AGENT_CREATE_PROMPT_HINTS_EMPTY = [
   "Create a frontend QA agent that checks accessibility, responsiveness, and spacing before merge.",
@@ -1312,6 +1315,233 @@ function normalizeAgentIconSvgFromUnknown(value: unknown): string {
   return raw;
 }
 
+function clampByte(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function toHexChannel(value: number): string {
+  return clampByte(value).toString(16).padStart(2, "0");
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  return `#${toHexChannel(r)}${toHexChannel(g)}${toHexChannel(b)}`.toUpperCase();
+}
+
+function parseRgbChannel(raw: string): number | null {
+  const value = String(raw || "").trim();
+  if (!value) return null;
+  if (value.endsWith("%")) {
+    const parsed = Number.parseFloat(value.slice(0, -1));
+    if (!Number.isFinite(parsed)) return null;
+    return clampByte((parsed / 100) * 255);
+  }
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) return null;
+  return clampByte(parsed);
+}
+
+function parseAlphaChannel(raw: string): number | null {
+  const value = String(raw || "").trim();
+  if (!value) return null;
+  if (value.endsWith("%")) {
+    const parsed = Number.parseFloat(value.slice(0, -1));
+    if (!Number.isFinite(parsed)) return null;
+    return Math.max(0, Math.min(1, parsed / 100));
+  }
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.min(1, parsed));
+}
+
+function hueToRgbChannel(p: number, q: number, t: number): number {
+  let value = t;
+  if (value < 0) value += 1;
+  if (value > 1) value -= 1;
+  if (value < 1 / 6) return p + (q - p) * 6 * value;
+  if (value < 1 / 2) return q;
+  if (value < 2 / 3) return p + (q - p) * (2 / 3 - value) * 6;
+  return p;
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const hue = ((h % 360) + 360) % 360 / 360;
+  const saturation = Math.max(0, Math.min(1, s));
+  const lightness = Math.max(0, Math.min(1, l));
+  if (saturation === 0) {
+    const gray = clampByte(lightness * 255);
+    return rgbToHex(gray, gray, gray);
+  }
+  const q = lightness < 0.5
+    ? lightness * (1 + saturation)
+    : lightness + saturation - lightness * saturation;
+  const p = 2 * lightness - q;
+  return rgbToHex(
+    hueToRgbChannel(p, q, hue + 1 / 3) * 255,
+    hueToRgbChannel(p, q, hue) * 255,
+    hueToRgbChannel(p, q, hue - 1 / 3) * 255,
+  );
+}
+
+function normalizeAgentColorHexFromUnknown(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const normalized = raw.replace(/\s+/g, "").toLowerCase();
+  if (
+    !normalized
+    || normalized === "none"
+    || normalized === "transparent"
+    || normalized === "currentcolor"
+    || normalized === "inherit"
+    || normalized.startsWith("url(")
+  ) {
+    return "";
+  }
+  const hexMatch = normalized.match(/^#([a-f0-9]{3}|[a-f0-9]{4}|[a-f0-9]{6}|[a-f0-9]{8})$/i);
+  if (hexMatch) {
+    const token = hexMatch[1];
+    if (token.length === 3 || token.length === 4) {
+      const expanded = token.slice(0, 3).split("").map((part) => `${part}${part}`).join("");
+      return `#${expanded}`.toUpperCase();
+    }
+    return `#${token.slice(0, 6)}`.toUpperCase();
+  }
+
+  const rgbMatch = normalized.match(/^rgba?\(([^)]+)\)$/i);
+  if (rgbMatch) {
+    const parts = rgbMatch[1].split(",").map((part) => part.trim()).filter(Boolean);
+    if (parts.length < 3) return "";
+    const r = parseRgbChannel(parts[0]);
+    const g = parseRgbChannel(parts[1]);
+    const b = parseRgbChannel(parts[2]);
+    if (r == null || g == null || b == null) return "";
+    if (parts[3] != null) {
+      const alpha = parseAlphaChannel(parts[3]);
+      if (alpha != null && alpha <= 0) return "";
+    }
+    return rgbToHex(r, g, b);
+  }
+
+  const hslMatch = normalized.match(/^hsla?\(([^)]+)\)$/i);
+  if (hslMatch) {
+    const parts = hslMatch[1].split(",").map((part) => part.trim()).filter(Boolean);
+    if (parts.length < 3) return "";
+    const hue = Number.parseFloat(parts[0]);
+    const saturation = Number.parseFloat(parts[1].replace("%", ""));
+    const lightness = Number.parseFloat(parts[2].replace("%", ""));
+    if (!Number.isFinite(hue) || !Number.isFinite(saturation) || !Number.isFinite(lightness)) return "";
+    if (parts[3] != null) {
+      const alpha = parseAlphaChannel(parts[3]);
+      if (alpha != null && alpha <= 0) return "";
+    }
+    return hslToHex(hue, saturation / 100, lightness / 100);
+  }
+
+  if (!normalized.startsWith("#") && /^[a-f0-9]{3,8}$/i.test(normalized)) {
+    return normalizeAgentColorHexFromUnknown(`#${normalized}`);
+  }
+  return "";
+}
+
+function hexToRgbTuple(hex: string): [number, number, number] | null {
+  const normalized = normalizeAgentColorHexFromUnknown(hex);
+  if (!normalized) return null;
+  const token = normalized.slice(1);
+  return [
+    Number.parseInt(token.slice(0, 2), 16),
+    Number.parseInt(token.slice(2, 4), 16),
+    Number.parseInt(token.slice(4, 6), 16),
+  ];
+}
+
+function mixAgentHexColors(hex: string, target: string, amount: number): string {
+  const left = hexToRgbTuple(hex);
+  const right = hexToRgbTuple(target);
+  if (!left || !right) return normalizeAgentColorHexFromUnknown(hex) || "";
+  const weight = Math.max(0, Math.min(1, amount));
+  return rgbToHex(
+    left[0] + (right[0] - left[0]) * weight,
+    left[1] + (right[1] - left[1]) * weight,
+    left[2] + (right[2] - left[2]) * weight,
+  );
+}
+
+function rgbaFromAgentHex(hex: string, alpha: number): string {
+  const rgb = hexToRgbTuple(hex);
+  if (!rgb) return `rgba(78,168,255,${alpha})`;
+  const safeAlpha = Math.max(0, Math.min(1, alpha));
+  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${safeAlpha})`;
+}
+
+function scoreSvgPaletteColor(hex: string, count: number): number {
+  const rgb = hexToRgbTuple(hex);
+  if (!rgb) return count;
+  const [r, g, b] = rgb;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const saturation = (max - min) / 255;
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  let score = count * 100 + saturation * 20;
+  if (luminance < 0.08 || luminance > 0.94) score -= 14;
+  if (saturation < 0.08) score -= 10;
+  return score;
+}
+
+function extractSvgPalette(svg: string): string[] {
+  const clean = normalizeAgentIconSvgFromUnknown(svg);
+  if (!clean) return [];
+  const hits = new Map<string, number>();
+  const rawValues: string[] = [];
+  const attrPattern = /\b(?:fill|stroke|stop-color|color)\s*=\s*["']([^"']+)["']/gi;
+  const stylePattern = /\bstyle\s*=\s*["']([^"']+)["']/gi;
+  const styleColorPattern = /\b(?:fill|stroke|stop-color|color)\s*:\s*([^;]+)/gi;
+
+  let match: RegExpExecArray | null = null;
+  while ((match = attrPattern.exec(clean))) {
+    rawValues.push(match[1] || "");
+  }
+  while ((match = stylePattern.exec(clean))) {
+    const style = match[1] || "";
+    let styleMatch: RegExpExecArray | null = null;
+    while ((styleMatch = styleColorPattern.exec(style))) {
+      rawValues.push(styleMatch[1] || "");
+    }
+  }
+
+  for (const rawValue of rawValues) {
+    const color = normalizeAgentColorHexFromUnknown(rawValue);
+    if (!color) continue;
+    hits.set(color, (hits.get(color) || 0) + 1);
+  }
+
+  return [...hits.entries()]
+    .sort((a, b) => scoreSvgPaletteColor(b[0], b[1]) - scoreSvgPaletteColor(a[0], a[1]) || b[1] - a[1])
+    .map(([color]) => color)
+    .slice(0, 6);
+}
+
+function pickDefaultAgentIconBackground(palette: readonly string[]): string {
+  for (const color of palette) {
+    const rgb = hexToRgbTuple(color);
+    if (!rgb) continue;
+    const max = Math.max(rgb[0], rgb[1], rgb[2]);
+    const min = Math.min(rgb[0], rgb[1], rgb[2]);
+    const saturation = (max - min) / 255;
+    const luminance = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
+    if (saturation >= 0.08 && luminance >= 0.12 && luminance <= 0.9) return color;
+  }
+  return palette[0] || DEFAULT_CUSTOM_AGENT_ICON_BACKGROUND;
+}
+
+function buildAgentIconSurfaceStyle(hex: string | null | undefined): React.CSSProperties | undefined {
+  const color = normalizeAgentColorHexFromUnknown(hex);
+  if (!color) return undefined;
+  return {
+    ["--cc-agent-icon-bg" as const]: `linear-gradient(135deg, ${mixAgentHexColors(color, "#FFFFFF", 0.16)}, ${mixAgentHexColors(color, "#050915", 0.12)})`,
+    ["--cc-agent-icon-border" as const]: rgbaFromAgentHex(mixAgentHexColors(color, "#FFFFFF", 0.28), 0.58),
+  };
+}
+
 function svgToDataUri(svg: string): string {
   const clean = normalizeAgentIconSvgFromUnknown(svg);
   if (!clean) return CAVEN_CUSTOM_AGENT_ICON_SRC;
@@ -1347,6 +1577,7 @@ function normalizeCustomAgentsFromUnknown(
       ? row.triggers.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 12)
       : [];
     const iconSvg = normalizeAgentIconSvgFromUnknown(row.iconSvg);
+    const iconBackground = normalizeAgentColorHexFromUnknown(row.iconBackground) || null;
     const createdAt = String(row.createdAt || "").trim() || new Date().toISOString();
     rows.push({
       id,
@@ -1357,6 +1588,7 @@ function normalizeCustomAgentsFromUnknown(
       triggers,
       instructions,
       iconSvg,
+      iconBackground,
       createdAt,
     });
     seen.add(id);
@@ -1390,6 +1622,7 @@ function customAgentToCard(record: CustomCavenAgentRecord): IdeAgentCard {
     name: record.name,
     summary: record.summary,
     iconSrc: svgToDataUri(record.iconSvg),
+    iconBackground: record.iconBackground,
     actionKey: record.actionKey,
     surface: record.surface,
     defaultInstalled: false,
@@ -4469,8 +4702,15 @@ export default function CavCodePage() {
   const [createAgentInstructions, setCreateAgentInstructions] = useState("");
   const [createAgentSurface, setCreateAgentSurface] = useState<"cavcode" | "center" | "all">("all");
   const [createAgentIconSvg, setCreateAgentIconSvg] = useState("");
+  const [createAgentIconBackground, setCreateAgentIconBackground] = useState("");
+  const [createAgentIconPalette, setCreateAgentIconPalette] = useState<string[]>([]);
+  const [createAgentColorInput, setCreateAgentColorInput] = useState("");
+  const [createAgentColorMenuOpen, setCreateAgentColorMenuOpen] = useState(false);
   const [createAgentError, setCreateAgentError] = useState("");
   const createAgentIconInputRef = useRef<HTMLInputElement | null>(null);
+  const createAgentColorInputRef = useRef<HTMLInputElement | null>(null);
+  const createAgentColorNativeInputRef = useRef<HTMLInputElement | null>(null);
+  const createAgentColorMenuRef = useRef<HTMLDivElement | null>(null);
   const [createAgentAiBusy, setCreateAgentAiBusy] = useState(false);
   const [createAgentAiMenuOpen, setCreateAgentAiMenuOpen] = useState(false);
   const [createAgentAiPromptOpen, setCreateAgentAiPromptOpen] = useState(false);
@@ -6271,6 +6511,55 @@ export default function CavCodePage() {
     };
   }, [createAgentAiControlMenu, createAgentAiMenuOpen, createAgentAiPromptOpen, createAgentOpen]);
 
+  const commitCreateAgentIconBackground = useCallback((value: string) => {
+    const normalized = normalizeAgentColorHexFromUnknown(value);
+    if (!normalized) {
+      const fallback = createAgentIconBackground || pickDefaultAgentIconBackground(createAgentIconPalette);
+      setCreateAgentColorInput(fallback);
+      return false;
+    }
+    setCreateAgentIconBackground(normalized);
+    setCreateAgentColorInput(normalized);
+    return true;
+  }, [createAgentIconBackground, createAgentIconPalette]);
+
+  useEffect(() => {
+    if (!createAgentOpen) return;
+    if (!createAgentIconSvg) {
+      setCreateAgentColorMenuOpen(false);
+      return;
+    }
+    if (!createAgentColorMenuOpen) return;
+    const timer = window.setTimeout(() => createAgentColorInputRef.current?.focus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [createAgentColorMenuOpen, createAgentIconSvg, createAgentOpen]);
+
+  useEffect(() => {
+    if (!createAgentOpen) return;
+    if (!createAgentColorMenuOpen) return;
+
+    const closeMenu = () => setCreateAgentColorMenuOpen(false);
+
+    function onPointerDown(event: MouseEvent) {
+      const target = event.target as Element | null;
+      if (!target) return;
+      if (target.closest("[data-agent-create-color='true']")) return;
+      closeMenu();
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      closeMenu();
+    }
+
+    window.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [createAgentColorMenuOpen, createAgentOpen]);
+
   const closeCreateAgent = useCallback(() => {
     setCreateAgentOpen(false);
     setCreateAgentName("");
@@ -6279,6 +6568,10 @@ export default function CavCodePage() {
     setCreateAgentInstructions("");
     setCreateAgentSurface("all");
     setCreateAgentIconSvg("");
+    setCreateAgentIconBackground("");
+    setCreateAgentIconPalette([]);
+    setCreateAgentColorInput("");
+    setCreateAgentColorMenuOpen(false);
     if (createAgentIconInputRef.current) createAgentIconInputRef.current.value = "";
     setCreateAgentError("");
     setCreateAgentAiBusy(false);
@@ -6316,7 +6609,13 @@ export default function CavCodePage() {
         input.value = "";
         return;
       }
+      const palette = extractSvgPalette(normalized);
+      const defaultColor = pickDefaultAgentIconBackground(palette);
       setCreateAgentIconSvg(normalized);
+      setCreateAgentIconPalette(palette);
+      setCreateAgentIconBackground(defaultColor);
+      setCreateAgentColorInput(defaultColor);
+      setCreateAgentColorMenuOpen(false);
       setCreateAgentError("");
     } catch {
       setCreateAgentError("Failed to read icon file.");
@@ -6330,6 +6629,7 @@ export default function CavCodePage() {
     const summary = createAgentSummary.trim().replace(/\s+/g, " ");
     const instructions = createAgentInstructions.trim();
     const iconSvg = normalizeAgentIconSvgFromUnknown(createAgentIconSvg);
+    const iconBackground = normalizeAgentColorHexFromUnknown(createAgentIconBackground) || null;
     const triggerList = createAgentTriggers
       .split(/[\n,]/g)
       .map((row) => row.trim())
@@ -6367,6 +6667,7 @@ export default function CavCodePage() {
       triggers: triggerList,
       instructions,
       iconSvg,
+      iconBackground,
       createdAt: new Date().toISOString(),
     };
 
@@ -6425,6 +6726,7 @@ export default function CavCodePage() {
     applyAgentSettingsFromServer,
     closeCreateAgent,
     createAgentInstructions,
+    createAgentIconBackground,
     createAgentIconSvg,
     createAgentName,
     createAgentSummary,
@@ -12878,7 +13180,7 @@ export default function CavCodePage() {
               </button>
 
               <button
-                className="cc-pm-item"
+                className="cc-pm-item cc-pm-itemDanger"
                 role="menuitem"
                 onClick={async () => {
                   setProfileOpen(false);
@@ -14256,26 +14558,139 @@ export default function CavCodePage() {
                           </div>
 
                           <div className="cc-agentCreateIdentityCard">
-                            <button
-                              type="button"
-                              className="cc-agentCreateIconBox cc-agentCreateIconBox--hero"
-                              onClick={() => createAgentIconInputRef.current?.click()}
-                              aria-label="Upload agent icon"
-                            >
+                            <div className="cc-agentCreateIdentityMedia">
                               {createAgentIconSvg ? (
-                                <Image
-                                  src={svgToDataUri(createAgentIconSvg)}
-                                  alt=""
-                                  width={70}
-                                  height={70}
-                                  className="cc-agentCreateIconPreview"
-                                  unoptimized
-                                  aria-hidden="true"
-                                />
-                              ) : (
-                                <span className="cc-agentCreateIconPlaceholderGlyph" aria-hidden="true" />
-                              )}
-                            </button>
+                                <div
+                                  className="cc-agentCreateColorWrap"
+                                  data-agent-create-color="true"
+                                  ref={createAgentColorMenuRef}
+                                >
+                                  <button
+                                    type="button"
+                                    className={`cc-agentCreateColorBtn ${createAgentColorMenuOpen ? "is-open" : ""}`}
+                                    onClick={() => setCreateAgentColorMenuOpen((prev) => !prev)}
+                                    aria-label="Choose agent icon background color"
+                                    aria-haspopup="dialog"
+                                    aria-expanded={createAgentColorMenuOpen}
+                                  >
+                                    <svg viewBox="0 0 20 20" aria-hidden="true" className="cc-agentCreateColorBtnGlyph">
+                                      <path
+                                        d="M9.22 2.44a2.2 2.2 0 0 1 3.11 0l1.7 1.7a2.2 2.2 0 0 1 0 3.11l-1.06 1.05a2.6 2.6 0 0 1 1.4 2.3A2.6 2.6 0 0 1 11.77 13H8.8a2.45 2.45 0 0 0-2.44 2.44c0 1.26-1.03 2.28-2.3 2.28a2.3 2.3 0 0 1-2.3-2.28c0-1.13.83-2.08 1.92-2.25l5.54-10.75Zm1.55 1.55a.7.7 0 0 0-.99 0L7.85 7.92l4.23 4.23 1.94-1.94a.7.7 0 0 0 0-.99ZM4.06 14.7a.78.78 0 1 0 .01 1.56.78.78 0 0 0-.01-1.56Z"
+                                        fill="currentColor"
+                                      />
+                                    </svg>
+                                    <span
+                                      className="cc-agentCreateColorBtnDot"
+                                      aria-hidden="true"
+                                      style={{ background: createAgentIconBackground || DEFAULT_CUSTOM_AGENT_ICON_BACKGROUND }}
+                                    />
+                                  </button>
+                                  {createAgentColorMenuOpen ? (
+                                    <div className="cc-agentCreateColorMenu" role="dialog" aria-label="Agent icon color">
+                                      <button
+                                        type="button"
+                                        className="cc-agentCreateColorPreview"
+                                        onClick={() => createAgentColorNativeInputRef.current?.click()}
+                                        style={{ background: createAgentIconBackground || DEFAULT_CUSTOM_AGENT_ICON_BACKGROUND }}
+                                      >
+                                        <span className="cc-agentCreateColorPreviewLabel">Open color picker</span>
+                                      </button>
+                                      <input
+                                        ref={createAgentColorNativeInputRef}
+                                        className="cc-agentCreateColorNativeInput"
+                                        type="color"
+                                        value={createAgentIconBackground || DEFAULT_CUSTOM_AGENT_ICON_BACKGROUND}
+                                        onChange={(event) => {
+                                          const next = normalizeAgentColorHexFromUnknown(event.currentTarget.value)
+                                            || DEFAULT_CUSTOM_AGENT_ICON_BACKGROUND;
+                                          setCreateAgentIconBackground(next);
+                                          setCreateAgentColorInput(next);
+                                        }}
+                                        tabIndex={-1}
+                                        aria-hidden="true"
+                                      />
+                                      <label className="cc-agentCreateColorField" htmlFor="cc-agent-create-color-input">
+                                        <span className="cc-agentCreateColorFieldLabel">Hex</span>
+                                        <input
+                                          ref={createAgentColorInputRef}
+                                          id="cc-agent-create-color-input"
+                                          className="cc-agentCreateColorHexInput"
+                                          value={createAgentColorInput}
+                                          onChange={(event) => {
+                                            const next = String(event.currentTarget.value || "").slice(0, 9);
+                                            setCreateAgentColorInput(next);
+                                            const normalized = normalizeAgentColorHexFromUnknown(next);
+                                            if (normalized) setCreateAgentIconBackground(normalized);
+                                          }}
+                                          onBlur={() => {
+                                            void commitCreateAgentIconBackground(createAgentColorInput);
+                                          }}
+                                          onKeyDown={(event) => {
+                                            if (event.key !== "Enter") return;
+                                            event.preventDefault();
+                                            void commitCreateAgentIconBackground(createAgentColorInput);
+                                          }}
+                                          placeholder="#4EA8FF"
+                                          spellCheck={false}
+                                          autoCapitalize="off"
+                                          autoCorrect="off"
+                                        />
+                                      </label>
+                                      {createAgentIconPalette.length ? (
+                                        <div className="cc-agentCreateColorSwatches" aria-label="Detected icon colors">
+                                          {createAgentIconPalette.map((color) => (
+                                            <button
+                                              key={color}
+                                              type="button"
+                                              className={`cc-agentCreateColorSwatch ${
+                                                color === createAgentIconBackground ? "is-active" : ""
+                                              }`}
+                                              onClick={() => {
+                                                setCreateAgentIconBackground(color);
+                                                setCreateAgentColorInput(color);
+                                              }}
+                                              title={color}
+                                              aria-label={`Use ${color} for the icon background`}
+                                              style={{ background: color }}
+                                            />
+                                          ))}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : null}
+
+                              <button
+                                type="button"
+                                className="cc-agentCreateIconBox cc-agentCreateIconBox--hero"
+                                onClick={() => createAgentIconInputRef.current?.click()}
+                                aria-label="Upload agent icon"
+                                style={createAgentIconSvg && createAgentIconBackground
+                                  ? {
+                                      background: createAgentIconBackground,
+                                      borderColor: rgbaFromAgentHex(
+                                        mixAgentHexColors(createAgentIconBackground, "#FFFFFF", 0.22),
+                                        0.32,
+                                      ),
+                                    }
+                                  : undefined}
+                              >
+                                {createAgentIconSvg ? (
+                                  <Image
+                                    src={svgToDataUri(createAgentIconSvg)}
+                                    alt=""
+                                    width={70}
+                                    height={70}
+                                    className="cc-agentCreateIconPreview"
+                                    unoptimized
+                                    aria-hidden="true"
+                                  />
+                                ) : (
+                                  <span className="cc-agentCreateIconPlaceholderGlyph" aria-hidden="true" />
+                                )}
+                              </button>
+                            </div>
 
                             <div className="cc-agentCreateIdentityBody">
                               <div className="cc-agentCreateIdentityKicker">Agent avatar</div>
@@ -14794,7 +15209,12 @@ export default function CavCodePage() {
                       </button>
                       {visibleCustomAgents.map((agent) => (
                         <article key={agent.id} className="cc-skills-card" title={agent.summary}>
-                          <span className="cc-skills-cardIcon" data-agent-id={agent.id} aria-hidden="true">
+                          <span
+                            className="cc-skills-cardIcon"
+                            data-agent-id={agent.id}
+                            aria-hidden="true"
+                            style={buildAgentIconSurfaceStyle(agent.iconBackground)}
+                          >
                             <Image src={agent.iconSrc} alt="" width={22} height={22} unoptimized />
                           </span>
                           <div className="cc-skills-cardBody">
