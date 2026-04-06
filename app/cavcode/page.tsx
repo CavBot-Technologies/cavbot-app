@@ -14481,6 +14481,36 @@ export default function CavCodePage() {
 
                           <div className="cc-agentCreateIdentityCard">
                             <div className="cc-agentCreateIdentityMedia">
+                              <button
+                                type="button"
+                                className="cc-agentCreateIconBox cc-agentCreateIconBox--hero"
+                                onClick={() => createAgentIconInputRef.current?.click()}
+                                aria-label="Upload agent icon"
+                                style={createAgentIconSvg && createAgentIconBackground
+                                  ? {
+                                      background: createAgentIconBackground,
+                                      borderColor: rgbaFromAgentHex(
+                                        mixAgentHexColors(createAgentIconBackground, "#FFFFFF", 0.22),
+                                        0.32,
+                                      ),
+                                    }
+                                  : undefined}
+                              >
+                                {createAgentIconSvg ? (
+                                  <Image
+                                    src={svgToDataUri(createAgentIconSvg)}
+                                    alt=""
+                                    width={70}
+                                    height={70}
+                                    className="cc-agentCreateIconPreview"
+                                    unoptimized
+                                    aria-hidden="true"
+                                  />
+                                ) : (
+                                  <span className="cc-agentCreateIconPlaceholderGlyph" aria-hidden="true" />
+                                )}
+                              </button>
+
                               {createAgentIconSvg ? (
                                 <div
                                   className="cc-agentCreateColorWrap"
@@ -14496,10 +14526,28 @@ export default function CavCodePage() {
                                     aria-expanded={createAgentColorMenuOpen}
                                   >
                                     <svg viewBox="0 0 20 20" aria-hidden="true" className="cc-agentCreateColorBtnGlyph">
+                                      <defs>
+                                        <linearGradient id="cc-agent-create-color-wheel-primary" x1="3.2" y1="3.4" x2="16.3" y2="16.4" gradientUnits="userSpaceOnUse">
+                                          <stop offset="0" stopColor="#FF5A5F" />
+                                          <stop offset=".32" stopColor="#FFB44C" />
+                                          <stop offset=".66" stopColor="#45D37B" />
+                                          <stop offset="1" stopColor="#4EA8FF" />
+                                        </linearGradient>
+                                        <linearGradient id="cc-agent-create-color-wheel-accent" x1="15.9" y1="4" x2="4.1" y2="15.7" gradientUnits="userSpaceOnUse">
+                                          <stop offset="0" stopColor="#8E6BFF" />
+                                          <stop offset=".52" stopColor="#FF57C3" />
+                                          <stop offset="1" stopColor="#FF7A4F" />
+                                        </linearGradient>
+                                      </defs>
+                                      <circle cx="10" cy="10" r="6.95" fill="none" stroke="url(#cc-agent-create-color-wheel-primary)" strokeWidth="3.1" />
                                       <path
-                                        d="M9.22 2.44a2.2 2.2 0 0 1 3.11 0l1.7 1.7a2.2 2.2 0 0 1 0 3.11l-1.06 1.05a2.6 2.6 0 0 1 1.4 2.3A2.6 2.6 0 0 1 11.77 13H8.8a2.45 2.45 0 0 0-2.44 2.44c0 1.26-1.03 2.28-2.3 2.28a2.3 2.3 0 0 1-2.3-2.28c0-1.13.83-2.08 1.92-2.25l5.54-10.75Zm1.55 1.55a.7.7 0 0 0-.99 0L7.85 7.92l4.23 4.23 1.94-1.94a.7.7 0 0 0 0-.99ZM4.06 14.7a.78.78 0 1 0 .01 1.56.78.78 0 0 0-.01-1.56Z"
-                                        fill="currentColor"
+                                        d="M10 3.05a6.95 6.95 0 0 1 6.3 9.82"
+                                        fill="none"
+                                        stroke="url(#cc-agent-create-color-wheel-accent)"
+                                        strokeWidth="3.1"
+                                        strokeLinecap="round"
                                       />
+                                      <circle cx="10" cy="10" r="2.2" fill="#F8FBFF" />
                                     </svg>
                                     <span
                                       className="cc-agentCreateColorBtnDot"
@@ -14582,36 +14630,6 @@ export default function CavCodePage() {
                                   ) : null}
                                 </div>
                               ) : null}
-
-                              <button
-                                type="button"
-                                className="cc-agentCreateIconBox cc-agentCreateIconBox--hero"
-                                onClick={() => createAgentIconInputRef.current?.click()}
-                                aria-label="Upload agent icon"
-                                style={createAgentIconSvg && createAgentIconBackground
-                                  ? {
-                                      background: createAgentIconBackground,
-                                      borderColor: rgbaFromAgentHex(
-                                        mixAgentHexColors(createAgentIconBackground, "#FFFFFF", 0.22),
-                                        0.32,
-                                      ),
-                                    }
-                                  : undefined}
-                              >
-                                {createAgentIconSvg ? (
-                                  <Image
-                                    src={svgToDataUri(createAgentIconSvg)}
-                                    alt=""
-                                    width={70}
-                                    height={70}
-                                    className="cc-agentCreateIconPreview"
-                                    unoptimized
-                                    aria-hidden="true"
-                                  />
-                                ) : (
-                                  <span className="cc-agentCreateIconPlaceholderGlyph" aria-hidden="true" />
-                                )}
-                              </button>
                             </div>
 
                             <div className="cc-agentCreateIdentityBody">

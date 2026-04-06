@@ -3083,6 +3083,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-agentCreateIdentityMedia{
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
   gap: 10px;
 }
@@ -3117,6 +3118,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   position: relative;
   display: inline-flex;
   flex: 0 0 auto;
+  align-self: flex-start;
 }
 
 .cc-agentCreateColorBtn{
