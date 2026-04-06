@@ -10,7 +10,6 @@ import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } fro
 
 import "../../components/CavBotLoadingScreen.css";
 import CavBotLoadingScreen from "../../components/CavBotLoadingScreen";
-import CavMobileMenu from "../../components/CavMobileMenu";
 
 type DeviceMode = "desktop" | "tablet" | "phone";
 type SourceMode = "cavcloud" | "cavsafe";
@@ -86,6 +85,14 @@ type DriveChildrenResponse = {
   folders?: DriveFolderRow[];
   files?: DriveFileRow[];
 };
+
+const CAVCODE_VIEWER_MOBILE_NAV_ITEMS = [
+  { label: "Home", href: "/" },
+  { label: "CavCode", href: "/cavcode" },
+  { label: "CavCode Viewer", href: "/cavcode-viewer" },
+  { label: "CavCloud", href: "/cavcloud" },
+  { label: "CavTools", href: "/cavtools" },
+];
 
 function safeJsonParse<T>(raw: string | null): T | null {
   if (!raw) return null;
@@ -515,6 +522,7 @@ export default function LivePage() {
   const [disableJs, setDisableJs] = useState<boolean>(false);
   const [blockExternal, setBlockExternal] = useState<boolean>(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [profileFullName, setProfileFullName] = useState<string>("");
   const [profileUsername, setProfileUsername] = useState<string>("");
   const [profileAvatar, setProfileAvatar] = useState<string>("");
@@ -711,7 +719,10 @@ export default function LivePage() {
     }
 
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setAccountOpen(false);
+      if (e.key === "Escape") {
+        setAccountOpen(false);
+        setMobileNavOpen(false);
+      }
     }
 
     window.addEventListener("mousedown", onDown);
@@ -1706,6 +1717,58 @@ export default function LivePage() {
     if (strict.length) return strict;
     return cavAllFiles.filter((f) => !isHtmlNode(f));
   }, [cavAllFiles]);
+  const renderDeviceTabs = (className = "") => (
+    <div className={`ccv-seg ccv-deviceSeg ${className}`.trim()} role="tablist" aria-label="Device">
+      <button
+        className={`ccv-segBtn ccv-deviceSegBtn ${device === "desktop" ? "is-on" : ""}`}
+        onClick={() => setDevice("desktop")}
+        role="tab"
+        aria-selected={device === "desktop"}
+        aria-label="Desktop"
+        title="Desktop"
+      >
+        <Image
+          src="/icons/app/cavcode-viewer/desktop-svgrepo-com.svg"
+          alt=""
+          width={18}
+          height={18}
+          className="ccv-deviceSegIcon"
+        />
+      </button>
+      <button
+        className={`ccv-segBtn ccv-deviceSegBtn ${device === "tablet" ? "is-on" : ""}`}
+        onClick={() => setDevice("tablet")}
+        role="tab"
+        aria-selected={device === "tablet"}
+        aria-label="Tablet"
+        title="Tablet"
+      >
+        <Image
+          src="/icons/app/cavcode-viewer/tablet-svgrepo-com.svg"
+          alt=""
+          width={18}
+          height={18}
+          className="ccv-deviceSegIcon"
+        />
+      </button>
+      <button
+        className={`ccv-segBtn ccv-deviceSegBtn ${device === "phone" ? "is-on" : ""}`}
+        onClick={() => setDevice("phone")}
+        role="tab"
+        aria-selected={device === "phone"}
+        aria-label="Phone"
+        title="Phone"
+      >
+        <Image
+          src="/icons/app/cavcode-viewer/phone-svgrepo-com.svg"
+          alt=""
+          width={18}
+          height={18}
+          className="ccv-deviceSegIcon"
+        />
+      </button>
+    </div>
+  );
 
   if (booting) {
     return (
@@ -1715,10 +1778,86 @@ export default function LivePage() {
 
   return (
     <main className="ccv-root">
+      <div
+        className={`ccv-mobileNavBackdrop ${mobileNavOpen ? "is-open" : ""}`}
+        aria-hidden={!mobileNavOpen}
+        onClick={() => setMobileNavOpen(false)}
+      />
+      <aside
+        id="ccv-mobile-drawer"
+        className={`ccv-mobileNavDrawer ${mobileNavOpen ? "is-open" : ""}`}
+        aria-label="CavBot viewer navigation"
+        aria-hidden={!mobileNavOpen}
+      >
+        <div className="ccv-mobileNavHead">
+          <Link
+            className="ccv-mobileNavBrand"
+            href="/"
+            aria-label="Back to Command Center"
+            onClick={() => setMobileNavOpen(false)}
+          >
+            <span className="ccv-markBadge ccv-mobileNavBrandMark">
+              <Image
+                src="/logo/cavbot-logomark.svg"
+                alt=""
+                width={28}
+                height={28}
+                className="ccv-markBadgeImg"
+                unoptimized
+              />
+            </span>
+            <span className="ccv-mobileNavBrandText">CavCode Viewer</span>
+          </Link>
+          <button
+            type="button"
+            className="ccv-iconbtn ccv-mobileNavClose"
+            onClick={() => setMobileNavOpen(false)}
+            aria-label="Close navigation drawer"
+            title="Close drawer"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+        <nav className="ccv-mobileNavLinks" aria-label="Viewer quick links">
+          {CAVCODE_VIEWER_MOBILE_NAV_ITEMS.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="ccv-mobileNavLink"
+              onClick={() => setMobileNavOpen(false)}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+      </aside>
+
       {/* Header */}
       <header className="ccv-top" role="banner">
         <div className="ccv-topLeft">
-          <CavMobileMenu />
+          <button
+            type="button"
+            className="ccv-iconbtn ccv-mobileMenuBtn"
+            onClick={() => {
+              setAccountOpen(false);
+              setMobileNavOpen((open) => !open);
+            }}
+            aria-label="Open navigation drawer"
+            title="Menu"
+            aria-expanded={mobileNavOpen}
+            aria-controls="ccv-mobile-drawer"
+          >
+            <Image
+              src="/icons/menu-svgrepo-com.svg"
+              alt=""
+              width={18}
+              height={18}
+              className="ccv-iconbtnImg ccv-mobileMenuIcon"
+              unoptimized
+            />
+          </button>
           <div className="ccv-titlebar" aria-label="CavCode Viewer">
             <Link className="ccv-markBadgeLink" href="/" aria-label="Back to Command Center">
               <span className="ccv-markBadge">
@@ -1739,56 +1878,7 @@ export default function LivePage() {
         </div>
 
         <div className="ccv-topRight" aria-label="Viewer controls">
-          <div className="ccv-seg" role="tablist" aria-label="Device">
-            <button
-              className={`ccv-segBtn ccv-deviceSegBtn ${device === "desktop" ? "is-on" : ""}`}
-              onClick={() => setDevice("desktop")}
-              role="tab"
-              aria-selected={device === "desktop"}
-              aria-label="Desktop"
-              title="Desktop"
-            >
-              <Image
-                src="/icons/app/cavcode-viewer/desktop-svgrepo-com.svg"
-                alt=""
-                width={18}
-                height={18}
-                className="ccv-deviceSegIcon"
-              />
-            </button>
-            <button
-              className={`ccv-segBtn ccv-deviceSegBtn ${device === "tablet" ? "is-on" : ""}`}
-              onClick={() => setDevice("tablet")}
-              role="tab"
-              aria-selected={device === "tablet"}
-              aria-label="Tablet"
-              title="Tablet"
-            >
-              <Image
-                src="/icons/app/cavcode-viewer/tablet-svgrepo-com.svg"
-                alt=""
-                width={18}
-                height={18}
-                className="ccv-deviceSegIcon"
-              />
-            </button>
-            <button
-              className={`ccv-segBtn ccv-deviceSegBtn ${device === "phone" ? "is-on" : ""}`}
-              onClick={() => setDevice("phone")}
-              role="tab"
-              aria-selected={device === "phone"}
-              aria-label="Phone"
-              title="Phone"
-            >
-              <Image
-                src="/icons/app/cavcode-viewer/phone-svgrepo-com.svg"
-                alt=""
-                width={18}
-                height={18}
-                className="ccv-deviceSegIcon"
-              />
-            </button>
-          </div>
+          <div className="ccv-deviceRailDesktop">{renderDeviceTabs()}</div>
 
           <button className="ccv-iconbtn" onClick={refreshPreview} title="Refresh" aria-label="Refresh">
             <Image
@@ -1871,6 +1961,10 @@ export default function LivePage() {
           </div>
         </div>
       </header>
+
+      <div className="ccv-mobileDeviceDock" aria-label="Mobile device controls">
+        {renderDeviceTabs("ccv-deviceRailMobile")}
+      </div>
 
       {/* Body */}
       <section className="ccv-body" aria-label="Viewer">

@@ -17,6 +17,10 @@
   --cb-lime: #b9c85a;
   --cb-amber: #ffcc66;
   --cb-red: #ff4d4d;
+  --ccv-radius-panel: 10px;
+  --ccv-radius-control: 8px;
+  --ccv-radius-chip: 8px;
+  --ccv-radius-frame: 12px;
   --ccv-header-bg: linear-gradient(
     to bottom,
     rgba(10, 11, 30, 0.98),
@@ -67,7 +71,7 @@ body{
   display:flex;
   align-items:center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 18px;
   padding: 14px 16px;
   border-bottom: 1px solid rgba(185,200,90,0.08);
   background: var(--ccv-header-bg);
@@ -78,6 +82,7 @@ body{
 .ccv-topLeft{
   display:flex;
   gap: 12px;
+  flex: 1 1 auto;
   min-width: 0;
   align-items:center;
 }
@@ -89,27 +94,37 @@ body{
   min-width: 0;
 }
 
+.ccv-mobileMenuBtn{
+  display: none;
+  flex: 0 0 auto;
+}
+
+.ccv-mobileMenuIcon{
+  filter: brightness(0) saturate(100%) invert(100%);
+  opacity: .92;
+}
+
 .ccv-markBadgeLink{
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   line-height: 0;
   text-decoration: none;
 }
 
 .ccv-markBadge{
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--ccv-radius-control);
   display:grid;
   place-items:center;
 }
 
 .ccv-markBadgeImg{
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
@@ -122,18 +137,31 @@ body{
   line-height: 1.1;
   color: rgba(247,251,255,.95);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Right controls */
 .ccv-topRight{
   display:flex;
-  gap: 10px;
+  gap: 8px;
   align-items:center;
-  flex-wrap: wrap;
+  justify-content:flex-end;
+  flex-wrap: nowrap;
+  flex: 0 0 auto;
 }
 
 .ccv-accountWrap{
   margin-left: 2px;
+}
+
+.ccv-deviceRailDesktop{
+  display: inline-flex;
+  align-items: center;
+}
+
+.ccv-mobileDeviceDock{
+  display: none;
 }
 
 .ccv-accountBtn{
@@ -152,7 +180,7 @@ body{
 .ccv-accountBtn .cb-account-chip.cb-avatar-plain{
   width: 34px;
   height: 34px;
-  border-radius: 9px;
+  border-radius: var(--ccv-radius-control);
 }
 
 .ccv-accountBtn .cb-account-caret{
@@ -163,7 +191,7 @@ body{
   display:inline-flex;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.18);
-  border-radius: 14px;
+  border-radius: var(--ccv-radius-control);
   overflow:hidden;
 }
 
@@ -205,7 +233,7 @@ body{
 .ccv-btn{
   height: 34px;
   padding: 0 12px;
-  border-radius: 14px;
+  border-radius: var(--ccv-radius-control);
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.18);
   color: rgba(247,251,255,.90);
@@ -250,7 +278,7 @@ body{
 .ccv-iconbtn{
   width: 36px;
   height: 34px;
-  border-radius: 12px;
+  border-radius: var(--ccv-radius-control);
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.18);
   color: rgba(247,251,255,.88);
@@ -308,7 +336,7 @@ body{
 .ccv-card{
   border: 1px solid rgba(255,255,255,.10);
   background: var(--ccv-header-bg);
-  border-radius: 16px;
+  border-radius: var(--ccv-radius-panel);
   overflow:hidden;
   width: 100%;
   height: 100%;
@@ -364,7 +392,7 @@ body{
 .ccv-uploadSurface{
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.20);
-  border-radius: 14px;
+  border-radius: var(--ccv-radius-panel);
   padding: 14px;
   display: flex;
   flex-direction: column;
@@ -493,7 +521,7 @@ body{
   gap: 5px;
   min-height: 26px;
   padding: 0 10px;
-  border-radius: 999px;
+  border-radius: var(--ccv-radius-chip);
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.18);
   color: rgba(197,206,231,.84);
@@ -516,7 +544,7 @@ body{
   color: rgba(255,204,102,.88);
   border: 1px solid rgba(255,204,102,.22);
   background: rgba(255,204,102,.08);
-  border-radius: 10px;
+  border-radius: var(--ccv-radius-chip);
   padding: 8px 10px;
 }
 
@@ -538,7 +566,7 @@ body{
   justify-content: center;
   min-width: 44px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: var(--ccv-radius-chip);
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.18);
   color: rgba(247,251,255,.90);
@@ -566,7 +594,7 @@ body{
   align-items: center;
   min-height: 28px;
   padding: 0 10px;
-  border-radius: 10px;
+  border-radius: var(--ccv-radius-chip);
   border: 1px solid rgba(185,200,90,.22);
   background: rgba(185,200,90,.10);
   color: rgba(231,238,255,.94);
@@ -589,14 +617,32 @@ body{
 
 .ccv-select{
   width: 100%;
-  height: 34px;
-  border-radius: 14px;
+  height: 36px;
+  border-radius: var(--ccv-radius-control);
   border: 1px solid rgba(255,255,255,.12);
-  background: rgba(0,0,0,.18);
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: rgba(0,0,0,.18);
+  background-image:
+    linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.5 4.25 6 7.75l3.5-3.5' stroke='%23C5CEE7' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat, no-repeat;
+  background-position: 0 0, calc(100% - 14px) center;
+  background-size: auto, 12px 12px;
   color: rgba(247,251,255,.92);
-  padding: 0 10px;
+  padding: 0 42px 0 12px;
   outline: none;
   min-width: 0;
+}
+
+.ccv-select:focus{
+  border-color: rgba(185,200,90,.30);
+  background-color: rgba(7,10,24,.32);
+}
+
+.ccv-select::-ms-expand{
+  display: none;
 }
 
 .ccv-select option{
@@ -628,7 +674,7 @@ body{
   background:
     radial-gradient(140% 140% at 100% 0%, rgba(185,200,90,.11), transparent 58%),
     linear-gradient(180deg, rgba(11,17,34,.74), rgba(5,8,18,.70));
-  border-radius: 16px;
+  border-radius: var(--ccv-radius-panel);
   padding: 14px;
   overflow: hidden;
 }
@@ -761,7 +807,7 @@ body{
   justify-content: space-between;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.16);
-  border-radius: 14px;
+  border-radius: var(--ccv-radius-panel);
   padding: 10px 12px;
 }
 
@@ -819,7 +865,7 @@ body{
 .ccv-drop{
   margin-top: 0;
   padding: 16px 16px;
-  border-radius: 16px;
+  border-radius: var(--ccv-radius-panel);
   border: 1px dashed rgba(255,255,255,.18);
   background: rgba(0,0,0,.14);
   text-align: center;
@@ -841,7 +887,7 @@ body{
   width: 100%;
   min-height: 220px;
   resize: vertical;
-  border-radius: 16px;
+  border-radius: var(--ccv-radius-panel);
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.18);
   color: rgba(234,240,255,.95);
@@ -872,7 +918,7 @@ body{
 .ccv-metaCard{
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.16);
-  border-radius: 12px;
+  border-radius: var(--ccv-radius-panel);
   padding: 10px 12px;
 }
 .ccv-meta span{
@@ -898,7 +944,7 @@ body{
   padding: 12px 12px;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(1,3,15,.62);
-  border-radius: 16px;
+  border-radius: var(--ccv-radius-panel);
 }
 
 .ccv-previewTitle{
@@ -915,7 +961,7 @@ body{
 
 .ccv-frame{
   margin-top: 0;
-  border-radius: 16px;
+  border-radius: var(--ccv-radius-panel);
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.18);
   overflow:hidden;
@@ -943,7 +989,7 @@ body{
   width: min(390px, 92vw);
   height: min(780px, calc(100dvh - 200px - var(--cb-global-footer-height)));
   border: 1px solid rgba(255,255,255,.14);
-  border-radius: 26px;
+  border-radius: var(--ccv-radius-frame);
   background: #070A16;
   box-shadow: 0 28px 90px rgba(0,0,0,.55);
 }
@@ -956,7 +1002,7 @@ body{
   width: min(820px, 92vw);
   height: min(1100px, calc(100dvh - 180px - var(--cb-global-footer-height)));
   border: 1px solid rgba(255,255,255,.14);
-  border-radius: 22px;
+  border-radius: var(--ccv-radius-frame);
   background: #070A16;
   box-shadow: 0 28px 90px rgba(0,0,0,.55);
 }
@@ -998,7 +1044,7 @@ body{
   transform: translateX(-50%);
   z-index: var(--z-toast);
   padding: 10px 12px;
-  border-radius: 14px;
+  border-radius: var(--ccv-radius-panel);
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(3,6,22,.92);
   color: rgba(247,251,255,.92);
@@ -1055,46 +1101,227 @@ body{
   opacity: .85;
 }
 
+.ccv-mobileNavBackdrop{
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.56);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease;
+  z-index: 44;
+}
+
+.ccv-mobileNavBackdrop.is-open{
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.ccv-mobileNavDrawer{
+  display: none;
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: min(320px, calc(100vw - 28px));
+  padding: 14px;
+  border-right: 1px solid rgba(255,255,255,.12);
+  background:
+    radial-gradient(140% 140% at 100% 0%, rgba(185,200,90,.10), transparent 52%),
+    linear-gradient(180deg, rgba(9,12,30,.98), rgba(4,7,20,.98));
+  transform: translateX(-104%);
+  transition: transform .22s ease;
+  z-index: 45;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ccv-mobileNavDrawer.is-open{
+  transform: translateX(0);
+}
+
+.ccv-mobileNavHead{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ccv-mobileNavBrand{
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: rgba(247,251,255,.94);
+}
+
+.ccv-mobileNavBrandMark{
+  width: 40px;
+  height: 40px;
+}
+
+.ccv-mobileNavBrandText{
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 780;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ccv-mobileNavClose{
+  flex: 0 0 auto;
+}
+
+.ccv-mobileNavLinks{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ccv-mobileNavLink{
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: var(--ccv-radius-control);
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.03);
+  color: rgba(234,240,255,.92);
+  font-size: 13px;
+  font-weight: 760;
+  text-decoration: none;
+}
+
+.ccv-mobileNavLink:hover{
+  border-color: rgba(185,200,90,.24);
+  background: rgba(185,200,90,.08);
+}
+
 /* Responsive */
 @media (max-width: 980px){
   .ccv-top{
     position: sticky;
     top: 0;
-    align-items:flex-start;
+    align-items:center;
+    padding: 12px 14px;
+    gap: 12px;
   }
+
+  .ccv-mobileMenuBtn{
+    display: inline-flex;
+  }
+
+  .ccv-mobileNavBackdrop{
+    display: block;
+  }
+
+  .ccv-mobileNavDrawer{
+    display: flex;
+  }
+
   .ccv-body{
     grid-template-columns: 1fr;
     min-height: 0;
+    gap: 12px;
     padding: 14px 14px 24px;
   }
-  .ccv-topLeft,
-  .ccv-topRight{
-    width: 100%;
+
+  .ccv-topLeft{
+    width: auto;
+    gap: 10px;
   }
-  .ccv-topRight{
-    justify-content: flex-start;
+
+  .ccv-titlebar{
+    gap: 10px;
   }
+
+  .ccv-topRight{
+    width: auto;
+    margin-left: auto;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .ccv-deviceRailDesktop{
+    display: none;
+  }
+
+  .ccv-mobileDeviceDock{
+    display: flex;
+    justify-content: center;
+    padding: 18px 14px 0;
+  }
+
+  .ccv-deviceRailMobile{
+    margin: 0 auto;
+  }
+
+  .ccv-markBadgeLink,
+  .ccv-markBadge{
+    width: 40px;
+    height: 40px;
+  }
+
+  .ccv-markBadgeImg{
+    width: 26px;
+    height: 26px;
+  }
+
+  .ccv-headline{
+    font-size: 15px;
+  }
+
+  .ccv-accountBtn .cb-account-chip.cb-avatar-plain{
+    width: 32px;
+    height: 32px;
+  }
+
   .ccv-card{
     height: auto;
   }
+
+  .ccv-left,
   .ccv-right{
     height: auto;
+    width: 100%;
   }
+
+  .ccv-cardHead{
+    padding: 16px 16px 14px;
+  }
+
+  .ccv-block{
+    padding: 16px 16px 18px;
+    gap: 18px;
+  }
+
+  .ccv-uploadSurface{
+    padding: 12px;
+  }
+
+  .ccv-meta{
+    grid-template-columns: 1fr;
+  }
+
   .ccv-frame{
     height: auto;
-    min-height: 520px;
+    min-height: 460px;
     flex: 0;
   }
+
   .ccv-frame.is-desktop{
-    height: min(68dvh, 720px);
+    height: min(70dvh, 720px);
   }
+
   .ccv-frame.is-phone .ccv-iframe{
     width: min(390px, 100%);
-    height: min(780px, 72dvh);
+    height: min(760px, 74dvh);
   }
+
   .ccv-frame.is-tablet .ccv-iframe{
     width: min(100%, 720px);
-    height: min(980px, 78dvh);
+    height: min(940px, 78dvh);
   }
 
   .ccv-uploadRow,
@@ -1116,5 +1343,110 @@ body{
   .ccv-uploadAction,
   .ccv-uploadActionSecondary{
     width: 100%;
+  }
+}
+
+@media (max-width: 640px){
+  .ccv-top{
+    padding: 12px;
+  }
+
+  .ccv-body{
+    padding: 12px 12px 22px;
+  }
+
+  .ccv-mobileDeviceDock{
+    padding: 16px 12px 0;
+  }
+
+  .ccv-topLeft{
+    gap: 8px;
+  }
+
+  .ccv-titlebar{
+    gap: 8px;
+  }
+
+  .ccv-markBadgeLink,
+  .ccv-markBadge{
+    width: 36px;
+    height: 36px;
+  }
+
+  .ccv-markBadgeImg{
+    width: 24px;
+    height: 24px;
+  }
+
+  .ccv-headline{
+    font-size: 14px;
+  }
+
+  .ccv-topRight{
+    gap: 6px;
+  }
+
+  .ccv-iconbtn{
+    width: 32px;
+    height: 32px;
+  }
+
+  .ccv-iconbtnImg,
+  .ccv-iconbtn svg{
+    width: 16px;
+    height: 16px;
+  }
+
+  .ccv-accountBtn .cb-account-chip.cb-avatar-plain{
+    width: 32px;
+    height: 32px;
+  }
+
+  .ccv-segBtn{
+    height: 32px;
+    padding: 0 10px;
+  }
+
+  .ccv-deviceSegBtn{
+    width: 38px;
+  }
+
+  .ccv-cardHead{
+    padding: 14px 14px 12px;
+  }
+
+  .ccv-block{
+    padding: 14px 14px 16px;
+    gap: 16px;
+  }
+
+  .ccv-frame{
+    min-height: 400px;
+  }
+
+  .ccv-frame.is-desktop{
+    height: min(64dvh, 620px);
+  }
+
+  .ccv-frame.is-phone,
+  .ccv-frame.is-tablet{
+    padding: 12px;
+  }
+
+  .ccv-frame.is-phone .ccv-iframe{
+    width: min(100%, 360px);
+    height: min(72dvh, 700px);
+    border-radius: 12px;
+  }
+
+  .ccv-frame.is-tablet .ccv-iframe{
+    width: 100%;
+    height: min(76dvh, 860px);
+    border-radius: 12px;
+  }
+
+  .ccv-mobileNavDrawer{
+    width: min(300px, calc(100vw - 24px));
+    padding: 12px;
   }
 }
