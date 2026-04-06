@@ -14612,7 +14612,7 @@ export default function CavCodePage() {
                                             onClick={() => createAgentColorNativeInputRef.current?.click()}
                                             aria-label="Open color picker"
                                           >
-                                            <Image src="/icons/chevron-right-svgrepo-com.svg" alt="" width={12} height={12} />
+                                            <span className="cc-agentCreateColorFieldChevronGlyph" aria-hidden="true" />
                                           </button>
                                         </span>
                                       </label>

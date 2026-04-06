@@ -3245,8 +3245,8 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   padding: 0;
   border: 0;
   border-radius: 8px;
-  background: transparent;
-  color: rgba(232,239,255,.86);
+  background: rgba(255,255,255,.06);
+  color: rgba(245,249,255,.98);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3257,13 +3257,17 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-agentCreateColorFieldChevron:hover,
 .cc-agentCreateColorFieldChevron:focus-visible{
-  background: rgba(255,255,255,.06);
+  background: rgba(255,255,255,.1);
   color: rgba(245,249,255,.98);
 }
 
-.cc-agentCreateColorFieldChevron img{
+.cc-agentCreateColorFieldChevronGlyph{
   display: block;
-  opacity: .88;
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+  -webkit-mask: url("/icons/chevron-right-svgrepo-com.svg") center / contain no-repeat;
+  mask: url("/icons/chevron-right-svgrepo-com.svg") center / contain no-repeat;
 }
 
 .cc-agentCreateColorSwatches{
