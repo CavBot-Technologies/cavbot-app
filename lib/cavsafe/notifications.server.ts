@@ -2,10 +2,10 @@ import "server-only";
 
 import type { Prisma } from "@prisma/client";
 
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { CAVSAFE_NOTIFICATION_KINDS } from "@/lib/notificationKinds";
 import { cavsafeSecuredStorageLimitBytesForPlan } from "@/lib/cavsafe/policy.server";
 import { getCavSafeSettings } from "@/lib/cavsafe/settings.server";
-import { resolvePlanIdFromTier } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 
 type NotificationTone = "GOOD" | "WATCH" | "BAD";
@@ -123,11 +123,8 @@ async function resolveStorageSnapshot(accountId: string): Promise<{
   limitBytes: bigint | null;
   pct: number | null;
 }> {
-  const [account, quota] = await Promise.all([
-    prisma.account.findUnique({
-      where: { id: accountId },
-      select: { tier: true, trialSeatActive: true, trialEndsAt: true },
-    }),
+  const [plan, quota] = await Promise.all([
+    getEffectiveAccountPlanContext(accountId).catch(() => null),
     prisma.cavSafeQuota.findUnique({
       where: { accountId },
       select: { usedBytes: true },
@@ -151,13 +148,7 @@ async function resolveStorageSnapshot(accountId: string): Promise<{
     usedBytes = typeof raw === "bigint" ? raw : BigInt(Number(raw || 0));
   }
 
-  let planId = resolvePlanIdFromTier(account?.tier || "FREE");
-  const trialEndsAtMs = account?.trialEndsAt ? new Date(account.trialEndsAt).getTime() : 0;
-  if (account?.trialSeatActive && Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now()) {
-    planId = "premium_plus";
-  }
-
-  const limitBytes = cavsafeSecuredStorageLimitBytesForPlan(planId);
+  const limitBytes = cavsafeSecuredStorageLimitBytesForPlan(plan?.planId || "free");
   if (limitBytes <= BigInt(0)) {
     return {
       usedBytes,

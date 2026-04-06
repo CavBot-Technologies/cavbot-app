@@ -8,8 +8,8 @@ import {
   requireUser,
   type CavbotAccountSession,
 } from "@/lib/apiAuth";
-import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
-import { prisma } from "@/lib/prisma";
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
+import type { PlanId } from "@/lib/plans";
 
 export type CavsafePlanId = Extract<PlanId, "premium" | "premium_plus">;
 
@@ -18,25 +18,11 @@ export type CavsafeAuthorizedSession = CavbotAccountSession & {
   cavsafePremiumPlus: boolean;
 };
 
-function isTrialSeatActiveNow(trialSeatActive: boolean | null, trialEndsAt: Date | null): boolean {
-  if (!trialSeatActive || !trialEndsAt) return false;
-  const endsAtMs = new Date(trialEndsAt).getTime();
-  return Number.isFinite(endsAtMs) && endsAtMs > Date.now();
-}
-
 async function resolveCavsafePlanId(accountId: string): Promise<CavsafePlanId> {
-  const account = await prisma.account.findUnique({
-    where: { id: accountId },
-    select: {
-      tier: true,
-      trialSeatActive: true,
-      trialEndsAt: true,
-    },
-  });
-  if (!account) throw new ApiAuthError("UNAUTHORIZED", 401);
+  const plan = await getEffectiveAccountPlanContext(accountId).catch(() => null);
+  if (!plan) throw new ApiAuthError("UNAUTHORIZED", 401);
 
-  const trialPlus = isTrialSeatActiveNow(account.trialSeatActive, account.trialEndsAt);
-  const planId = trialPlus ? "premium_plus" : resolvePlanIdFromTier(account.tier);
+  const planId = plan.planId;
 
   if (planId === "premium_plus") return "premium_plus";
   if (planId === "premium") return "premium";

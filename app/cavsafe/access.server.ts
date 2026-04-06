@@ -2,7 +2,8 @@ import { headers } from "next/headers";
 import { unstable_cache } from "next/cache";
 
 import { getAppOrigin, getSession } from "@/lib/apiAuth";
-import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
+import type { PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { appendGuardReturnParam, resolveGuardReturnFromReferer } from "@/src/lib/cavguard/cavGuard.return";
 
@@ -20,12 +21,6 @@ function sanitizeCacheScope(raw: unknown): string {
   return value ? value.slice(0, 96) : "anon";
 }
 
-function isTrialSeatActiveNow(trialSeatActive: boolean | null, trialEndsAt: Date | null): boolean {
-  if (!trialSeatActive || !trialEndsAt) return false;
-  const endsAtMs = new Date(trialEndsAt).getTime();
-  return Number.isFinite(endsAtMs) && endsAtMs > Date.now();
-}
-
 async function resolveAccountPlanId(accountId: string): Promise<PlanId> {
   const id = String(accountId || "").trim();
   if (!id) return "free";
@@ -34,17 +29,8 @@ async function resolveAccountPlanId(accountId: string): Promise<PlanId> {
 
 const cachedResolveAccountPlanId = unstable_cache(
   async (resolvedAccountId: string): Promise<PlanId> => {
-    const account = await prisma.account.findUnique({
-      where: { id: resolvedAccountId },
-      select: {
-        tier: true,
-        trialSeatActive: true,
-        trialEndsAt: true,
-      },
-    });
-    if (!account) return "free";
-    if (isTrialSeatActiveNow(account.trialSeatActive, account.trialEndsAt)) return "premium_plus";
-    return resolvePlanIdFromTier(account.tier);
+    const plan = await getEffectiveAccountPlanContext(resolvedAccountId).catch(() => null);
+    return plan?.planId || "free";
   },
   ["cavsafe-access-plan"],
   { revalidate: 30 },

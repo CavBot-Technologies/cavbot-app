@@ -25,6 +25,8 @@ export type CavCloudPlanContext = ReturnType<typeof resolveCavCloudEffectivePlan
   perFileMaxBytesBigInt: bigint;
 };
 
+export type EffectiveAccountPlanContext = CavCloudPlanContext;
+
 async function readPrismaAccountPlanInput(accountId: string, tx: PlanReader): Promise<CavCloudPlanAccountInput | null> {
   if (!accountId) return null;
 
@@ -131,4 +133,11 @@ export async function getCavCloudPlanContext(accountId: string, tx: PlanReader =
     perFileMaxBytes: cavcloudPerFileMaxBytesForPlan(resolved.planId),
     perFileMaxBytesBigInt: cavcloudPerFileMaxBytesBigIntForPlan(resolved.planId),
   };
+}
+
+export async function getEffectiveAccountPlanContext(
+  accountId: string,
+  tx: PlanReader = prisma,
+): Promise<EffectiveAccountPlanContext> {
+  return getCavCloudPlanContext(accountId, tx);
 }

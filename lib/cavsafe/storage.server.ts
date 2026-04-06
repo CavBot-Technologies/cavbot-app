@@ -7,8 +7,7 @@ import { pipeline } from "stream/promises";
 
 import { Prisma } from "@prisma/client";
 
-import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
-import { prisma } from "@/lib/prisma";
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { cavsafeSecuredStorageLimitBytesForPlan } from "@/lib/cavsafe/policy.server";
 import { resolveCavSafeRetentionPolicy } from "@/lib/cavsafe/settings.server";
 import { inferCavsafeOperationKindFromActivity, writeCavSafeOperationLog } from "@/lib/cavsafe/operationLog.server";
@@ -21,6 +20,8 @@ import {
   PREVIEW_SNIPPET_MAX_CHARS,
   PREVIEW_SNIPPET_RANGE_BYTES,
 } from "@/lib/filePreview";
+import type { PlanId } from "@/lib/plans";
+import { prisma } from "@/lib/prisma";
 import {
   abortCavsafeMultipartUpload,
   completeCavsafeMultipartUpload,
@@ -746,22 +747,10 @@ async function accountPlanSnapshot(accountId: string, tx: DbClient = prisma): Pr
   limitBytes: bigint | null;
   perFileMaxBytes: bigint;
 }> {
-  const account = await tx.account.findUnique({
-    where: { id: accountId },
-    select: {
-      tier: true,
-      trialSeatActive: true,
-      trialEndsAt: true,
-    },
-  });
+  const plan = await getEffectiveAccountPlanContext(accountId, tx).catch(() => null);
+  if (!plan?.account) throw new CavSafeError("ACCOUNT_NOT_FOUND", 404, "account not found");
 
-  if (!account) throw new CavSafeError("ACCOUNT_NOT_FOUND", 404, "account not found");
-
-  let planId = resolvePlanIdFromTier(account.tier);
-  const trialEndsAtMs = account.trialEndsAt ? new Date(account.trialEndsAt).getTime() : 0;
-  if (account.trialSeatActive && Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now()) {
-    planId = "premium_plus";
-  }
+  const planId = plan.planId;
 
   const limitBytes = storageLimitBytesForPlan(planId);
   const perFileMaxBytes = perFileLimitBytesForPlan(planId);

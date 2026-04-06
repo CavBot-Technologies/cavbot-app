@@ -1,9 +1,9 @@
 import { requireCavsafeOwnerSession } from "@/lib/cavsafe/auth.server";
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { cavsafeErrorResponse, jsonNoStore } from "@/lib/cavsafe/http.server";
 import { getTree, getTreeLite } from "@/lib/cavsafe/storage.server";
 import { cavsafeSecuredStorageLimitBytesForPlan } from "@/lib/cavsafe/policy.server";
-import { prisma } from "@/lib/prisma";
-import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
+import type { PlanId } from "@/lib/plans";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,9 +44,9 @@ function envPositiveInt(name: string, fallback: number): number {
 }
 
 function perFileMaxBytesForPlan(planId: PlanId): number {
-  const free = envPositiveInt("CAVCLOUD_MAX_FILE_BYTES_FREE", 64 * 1024 * 1024);
-  const premium = envPositiveInt("CAVCLOUD_MAX_FILE_BYTES_PREMIUM", 1024 * 1024 * 1024);
-  const premiumPlus = envPositiveInt("CAVCLOUD_MAX_FILE_BYTES_PREMIUM_PLUS", 5 * 1024 * 1024 * 1024);
+  const free = envPositiveInt("CAVSAFE_MAX_FILE_BYTES_FREE", envPositiveInt("CAVCLOUD_MAX_FILE_BYTES_FREE", 64 * 1024 * 1024));
+  const premium = envPositiveInt("CAVSAFE_MAX_FILE_BYTES_PREMIUM", envPositiveInt("CAVCLOUD_MAX_FILE_BYTES_PREMIUM", 1024 * 1024 * 1024));
+  const premiumPlus = envPositiveInt("CAVSAFE_MAX_FILE_BYTES_PREMIUM_PLUS", envPositiveInt("CAVCLOUD_MAX_FILE_BYTES_PREMIUM_PLUS", 5 * 1024 * 1024 * 1024));
   if (planId === "premium_plus") return premiumPlus;
   if (planId === "premium") return premium;
   return free;
@@ -74,16 +74,8 @@ function isMissingCavSafeTablesError(err: unknown): boolean {
 }
 
 async function fallbackTreeForMissingTables(accountId: string) {
-  const account = await prisma.account.findUnique({
-    where: { id: accountId },
-    select: { tier: true, trialSeatActive: true, trialEndsAt: true },
-  });
-
-  let planId: PlanId = resolvePlanIdFromTier(account?.tier || "FREE");
-  const trialEndsAtMs = account?.trialEndsAt ? new Date(account.trialEndsAt).getTime() : 0;
-  if (account?.trialSeatActive && Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now()) {
-    planId = "premium_plus";
-  }
+  const plan = await getEffectiveAccountPlanContext(accountId).catch(() => null);
+  const planId: PlanId = plan?.planId || "free";
 
   const limitBytes = storageLimitBytesForPlan(planId);
   const perFileMaxBytes = perFileMaxBytesForPlan(planId);

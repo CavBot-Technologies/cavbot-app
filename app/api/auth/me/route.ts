@@ -91,9 +91,9 @@ type AccountWithComputed = PrismaAccount & {
 };
 
 function computeEffectiveTier(account?: {
-  tier?: string | null;
+  tier?: unknown;
   trialSeatActive?: boolean | null;
-  trialEndsAt?: string | Date | null;
+  trialEndsAt?: string | number | Date | null;
 } | null) {
   const now = Date.now();
   const endsAtMs = account?.trialEndsAt ? new Date(account.trialEndsAt).getTime() : 0;

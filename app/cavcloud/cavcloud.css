@@ -782,16 +782,33 @@ body{ margin:0; }
   text-transform: none;
 }
 .cavcloud-paneTitleSelect{
+  --cc-select-chevron-color: rgba(214,224,244,.82);
+  --cc-select-background-image:
+    linear-gradient(45deg, transparent 50%, var(--cc-select-chevron-color) 50%),
+    linear-gradient(135deg, var(--cc-select-chevron-color) 50%, transparent 50%);
+  --cc-select-background-position:
+    calc(100% - 18px) calc(50% - 1px),
+    calc(100% - 13px) calc(50% - 1px);
+  --cc-select-background-size:
+    5px 5px,
+    5px 5px;
+  --cc-select-background-repeat: no-repeat, no-repeat;
+  appearance: none;
+  -webkit-appearance: none;
   min-width: 168px;
   border-radius: 10px;
   border: 1px solid rgba(255,255,255,.18);
   background: rgba(0,0,0,.22);
+  background-image: var(--cc-select-background-image);
+  background-position: var(--cc-select-background-position);
+  background-size: var(--cc-select-background-size);
+  background-repeat: var(--cc-select-background-repeat);
   color: rgba(247,251,255,.9);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: .02em;
   text-transform: none;
-  padding: 7px 10px;
+  padding: 7px 34px 7px 10px;
   cursor: pointer;
 }
 .cavcloud-paneTitleSelect:hover{
@@ -806,14 +823,33 @@ body{ margin:0; }
   font-size: 11px;
   line-height: 1.1;
   padding-left: 22px;
-  background-image: radial-gradient(circle, var(--cc-native-status-dot, transparent) 0 56%, transparent 61%);
-  background-repeat: no-repeat;
-  background-position: 10px 50%;
-  background-size: 7px 7px;
+  padding-right: 34px;
+  --cc-select-background-image:
+    radial-gradient(circle, var(--cc-native-status-dot, transparent) 0 56%, transparent 61%),
+    linear-gradient(45deg, transparent 50%, var(--cc-select-chevron-color) 50%),
+    linear-gradient(135deg, var(--cc-select-chevron-color) 50%, transparent 50%);
+  --cc-select-background-position:
+    10px 50%,
+    calc(100% - 18px) calc(50% - 1px),
+    calc(100% - 13px) calc(50% - 1px);
+  --cc-select-background-size:
+    7px 7px,
+    5px 5px,
+    5px 5px;
+  --cc-select-background-repeat: no-repeat, no-repeat, no-repeat;
 }
 .cavcloud-restorationStatusNativeSelect.is-any{
   padding-left: 10px;
-  background-image: none;
+  --cc-select-background-image:
+    linear-gradient(45deg, transparent 50%, var(--cc-select-chevron-color) 50%),
+    linear-gradient(135deg, var(--cc-select-chevron-color) 50%, transparent 50%);
+  --cc-select-background-position:
+    calc(100% - 18px) calc(50% - 1px),
+    calc(100% - 13px) calc(50% - 1px);
+  --cc-select-background-size:
+    5px 5px,
+    5px 5px;
+  --cc-select-background-repeat: no-repeat, no-repeat;
 }
 .cavcloud-restorationStatusNativeSelect.is-in-progress{
   --cc-native-status-dot: var(--cc-status-in-progress);
