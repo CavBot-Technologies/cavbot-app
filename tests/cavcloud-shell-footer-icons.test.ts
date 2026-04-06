@@ -23,6 +23,7 @@ test("cavcloud and cavsafe footer restore surface quick tools and keep premium p
   assert.match(controls, /<IconGallerySquares \/>/);
   assert.match(controls, /<IconGalleryPalette \/>/);
   assert.match(controls, /<IconGear \/>/);
+  assert.match(controls, /<span className="cavcloud-headerGreetingPrefix">Hi, <\/span>/);
   assert.match(controls, /iconSizePx=\{18\}/);
   assert.match(controls, /cavcloud-surfaceQuickToolIconGallery/);
   assert.match(controls, /cavcloud-surfaceQuickToolIconSettings/);
