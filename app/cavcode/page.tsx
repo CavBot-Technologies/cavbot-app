@@ -112,7 +112,7 @@ type FolderNode = {
 type Node = FileNode | FolderNode;
 
 type GitCompareMode = "staged" | "unstaged";
-type TabKind = "file" | "skills" | "git-compare-single" | "git-compare-aggregate";
+type TabKind = "file" | "skills" | "keyboard-shortcuts" | "git-compare-single" | "git-compare-aggregate";
 
 type Tab = {
   id: string;
@@ -139,7 +139,19 @@ type Problem = {
 type PanelTab = "problems" | "output" | "debug" | "terminal" | "ports" | "git" | "run";
 type Activity = "explorer" | "search" | "scm" | "changes" | "extensions" | "live" | "run" | "settings" | "ai";
 
-type ThemeOption = "cavbot-default" | "cavbot-light" | "cavbot-lime" | "cavbot-classic" | "cavbot-dark";
+type ThemeOption =
+  | "cavbot-default"
+  | "cavbot-light"
+  | "cavbot-lime"
+  | "cavbot-classic"
+  | "cavbot-dark"
+  | "cavbot-cobalt"
+  | "cavbot-ember"
+  | "cavbot-obsidian"
+  | "cavbot-mocha"
+  | "cavbot-graphite"
+  | "cavbot-nord"
+  | "cavbot-dawn";
 type CavenComposerEnterBehavior = "enter" | "meta_enter";
 type CavenReasoningLevel = "low" | "medium" | "high" | "extra_high";
 type CavenInferenceSpeed = "standard" | "fast";
@@ -280,12 +292,653 @@ type AgentBuilderDraftResult = {
   surface: "cavcode" | "center" | "all";
 };
 
-const THEME_OPTIONS: Array<{ value: ThemeOption; label: string }> = [
-  { value: "cavbot-default", label: "CavBot Default" },
-  { value: "cavbot-light", label: "CavBot Light" },
-  { value: "cavbot-lime", label: "CavBot Lime" },
-  { value: "cavbot-classic", label: "CavBot Classic" },
-  { value: "cavbot-dark", label: "CavBot Dark" },
+type ShortcutDefinition = {
+  id: string;
+  command: string;
+  when: string;
+  source: string;
+  mac: string[][];
+  win: string[][];
+  keywords?: string[];
+};
+
+type ThemeOptionDefinition = {
+  value: ThemeOption;
+  label: string;
+  hint: string;
+  accent: string;
+  accentSoft: string;
+  accentWash: string;
+  previewBackground: string;
+  previewBorder: string;
+  previewText: string;
+  previewLine: string;
+  tokens: {
+    keyword: string;
+    string: string;
+    number: string;
+    type: string;
+    comment: string;
+  };
+  monaco: {
+    base: "vs" | "vs-dark";
+    inherit: true;
+    rules: Array<{ token: string; foreground: string }>;
+    colors: Record<string, string>;
+  };
+};
+
+const THEME_OPTIONS: ThemeOptionDefinition[] = [
+  {
+    value: "cavbot-default",
+    label: "CavBot Default",
+    hint: "Balanced CavBot dark",
+    accent: "#B9C85A",
+    accentSoft: "rgba(185,200,90,.30)",
+    accentWash: "rgba(185,200,90,.12)",
+    previewBackground: "#070A16",
+    previewBorder: "#2A3352",
+    previewText: "#EAF0FF",
+    previewLine: "#5A6475",
+    tokens: {
+      comment: "#98A3B3",
+      string: "#C6E48B",
+      keyword: "#8B5CFF",
+      number: "#FFCC66",
+      type: "#B9C85A",
+    },
+    monaco: {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "98A3B3" },
+        { token: "string", foreground: "C6E48B" },
+        { token: "keyword", foreground: "8B5CFF" },
+        { token: "number", foreground: "FFCC66" },
+        { token: "type.identifier", foreground: "B9C85A" },
+      ],
+      colors: {
+        "editor.background": "#070A16",
+        "editor.foreground": "#EAF0FF",
+        "editorLineNumber.foreground": "#5A6475",
+        "editorLineNumber.activeForeground": "#B9C85A",
+        "editorCursor.foreground": "#B9C85A",
+        "editor.selectionBackground": "#2A1F55",
+        "editor.inactiveSelectionBackground": "#1A1730",
+        "editorIndentGuide.background": "#20253A",
+        "editorIndentGuide.activeBackground": "#343B58",
+        "editorWidget.background": "#0A0F22",
+        "editorSuggestWidget.background": "#0A0F22",
+        "editorSuggestWidget.border": "#2A3352",
+        "editorHoverWidget.background": "#0A0F22",
+        "editorHoverWidget.border": "#2A3352",
+        "peekView.border": "#2A3352",
+        "inputValidation.errorBorder": "#2A3352",
+        "editorError.foreground": "#FF4D4D",
+        "editorWarning.foreground": "#FFCC66",
+      },
+    },
+  },
+  {
+    value: "cavbot-light",
+    label: "CavBot Light",
+    hint: "Bright studio canvas",
+    accent: "#4EA8FF",
+    accentSoft: "rgba(78,168,255,.28)",
+    accentWash: "rgba(78,168,255,.12)",
+    previewBackground: "#F7F8FC",
+    previewBorder: "#D0D7E6",
+    previewText: "#0B0D12",
+    previewLine: "#9AA2B2",
+    tokens: {
+      comment: "#6B7280",
+      string: "#2F6F3E",
+      keyword: "#6D47FF",
+      number: "#8A5A00",
+      type: "#5C7A2D",
+    },
+    monaco: {
+      base: "vs",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "6B7280" },
+        { token: "string", foreground: "2F6F3E" },
+        { token: "keyword", foreground: "6D47FF" },
+        { token: "number", foreground: "8A5A00" },
+        { token: "type.identifier", foreground: "5C7A2D" },
+      ],
+      colors: {
+        "editor.background": "#F7F8FC",
+        "editor.foreground": "#0B0D12",
+        "editorLineNumber.foreground": "#9AA2B2",
+        "editorLineNumber.activeForeground": "#5C7A2D",
+        "editorCursor.foreground": "#5C7A2D",
+        "editor.selectionBackground": "#E2DAFF",
+        "editor.inactiveSelectionBackground": "#F0ECFA",
+        "editorIndentGuide.background": "#E2E6EF",
+        "editorIndentGuide.activeBackground": "#C9D1E3",
+        "editorWidget.background": "#FFFFFF",
+        "editorSuggestWidget.background": "#FFFFFF",
+        "editorSuggestWidget.border": "#D0D7E6",
+        "editorHoverWidget.background": "#FFFFFF",
+        "editorHoverWidget.border": "#D0D7E6",
+        "peekView.border": "#D0D7E6",
+        "inputValidation.errorBorder": "#D0D7E6",
+        "editorError.foreground": "#D92D2D",
+        "editorWarning.foreground": "#B06B00",
+      },
+    },
+  },
+  {
+    value: "cavbot-lime",
+    label: "CavBot Lime",
+    hint: "Green ops cockpit",
+    accent: "#B9C85A",
+    accentSoft: "rgba(185,200,90,.30)",
+    accentWash: "rgba(185,200,90,.12)",
+    previewBackground: "#030F07",
+    previewBorder: "rgba(185,200,90,.45)",
+    previewText: "#E9F6D3",
+    previewLine: "#3F6C48",
+    tokens: {
+      comment: "#79B567",
+      string: "#C5F09B",
+      keyword: "#D5DCA0",
+      number: "#A7D87E",
+      type: "#B9C85A",
+    },
+    monaco: {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "79B567" },
+        { token: "string", foreground: "C5F09B" },
+        { token: "keyword", foreground: "D5DCA0" },
+        { token: "number", foreground: "A7D87E" },
+        { token: "type.identifier", foreground: "B9C85A" },
+      ],
+      colors: {
+        "editor.background": "#030F07",
+        "editor.foreground": "#E9F6D3",
+        "editorLineNumber.foreground": "#3F6C48",
+        "editorLineNumber.activeForeground": "#C7E394",
+        "editorCursor.foreground": "#B9C85A",
+        "editor.selectionBackground": "rgba(185,200,90,0.3)",
+        "editor.inactiveSelectionBackground": "rgba(185,200,90,0.08)",
+        "editorLineHighlightBackground": "rgba(185,200,90,0.1)",
+        "editorIndentGuide.background": "rgba(116,148,116,0.65)",
+        "editorIndentGuide.activeBackground": "rgba(185,200,90,0.75)",
+        "editorWidget.background": "#04140A",
+        "editorSuggestWidget.background": "#04140A",
+        "editorSuggestWidget.border": "rgba(185,200,90,0.45)",
+        "editorHoverWidget.background": "#04140A",
+        "editorHoverWidget.border": "rgba(185,200,90,0.45)",
+        "peekView.border": "rgba(185,200,90,0.45)",
+        "inputValidation.errorBorder": "rgba(185,200,90,0.45)",
+        "editorError.foreground": "#FF5B5B",
+        "editorWarning.foreground": "#FFCC66",
+      },
+    },
+  },
+  {
+    value: "cavbot-classic",
+    label: "CavBot Classic",
+    hint: "Familiar editor baseline",
+    accent: "#8B5CFF",
+    accentSoft: "rgba(139,92,255,.30)",
+    accentWash: "rgba(139,92,255,.14)",
+    previewBackground: "#1E1E1E",
+    previewBorder: "#3F3F46",
+    previewText: "#D4D4D4",
+    previewLine: "#858585",
+    tokens: {
+      comment: "#6A9955",
+      string: "#CE9178",
+      keyword: "#569CD6",
+      number: "#B5CEA8",
+      type: "#4EC9B0",
+    },
+    monaco: {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "6A9955" },
+        { token: "string", foreground: "CE9178" },
+        { token: "keyword", foreground: "569CD6" },
+        { token: "number", foreground: "B5CEA8" },
+        { token: "type.identifier", foreground: "4EC9B0" },
+      ],
+      colors: {
+        "editor.background": "#1E1E1E",
+        "editor.foreground": "#D4D4D4",
+        "editorLineNumber.foreground": "#858585",
+        "editorLineNumber.activeForeground": "#C3E88D",
+        "editorCursor.foreground": "#AEAFAD",
+        "editor.selectionBackground": "#094771",
+        "editor.inactiveSelectionBackground": "#2A2D2E",
+        "editorLineHighlightBackground": "#2A2D2E",
+        "editorIndentGuide.background": "#404040",
+        "editorIndentGuide.activeBackground": "#707070",
+        "editorWidget.background": "#252526",
+        "editorSuggestWidget.background": "#252526",
+        "editorSuggestWidget.border": "#3F3F46",
+        "editorHoverWidget.background": "#252526",
+        "editorHoverWidget.border": "#3F3F46",
+        "peekView.border": "#3F3F46",
+        "inputValidation.errorBorder": "#3F3F46",
+        "editorError.foreground": "#F44747",
+        "editorWarning.foreground": "#FF8800",
+      },
+    },
+  },
+  {
+    value: "cavbot-dark",
+    label: "CavBot Dark",
+    hint: "Deep black and cobalt",
+    accent: "#2F81F7",
+    accentSoft: "rgba(47,129,247,.30)",
+    accentWash: "rgba(47,129,247,.12)",
+    previewBackground: "#01030F",
+    previewBorder: "rgba(121,185,255,.35)",
+    previewText: "#DFE8FF",
+    previewLine: "#4B5465",
+    tokens: {
+      comment: "#7D9BCF",
+      string: "#C6D8FF",
+      keyword: "#79B9FF",
+      number: "#B0C6FF",
+      type: "#81B1E0",
+    },
+    monaco: {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "7D9BCF" },
+        { token: "string", foreground: "C6D8FF" },
+        { token: "keyword", foreground: "79B9FF" },
+        { token: "number", foreground: "B0C6FF" },
+        { token: "type.identifier", foreground: "81B1E0" },
+      ],
+      colors: {
+        "editor.background": "#01030F",
+        "editor.foreground": "#DFE8FF",
+        "editorLineNumber.foreground": "#4B5465",
+        "editorLineNumber.activeForeground": "#99B1D8",
+        "editorCursor.foreground": "#C6D8FF",
+        "editor.selectionBackground": "rgba(121,185,255,0.18)",
+        "editor.inactiveSelectionBackground": "rgba(121,185,255,0.08)",
+        "editorLineHighlightBackground": "rgba(121,185,255,0.08)",
+        "editorIndentGuide.background": "rgba(70,82,110,0.55)",
+        "editorIndentGuide.activeBackground": "rgba(121,185,255,0.6)",
+        "editorWidget.background": "#050715",
+        "editorSuggestWidget.background": "#050715",
+        "editorSuggestWidget.border": "rgba(121,185,255,0.35)",
+        "editorHoverWidget.background": "#050715",
+        "editorHoverWidget.border": "rgba(121,185,255,0.35)",
+        "peekView.border": "rgba(121,185,255,0.35)",
+        "inputValidation.errorBorder": "rgba(121,185,255,0.35)",
+        "editorError.foreground": "#FF6F6F",
+        "editorWarning.foreground": "#FFC66D",
+      },
+    },
+  },
+  {
+    value: "cavbot-cobalt",
+    label: "CavBot Cobalt",
+    hint: "Electric blue control room",
+    accent: "#59B7FF",
+    accentSoft: "rgba(89,183,255,.30)",
+    accentWash: "rgba(89,183,255,.12)",
+    previewBackground: "#04142A",
+    previewBorder: "#1F4D7A",
+    previewText: "#E8F2FF",
+    previewLine: "#66829D",
+    tokens: {
+      comment: "#6B88A6",
+      string: "#9BD3FF",
+      keyword: "#6CB8FF",
+      number: "#FFC46B",
+      type: "#7FE8FF",
+    },
+    monaco: {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "6B88A6" },
+        { token: "string", foreground: "9BD3FF" },
+        { token: "keyword", foreground: "6CB8FF" },
+        { token: "number", foreground: "FFC46B" },
+        { token: "type.identifier", foreground: "7FE8FF" },
+      ],
+      colors: {
+        "editor.background": "#04142A",
+        "editor.foreground": "#E8F2FF",
+        "editorLineNumber.foreground": "#597089",
+        "editorLineNumber.activeForeground": "#8ED7FF",
+        "editorCursor.foreground": "#7FE8FF",
+        "editor.selectionBackground": "rgba(89,183,255,0.22)",
+        "editor.inactiveSelectionBackground": "rgba(89,183,255,0.1)",
+        "editorLineHighlightBackground": "rgba(89,183,255,0.08)",
+        "editorIndentGuide.background": "rgba(73,103,136,0.55)",
+        "editorIndentGuide.activeBackground": "rgba(89,183,255,0.72)",
+        "editorWidget.background": "#071B33",
+        "editorSuggestWidget.background": "#071B33",
+        "editorSuggestWidget.border": "#1F4D7A",
+        "editorHoverWidget.background": "#071B33",
+        "editorHoverWidget.border": "#1F4D7A",
+        "peekView.border": "#1F4D7A",
+        "inputValidation.errorBorder": "#1F4D7A",
+        "editorError.foreground": "#FF7373",
+        "editorWarning.foreground": "#FFC46B",
+      },
+    },
+  },
+  {
+    value: "cavbot-ember",
+    label: "CavBot Ember",
+    hint: "Warm red incident deck",
+    accent: "#FF7B72",
+    accentSoft: "rgba(255,123,114,.28)",
+    accentWash: "rgba(255,123,114,.12)",
+    previewBackground: "#220607",
+    previewBorder: "#6C2622",
+    previewText: "#FFE7E1",
+    previewLine: "#9B6D68",
+    tokens: {
+      comment: "#B68A84",
+      string: "#FFB27F",
+      keyword: "#FF7B72",
+      number: "#FFD280",
+      type: "#F5E96E",
+    },
+    monaco: {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "B68A84" },
+        { token: "string", foreground: "FFB27F" },
+        { token: "keyword", foreground: "FF7B72" },
+        { token: "number", foreground: "FFD280" },
+        { token: "type.identifier", foreground: "F5E96E" },
+      ],
+      colors: {
+        "editor.background": "#220607",
+        "editor.foreground": "#FFE7E1",
+        "editorLineNumber.foreground": "#8E5F5A",
+        "editorLineNumber.activeForeground": "#FFB27F",
+        "editorCursor.foreground": "#FF9D78",
+        "editor.selectionBackground": "rgba(255,123,114,0.22)",
+        "editor.inactiveSelectionBackground": "rgba(255,123,114,0.1)",
+        "editorLineHighlightBackground": "rgba(255,123,114,0.08)",
+        "editorIndentGuide.background": "rgba(120,69,64,0.55)",
+        "editorIndentGuide.activeBackground": "rgba(255,123,114,0.72)",
+        "editorWidget.background": "#2A090A",
+        "editorSuggestWidget.background": "#2A090A",
+        "editorSuggestWidget.border": "#6C2622",
+        "editorHoverWidget.background": "#2A090A",
+        "editorHoverWidget.border": "#6C2622",
+        "peekView.border": "#6C2622",
+        "inputValidation.errorBorder": "#6C2622",
+        "editorError.foreground": "#FF8F87",
+        "editorWarning.foreground": "#FFD280",
+      },
+    },
+  },
+  {
+    value: "cavbot-obsidian",
+    label: "CavBot Obsidian",
+    hint: "High-contrast black glass",
+    accent: "#79E7D4",
+    accentSoft: "rgba(121,231,212,.28)",
+    accentWash: "rgba(121,231,212,.12)",
+    previewBackground: "#000000",
+    previewBorder: "#1D3835",
+    previewText: "#E6F6F5",
+    previewLine: "#58706E",
+    tokens: {
+      comment: "#648381",
+      string: "#9FE7C8",
+      keyword: "#7FE7FF",
+      number: "#F5D77A",
+      type: "#89FFCF",
+    },
+    monaco: {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "648381" },
+        { token: "string", foreground: "9FE7C8" },
+        { token: "keyword", foreground: "7FE7FF" },
+        { token: "number", foreground: "F5D77A" },
+        { token: "type.identifier", foreground: "89FFCF" },
+      ],
+      colors: {
+        "editor.background": "#000000",
+        "editor.foreground": "#E6F6F5",
+        "editorLineNumber.foreground": "#506867",
+        "editorLineNumber.activeForeground": "#8CF2E5",
+        "editorCursor.foreground": "#79E7D4",
+        "editor.selectionBackground": "rgba(121,231,212,0.18)",
+        "editor.inactiveSelectionBackground": "rgba(121,231,212,0.08)",
+        "editorLineHighlightBackground": "rgba(121,231,212,0.06)",
+        "editorIndentGuide.background": "rgba(64,91,88,0.52)",
+        "editorIndentGuide.activeBackground": "rgba(121,231,212,0.68)",
+        "editorWidget.background": "#050807",
+        "editorSuggestWidget.background": "#050807",
+        "editorSuggestWidget.border": "#1D3835",
+        "editorHoverWidget.background": "#050807",
+        "editorHoverWidget.border": "#1D3835",
+        "peekView.border": "#1D3835",
+        "inputValidation.errorBorder": "#1D3835",
+        "editorError.foreground": "#FF8C82",
+        "editorWarning.foreground": "#F5D77A",
+      },
+    },
+  },
+  {
+    value: "cavbot-mocha",
+    label: "CavBot Mocha",
+    hint: "Warm brown editorial deck",
+    accent: "#D8A46C",
+    accentSoft: "rgba(216,164,108,.28)",
+    accentWash: "rgba(216,164,108,.12)",
+    previewBackground: "#1B140E",
+    previewBorder: "#6D533A",
+    previewText: "#F6EBDD",
+    previewLine: "#8E7964",
+    tokens: {
+      comment: "#A38C72",
+      string: "#CFE7A3",
+      keyword: "#E48A5B",
+      number: "#F3C977",
+      type: "#C6A96D",
+    },
+    monaco: {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "A38C72" },
+        { token: "string", foreground: "CFE7A3" },
+        { token: "keyword", foreground: "E48A5B" },
+        { token: "number", foreground: "F3C977" },
+        { token: "type.identifier", foreground: "C6A96D" },
+      ],
+      colors: {
+        "editor.background": "#1B140E",
+        "editor.foreground": "#F6EBDD",
+        "editorLineNumber.foreground": "#75604D",
+        "editorLineNumber.activeForeground": "#F0C58E",
+        "editorCursor.foreground": "#D8A46C",
+        "editor.selectionBackground": "rgba(216,164,108,0.2)",
+        "editor.inactiveSelectionBackground": "rgba(216,164,108,0.08)",
+        "editorLineHighlightBackground": "rgba(216,164,108,0.06)",
+        "editorIndentGuide.background": "rgba(104,82,63,0.52)",
+        "editorIndentGuide.activeBackground": "rgba(216,164,108,0.68)",
+        "editorWidget.background": "#241A13",
+        "editorSuggestWidget.background": "#241A13",
+        "editorSuggestWidget.border": "#6D533A",
+        "editorHoverWidget.background": "#241A13",
+        "editorHoverWidget.border": "#6D533A",
+        "peekView.border": "#6D533A",
+        "inputValidation.errorBorder": "#6D533A",
+        "editorError.foreground": "#FF8F76",
+        "editorWarning.foreground": "#F3C977",
+      },
+    },
+  },
+  {
+    value: "cavbot-graphite",
+    label: "CavBot Graphite",
+    hint: "Neutral graphite terminal",
+    accent: "#9AB6FF",
+    accentSoft: "rgba(154,182,255,.28)",
+    accentWash: "rgba(154,182,255,.12)",
+    previewBackground: "#111318",
+    previewBorder: "#3A4354",
+    previewText: "#EEF2F8",
+    previewLine: "#737D90",
+    tokens: {
+      comment: "#7E8796",
+      string: "#A8C6B4",
+      keyword: "#9AB6FF",
+      number: "#E3BF7A",
+      type: "#7DD3C7",
+    },
+    monaco: {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "7E8796" },
+        { token: "string", foreground: "A8C6B4" },
+        { token: "keyword", foreground: "9AB6FF" },
+        { token: "number", foreground: "E3BF7A" },
+        { token: "type.identifier", foreground: "7DD3C7" },
+      ],
+      colors: {
+        "editor.background": "#111318",
+        "editor.foreground": "#EEF2F8",
+        "editorLineNumber.foreground": "#667083",
+        "editorLineNumber.activeForeground": "#B5CBFF",
+        "editorCursor.foreground": "#9AB6FF",
+        "editor.selectionBackground": "rgba(154,182,255,0.18)",
+        "editor.inactiveSelectionBackground": "rgba(154,182,255,0.08)",
+        "editorLineHighlightBackground": "rgba(154,182,255,0.06)",
+        "editorIndentGuide.background": "rgba(82,92,110,0.52)",
+        "editorIndentGuide.activeBackground": "rgba(154,182,255,0.62)",
+        "editorWidget.background": "#171A20",
+        "editorSuggestWidget.background": "#171A20",
+        "editorSuggestWidget.border": "#3A4354",
+        "editorHoverWidget.background": "#171A20",
+        "editorHoverWidget.border": "#3A4354",
+        "peekView.border": "#3A4354",
+        "inputValidation.errorBorder": "#3A4354",
+        "editorError.foreground": "#FF8C82",
+        "editorWarning.foreground": "#E3BF7A",
+      },
+    },
+  },
+  {
+    value: "cavbot-nord",
+    label: "CavBot Nord",
+    hint: "Cool slate clarity",
+    accent: "#88C0D0",
+    accentSoft: "rgba(136,192,208,.28)",
+    accentWash: "rgba(136,192,208,.12)",
+    previewBackground: "#2E3440",
+    previewBorder: "#4C566A",
+    previewText: "#ECEFF4",
+    previewLine: "#667388",
+    tokens: {
+      comment: "#6B7A90",
+      string: "#A3BE8C",
+      keyword: "#81A1C1",
+      number: "#EBCB8B",
+      type: "#8FBCBB",
+    },
+    monaco: {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "6B7A90" },
+        { token: "string", foreground: "A3BE8C" },
+        { token: "keyword", foreground: "81A1C1" },
+        { token: "number", foreground: "EBCB8B" },
+        { token: "type.identifier", foreground: "8FBCBB" },
+      ],
+      colors: {
+        "editor.background": "#2E3440",
+        "editor.foreground": "#ECEFF4",
+        "editorLineNumber.foreground": "#657186",
+        "editorLineNumber.activeForeground": "#88C0D0",
+        "editorCursor.foreground": "#88C0D0",
+        "editor.selectionBackground": "rgba(129,161,193,0.22)",
+        "editor.inactiveSelectionBackground": "rgba(129,161,193,0.1)",
+        "editorLineHighlightBackground": "rgba(129,161,193,0.08)",
+        "editorIndentGuide.background": "rgba(76,86,106,0.58)",
+        "editorIndentGuide.activeBackground": "rgba(136,192,208,0.74)",
+        "editorWidget.background": "#343B48",
+        "editorSuggestWidget.background": "#343B48",
+        "editorSuggestWidget.border": "#4C566A",
+        "editorHoverWidget.background": "#343B48",
+        "editorHoverWidget.border": "#4C566A",
+        "peekView.border": "#4C566A",
+        "inputValidation.errorBorder": "#4C566A",
+        "editorError.foreground": "#BF616A",
+        "editorWarning.foreground": "#D08770",
+      },
+    },
+  },
+  {
+    value: "cavbot-dawn",
+    label: "CavBot Dawn",
+    hint: "Soft daylight editing",
+    accent: "#7A48C6",
+    accentSoft: "rgba(122,72,198,.24)",
+    accentWash: "rgba(122,72,198,.1)",
+    previewBackground: "#FFF8EF",
+    previewBorder: "#D8CFC1",
+    previewText: "#2B2620",
+    previewLine: "#988F84",
+    tokens: {
+      comment: "#8A7F74",
+      string: "#3E7D4E",
+      keyword: "#7A48C6",
+      number: "#A15C13",
+      type: "#2E6F9E",
+    },
+    monaco: {
+      base: "vs",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "8A7F74" },
+        { token: "string", foreground: "3E7D4E" },
+        { token: "keyword", foreground: "7A48C6" },
+        { token: "number", foreground: "A15C13" },
+        { token: "type.identifier", foreground: "2E6F9E" },
+      ],
+      colors: {
+        "editor.background": "#FFF8EF",
+        "editor.foreground": "#2B2620",
+        "editorLineNumber.foreground": "#A29A90",
+        "editorLineNumber.activeForeground": "#7A48C6",
+        "editorCursor.foreground": "#7A48C6",
+        "editor.selectionBackground": "#EBDFFF",
+        "editor.inactiveSelectionBackground": "#F4ECFF",
+        "editorLineHighlightBackground": "#F6F1E9",
+        "editorIndentGuide.background": "#DDD5C8",
+        "editorIndentGuide.activeBackground": "#C3B4E3",
+        "editorWidget.background": "#FFFFFF",
+        "editorSuggestWidget.background": "#FFFFFF",
+        "editorSuggestWidget.border": "#D8CFC1",
+        "editorHoverWidget.background": "#FFFFFF",
+        "editorHoverWidget.border": "#D8CFC1",
+        "peekView.border": "#D8CFC1",
+        "inputValidation.errorBorder": "#D8CFC1",
+        "editorError.foreground": "#C44536",
+        "editorWarning.foreground": "#A15C13",
+      },
+    },
+  },
 ];
 const THEME_VALUES = THEME_OPTIONS.map((option) => option.value);
 
@@ -357,6 +1010,7 @@ const CAVEN_GENERAL_MODEL_BASE_IDS = [
 ] as const;
 
 const CAVCODE_SKILLS_TAB_ID = "__cavcode_skills__";
+const CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID = "__cavcode_keyboard_shortcuts__";
 const CAVCODE_SKILLS_TAB_META: Record<SkillsPageView, { path: string; name: string; lang: string }> = {
   agents: {
     path: "/.cavcode/caven-agents",
@@ -374,6 +1028,222 @@ const CAVCODE_SKILLS_TAB_META: Record<SkillsPageView, { path: string; name: stri
     lang: "ide",
   },
 };
+const CAVCODE_KEYBOARD_SHORTCUTS_TAB: Tab = {
+  id: CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID,
+  path: "/.cavcode/keyboard-shortcuts",
+  name: "Keyboard Shortcuts",
+  lang: "keybindings",
+  kind: "keyboard-shortcuts",
+};
+const CAVCODE_SHORTCUTS: ShortcutDefinition[] = [
+  {
+    id: "save",
+    command: "Save workspace",
+    when: "Anywhere inside CavCode",
+    source: "CavCode",
+    mac: [["⌘", "S"]],
+    win: [["Ctrl", "S"]],
+    keywords: ["save", "persist", "workspace"],
+  },
+  {
+    id: "open-settings",
+    command: "Open settings",
+    when: "Workbench",
+    source: "CavCode",
+    mac: [["⌘", ","]],
+    win: [["Ctrl", ","]],
+    keywords: ["settings", "preferences"],
+  },
+  {
+    id: "open-keyboard-shortcuts",
+    command: "Open keyboard shortcuts",
+    when: "Workbench",
+    source: "CavCode",
+    mac: [["⌘", "K"], ["⌘", "S"]],
+    win: [["Ctrl", "K"], ["Ctrl", "S"]],
+    keywords: ["keyboard", "shortcuts", "keybindings"],
+  },
+  {
+    id: "toggle-sidebar",
+    command: "Toggle sidebar",
+    when: "Workbench",
+    source: "CavCode",
+    mac: [["⌘", "B"]],
+    win: [["Ctrl", "B"]],
+    keywords: ["sidebar", "layout"],
+  },
+  {
+    id: "quick-open",
+    command: "Quick open search",
+    when: "Workbench",
+    source: "CavCode",
+    mac: [["⌘", "P"]],
+    win: [["Ctrl", "P"]],
+    keywords: ["quick open", "search", "files"],
+  },
+  {
+    id: "focus-explorer",
+    command: "Focus explorer",
+    when: "Workbench",
+    source: "CavCode",
+    mac: [["⌘", "⇧", "E"]],
+    win: [["Ctrl", "Shift", "E"]],
+    keywords: ["explorer", "files", "sidebar"],
+  },
+  {
+    id: "focus-search",
+    command: "Focus search panel",
+    when: "Workbench",
+    source: "CavCode",
+    mac: [["⌘", "⇧", "F"]],
+    win: [["Ctrl", "Shift", "F"]],
+    keywords: ["search", "find", "sidebar"],
+  },
+  {
+    id: "focus-source-control",
+    command: "Focus source control",
+    when: "Workbench",
+    source: "CavCode",
+    mac: [["⌘", "⇧", "G"]],
+    win: [["Ctrl", "Shift", "G"]],
+    keywords: ["git", "source control", "changes"],
+  },
+  {
+    id: "focus-run-debug",
+    command: "Focus run and debug",
+    when: "Workbench",
+    source: "CavCode",
+    mac: [["⌘", "⇧", "D"]],
+    win: [["Ctrl", "Shift", "D"]],
+    keywords: ["run", "debug"],
+  },
+  {
+    id: "split-editor-right",
+    command: "Split editor right",
+    when: "Workbench",
+    source: "CavCode",
+    mac: [["⌘", "\\"]],
+    win: [["Ctrl", "\\"]],
+    keywords: ["split", "editor", "layout"],
+  },
+  {
+    id: "toggle-panel",
+    command: "Toggle lower panel",
+    when: "Workbench",
+    source: "CavCode",
+    mac: [["⌘", "J"]],
+    win: [["Ctrl", "J"]],
+    keywords: ["panel", "terminal", "problems"],
+  },
+  {
+    id: "find",
+    command: "Find in active editor",
+    when: "Editor",
+    source: "Monaco",
+    mac: [["⌘", "F"]],
+    win: [["Ctrl", "F"]],
+    keywords: ["find", "search", "editor"],
+  },
+  {
+    id: "replace",
+    command: "Replace in active editor",
+    when: "Editor",
+    source: "Monaco",
+    mac: [["⌘", "H"]],
+    win: [["Ctrl", "H"]],
+    keywords: ["replace", "editor"],
+  },
+  {
+    id: "quick-fix",
+    command: "Quick fix or CavAi fix",
+    when: "Editor diagnostics",
+    source: "Monaco + CavAi",
+    mac: [["⌘", "."]],
+    win: [["Ctrl", "."]],
+    keywords: ["quick fix", "fix", "diagnostics"],
+  },
+  {
+    id: "organize-imports",
+    command: "Organize imports",
+    when: "Editor",
+    source: "Monaco",
+    mac: [["⌘", "⇧", "O"]],
+    win: [["Ctrl", "Shift", "O"]],
+    keywords: ["imports", "organize"],
+  },
+  {
+    id: "rename-node",
+    command: "Rename selected file or folder",
+    when: "Explorer selection",
+    source: "CavCode",
+    mac: [["F2"]],
+    win: [["F2"]],
+    keywords: ["rename", "file", "folder"],
+  },
+  {
+    id: "delete-node",
+    command: "Delete selected file or folder",
+    when: "Explorer selection",
+    source: "CavCode",
+    mac: [["Delete"]],
+    win: [["Delete"]],
+    keywords: ["delete", "remove", "file", "folder"],
+  },
+  {
+    id: "dismiss-ui",
+    command: "Dismiss rename, menus, and transient UI",
+    when: "Transient surfaces",
+    source: "CavCode",
+    mac: [["Esc"]],
+    win: [["Esc"]],
+    keywords: ["escape", "dismiss", "close"],
+  },
+  {
+    id: "terminal-run",
+    command: "Run terminal command",
+    when: "Terminal input",
+    source: "CavCode",
+    mac: [["Return"]],
+    win: [["Enter"]],
+    keywords: ["terminal", "run", "enter"],
+  },
+  {
+    id: "terminal-clear",
+    command: "Clear terminal input",
+    when: "Terminal input",
+    source: "CavCode",
+    mac: [["Esc"]],
+    win: [["Esc"]],
+    keywords: ["terminal", "clear"],
+  },
+  {
+    id: "terminal-history-up",
+    command: "Previous terminal command",
+    when: "Terminal input",
+    source: "CavCode",
+    mac: [["↑"]],
+    win: [["↑"]],
+    keywords: ["terminal", "history", "up"],
+  },
+  {
+    id: "terminal-history-down",
+    command: "Next terminal command",
+    when: "Terminal input",
+    source: "CavCode",
+    mac: [["↓"]],
+    win: [["↓"]],
+    keywords: ["terminal", "history", "down"],
+  },
+  {
+    id: "terminal-complete",
+    command: "Autocomplete known terminal command",
+    when: "Terminal input",
+    source: "CavCode",
+    mac: [["Tab"]],
+    win: [["Tab"]],
+    keywords: ["terminal", "autocomplete", "tab"],
+  },
+];
 const CAVCODE_AGENT_CATALOG: IdeAgentCard[] = [
   {
     id: "error_explainer",
@@ -1660,6 +2530,14 @@ function toSkillsTab(view: SkillsPageView = "agents"): Tab {
   };
 }
 
+function toKeyboardShortcutsTab(): Tab {
+  return { ...CAVCODE_KEYBOARD_SHORTCUTS_TAB };
+}
+
+function shortcutChordsForPlatform(entry: ShortcutDefinition, isMac: boolean) {
+  return isMac ? entry.mac : entry.win;
+}
+
 /* =========================
   System virtual files
   - Backed by DB (via /api/profile/readme)
@@ -1786,6 +2664,14 @@ function normalizeTabsForWorkspace(root: FolderNode, rawTabs: unknown): Tab[] {
       out.push(toSkillsTab(skillsPageViewFromTabLike(entry)));
       continue;
     }
+    if (
+      (tabId === CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID || tabKind === "keyboard-shortcuts")
+      && !seen.has(CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID)
+    ) {
+      seen.add(CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID);
+      out.push(toKeyboardShortcutsTab());
+      continue;
+    }
 
     const byId = entry.id ? findFileById(root, String(entry.id)) : null;
     const byPath = !byId && entry.path ? findNodeByPath(root, String(entry.path)) : null;
@@ -1818,11 +2704,14 @@ function parseWorkspaceSnapshot(raw: unknown): CavCodeWorkspaceSnapshot | null {
   const tabs = normalizeTabsForWorkspace(nextFs, record.tabs);
   const activeRaw = String(record.activeFileId || "").trim();
   const activeNode = activeRaw ? findNode(nextFs, activeRaw) : null;
-  const activeFileId = activeRaw === CAVCODE_SKILLS_TAB_ID && tabs.some((tab) => tab.id === CAVCODE_SKILLS_TAB_ID)
-    ? CAVCODE_SKILLS_TAB_ID
-    : activeNode && isFile(activeNode) && !isSystemPath(activeNode.path)
-      ? activeRaw
-      : "";
+  const activeFileId =
+    activeRaw === CAVCODE_SKILLS_TAB_ID && tabs.some((tab) => tab.id === CAVCODE_SKILLS_TAB_ID)
+      ? CAVCODE_SKILLS_TAB_ID
+      : activeRaw === CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID && tabs.some((tab) => tab.id === CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID)
+        ? CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID
+        : activeNode && isFile(activeNode) && !isSystemPath(activeNode.path)
+          ? activeRaw
+          : "";
   const activeProjectRootPathRaw = String(record.activeProjectRootPath || "").trim();
   const projectRootNode = activeProjectRootPathRaw ? findNodeByPath(nextFs, activeProjectRootPathRaw) : null;
   const activeProjectRootPath =
@@ -4382,7 +5271,45 @@ function IconGearGlyph({ className, size }: { className?: string; size?: number 
         fillRule="evenodd"
         clipRule="evenodd"
         d="m4.929 4.93.001-.002.002.001.527-.528a.575.575 0 0 1 .786-.025l1.21 1.061c.332.305.774.492 1.26.492.514 0 .98-.21 1.316-.548.318-.32.52-.754.539-1.235h.004l.105-1.607a.575.575 0 0 1 .574-.537h.746V2v.002h.747c.303 0 .554.235.574.537l.105 1.607h.005c.019.484.223.92.544 1.24.336.335.8.543 1.312.543.492 0 .94-.192 1.272-.504l1.196-1.05a.575.575 0 0 1 .786.026l.528.528.002-.002v.002l-.001.002.528.527a.575.575 0 0 1 .026.786l-1.06 1.212a1.85 1.85 0 0 0-.492 1.258c0 .515.21.98.548 1.317.32.318.753.52 1.235.539v.004l1.606.105c.303.02.538.271.538.574V12H22v.002h-.002v.746a.575.575 0 0 1-.537.574l-1.607.107v.001c-.484.02-.92.223-1.24.544-.335.336-.543.8-.543 1.312 0 .486.187.928.493 1.26h-.002l1.062 1.211c.2.228.188.572-.026.786l-.528.528v.002h-.001l-.528.527a.575.575 0 0 1-.785.026l-1.168-1.021a1.851 1.851 0 0 0-1.302-.534c-.515 0-.98.21-1.317.548-.318.32-.52.755-.54 1.238h-.004l-.105 1.607a.575.575 0 0 1-.54.536H11.22a.575.575 0 0 1-.54-.536l-.105-1.607h-.004a1.851 1.851 0 0 0-.545-1.244 1.851 1.851 0 0 0-1.31-.542c-.504 0-.96.2-1.295.526l-1.177 1.03a.575.575 0 0 1-.785-.027l-.528-.528-.001-.001-.528-.528a.575.575 0 0 1-.026-.786l1.062-1.21-.001-.001a1.85 1.85 0 0 0 .493-1.26c0-.515-.21-.98-.548-1.317a1.85 1.85 0 0 0-1.236-.539v-.001l-1.607-.107a.575.575 0 0 1-.537-.574v-.746H2V12h.001v-.747c0-.303.235-.554.538-.574l1.606-.105v-.004a1.851 1.851 0 0 0 1.242-.545c.335-.336.542-.8.542-1.31 0-.49-.19-.935-.499-1.267L4.376 6.244a.575.575 0 0 1 .026-.786l.528-.527-.001-.002zM16.286 12a4.286 4.286 0 1 1-8.572 0 4.286 4.286 0 0 1 8.572 0z"
-        fill="#000000"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function IconKeyboardGlyph({ className, size }: { className?: string; size?: number }) {
+  const iconSize = Number.isFinite(size) ? Math.max(8, Math.round(size as number)) : 18;
+  return (
+    <svg
+      className={className}
+      width={iconSize}
+      height={iconSize}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="2.5" y="5" width="19" height="14" rx="3.2" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M6.5 10.2h1.4M9.6 10.2H11m2.1 0h1.4m2.1 0H18m-11.5 3.3h1.4m2.1 0H11m2.1 0h4.9m-11.5 3.3H18" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconCollaboratorsGlyph({ className, size }: { className?: string; size?: number }) {
+  const iconSize = Number.isFinite(size) ? Math.max(8, Math.round(size as number)) : 18;
+  return (
+    <svg
+      className={className}
+      width={iconSize}
+      height={iconSize}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M8 11.2a2.9 2.9 0 1 0 0-5.8 2.9 2.9 0 0 0 0 5.8Zm8 0a2.55 2.55 0 1 0 0-5.1 2.55 2.55 0 0 0 0 5.1ZM4.5 18.2c0-2.2 2.1-4 4.7-4s4.8 1.8 4.8 4v.3H4.5v-.3Zm10.4.3c.2-1.15-.1-2.24-.73-3.14 1.97.18 3.43 1.54 3.43 3.14v.02H14.9v-.02Z"
+        fill="currentColor"
       />
     </svg>
   );
@@ -4671,6 +5598,8 @@ export default function CavCodePage() {
 
   // settings
   const [settings, setSettings] = useState<EditorSettings>(DEFAULT_SETTINGS);
+  const [settingsSection, setSettingsSection] = useState<"editor" | "collaborators">("editor");
+  const [keyboardShortcutsQuery, setKeyboardShortcutsQuery] = useState("");
   const [skillsPageView, setSkillsPageView] = useState<SkillsPageView>("agents");
   const [cavenIdeSettings, setCavenIdeSettings] = useState<CavenIdeSettings>(DEFAULT_CAVEN_IDE_SETTINGS);
   const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">("free");
@@ -4686,6 +5615,12 @@ export default function CavCodePage() {
   const [projectCollabUserId, setProjectCollabUserId] = useState<string>("");
   const [projectCollabRole, setProjectCollabRole] = useState<"VIEWER" | "EDITOR" | "ADMIN">("VIEWER");
   const [projectCollabSubmitting, setProjectCollabSubmitting] = useState<boolean>(false);
+  const settingsEditorSectionRef = useRef<HTMLDivElement | null>(null);
+  const settingsCollaboratorsSectionRef = useRef<HTMLDivElement | null>(null);
+  const settingsSectionRef = useRef<"editor" | "collaborators">("editor");
+  const keyboardShortcutsSearchRef = useRef<HTMLInputElement | null>(null);
+  const shortcutChordRef = useRef<string>("");
+  const shortcutChordTimerRef = useRef<number | null>(null);
 
   // inline rename
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -5584,6 +6519,18 @@ export default function CavCodePage() {
     if (activity !== "settings") return;
     void loadProjectCollaborators();
   }, [activity, loadProjectCollaborators]);
+  useEffect(() => {
+    settingsSectionRef.current = settingsSection;
+  }, [settingsSection]);
+  useEffect(() => {
+    if (activity !== "settings") return;
+    const target = settingsSectionRef.current === "editor" ? settingsEditorSectionRef.current : settingsCollaboratorsSectionRef.current;
+    if (!target) return;
+    const frame = window.requestAnimationFrame(() => {
+      target.scrollIntoView({ block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activity]);
 
   const activeTab = useMemo(() => tabs.find((tab) => tab.id === activeFileId) || null, [activeFileId, tabs]);
   const primaryTab = activeTab;
@@ -5606,6 +6553,29 @@ export default function CavCodePage() {
     () => Boolean(activeTab && (activeTab.kind === "skills" || activeTab.id === CAVCODE_SKILLS_TAB_ID)),
     [activeTab]
   );
+  const activeKeyboardShortcutsTab = useMemo(
+    () => Boolean(activeTab && (activeTab.kind === "keyboard-shortcuts" || activeTab.id === CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID)),
+    [activeTab]
+  );
+  const isMacPlatform =
+    typeof navigator !== "undefined" && String(navigator.platform || "").toLowerCase().includes("mac");
+  const filteredKeyboardShortcuts = useMemo(() => {
+    const query = keyboardShortcutsQuery.trim().toLowerCase();
+    if (!query) return CAVCODE_SHORTCUTS;
+    return CAVCODE_SHORTCUTS.filter((entry) => {
+      const haystack = [
+        entry.command,
+        entry.when,
+        entry.source,
+        ...(entry.keywords || []),
+        entry.mac.flat().join(" "),
+        entry.win.flat().join(" "),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [keyboardShortcutsQuery]);
   const tabsBarActiveId = splitLayout !== "single" && activePane === "secondary" ? secondaryFileId || activeFileId : activeFileId;
   useEffect(() => {
     if (!activeSkillsTab || !activeTab) return;
@@ -5613,6 +6583,14 @@ export default function CavCodePage() {
     if (nextView === skillsPageView) return;
     setSkillsPageView(nextView);
   }, [activeSkillsTab, activeTab, skillsPageView]);
+  useEffect(() => {
+    if (!activeKeyboardShortcutsTab) return;
+    const timer = window.setTimeout(() => {
+      keyboardShortcutsSearchRef.current?.focus();
+      keyboardShortcutsSearchRef.current?.select();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeKeyboardShortcutsTab]);
   const customAgentIdSet = useMemo(() => new Set(customAgents.map((agent) => agent.id)), [customAgents]);
   const installedAgentSet = useMemo(() => new Set(installedAgentIds), [installedAgentIds]);
   const builtInRegistryCards = useMemo(
@@ -6951,9 +7929,15 @@ export default function CavCodePage() {
     if (!resolvedPath) return false;
     const target = findNodeByPath(fs, resolvedPath);
     if (!target || !isFile(target)) return false;
-    openFile(target);
+    setSelectedId(target.id);
+    if (splitLayout !== "single" && activePane === "secondary") {
+      setSecondaryFileId(target.id);
+      return true;
+    }
+    setActivePane("primary");
+    setActiveFileId(target.id);
     return true;
-  }, [fs, openFile, resolveWorkspaceFilePathForAi]);
+  }, [activePane, fs, resolveWorkspaceFilePathForAi, splitLayout]);
 
   const uploadWorkspaceFilesFromCaven = useCallback(async (rawFiles: File[]): Promise<CavenWorkspaceUploadFileRef[]> => {
     const files = Array.isArray(rawFiles) ? rawFiles : [];
@@ -7149,6 +8133,29 @@ export default function CavCodePage() {
     setActiveFileId(SYS_CAVEN_CONFIG_ID);
     setActivePane("primary");
   }, [cavenConfigToml, sysProfileReadme.loaded, sysProfileReadme.markdown]);
+  const openKeyboardShortcutsTab = useCallback(() => {
+    setTabs((prev) => {
+      if (prev.some((tab) => tab.id === CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID)) return prev;
+      return [...prev, toKeyboardShortcutsTab()];
+    });
+    setActivePane("primary");
+    setActiveFileId(CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID);
+    setSidebarOpen(true);
+    setActivity("settings");
+  }, []);
+  const scrollSettingsSection = useCallback((section: "editor" | "collaborators") => {
+    setSettingsSection(section);
+    const target = section === "editor" ? settingsEditorSectionRef.current : settingsCollaboratorsSectionRef.current;
+    if (!target) return;
+    window.requestAnimationFrame(() => {
+      target.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+  }, []);
+  const openSettingsSidebar = useCallback(() => {
+    setSidebarOpen(true);
+    setActivity("settings");
+    scrollSettingsSection("editor");
+  }, [scrollSettingsSection]);
 
   const applyAiProposedCodeToWorkspaceFile = useCallback(async (args: { filePath: string; code: string }) => {
     const resolvedPath = resolveWorkspaceFilePathForAi(args.filePath);
@@ -7436,10 +8443,16 @@ export default function CavCodePage() {
       sysOpenRef.current = true;
       setActivity("explorer");
       setOpenFolders((p) => ({ ...p, root: true, [SYS_ROOT_ID]: true, [SYS_PROFILE_ID]: true }));
-      openFile(node);
+      setSelectedId(node.id);
+      if (splitLayout !== "single" && activePane === "secondary") {
+        setSecondaryFileId(node.id);
+      } else {
+        setActivePane("primary");
+        setActiveFileId(node.id);
+      }
       window.setTimeout(() => editorRef.current?.focus?.(), 0);
     } catch {}
-  }, [isClient, fsReady, sysProfileReadme.loaded, fs, openFile]);
+  }, [activePane, fs, fsReady, isClient, splitLayout, sysProfileReadme.loaded]);
 
   /* =========================
     Deep link: /cavcode?file=/path/to/file
@@ -9641,7 +10654,7 @@ export default function CavCodePage() {
     const nextTabId = String(tabId || "").trim();
     if (!nextTabId) return;
     const nextTab = tabs.find((tab) => tab.id === nextTabId);
-    const allowSecondaryTarget = !nextTab || nextTab.kind !== "skills";
+    const allowSecondaryTarget = !nextTab || (nextTab.kind !== "skills" && nextTab.kind !== "keyboard-shortcuts");
     if (splitLayout !== "single" && activePane === "secondary" && allowSecondaryTarget) {
       setSecondaryFileId(nextTabId);
       return;
@@ -11518,168 +12531,9 @@ export default function CavCodePage() {
       }
     } catch {}
 
-    monaco.editor.defineTheme("cavbot-default", {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "98A3B3" },
-        { token: "string", foreground: "C6E48B" },
-        { token: "keyword", foreground: "8B5CFF" },
-        { token: "number", foreground: "FFCC66" },
-        { token: "type.identifier", foreground: "B9C85A" },
-      ],
-      colors: {
-        "editor.background": "#070A16",
-        "editor.foreground": "#EAF0FF",
-        "editorLineNumber.foreground": "#5A6475",
-        "editorLineNumber.activeForeground": "#B9C85A",
-        "editorCursor.foreground": "#B9C85A",
-        "editor.selectionBackground": "#2A1F55",
-        "editor.inactiveSelectionBackground": "#1A1730",
-        "editorIndentGuide.background": "#20253A",
-        "editorIndentGuide.activeBackground": "#343B58",
-        "editorWidget.background": "#0A0F22",
-        "editorSuggestWidget.background": "#0A0F22",
-        "editorSuggestWidget.border": "#2A3352",
-        "editorHoverWidget.background": "#0A0F22",
-        "editorHoverWidget.border": "#2A3352",
-        "peekView.border": "#2A3352",
-        "inputValidation.errorBorder": "#2A3352",
-        "editorError.foreground": "#FF4D4D",
-        "editorWarning.foreground": "#FFCC66",
-      },
-    });
-
-    monaco.editor.defineTheme("cavbot-light", {
-      base: "vs",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "6B7280" },
-        { token: "string", foreground: "2F6F3E" },
-        { token: "keyword", foreground: "6D47FF" },
-        { token: "number", foreground: "8A5A00" },
-        { token: "type.identifier", foreground: "5C7A2D" },
-      ],
-      colors: {
-        "editor.background": "#F7F8FC",
-        "editor.foreground": "#0B0D12",
-        "editorLineNumber.foreground": "#9AA2B2",
-        "editorLineNumber.activeForeground": "#5C7A2D",
-        "editorCursor.foreground": "#5C7A2D",
-        "editor.selectionBackground": "#E2DAFF",
-        "editor.inactiveSelectionBackground": "#F0ECFA",
-        "editorIndentGuide.background": "#E2E6EF",
-        "editorIndentGuide.activeBackground": "#C9D1E3",
-        "editorWidget.background": "#FFFFFF",
-        "editorSuggestWidget.background": "#FFFFFF",
-        "editorSuggestWidget.border": "#D0D7E6",
-        "editorHoverWidget.background": "#FFFFFF",
-        "editorHoverWidget.border": "#D0D7E6",
-        "peekView.border": "#D0D7E6",
-        "inputValidation.errorBorder": "#D0D7E6",
-        "editorError.foreground": "#D92D2D",
-        "editorWarning.foreground": "#B06B00",
-      },
-    });
-
-    monaco.editor.defineTheme("cavbot-lime", {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "79b567" },
-        { token: "string", foreground: "c5f09b" },
-        { token: "keyword", foreground: "d5dca0" },
-        { token: "number", foreground: "a7d87e" },
-        { token: "type.identifier", foreground: "b9c85a" },
-      ],
-      colors: {
-        "editor.background": "#030f07",
-        "editor.foreground": "#e9f6d3",
-        "editorLineNumber.foreground": "#3f6c48",
-        "editorLineNumber.activeForeground": "#c7e394",
-        "editorCursor.foreground": "#b9c85a",
-        "editor.selectionBackground": "rgba(185,200,90,0.3)",
-        "editor.inactiveSelectionBackground": "rgba(185,200,90,0.08)",
-        "editorLineHighlightBackground": "rgba(185,200,90,0.1)",
-        "editorIndentGuide.background": "rgba(116,148,116,0.65)",
-        "editorIndentGuide.activeBackground": "rgba(185,200,90,0.75)",
-        "editorWidget.background": "#04140a",
-        "editorSuggestWidget.background": "#04140a",
-        "editorSuggestWidget.border": "rgba(185,200,90,0.45)",
-        "editorHoverWidget.background": "#04140a",
-        "editorHoverWidget.border": "rgba(185,200,90,0.45)",
-        "peekView.border": "rgba(185,200,90,0.45)",
-        "inputValidation.errorBorder": "rgba(185,200,90,0.45)",
-        "editorError.foreground": "#ff5b5b",
-        "editorWarning.foreground": "#ffcc66",
-      },
-    });
-
-    monaco.editor.defineTheme("cavbot-classic", {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "6a9955" },
-        { token: "string", foreground: "ce9178" },
-        { token: "keyword", foreground: "569cd6" },
-        { token: "number", foreground: "b5cea8" },
-        { token: "type.identifier", foreground: "4ec9b0" },
-      ],
-      colors: {
-        "editor.background": "#1e1e1e",
-        "editor.foreground": "#d4d4d4",
-        "editorLineNumber.foreground": "#858585",
-        "editorLineNumber.activeForeground": "#c3e88d",
-        "editorCursor.foreground": "#aeafad",
-        "editor.selectionBackground": "#094771",
-        "editor.inactiveSelectionBackground": "#2a2d2e",
-        "editorLineHighlightBackground": "#2a2d2e",
-        "editorIndentGuide.background": "#404040",
-        "editorIndentGuide.activeBackground": "#707070",
-        "editorWidget.background": "#252526",
-        "editorSuggestWidget.background": "#252526",
-        "editorSuggestWidget.border": "#3f3f46",
-        "editorHoverWidget.background": "#252526",
-        "editorHoverWidget.border": "#3f3f46",
-        "peekView.border": "#3f3f46",
-        "inputValidation.errorBorder": "#3f3f46",
-        "editorError.foreground": "#f44747",
-        "editorWarning.foreground": "#ff8800",
-      },
-    });
-
-    monaco.editor.defineTheme("cavbot-dark", {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "7d9bcf" },
-        { token: "string", foreground: "c6d8ff" },
-        { token: "keyword", foreground: "79b9ff" },
-        { token: "number", foreground: "b0c6ff" },
-        { token: "type.identifier", foreground: "81b1e0" },
-      ],
-      colors: {
-        "editor.background": "#01030f",
-        "editor.foreground": "#dfe8ff",
-        "editorLineNumber.foreground": "#4b5465",
-        "editorLineNumber.activeForeground": "#99b1d8",
-        "editorCursor.foreground": "#c6d8ff",
-        "editor.selectionBackground": "rgba(121,185,255,0.18)",
-        "editor.inactiveSelectionBackground": "rgba(121,185,255,0.08)",
-        "editorLineHighlightBackground": "rgba(121,185,255,0.08)",
-        "editorIndentGuide.background": "rgba(70,82,110,0.55)",
-        "editorIndentGuide.activeBackground": "rgba(121,185,255,0.6)",
-        "editorWidget.background": "#050715",
-        "editorSuggestWidget.background": "#050715",
-        "editorSuggestWidget.border": "rgba(121,185,255,0.35)",
-        "editorHoverWidget.background": "#050715",
-        "editorHoverWidget.border": "rgba(121,185,255,0.35)",
-        "peekView.border": "rgba(121,185,255,0.35)",
-        "inputValidation.errorBorder": "rgba(121,185,255,0.35)",
-        "editorError.foreground": "#ff6f6f",
-        "editorWarning.foreground": "#ffc66d",
-      },
-    });
+    for (const themeOption of THEME_OPTIONS) {
+      monaco.editor.defineTheme(themeOption.value, themeOption.monaco);
+    }
 
     monaco.editor.setTheme(settings.theme);
 
@@ -12110,6 +12964,23 @@ export default function CavCodePage() {
     } catch {}
   }
 
+  const clearShortcutChord = useCallback(() => {
+    shortcutChordRef.current = "";
+    if (shortcutChordTimerRef.current) {
+      window.clearTimeout(shortcutChordTimerRef.current);
+      shortcutChordTimerRef.current = null;
+    }
+  }, []);
+
+  const armShortcutChord = useCallback((chord: string) => {
+    clearShortcutChord();
+    shortcutChordRef.current = chord;
+    shortcutChordTimerRef.current = window.setTimeout(() => {
+      clearShortcutChord();
+    }, 1500);
+  }, [clearShortcutChord]);
+  useEffect(() => () => clearShortcutChord(), [clearShortcutChord]);
+
   /* =========================
     Keyboard (VS-grade)
     - Added:
@@ -12119,33 +12990,112 @@ export default function CavCodePage() {
     const onKeyDown = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toLowerCase().includes("mac");
       const mod = isMac ? e.metaKey : e.ctrlKey;
+      const key = String(e.key || "").toLowerCase();
+
+      if (shortcutChordRef.current === "mod+k") {
+        if (mod && !e.shiftKey && !e.altKey && key === "s") {
+          e.preventDefault();
+          e.stopPropagation();
+          clearShortcutChord();
+          openKeyboardShortcutsTab();
+          return;
+        }
+        if (!["meta", "control", "shift", "alt"].includes(key)) {
+          clearShortcutChord();
+        }
+      }
 
       // Always capture Cmd/Ctrl+S inside CavCode (including Monaco/editor inputs)
       // so browser/system "Save Page" never opens here.
-      if (mod && e.key.toLowerCase() === "s") {
+      if (mod && !e.shiftKey && !e.altKey && key === "s") {
         e.preventDefault();
         e.stopPropagation();
         void saveNow();
         return;
       }
 
-      if (isTypingTarget(e.target)) return;
-
-      if (mod && e.key.toLowerCase() === "b") {
+      if (mod && !e.shiftKey && !e.altKey && key === ",") {
         e.preventDefault();
-        setSidebarOpen((p) => !p);
+        e.stopPropagation();
+        clearShortcutChord();
+        openSettingsSidebar();
         return;
       }
 
-      if (mod && e.key.toLowerCase() === "p") {
+      if (mod && !e.shiftKey && !e.altKey && key === "k") {
         e.preventDefault();
+        e.stopPropagation();
+        armShortcutChord("mod+k");
+        return;
+      }
+
+      if (mod && !e.altKey && e.shiftKey && key === "e") {
+        e.preventDefault();
+        setSidebarOpen(true);
+        setActivity("explorer");
+        return;
+      }
+
+      if (mod && !e.altKey && e.shiftKey && key === "f") {
+        e.preventDefault();
+        setSidebarOpen(true);
         setActivity("search");
         const el = document.getElementById("cc-search") as HTMLInputElement | null;
         window.setTimeout(() => el?.focus(), 0);
         return;
       }
 
-      if (mod && e.key.toLowerCase() === "f") {
+      if (mod && !e.altKey && e.shiftKey && key === "g") {
+        e.preventDefault();
+        setSidebarOpen(true);
+        setActivity("scm");
+        return;
+      }
+
+      if (mod && !e.altKey && e.shiftKey && key === "d") {
+        e.preventDefault();
+        setSidebarOpen(true);
+        setActivity("run");
+        return;
+      }
+
+      if (mod && !e.shiftKey && !e.altKey && e.key === "\\") {
+        e.preventDefault();
+        setSidebarOpen(true);
+        if (splitLayout === "right") {
+          setSplitLayout("single");
+          setActivePane("primary");
+        } else {
+          setSplitLayout("right");
+          setSecondaryFileId((prev) => {
+            if (prev) return prev;
+            const fallback = String(activeFileId || "").trim();
+            if (fallback) return fallback;
+            return String(tabs[tabs.length - 1]?.id || "").trim();
+          });
+        }
+        return;
+      }
+
+      if (isTypingTarget(e.target)) return;
+
+      if (mod && key === "b") {
+        e.preventDefault();
+        setSidebarOpen((p) => !p);
+        return;
+      }
+
+      if (mod && key === "p") {
+        e.preventDefault();
+        clearShortcutChord();
+        setSidebarOpen(true);
+        setActivity("search");
+        const el = document.getElementById("cc-search") as HTMLInputElement | null;
+        window.setTimeout(() => el?.focus(), 0);
+        return;
+      }
+
+      if (mod && key === "f") {
         e.preventDefault();
         openMonacoFind("find");
         setPanelOpen(false);
@@ -12153,7 +13103,7 @@ export default function CavCodePage() {
       }
 
       // Optional: VS Code replace shortcut (Cmd/Ctrl+H) -> replace widget
-      if (mod && e.key.toLowerCase() === "h") {
+      if (mod && key === "h") {
         e.preventDefault();
         openMonacoFind("replace");
         setPanelOpen(false);
@@ -12177,7 +13127,7 @@ export default function CavCodePage() {
         return;
       }
 
-      if (mod && e.key.toLowerCase() === "j") {
+      if (mod && key === "j") {
         e.preventDefault();
         setPanelOpen((p) => !p);
         return;
@@ -12213,6 +13163,12 @@ export default function CavCodePage() {
     settings,
     deleteNode,
     saveNow,
+    armShortcutChord,
+    clearShortcutChord,
+    openKeyboardShortcutsTab,
+    openSettingsSidebar,
+    splitLayout,
+    tabs,
   ]);
 
   /* =========================
@@ -12904,6 +13860,83 @@ export default function CavCodePage() {
     );
   }
 
+  function renderKeyboardShortcutsPage() {
+    return (
+      <div className="cc-shortcutsPage" role="region" aria-label="Keyboard Shortcuts">
+        <div className="cc-shortcutsToolbar">
+          <div className="cc-shortcutsTitleWrap">
+            <div className="cc-shortcutsTitle">Keyboard Shortcuts</div>
+            <div className="cc-shortcutsSub">
+              CavCode workbench, editor, explorer, and terminal keybindings.
+            </div>
+          </div>
+          <input
+            ref={keyboardShortcutsSearchRef}
+            className="cc-shortcutsSearch"
+            value={keyboardShortcutsQuery}
+            onChange={(event) => setKeyboardShortcutsQuery(event.currentTarget.value)}
+            placeholder="Type to search in keybindings"
+            aria-label="Search keyboard shortcuts"
+          />
+        </div>
+
+        <div className="cc-shortcutsTable" role="table" aria-label="Keyboard shortcuts table">
+          <div className="cc-shortcutsHead" role="rowgroup">
+            <div className="cc-shortcutsRow cc-shortcutsRowHead" role="row">
+              <span role="columnheader">Command</span>
+              <span role="columnheader">Keybinding</span>
+              <span role="columnheader">When</span>
+              <span role="columnheader">Source</span>
+            </div>
+          </div>
+          <div className="cc-shortcutsBody" role="rowgroup">
+            {filteredKeyboardShortcuts.length ? (
+              filteredKeyboardShortcuts.map((entry) => {
+                const chords = shortcutChordsForPlatform(entry, isMacPlatform);
+                return (
+                  <div key={entry.id} className="cc-shortcutsRow" role="row">
+                    <div className="cc-shortcutsCommand" role="cell">
+                      {entry.command}
+                    </div>
+                    <div className="cc-shortcutsBinding" role="cell">
+                      {chords.map((chord, chordIndex) => (
+                        <React.Fragment key={`${entry.id}-${chordIndex}`}>
+                          <span className="cc-shortcutsChord">
+                            {chord.map((segment) => (
+                              <span key={`${entry.id}-${chordIndex}-${segment}`} className="cc-shortcutsKey">
+                                {segment}
+                              </span>
+                            ))}
+                          </span>
+                          {chordIndex < chords.length - 1 ? (
+                            <span className="cc-shortcutsThen" aria-hidden="true">
+                              then
+                            </span>
+                          ) : null}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                    <div className="cc-shortcutsWhen" role="cell">
+                      {entry.when}
+                    </div>
+                    <div className="cc-shortcutsSource" role="cell">
+                      {entry.source}
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="cc-shortcutsEmpty">
+                <div className="cc-editor-empty-title">No matching keybindings.</div>
+                <div className="cc-editor-empty-sub">Try a command, area, or key like save, sidebar, or Ctrl.</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   /* =========================
     Render IDE
   ========================= */
@@ -13204,7 +14237,7 @@ export default function CavCodePage() {
             </div>
           ) : null}
 
-          <button className={`cc-act cc-act-underprofile ${activity === "settings" ? "is-on" : ""}`} onClick={() => setActivity("settings")} title="Settings">
+          <button className={`cc-act cc-act-underprofile ${activity === "settings" ? "is-on" : ""}`} onClick={openSettingsSidebar} title="Settings">
             <IconGear />
           </button>
         </aside>
@@ -13796,109 +14829,254 @@ export default function CavCodePage() {
                 </div>
 
                 <div className="cc-settings">
-                  <div className="cc-set-card">
-                    <div className="cc-set-title">Editor</div>
+                  <div className="cc-settingsNav">
+                    <button
+                      type="button"
+                      className={`cc-settingsNavItem ${settingsSection === "editor" ? "is-on" : ""}`}
+                      onClick={() => scrollSettingsSection("editor")}
+                    >
+                      <span className="cc-settingsNavIcon" aria-hidden="true">
+                        <IconGearGlyph size={15} />
+                      </span>
+                      <span className="cc-settingsNavCopy">
+                        <span className="cc-settingsNavLabel">Editor</span>
+                        <span className="cc-settingsNavHint">Typography, save flow, theme, and sync.</span>
+                      </span>
+                    </button>
 
-                    <label className="cc-set-row">
-                      <span className="cc-set-label">Font Size</span>
-                      <input
-                        className="cc-set-input"
-                        type="number"
-                        min={10}
-                        max={22}
-                        value={settings.fontSize}
-                        onChange={(e) => setSettings((s) => ({ ...s, fontSize: Math.max(10, Math.min(22, Number(e.target.value) || 12)) }))}
-                      />
-                    </label>
+                    <button
+                      type="button"
+                      className={`cc-settingsNavItem ${activeKeyboardShortcutsTab ? "is-on" : ""}`}
+                      onClick={openKeyboardShortcutsTab}
+                    >
+                      <span className="cc-settingsNavIcon" aria-hidden="true">
+                        <IconKeyboardGlyph size={15} />
+                      </span>
+                      <span className="cc-settingsNavCopy">
+                        <span className="cc-settingsNavLabel">Keyboard Shortcuts</span>
+                        <span className="cc-settingsNavHint">Open the CavCode keybinding editor tab.</span>
+                      </span>
+                      <span className="cc-settingsNavKey">{isMacPlatform ? "⌘K ⌘S" : "Ctrl+K Ctrl+S"}</span>
+                    </button>
 
-                    <label className="cc-set-row">
-                      <span className="cc-set-label">Tab Size</span>
-                      <input
-                        className="cc-set-input"
-                        type="number"
-                        min={2}
-                        max={8}
-                        value={settings.tabSize}
-                        onChange={(e) => setSettings((s) => ({ ...s, tabSize: Math.max(2, Math.min(8, Number(e.target.value) || 2)) }))}
-                      />
-                    </label>
-
-                    <label className="cc-set-row">
-                      <span className="cc-set-label">Word Wrap</span>
-                      <input
-                        type="checkbox"
-                        checked={settings.wordWrap}
-                        onChange={(e) => setSettings((s) => ({ ...s, wordWrap: e.target.checked }))}
-                      />
-                    </label>
-
-                    <label className="cc-set-row">
-                      <span className="cc-set-label">Minimap</span>
-                      <input
-                        type="checkbox"
-                        checked={settings.minimap}
-                        onChange={(e) => setSettings((s) => ({ ...s, minimap: e.target.checked }))}
-                      />
-                    </label>
-
-                    <label className="cc-set-row">
-                      <span className="cc-set-label">Format on Save</span>
-                      <input
-                        type="checkbox"
-                        checked={settings.formatOnSave}
-                        onChange={(e) => setSettings((s) => ({ ...s, formatOnSave: e.target.checked }))}
-                      />
-                    </label>
-
-                    <label className="cc-set-row">
-                      <span className="cc-set-label">Autosave</span>
-                      <input
-                        type="checkbox"
-                        checked={settings.autosave}
-                        onChange={(e) => setSettings((s) => ({ ...s, autosave: e.target.checked }))}
-                      />
-                    </label>
-
-                    <label className="cc-set-row">
-                      <span className="cc-set-label">Sync to CavCloud</span>
-                      <input
-                        type="checkbox"
-                        checked={settings.syncToCavcloud}
-                        onChange={(e) => setSettings((s) => ({ ...s, syncToCavcloud: e.target.checked }))}
-                      />
-                    </label>
-
-                    <label className="cc-set-row">
-                      <span className="cc-set-label">Theme</span>
-                      <select
-                        className="cc-set-input"
-                        value={settings.theme}
-                        onChange={(e) => {
-                          const next = e.target.value as ThemeOption;
-                          const safeTheme = THEME_VALUES.includes(next) ? next : settings.theme;
-                          setSettings((s) => ({ ...s, theme: safeTheme }));
-                        }}
-                      >
-                        {THEME_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="cc-set-row">
-                      <span className="cc-set-label">Telemetry</span>
-                      <input
-                        type="checkbox"
-                        checked={settings.telemetry}
-                        onChange={(e) => setSettings((s) => ({ ...s, telemetry: e.target.checked }))}
-                      />
-                    </label>
+                    <button
+                      type="button"
+                      className={`cc-settingsNavItem ${settingsSection === "collaborators" ? "is-on" : ""}`}
+                      onClick={() => scrollSettingsSection("collaborators")}
+                    >
+                      <span className="cc-settingsNavIcon" aria-hidden="true">
+                        <IconCollaboratorsGlyph size={15} />
+                      </span>
+                      <span className="cc-settingsNavCopy">
+                        <span className="cc-settingsNavLabel">Project Collaborators</span>
+                        <span className="cc-settingsNavHint">Manage who can view, edit, or administer a project.</span>
+                      </span>
+                    </button>
                   </div>
 
-                  <div className="cc-set-card">
-                    <div className="cc-set-title">Project Collaborators</div>
+                  <div className="cc-set-card cc-set-cardSettings" ref={settingsEditorSectionRef}>
+                    <div className="cc-set-head">
+                      <div>
+                        <div className="cc-set-title">Editor</div>
+                        <div className="cc-set-note">Keep CavCode tight, readable, and consistent across your workspace.</div>
+                      </div>
+                    </div>
+
+                    <div className="cc-set-stack">
+                      <div className="cc-set-row cc-set-rowDetailed">
+                        <div className="cc-set-copy">
+                          <span className="cc-set-label">Font Size</span>
+                          <span className="cc-set-note">Editor text scale for Monaco, diffs, and inline diagnostics.</span>
+                        </div>
+                        <div className="cc-set-stepper" role="group" aria-label="Font Size">
+                          <span className="cc-set-stepperValue" aria-live="polite">{settings.fontSize}</span>
+                          <span className="cc-set-stepperButtons">
+                            <button
+                              type="button"
+                              className="cc-set-stepperBtn"
+                              aria-label="Increase font size"
+                              onClick={() => setSettings((s) => ({ ...s, fontSize: Math.max(10, Math.min(22, s.fontSize + 1)) }))}
+                            >
+                              <Image src="/icons/app/arrow-square-up-svgrepo-com.svg" alt="" width={12} height={12} aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              className="cc-set-stepperBtn"
+                              aria-label="Decrease font size"
+                              onClick={() => setSettings((s) => ({ ...s, fontSize: Math.max(10, Math.min(22, s.fontSize - 1)) }))}
+                            >
+                              <Image src="/icons/app/arrow-square-down-svgrepo-com.svg" alt="" width={12} height={12} aria-hidden="true" />
+                            </button>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="cc-set-row cc-set-rowDetailed">
+                        <div className="cc-set-copy">
+                          <span className="cc-set-label">Tab Size</span>
+                          <span className="cc-set-note">Default indentation width for tabs and inserted spaces.</span>
+                        </div>
+                        <div className="cc-set-stepper" role="group" aria-label="Tab Size">
+                          <span className="cc-set-stepperValue" aria-live="polite">{settings.tabSize}</span>
+                          <span className="cc-set-stepperButtons">
+                            <button
+                              type="button"
+                              className="cc-set-stepperBtn"
+                              aria-label="Increase tab size"
+                              onClick={() => setSettings((s) => ({ ...s, tabSize: Math.max(2, Math.min(8, s.tabSize + 1)) }))}
+                            >
+                              <Image src="/icons/app/arrow-square-up-svgrepo-com.svg" alt="" width={12} height={12} aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              className="cc-set-stepperBtn"
+                              aria-label="Decrease tab size"
+                              onClick={() => setSettings((s) => ({ ...s, tabSize: Math.max(2, Math.min(8, s.tabSize - 1)) }))}
+                            >
+                              <Image src="/icons/app/arrow-square-down-svgrepo-com.svg" alt="" width={12} height={12} aria-hidden="true" />
+                            </button>
+                          </span>
+                        </div>
+                      </div>
+
+                      <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
+                        <span className="cc-set-copy">
+                          <span className="cc-set-label">Word Wrap</span>
+                          <span className="cc-set-note">Wrap long lines inside the editor viewport.</span>
+                        </span>
+                        <input
+                          className="cc-set-toggle"
+                          type="checkbox"
+                          checked={settings.wordWrap}
+                          onChange={(e) => setSettings((s) => ({ ...s, wordWrap: e.target.checked }))}
+                        />
+                      </label>
+
+                      <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
+                        <span className="cc-set-copy">
+                          <span className="cc-set-label">Minimap</span>
+                          <span className="cc-set-note">Keep the overview map visible for fast scanning.</span>
+                        </span>
+                        <input
+                          className="cc-set-toggle"
+                          type="checkbox"
+                          checked={settings.minimap}
+                          onChange={(e) => setSettings((s) => ({ ...s, minimap: e.target.checked }))}
+                        />
+                      </label>
+
+                      <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
+                        <span className="cc-set-copy">
+                          <span className="cc-set-label">Format on Save</span>
+                          <span className="cc-set-note">Apply Monaco formatting whenever a save is triggered.</span>
+                        </span>
+                        <input
+                          className="cc-set-toggle"
+                          type="checkbox"
+                          checked={settings.formatOnSave}
+                          onChange={(e) => setSettings((s) => ({ ...s, formatOnSave: e.target.checked }))}
+                        />
+                      </label>
+
+                      <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
+                        <span className="cc-set-copy">
+                          <span className="cc-set-label">Autosave</span>
+                          <span className="cc-set-note">Write changes automatically to CavBot persistence while you work.</span>
+                        </span>
+                        <input
+                          className="cc-set-toggle"
+                          type="checkbox"
+                          checked={settings.autosave}
+                          onChange={(e) => setSettings((s) => ({ ...s, autosave: e.target.checked }))}
+                        />
+                      </label>
+
+                      <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
+                        <span className="cc-set-copy">
+                          <span className="cc-set-label">Sync to CavCloud</span>
+                          <span className="cc-set-note">Mirror CavCode settings into your CavCloud-linked workspace profile.</span>
+                        </span>
+                        <input
+                          className="cc-set-toggle"
+                          type="checkbox"
+                          checked={settings.syncToCavcloud}
+                          onChange={(e) => setSettings((s) => ({ ...s, syncToCavcloud: e.target.checked }))}
+                        />
+                      </label>
+
+                      <div className="cc-set-row cc-set-rowTheme">
+                        <div className="cc-set-copy">
+                          <span className="cc-set-label">Theme</span>
+                          <span className="cc-set-note">12 professional CavCode themes. Monaco rendering stays on the same theme pipeline.</span>
+                        </div>
+                        <div className="cc-themeList" role="list" aria-label="CavCode themes">
+                          {THEME_OPTIONS.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              className={`cc-themeCard ${settings.theme === option.value ? "is-on" : ""}`}
+                              data-theme-value={option.value}
+                              onClick={() => setSettings((s) => ({ ...s, theme: option.value }))}
+                              style={{
+                                "--cc-theme-card-bg": option.previewBackground,
+                                "--cc-theme-card-border": option.previewBorder,
+                                "--cc-theme-card-fg": option.previewText,
+                                "--cc-theme-card-line": option.previewLine,
+                                "--cc-theme-card-accent": option.accent,
+                                "--cc-theme-card-keyword": option.tokens.keyword,
+                                "--cc-theme-card-string": option.tokens.string,
+                                "--cc-theme-card-number": option.tokens.number,
+                                "--cc-theme-card-type": option.tokens.type,
+                                "--cc-theme-card-comment": option.tokens.comment,
+                              } as React.CSSProperties}
+                            >
+                              <span className="cc-themeCardMeta">
+                                <span className="cc-themeCardTitleWrap">
+                                  <span className="cc-themeCardName">{option.label}</span>
+                                  <span className="cc-themeCardHint">{option.hint}</span>
+                                </span>
+                                <span className="cc-themeCardDot" aria-hidden="true" />
+                              </span>
+                              <span className="cc-themeCardCode" aria-hidden="true">
+                                <span className="cc-themeCardCodeLine is-comment">{`// ${option.value}`}</span>
+                                <span className="cc-themeCardCodeLine">
+                                  <span className="tok-keyword">const</span>{" "}
+                                  <span className="tok-type">accent</span>{" "}
+                                  ={" "}
+                                  <span className="tok-string">{JSON.stringify(option.label)}</span>
+                                </span>
+                                <span className="cc-themeCardCodeLine">
+                                  <span className="tok-keyword">return</span>{" "}
+                                  <span className="tok-number">12</span>
+                                </span>
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
+                        <span className="cc-set-copy">
+                          <span className="cc-set-label">Telemetry</span>
+                          <span className="cc-set-note">Share editor diagnostics and behavior signals with CavBot telemetry.</span>
+                        </span>
+                        <input
+                          className="cc-set-toggle"
+                          type="checkbox"
+                          checked={settings.telemetry}
+                          onChange={(e) => setSettings((s) => ({ ...s, telemetry: e.target.checked }))}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="cc-set-card cc-set-cardSettings" ref={settingsCollaboratorsSectionRef}>
+                    <div className="cc-set-head">
+                      <div>
+                        <div className="cc-set-title">Project Collaborators</div>
+                        <div className="cc-set-note">Invite workspace members into this project without leaving CavCode.</div>
+                      </div>
+                    </div>
                     {!projectIdFromQuery ? (
                       <div className="cc-set-note">
                         Open CavCode with a project context to manage collaborators.
@@ -13911,36 +15089,46 @@ export default function CavCodePage() {
 
                         <label className="cc-set-row cc-set-rowStack">
                           <span className="cc-set-label">Workspace member</span>
-                          <select
-                            className="cc-set-input cc-set-inputWide"
-                            value={projectCollabUserId}
-                            onChange={(e) => setProjectCollabUserId(e.target.value)}
-                            disabled={projectCollabBusy || projectCollabSubmitting || !workspaceMemberOptions.length}
-                          >
-                            {workspaceMemberOptions.length ? null : <option value="">No workspace members</option>}
-                            {workspaceMemberOptions.map((member) => (
-                              <option key={member.userId} value={member.userId}>
-                                {member.displayName ? `${member.displayName} (${member.email})` : member.email}
-                              </option>
-                            ))}
-                          </select>
+                          <span className="cc-set-selectWrap">
+                            <select
+                              className="cc-set-input cc-set-inputWide cc-set-select"
+                              value={projectCollabUserId}
+                              onChange={(e) => setProjectCollabUserId(e.target.value)}
+                              disabled={projectCollabBusy || projectCollabSubmitting || !workspaceMemberOptions.length}
+                            >
+                              {workspaceMemberOptions.length ? null : <option value="">No workspace members</option>}
+                              {workspaceMemberOptions.map((member) => (
+                                <option key={member.userId} value={member.userId}>
+                                  {member.displayName ? `${member.displayName} (${member.email})` : member.email}
+                                </option>
+                              ))}
+                            </select>
+                            <span className="cc-set-selectChevron" aria-hidden="true">
+                              <Image src="/icons/app/cavcode/arrow-down-svgrepo-com.svg" alt="" width={10} height={10} />
+                            </span>
+                          </span>
                         </label>
 
                         <label className="cc-set-row cc-set-rowStack">
                           <span className="cc-set-label">Role</span>
-                          <select
-                            className="cc-set-input cc-set-inputWide"
-                            value={projectCollabRole}
-                            onChange={(e) => {
-                              const next = String(e.target.value || "").toUpperCase();
-                              setProjectCollabRole(next === "EDITOR" || next === "ADMIN" ? next : "VIEWER");
-                            }}
-                            disabled={projectCollabBusy || projectCollabSubmitting}
-                          >
-                            <option value="VIEWER">Viewer</option>
-                            <option value="EDITOR">Editor</option>
-                            <option value="ADMIN">Admin</option>
-                          </select>
+                          <span className="cc-set-selectWrap">
+                            <select
+                              className="cc-set-input cc-set-inputWide cc-set-select"
+                              value={projectCollabRole}
+                              onChange={(e) => {
+                                const next = String(e.target.value || "").toUpperCase();
+                                setProjectCollabRole(next === "EDITOR" || next === "ADMIN" ? next : "VIEWER");
+                              }}
+                              disabled={projectCollabBusy || projectCollabSubmitting}
+                            >
+                              <option value="VIEWER">Viewer</option>
+                              <option value="EDITOR">Editor</option>
+                              <option value="ADMIN">Admin</option>
+                            </select>
+                            <span className="cc-set-selectChevron" aria-hidden="true">
+                              <Image src="/icons/app/cavcode/arrow-down-svgrepo-com.svg" alt="" width={10} height={10} />
+                            </span>
+                          </span>
                         </label>
 
                         <div className="cc-run-actions">
@@ -14121,7 +15309,7 @@ export default function CavCodePage() {
         ) : null}
 
         {/* Workbench */}
-        <section className={`cc-workbench${panelExpanded && panelOpen && !activeSkillsTab ? " is-panel-maximized" : ""}`} aria-label="Workbench">
+        <section className={`cc-workbench${panelExpanded && panelOpen && !activeSkillsTab && !activeKeyboardShortcutsTab ? " is-panel-maximized" : ""}`} aria-label="Workbench">
           {/* Tabs (browser tabs, not pills) */}
           <div className="cc-tabshead">
             <div
@@ -14202,6 +15390,8 @@ export default function CavCodePage() {
                       <span className="cc-tab-ic" aria-hidden="true">
                         {t.kind === "skills" ? (
                           <IconGearGlyph className="cc-tab-gear" size={14} />
+                        ) : t.kind === "keyboard-shortcuts" ? (
+                          <IconKeyboardGlyph className="cc-tab-gear" size={14} />
                         ) : t.kind === "git-compare-single" || t.kind === "git-compare-aggregate" ? (
                           <Image
                             className="cc-tab-gear"
@@ -15584,6 +16774,8 @@ export default function CavCodePage() {
                   </>
                 ) : null}
               </div>
+            ) : activeKeyboardShortcutsTab ? (
+              renderKeyboardShortcutsPage()
             ) : (
               <div
                 className={`cc-editor-panes ${splitLayout === "right" ? "is-right" : splitLayout === "down" ? "is-down" : "is-single"}`}
