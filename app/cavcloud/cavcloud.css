@@ -444,6 +444,14 @@ body{ margin:0; }
   display: block;
   object-fit: contain;
 }
+.cavcloud-surfaceQuickToolIconGallery{
+  transform: scale(1.12);
+  transform-origin: center;
+}
+.cavcloud-surfaceQuickToolIconSettings{
+  width: 18px;
+  height: 18px;
+}
 .cavcloud-surfaceQuickToolGrid{
   width: 18px;
   height: 18px;
@@ -469,8 +477,8 @@ body{ margin:0; }
   filter: brightness(0) saturate(100%) invert(100%);
 }
 .cavcloud-surfaceLauncherActionIconMark{
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
 }
 .cavcloud-surfaceQuickToolCavAi{
   display: inline-grid;
@@ -941,18 +949,24 @@ body{ margin:0; }
   min-width: 168px;
   border-radius: 10px;
   border: 1px solid rgba(255,255,255,.18);
-  background: rgba(0,0,0,.22);
+  background-color: rgba(0,0,0,.22);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5 6 7.5l3-3' stroke='rgba(247,251,255,0.82)' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 10px 10px;
+  appearance: none;
+  -webkit-appearance: none;
   color: rgba(247,251,255,.9);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: .02em;
   text-transform: none;
-  padding: 7px 10px;
+  padding: 7px 36px 7px 10px;
   cursor: pointer;
 }
 .cavcloud-paneTitleSelect:hover{
   border-color: var(--cc-accent-strong);
-  background: var(--cc-accent-soft);
+  background-color: var(--cc-accent-soft);
 }
 .cavcloud-paneTitleSelect:focus-visible{
   outline: 1px solid var(--cc-accent-strong);

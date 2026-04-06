@@ -329,10 +329,6 @@ let m = "cb_cavcloud_activity",
     key: "Trash",
     label: "Recently deleted",
     icon: "trash"
-  }, {
-    key: "Settings",
-    label: "Settings",
-    icon: "settings"
   }],
   I = {
     code: "#8b5cff",
@@ -7794,7 +7790,7 @@ function ek(e) {
   let profileHandle = resolveCavcloudInitialUsername(eH).trim().toLowerCase(),
     publicProfileHref = buildCanonicalPublicProfileHref(profileHandle),
     profileMenuLabel = "public" === profilePublicEnabled ? "Public Profile" : "private" === profilePublicEnabled ? "Private Profile" : "Profile",
-    surfaceTitle = "CavCloud Storage",
+    surfaceTitle = "CavCloud",
     surfaceVerified = "PREMIUM_PLUS" === resolveCavcloudPlanTier({
       tier: eK
     }),
@@ -8686,16 +8682,7 @@ function ek(e) {
                 }), t.jsx("span", {
                   children: i_
                 })]
-              }) : "Explore" === S ? (0, t.jsxs)("div", {
-                className: "cavcloud-paneSubExplore",
-                children: [t.jsx("span", {
-                  className: "cavcloud-paneSubFolderName",
-                  children: iB
-                }), t.jsx("span", {
-                  className: "cavcloud-paneSubMeta",
-                  children: i_
-                })]
-              }) : "Synced" === S ? (0, t.jsxs)("div", {
+              }) : "Explore" === S ? i_ : "Synced" === S ? (0, t.jsxs)("div", {
                 className: "cavcloud-paneSubSynced",
                 children: [t.jsx("button", {
                   className: "cavcloud-galleryLayoutBtn",

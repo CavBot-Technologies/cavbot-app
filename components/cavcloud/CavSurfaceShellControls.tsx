@@ -260,9 +260,9 @@ function IconGear() {
     <Image
       src="/icons/app/settings-svgrepo-com.svg"
       alt=""
-      width={22}
-      height={22}
-      className="cb-settings-icon"
+      width={18}
+      height={18}
+      className="cb-settings-icon cavcloud-surfaceQuickToolIcon cavcloud-surfaceQuickToolIconSettings"
       aria-hidden="true"
       priority
       unoptimized
@@ -288,7 +288,7 @@ function IconGalleryPalette() {
       alt=""
       width={18}
       height={18}
-      className="cavcloud-surfaceQuickToolIcon"
+      className="cavcloud-surfaceQuickToolIcon cavcloud-surfaceQuickToolIconGallery"
       aria-hidden="true"
       unoptimized
     />
@@ -413,7 +413,7 @@ export function CavSurfaceSidebarFooter(props: CavSurfaceSidebarFooterProps) {
                 triggerClassName="cb-icon-btn cavcloud-surfaceQuickTool cavcloud-surfaceQuickToolCavAi"
                 triggerAriaLabel={`Open CavAi for ${props.cavAiContextLabel}`}
                 iconOnly
-                iconSizePx={20}
+                iconSizePx={18}
               />
 
               <button
