@@ -4824,19 +4824,32 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   pointer-events: auto;
 }
 
+.cc-skills-cardActionWrap.is-open .cc-skills-cardActionStatus{
+  opacity: 0;
+  transform: translateY(-1px);
+  pointer-events: none;
+}
+
+.cc-skills-cardActionWrap.is-open .cc-skills-cardManageBtn{
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .cc-skills-cardManageMenu{
   position: absolute;
   right: 0;
   top: calc(100% + 6px);
-  z-index: 10;
-  min-width: 164px;
-  border: 1px solid rgba(255,255,255,.16);
-  border-radius: 9px;
-  background: rgba(8, 14, 32, .97);
-  box-shadow: 0 12px 32px rgba(0,0,0,.44);
-  padding: 4px;
+  z-index: var(--z-pop);
+  width: 224px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 16px;
+  background: rgba(3,6,22,.94);
+  box-shadow: 0 18px 60px rgba(0,0,0,.55);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  padding: 10px;
   display: grid;
-  gap: 1px;
+  gap: 8px;
 }
 
 .cc-skills-cardManageMenuItem{
@@ -4939,6 +4952,41 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-agentManageActionStack .cc-modal-btn{
   width: 100%;
+}
+
+.cc-agentManageInlineMenu{
+  pointer-events: auto;
+}
+
+.cc-agentManageInlineMeta{
+  display: grid;
+  gap: 4px;
+  padding: 0 8px;
+}
+
+.cc-agentManageInlineStatus{
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: rgba(197,206,231,.72);
+}
+
+.cc-agentManageInlinePlacement,
+.cc-agentManageInlineSummary,
+.cc-agentManageInlineNote{
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(197,206,231,.76);
+}
+
+.cc-agentManageInlineSummary,
+.cc-agentManageInlineNote{
+  padding: 0 8px;
+}
+
+.cc-agentManageInlineMenu .cc-pm-item{
+  min-height: 38px;
 }
 
 .cc-agentManageDangerBtn{
