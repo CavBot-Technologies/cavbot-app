@@ -1674,6 +1674,23 @@
   padding: 14px;
 }
 
+.codePanelEmptyLogo {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  color: rgba(223, 231, 246, 0.94);
+}
+
+.codePanelEmptyLogoGlyph {
+  width: 34px;
+  height: 34px;
+  display: block;
+  background-color: currentColor;
+  -webkit-mask: url("/icons/app/cavcode/atom-svgrepo-com.svg") center / contain no-repeat;
+  mask: url("/icons/app/cavcode/atom-svgrepo-com.svg") center / contain no-repeat;
+}
+
 .codePanelMode .empty,
 .codePanelMode .emptyLarge {
   border-radius: 14px !important;

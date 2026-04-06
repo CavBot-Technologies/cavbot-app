@@ -4735,7 +4735,9 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
             <div className={styles.chatStream}>
               {!cavenInteractionLocked && Boolean(sessionId) && !visibleMessages.length && !loadingMessages && !hasPendingPrompt && !hasInlineEdit ? (
                 <div className={styles.emptyLarge}>
-                  {heroLine}
+                  <span className={styles.codePanelEmptyLogo} role="img" aria-label={heroLine}>
+                    <span className={styles.codePanelEmptyLogoGlyph} aria-hidden="true" />
+                  </span>
                 </div>
               ) : null}
 
