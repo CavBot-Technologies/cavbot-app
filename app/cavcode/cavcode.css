@@ -7916,14 +7916,14 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 }
 
 .cc-pm-itemDanger{
-  border-color: rgba(255,120,120,.18);
-  background: rgba(255,120,120,.05);
+  border-color: transparent;
+  background: rgba(255,120,120,.08);
   color: rgba(255,216,216,.96);
 }
 
 .cc-pm-itemDanger:hover{
-  border-color: rgba(255,120,120,.28);
-  background: rgba(255,120,120,.10);
+  border-color: transparent;
+  background: rgba(255,120,120,.08);
 }
 
 .cc-pm-item:active{
