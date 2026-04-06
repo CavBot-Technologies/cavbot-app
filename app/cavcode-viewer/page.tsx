@@ -568,22 +568,6 @@ export default function LivePage() {
 
   const [booting, setBooting] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-
-  const diag = useMemo(() => {
-    const issues: string[] = [];
-    const hasHtml = Boolean(html.trim());
-    if (hasHtml) {
-      if (!/<html[\s>]/i.test(html) && !/<!doctype/i.test(html)) {
-        issues.push("No <html> or <!doctype> detected — rendering will be wrapped.");
-      }
-      if (!/<body[\s>]/i.test(html)) {
-        issues.push("No <body> tag detected — rendering will be wrapped.");
-      }
-    }
-    const statusLabel = !hasHtml ? "No HTML loaded" : issues.length ? "Needs attention" : "Posture clean";
-    return { issues, statusLabel };
-  }, [html]);
-  const hasHtmlInput = Boolean(html.trim());
   const hasManualPreview = Boolean(html.trim() || css.trim() || js.trim());
   const isPreviewLive = mountMode ? mountBootstrapped : hasManualPreview;
   const accountInitials = useMemo(
@@ -2200,29 +2184,7 @@ export default function LivePage() {
               </div>
             </div>
 
-            <div className="ccv-block ccv-elegantBlock">
-              <div className={hasHtmlInput ? "ccv-diag" : "ccv-diag is-empty"}>
-                <div className="ccv-diagHead">
-                  <div className="ccv-diagLabel">Markup posture</div>
-                  <div className={`ccv-diagStatus ${diag.issues.length ? "bad" : hasHtmlInput ? "good" : "muted"}`}>
-                    {diag.statusLabel}
-                  </div>
-                </div>
-                {diag.issues.length ? (
-                  <ul className="ccv-diagList">
-                    {diag.issues.map((i, idx) => (
-                      <li key={`${i}-${idx}`}>{i}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className={hasHtmlInput ? "ccv-diagSub" : "ccv-diagSub is-empty"}>
-                    {hasHtmlInput ? "No issues detected. Ready to render." : "Paste or load HTML to begin."}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="ccv-block ccv-elegantBlock ccv-previewSupportDesktopBlock">
+            <div className="ccv-block ccv-elegantBlock ccv-previewSupportDesktopBlock ccv-blockNoDivider">
               <div className="ccv-previewSupportDesktop">
                 {renderPreviewToggleControls()}
               </div>

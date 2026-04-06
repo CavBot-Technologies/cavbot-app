@@ -366,6 +366,10 @@ body{
   border-top: 0;
 }
 
+.ccv-blockNoDivider{
+  border-top: 0;
+}
+
 .ccv-blockTitle{
   font-size: 10px;
   font-weight: 750;
@@ -653,128 +657,6 @@ body{
 
 .ccv-elegantBlock{
   gap: 14px;
-}
-
-.ccv-diag{
-  position: relative;
-  display:flex;
-  flex-direction: column;
-  gap: 11px;
-  border: 1px solid rgba(255,255,255,.10);
-  background:
-    radial-gradient(140% 140% at 100% 0%, rgba(185,200,90,.11), transparent 58%),
-    linear-gradient(180deg, rgba(11,17,34,.74), rgba(5,8,18,.70));
-  border-radius: var(--ccv-radius-panel);
-  padding: 14px;
-  overflow: hidden;
-}
-
-.ccv-diag::before{
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 2px;
-  background: linear-gradient(180deg, rgba(185,200,90,.48), rgba(197,206,231,.10));
-  opacity: .9;
-}
-
-.ccv-diag.is-empty{
-  background:
-    radial-gradient(140% 140% at 100% 0%, rgba(197,206,231,.08), transparent 58%),
-    linear-gradient(180deg, rgba(10,14,30,.72), rgba(5,8,18,.68));
-}
-
-.ccv-diag.is-empty::before{
-  background: linear-gradient(180deg, rgba(197,206,231,.38), rgba(197,206,231,.10));
-}
-
-.ccv-diagHead{
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.ccv-diagLabel{
-  font-size: 10px;
-  font-weight: 760;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: rgba(197,206,231,.56);
-}
-
-.ccv-diagStatus{
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  width: auto;
-  font-size: 11px;
-  font-weight: 760;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: rgba(197,206,231,.86);
-  padding: 0;
-}
-.ccv-diagStatus::before{
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 0 4px rgba(197,206,231,.16);
-  opacity: .95;
-}
-.ccv-diagStatus.good{
-  color: rgba(185,200,90,.94);
-}
-.ccv-diagStatus.good::before{
-  box-shadow: 0 0 0 4px rgba(185,200,90,.20);
-}
-.ccv-diagStatus.bad{
-  color: rgba(255,120,120,.94);
-}
-.ccv-diagStatus.bad::before{
-  box-shadow: 0 0 0 4px rgba(255,120,120,.18);
-}
-.ccv-diagStatus.muted{
-  color: rgba(197,206,231,.70);
-}
-.ccv-diagList{
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  color: rgba(214,223,245,.84);
-  font-size: 12px;
-  line-height: 1.5;
-}
-.ccv-diagList li{
-  position: relative;
-  padding-left: 15px;
-}
-.ccv-diagList li::before{
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 7px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: rgba(255,120,120,.86);
-  box-shadow: 0 0 0 3px rgba(255,120,120,.14);
-}
-.ccv-diagSub{
-  font-size: 12px;
-  color: rgba(197,206,231,.78);
-  line-height: 1.5;
-}
-
-.ccv-diagSub.is-empty{
-  color: rgba(197,206,231,.68);
-  padding-top: 3px;
 }
 
 .ccv-controlStack{
