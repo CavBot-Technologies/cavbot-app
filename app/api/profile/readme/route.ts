@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/apiAuth";
 import {
@@ -26,8 +27,12 @@ type RawDb = {
 
 const MAX_BYTES = 64 * 1024;
 const OWNER_USERNAME = normalizeUsername(process.env.CAVBOT_OWNER_USERNAME || "");
+const ALLOW_RUNTIME_STORAGE_BOOTSTRAP = process.env.NODE_ENV !== "production";
+const STORAGE_READY_CACHE_TTL_MS = ALLOW_RUNTIME_STORAGE_BOOTSTRAP ? 2_000 : 60_000;
+const STORAGE_UNAVAILABLE_MESSAGE = "Profile README storage is temporarily unavailable.";
 
 let _tableReady: boolean | null = null;
+let _tableReadyCheckedAt = 0;
 
 function json<T>(body: T, init?: { status?: number; headers?: Record<string, string> }) {
   return NextResponse.json(body, {
@@ -84,6 +89,7 @@ function stripRawHtmlOutsideCodeFences(markdown: string) {
 }
 
 async function ensureTable(db: RawDb) {
+  if (!ALLOW_RUNTIME_STORAGE_BOOTSTRAP) return;
   if (_tableReady) return;
   const createSql = `
 CREATE TABLE IF NOT EXISTS "PublicProfileReadme" (
@@ -102,9 +108,54 @@ ALTER TABLE "PublicProfileReadme"
     await db.$executeRawUnsafe(createSql);
     await db.$executeRawUnsafe(revisionSql);
     _tableReady = true;
+    _tableReadyCheckedAt = Date.now();
+  } catch {
+    _tableReady = false;
+    _tableReadyCheckedAt = Date.now();
+  }
+}
+
+async function probeStorageReady(db: RawDb) {
+  if (_tableReady !== null && Date.now() - _tableReadyCheckedAt < STORAGE_READY_CACHE_TTL_MS) {
+    return _tableReady;
+  }
+
+  try {
+    await db.$queryRaw`
+      SELECT "revision"
+      FROM "PublicProfileReadme"
+      WHERE 1 = 0
+    `;
+    _tableReady = true;
   } catch {
     _tableReady = false;
   }
+  _tableReadyCheckedAt = Date.now();
+  return _tableReady;
+}
+
+async function ensureStorageReady(db: RawDb) {
+  if (await probeStorageReady(db)) return true;
+  if (!ALLOW_RUNTIME_STORAGE_BOOTSTRAP) return false;
+  await ensureTable(db);
+  return probeStorageReady(db);
+}
+
+function storageUnavailableResponse() {
+  return json(
+    {
+      ok: false,
+      error: "README_STORAGE_UNAVAILABLE",
+      message: STORAGE_UNAVAILABLE_MESSAGE,
+    },
+    {
+      status: 503,
+      headers: {
+        "Cache-Control": "no-store",
+        "Retry-After": "15",
+      },
+    },
+  );
 }
 
 async function readRow(userId: string) {
@@ -177,7 +228,8 @@ export async function GET(req: Request) {
     // Owner view should never be cached publicly.
     if (isOwner) noStore();
 
-    const row = await readRow(userId);
+    const storageReady = await ensureStorageReady(prisma as unknown as RawDb);
+    const row = storageReady ? await readRow(userId) : null;
     const updatedAtISO = row?.updatedAt ? new Date(row.updatedAt).toISOString() : null;
     const revision = toSafeRevision(row?.revision, 0);
 
@@ -199,6 +251,12 @@ export async function GET(req: Request) {
       }
     );
   } catch (e) {
+    if (isSchemaMismatchError(e, { tables: ["PublicProfileReadme"], columns: ["revision"] })) {
+      return json(
+        { ok: true, markdown: null, updatedAt: null, revision: 0 },
+        { status: 200, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     console.error("GET /api/profile/readme failed:", e);
     return json({ ok: false, message: "Failed to load README." }, { status: 500, headers: { "Cache-Control": "no-store" } });
   }
@@ -243,9 +301,8 @@ export async function PUT(req: Request) {
       return json({ ok: false, message: "README too large (max 64KB)" }, { status: 413, headers: { "Cache-Control": "no-store" } });
     }
 
-    await ensureTable(prisma as unknown as RawDb);
-    if (_tableReady === false) {
-      return json({ ok: false, message: "Storage unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });
+    if (!(await ensureStorageReady(prisma as unknown as RawDb))) {
+      return storageUnavailableResponse();
     }
 
     const normalizedMarkdown = cleaned.trim() ? cleaned : "";
@@ -350,6 +407,9 @@ export async function PUT(req: Request) {
       { status: 200, headers: { "Cache-Control": "no-store" } }
     );
   } catch (e) {
+    if (isSchemaMismatchError(e, { tables: ["PublicProfileReadme"], columns: ["revision"] })) {
+      return storageUnavailableResponse();
+    }
     console.error("PUT /api/profile/readme failed:", e);
     return json({ ok: false, message: "Save failed." }, { status: 500, headers: { "Cache-Control": "no-store" } });
   }

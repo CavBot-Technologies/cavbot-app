@@ -841,6 +841,8 @@ export default async function PublicCavbotProfilePage({
     var LS_SERVER_REV = 'cb_sys_profile_readme_server_rev_v1';
     var SERVER_REV = ${readmeServerRevision};
     var knownServerRevision = Number.isFinite(Number(SERVER_REV)) && Number(SERVER_REV) >= 0 ? Math.trunc(Number(SERVER_REV)) : 0;
+    var README_SAVE_RETRY_MS = 15000;
+    var readmeSaveUnavailableUntil = 0;
     var BT = String.fromCharCode(96);
     var FENCE = BT + BT + BT;
 
@@ -956,6 +958,7 @@ export default async function PublicCavbotProfilePage({
     function persistReadmeDraft(md){
       var bodyMd = String(md || '');
       if (!bodyMd) return;
+      if (readmeSaveUnavailableUntil > Date.now()) return;
       try {
         var localServerRevRaw = Number(globalThis.__cbLocalStore.getItem(LS_SERVER_REV) || '0');
         var localServerRev = Number.isFinite(localServerRevRaw) && localServerRevRaw >= 0 ? Math.trunc(localServerRevRaw) : 0;
@@ -970,10 +973,18 @@ export default async function PublicCavbotProfilePage({
           headers: { 'Content-Type': 'application/json', 'x-cavbot-csrf': '1' },
           body: JSON.stringify(payload),
         })
-          .then(function(res){ return res.json().catch(function(){ return null; }); })
-          .then(function(data){
+          .then(function(res){
+            var status = Number(res && res.status || 0);
+            return res.json().catch(function(){ return null; }).then(function(data){
+              return { status: status, data: data };
+            });
+          })
+          .then(function(result){
+            var status = Number(result && result.status || 0);
+            var data = result && typeof result === 'object' ? result.data : null;
             if (!data || typeof data !== 'object') return;
             if (data.ok === true) {
+              readmeSaveUnavailableUntil = 0;
               var rev = Number(data.revision);
               if (Number.isFinite(rev) && rev >= 0) {
                 knownServerRevision = Math.max(knownServerRevision, Math.trunc(rev));
@@ -982,14 +993,21 @@ export default async function PublicCavbotProfilePage({
               return;
             }
             if (String(data.error || '') === 'REVISION_CONFLICT') {
+              readmeSaveUnavailableUntil = 0;
               var currentRev = Number(data.currentRevision);
               if (Number.isFinite(currentRev) && currentRev >= 0) {
                 knownServerRevision = Math.max(knownServerRevision, Math.trunc(currentRev));
                 try { globalThis.__cbLocalStore.setItem(LS_SERVER_REV, String(Math.trunc(currentRev))); } catch {}
               }
+              return;
+            }
+            if (status >= 500 || String(data.error || '') === 'README_STORAGE_UNAVAILABLE') {
+              readmeSaveUnavailableUntil = Date.now() + README_SAVE_RETRY_MS;
             }
           })
-          .catch(function(){});
+          .catch(function(){
+            readmeSaveUnavailableUntil = Date.now() + README_SAVE_RETRY_MS;
+          });
       } catch {}
     }
 

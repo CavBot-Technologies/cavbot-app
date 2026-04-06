@@ -1443,6 +1443,7 @@ const SYS_PROFILE_PATH = "/system/profile";
 const SYS_README_PATH = "/system/profile/README.md";
 const SYS_CAVEN_PATH = "/system/caven";
 const SYS_CAVEN_CONFIG_PATH = "/system/caven/config.toml";
+const PROFILE_README_SAVE_RETRY_MS = 15_000;
 
 /* =========================
   Utils
@@ -4685,10 +4686,18 @@ export default function CavCodePage() {
   });
   const sysOpenRef = useRef(false);
   const cloudOpenRef = useRef("");
-  const sysAutosaveRef = useRef<{ timer: number | null; lastSavedHash: string; lastSavedRevision: number }>({
+  const sysAutosaveRef = useRef<{
+    timer: number | null;
+    lastSavedHash: string;
+    lastSavedRevision: number;
+    unavailableUntil: number;
+    lastUnavailableMessage: string;
+  }>({
     timer: null,
     lastSavedHash: "",
     lastSavedRevision: 0,
+    unavailableUntil: 0,
+    lastUnavailableMessage: "",
   });
 
   // Monaco refs
@@ -9028,6 +9037,94 @@ export default function CavCodePage() {
     [activeFile, pushToast]
   );
 
+  const saveProfileReadmeToServer = useCallback(async (markdown: string) => {
+    const ref = sysAutosaveRef.current;
+    const now = Date.now();
+    if (ref.unavailableUntil > now) {
+      return {
+        ok: false as const,
+        kind: "retryable" as const,
+        message: ref.lastUnavailableMessage || "Profile README storage is temporarily unavailable. Try again shortly.",
+        retryAt: ref.unavailableUntil,
+      };
+    }
+
+    const expectedRevision = Math.max(0, Math.trunc(Number(ref.lastSavedRevision || 0)));
+
+    try {
+      const res = await fetch("/api/profile/readme", {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "x-cavbot-csrf": "1",
+        },
+        body: JSON.stringify({ markdown, expectedRevision }),
+      });
+      const j = (await res.json().catch(() => null)) as unknown;
+      const r = j && typeof j === "object" ? (j as Record<string, unknown>) : null;
+
+      if (r && r.ok === true) {
+        const revisionRaw = Number(r.revision);
+        const revision =
+          Number.isFinite(revisionRaw) && Number.isInteger(revisionRaw) && revisionRaw >= 0
+            ? Math.trunc(revisionRaw)
+            : expectedRevision + 1;
+        ref.unavailableUntil = 0;
+        ref.lastUnavailableMessage = "";
+        return {
+          ok: true as const,
+          revision,
+        };
+      }
+
+      if (r && r.error === "REVISION_CONFLICT") {
+        const currentRevisionRaw = Number(r.currentRevision);
+        const currentRevision =
+          Number.isFinite(currentRevisionRaw) && Number.isInteger(currentRevisionRaw) && currentRevisionRaw >= 0
+            ? Math.trunc(currentRevisionRaw)
+            : expectedRevision;
+        ref.unavailableUntil = 0;
+        ref.lastUnavailableMessage = "";
+        return {
+          ok: false as const,
+          kind: "conflict" as const,
+          currentRevision,
+        };
+      }
+
+      const message = String(r?.message || "Save failed.");
+      if (res.status >= 500 || r?.error === "README_STORAGE_UNAVAILABLE") {
+        const retryAt = Date.now() + PROFILE_README_SAVE_RETRY_MS;
+        ref.unavailableUntil = retryAt;
+        ref.lastUnavailableMessage = message;
+        return {
+          ok: false as const,
+          kind: "retryable" as const,
+          message,
+          retryAt,
+        };
+      }
+
+      return {
+        ok: false as const,
+        kind: "error" as const,
+        message,
+      };
+    } catch {
+      const retryAt = Date.now() + PROFILE_README_SAVE_RETRY_MS;
+      const message = ref.lastUnavailableMessage || "Profile README storage is temporarily unavailable. Try again shortly.";
+      ref.unavailableUntil = retryAt;
+      ref.lastUnavailableMessage = message;
+      return {
+        ok: false as const,
+        kind: "retryable" as const,
+        message,
+        retryAt,
+      };
+    }
+  }, []);
+
   const saveNow = useCallback(async () => {
     try {
       if (settings.formatOnSave) {
@@ -9043,48 +9140,25 @@ export default function CavCodePage() {
         pushToast("README too large (max 64KB).", "bad");
         return;
       }
-      try {
-        const expectedRevision = Math.max(0, Math.trunc(Number(sysAutosaveRef.current.lastSavedRevision || 0)));
-        const res = await fetch("/api/profile/readme", {
-          method: "PUT",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            "x-cavbot-csrf": "1",
-          },
-          body: JSON.stringify({ markdown: md, expectedRevision }),
-        });
-        const j = (await res.json().catch(() => null)) as unknown;
-        const r = j && typeof j === "object" ? (j as Record<string, unknown>) : null;
-        if (r && r.ok === true) {
-          const revisionRaw = Number(r.revision);
-          const revision =
-            Number.isFinite(revisionRaw) && Number.isInteger(revisionRaw) && revisionRaw >= 0
-              ? Math.trunc(revisionRaw)
-              : expectedRevision + 1;
-          sysAutosaveRef.current.lastSavedHash = hashString(md);
-          sysAutosaveRef.current.lastSavedRevision = revision;
-          setSysProfileReadme({ markdown: md, loaded: true, revision });
-          publishSysProfileReadme(md, revision);
-          if (activeFile?.id) {
-            markFileSaved(activeFile.id, md);
-          }
-          pushToast("Saved.", "good");
-        } else if (r && r.error === "REVISION_CONFLICT") {
-          const currentRevisionRaw = Number(r.currentRevision);
-          const currentRevision =
-            Number.isFinite(currentRevisionRaw) && Number.isInteger(currentRevisionRaw) && currentRevisionRaw >= 0
-              ? Math.trunc(currentRevisionRaw)
-              : expectedRevision;
-          sysAutosaveRef.current.lastSavedRevision = currentRevision;
-          setSysProfileReadme({ markdown: md, loaded: true, revision: currentRevision });
-          publishSysProfileReadme(md, currentRevision);
-          pushToast("README changed in another tab. Save again to apply your latest edit.", "watch");
-        } else {
-          pushToast(String(r?.message || "Save failed."), "bad");
+      const result = await saveProfileReadmeToServer(md);
+      if (result.ok) {
+        sysAutosaveRef.current.lastSavedHash = hashString(md);
+        sysAutosaveRef.current.lastSavedRevision = result.revision;
+        setSysProfileReadme({ markdown: md, loaded: true, revision: result.revision });
+        publishSysProfileReadme(md, result.revision);
+        if (activeFile?.id) {
+          markFileSaved(activeFile.id, md);
         }
-      } catch {
-        pushToast("Save failed.", "bad");
+        pushToast("Saved.", "good");
+      } else if (result.kind === "conflict") {
+        sysAutosaveRef.current.lastSavedRevision = result.currentRevision;
+        setSysProfileReadme({ markdown: md, loaded: true, revision: result.currentRevision });
+        publishSysProfileReadme(md, result.currentRevision);
+        pushToast("README changed in another tab. Save again to apply your latest edit.", "watch");
+      } else if (result.kind === "retryable") {
+        pushToast(result.message, "watch");
+      } else {
+        pushToast(result.message, "bad");
       }
       return;
     }
@@ -9142,6 +9216,7 @@ export default function CavCodePage() {
     setSysProfileReadme,
     markFileSaved,
     saveCodebaseFileToServer,
+    saveProfileReadmeToServer,
     syncCodebaseFsFromServer,
   ]);
 
@@ -9160,56 +9235,59 @@ export default function CavCodePage() {
 
     const ref = sysAutosaveRef.current;
     if (ref.timer) window.clearTimeout(ref.timer);
-    ref.timer = window.setTimeout(async () => {
-      // Timer fired; clear only if it is still ours.
-      if (ref.timer) ref.timer = null;
-      // Recheck latest
+    let cancelled = false;
+
+    const attemptSave = async () => {
+      if (cancelled) return;
+      ref.timer = null;
+
       const latest = findNodeByPath(fs, SYS_README_PATH);
       if (!latest || !isFile(latest)) return;
       const latestMd = String(latest.content ?? "");
       const latestHash = hashString(latestMd);
       if (latestHash === ref.lastSavedHash) return;
-      if (Buffer.byteLength(latestMd, "utf8") > 64 * 1024) return; // don't spam API; user will see size error on hard save
+      if (Buffer.byteLength(latestMd, "utf8") > 64 * 1024) return;
 
-      try {
-        const expectedRevision = Math.max(0, Math.trunc(Number(ref.lastSavedRevision || 0)));
-        const res = await fetch("/api/profile/readme", {
-          method: "PUT",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            "x-cavbot-csrf": "1",
-          },
-          body: JSON.stringify({ markdown: latestMd, expectedRevision }),
-        });
-        const j = (await res.json().catch(() => null)) as unknown;
-        const r = j && typeof j === "object" ? (j as Record<string, unknown>) : null;
-        if (r && r.ok === true) {
-          const revisionRaw = Number(r.revision);
-          const revision =
-            Number.isFinite(revisionRaw) && Number.isInteger(revisionRaw) && revisionRaw >= 0
-              ? Math.trunc(revisionRaw)
-              : expectedRevision + 1;
-          ref.lastSavedHash = latestHash;
-          ref.lastSavedRevision = revision;
-          setSysProfileReadme({ markdown: latestMd, loaded: true, revision });
-          publishSysProfileReadme(latestMd, revision);
-          markFileSaved(latest.id, latestMd);
-        } else if (r && r.error === "REVISION_CONFLICT") {
-          const currentRevisionRaw = Number(r.currentRevision);
-          if (Number.isFinite(currentRevisionRaw) && Number.isInteger(currentRevisionRaw) && currentRevisionRaw >= 0) {
-            ref.lastSavedRevision = Math.trunc(currentRevisionRaw);
-          }
-        }
-      } catch {}
-    }, 650);
-    const timerId = ref.timer;
+      const result = await saveProfileReadmeToServer(latestMd);
+      if (cancelled) return;
+
+      if (result.ok) {
+        ref.lastSavedHash = latestHash;
+        ref.lastSavedRevision = result.revision;
+        setSysProfileReadme({ markdown: latestMd, loaded: true, revision: result.revision });
+        publishSysProfileReadme(latestMd, result.revision);
+        markFileSaved(latest.id, latestMd);
+        return;
+      }
+
+      if (result.kind === "conflict") {
+        ref.lastSavedRevision = result.currentRevision;
+        return;
+      }
+
+      if (result.kind === "retryable") {
+        const delay = Math.max(1000, result.retryAt - Date.now());
+        ref.timer = window.setTimeout(() => {
+          void attemptSave();
+        }, delay);
+      }
+    };
+
+    const initialDelay = ref.unavailableUntil > Date.now()
+      ? Math.max(650, ref.unavailableUntil - Date.now())
+      : 650;
+    ref.timer = window.setTimeout(() => {
+      void attemptSave();
+    }, initialDelay);
 
     return () => {
-      if (timerId) window.clearTimeout(timerId);
-      if (ref.timer === timerId) ref.timer = null;
+      cancelled = true;
+      if (ref.timer) {
+        window.clearTimeout(ref.timer);
+        ref.timer = null;
+      }
     };
-  }, [activeFile, markFileSaved, settings.autosave, fs]);
+  }, [activeFile, markFileSaved, saveProfileReadmeToServer, settings.autosave, fs]);
 
   /* =========================
     Editor content updates (autosave)
