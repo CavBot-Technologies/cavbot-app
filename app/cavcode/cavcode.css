@@ -3125,8 +3125,8 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  border: 1px solid rgba(255,255,255,.08);
-  background: rgba(255,255,255,.03);
+  border: 0;
+  background: transparent;
   color: rgba(234,240,255,.88);
   padding: 0;
   display: inline-flex;
@@ -3140,27 +3140,14 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-agentCreateColorBtn:hover,
 .cc-agentCreateColorBtn:focus-visible,
 .cc-agentCreateColorBtn.is-open{
-  color: rgba(157,204,255,.99);
   border-color: transparent;
-  background: rgba(78,168,255,.06);
-  transform: translateY(-1px);
+  background: transparent;
 }
 
 .cc-agentCreateColorBtnGlyph{
   width: 15px;
   height: 15px;
   display: block;
-}
-
-.cc-agentCreateColorBtnDot{
-  position: absolute;
-  right: 5px;
-  bottom: 5px;
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.42);
-  box-shadow: 0 0 0 1px rgba(3,6,22,.55);
 }
 
 .cc-agentCreateColorMenu{

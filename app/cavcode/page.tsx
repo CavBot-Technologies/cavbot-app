@@ -14627,11 +14627,6 @@ export default function CavCodePage() {
                                       />
                                       <circle cx="10" cy="10" r="2.2" fill="#F8FBFF" />
                                     </svg>
-                                    <span
-                                      className="cc-agentCreateColorBtnDot"
-                                      aria-hidden="true"
-                                      style={{ background: createAgentIconBackground || DEFAULT_CUSTOM_AGENT_ICON_BACKGROUND }}
-                                    />
                                   </button>
                                   {createAgentColorMenuOpen ? (
                                     <div className="cc-agentCreateColorMenu" role="dialog" aria-label="Agent icon color">
