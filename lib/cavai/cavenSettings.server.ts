@@ -11,6 +11,11 @@ import {
   listActiveInstalledBuiltInAgentIds,
   updateBuiltInInstallState,
 } from "@/lib/cavai/agentRegistry.server";
+import {
+  listPublishedOperatorAgents,
+  listPublishedOperatorAgentIds,
+  syncOperatorAgentPublicationState,
+} from "@/lib/cavai/operatorAgents.server";
 
 import { prisma } from "@/lib/prisma";
 
@@ -34,6 +39,13 @@ const THEME_OPTIONS = [
   "cavbot-lime",
   "cavbot-classic",
   "cavbot-dark",
+  "cavbot-cobalt",
+  "cavbot-ember",
+  "cavbot-obsidian",
+  "cavbot-mocha",
+  "cavbot-graphite",
+  "cavbot-nord",
+  "cavbot-dawn",
 ] as const;
 const MIN_FONT_SIZE = 8;
 const MAX_FONT_SIZE = 40;
@@ -78,6 +90,8 @@ export type CavenCustomAgent = {
   iconSvg: string;
   iconBackground: string | null;
   createdAt: string;
+  publicationRequested: boolean;
+  publicationRequestedAt: string | null;
 };
 
 export type CavenSettings = {
@@ -261,23 +275,26 @@ function pickInstalledAgentIds(
   value: unknown,
   fallback: readonly string[],
   customAgentIdSet?: ReadonlySet<string>,
-  planId?: PlanId
+  planId?: PlanId,
+  publishedAgentIdSet?: ReadonlySet<string>
 ): string[] {
   const parsed = parseInstalledAgentIdList(value);
   if (!parsed.length) return [...fallback];
 
   const customIds = customAgentIdSet || new Set<string>();
+  const publishedIds = publishedAgentIdSet || new Set<string>();
   const rows: string[] = [];
   for (const id of parsed) {
-    if (!CAVEN_AGENT_ID_SET.has(id) && !customIds.has(id)) continue;
+    if (!CAVEN_AGENT_ID_SET.has(id) && !customIds.has(id) && !publishedIds.has(id)) continue;
     if (CAVEN_AGENT_ID_SET.has(id) && planId && !isAgentPlanEligible(id, planId)) continue;
     rows.push(id);
   }
   if (!rows.length) return [...fallback];
 
   const builtInOrdered = CAVEN_AGENT_IDS.filter((id) => rows.includes(id));
-  const customOrdered = rows.filter((id) => !CAVEN_AGENT_ID_SET.has(id));
-  return [...builtInOrdered, ...customOrdered];
+  const customOrdered = rows.filter((id) => !CAVEN_AGENT_ID_SET.has(id) && customIds.has(id));
+  const publishedOrdered = rows.filter((id) => !CAVEN_AGENT_ID_SET.has(id) && !customIds.has(id) && publishedIds.has(id));
+  return [...builtInOrdered, ...customOrdered, ...publishedOrdered];
 }
 
 function pickAgentSurface(value: unknown): CavenAgentSurface {
@@ -359,6 +376,10 @@ function normalizeCustomAgents(value: unknown): CavenCustomAgent[] {
       iconSvg,
       iconBackground,
       createdAt,
+      publicationRequested: row.publicationRequested === true,
+      publicationRequestedAt: row.publicationRequested === true
+        ? (Number.isFinite(Date.parse(s(row.publicationRequestedAt))) ? new Date(s(row.publicationRequestedAt)).toISOString() : createdAt)
+        : null,
     });
     seen.add(id);
 
@@ -368,7 +389,11 @@ function normalizeCustomAgents(value: unknown): CavenCustomAgent[] {
   return rows;
 }
 
-function normalizeSettings(row: RawCavenSettingsRow | null | undefined, planId?: PlanId): CavenSettings {
+function normalizeSettings(
+  row: RawCavenSettingsRow | null | undefined,
+  planId?: PlanId,
+  publishedAgentIdSet?: ReadonlySet<string>
+): CavenSettings {
   const safe = row || {};
   const editorSettings = normalizeEditorSettings(safe.editorSettings, DEFAULT_CAVEN_SETTINGS.editorSettings);
   const terminalState = normalizeTerminalState(safe.terminalState, DEFAULT_CAVEN_SETTINGS.terminalState);
@@ -378,7 +403,8 @@ function normalizeSettings(row: RawCavenSettingsRow | null | undefined, planId?:
     safe.installedAgentIds,
     DEFAULT_CAVEN_SETTINGS.installedAgentIds,
     customAgentIdSet,
-    planId
+    planId,
+    publishedAgentIdSet
   );
   const asrAudioSkillEnabled = pickBool(
     safe.asrAudioSkillEnabled,
@@ -699,8 +725,15 @@ export async function getCavenSettings(args: {
   const userId = s(args.userId);
   if (!accountId || !userId) return { ...DEFAULT_CAVEN_SETTINGS };
   await ensureSettingsRow(accountId, userId);
+  let publishedAgentIds: string[] = [];
+  try {
+    publishedAgentIds = await listPublishedOperatorAgentIds();
+  } catch (error) {
+    console.error("[cavenSettings] listPublishedOperatorAgentIds failed, using settings fallback", error);
+  }
+  const publishedAgentIdSet = new Set<string>(publishedAgentIds);
   const row = await readSettingsRow(accountId, userId);
-  const normalized = normalizeSettings(row, args.planId);
+  const normalized = normalizeSettings(row, args.planId, publishedAgentIdSet);
   let activeBuiltInIds = fallbackBuiltInInstalledIds(normalized.installedAgentIds, args.planId);
   try {
     activeBuiltInIds = await listActiveInstalledBuiltInAgentIds({
@@ -714,11 +747,13 @@ export async function getCavenSettings(args: {
   }
   const customIdSet = new Set<string>(normalized.customAgents.map((agent) => agent.id));
   const customInstalled = normalized.installedAgentIds.filter((id) => customIdSet.has(id));
+  const publishedInstalled = normalized.installedAgentIds.filter((id) => publishedAgentIdSet.has(id));
   const installedAgentIds = pickInstalledAgentIds(
-    [...activeBuiltInIds, ...customInstalled],
+    [...activeBuiltInIds, ...customInstalled, ...publishedInstalled],
     [],
     customIdSet,
-    args.planId
+    args.planId,
+    publishedAgentIdSet
   );
   return {
     ...normalized,
@@ -738,7 +773,14 @@ export async function updateCavenSettings(args: {
   if (!accountId || !userId) return { ...DEFAULT_CAVEN_SETTINGS };
 
   await ensureSettingsRow(accountId, userId);
-  const current = normalizeSettings(await readSettingsRow(accountId, userId), args.planId);
+  let publishedAgentIds: string[] = [];
+  try {
+    publishedAgentIds = await listPublishedOperatorAgentIds();
+  } catch (error) {
+    console.error("[cavenSettings] listPublishedOperatorAgentIds failed, using current settings fallback", error);
+  }
+  const publishedAgentIdSet = new Set<string>(publishedAgentIds);
+  const current = normalizeSettings(await readSettingsRow(accountId, userId), args.planId, publishedAgentIdSet);
 
   const customAgentsPatch = patch.customAgents !== undefined ? normalizeCustomAgents(patch.customAgents) : undefined;
   const effectiveCustomAgents = customAgentsPatch ?? current.customAgents;
@@ -746,7 +788,7 @@ export async function updateCavenSettings(args: {
 
   let installedAgentIdsPatch =
     patch.installedAgentIds !== undefined
-      ? pickInstalledAgentIds(patch.installedAgentIds, [], customAgentIdSet, args.planId)
+      ? pickInstalledAgentIds(patch.installedAgentIds, [], customAgentIdSet, args.planId, publishedAgentIdSet)
       : undefined;
   const asrAudioSkillEnabledPatch = patch.asrAudioSkillEnabled;
 
@@ -755,7 +797,8 @@ export async function updateCavenSettings(args: {
       current.installedAgentIds,
       current.installedAgentIds,
       customAgentIdSet,
-      args.planId
+      args.planId,
+      publishedAgentIdSet
     );
   }
   const requestedInstalledAgentIds = installedAgentIdsPatch ?? current.installedAgentIds;
@@ -788,10 +831,11 @@ export async function updateCavenSettings(args: {
     }
   }
   const finalInstalledAgentIds = pickInstalledAgentIds(
-    [...activeBuiltInInstalledIds, ...requestedCustomInstallIds],
+    [...activeBuiltInInstalledIds, ...requestedCustomInstallIds, ...requestedInstalledAgentIds.filter((id) => publishedAgentIdSet.has(id))],
     [],
     customAgentIdSet,
-    args.planId
+    args.planId,
+    publishedAgentIdSet
   );
 
   const assignments: Prisma.Sql[] = [];
@@ -848,7 +892,7 @@ export async function updateCavenSettings(args: {
   }
 
   const next = await readSettingsRow(accountId, userId);
-  const normalizedRaw = normalizeSettings(next, args.planId);
+  const normalizedRaw = normalizeSettings(next, args.planId, publishedAgentIdSet);
   let activeBuiltIns = fallbackBuiltInInstalledIds(normalizedRaw.installedAgentIds, args.planId);
   try {
     activeBuiltIns = await listActiveInstalledBuiltInAgentIds({
@@ -862,15 +906,28 @@ export async function updateCavenSettings(args: {
   }
   const normalizedCustomIdSet = new Set<string>(normalizedRaw.customAgents.map((agent) => agent.id));
   const normalizedCustomInstalled = normalizedRaw.installedAgentIds.filter((id) => normalizedCustomIdSet.has(id));
+  const normalizedPublishedInstalled = normalizedRaw.installedAgentIds.filter((id) => publishedAgentIdSet.has(id));
   const normalized: CavenSettings = {
     ...normalizedRaw,
     installedAgentIds: pickInstalledAgentIds(
-      [...activeBuiltIns, ...normalizedCustomInstalled],
+      [...activeBuiltIns, ...normalizedCustomInstalled, ...normalizedPublishedInstalled],
       [],
       normalizedCustomIdSet,
-      args.planId
+      args.planId,
+      publishedAgentIdSet
     ),
   };
+  if (customAgentsPatch !== undefined) {
+    try {
+      await syncOperatorAgentPublicationState({
+        accountId,
+        userId,
+        agents: normalized.customAgents,
+      });
+    } catch (error) {
+      console.error("[cavenSettings] syncOperatorAgentPublicationState failed", error);
+    }
+  }
   try {
     await syncAgentInstallState({
       accountId,
@@ -921,6 +978,38 @@ export async function resolveInstalledCavenCustomAgent(args: {
     const actionMatches = requestedActionKey && actionKey && actionKey === requestedActionKey;
     if (!idMatches && !actionMatches) continue;
     return agent;
+  }
+
+  try {
+    const publishedAgents = await listPublishedOperatorAgents({
+      surface: runtimeSurface,
+      limit: 240,
+    });
+
+    for (const agent of publishedAgents) {
+      const id = s(agent.id).toLowerCase();
+      const actionKey = s(agent.actionKey).toLowerCase();
+      if (!id || !installedIdSet.has(id)) continue;
+      const idMatches = requestedAgentId && id === requestedAgentId;
+      const actionMatches = requestedActionKey && actionKey && actionKey === requestedActionKey;
+      if (!idMatches && !actionMatches) continue;
+      return {
+        id,
+        name: agent.name,
+        summary: agent.summary,
+        actionKey,
+        surface: agent.surface,
+        triggers: Array.isArray(agent.triggers) ? agent.triggers.map((trigger) => s(trigger)).filter(Boolean).slice(0, MAX_AGENT_TRIGGERS) : [],
+        instructions: s(agent.instructions),
+        iconSvg: s(agent.iconSvg),
+        iconBackground: agent.iconBackground,
+        createdAt: s(agent.publishedAt) || s(agent.updatedAt) || new Date().toISOString(),
+        publicationRequested: false,
+        publicationRequestedAt: null,
+      };
+    }
+  } catch (error) {
+    console.error("[cavenSettings] resolveInstalledCavenCustomAgent published lookup failed", error);
   }
 
   return null;

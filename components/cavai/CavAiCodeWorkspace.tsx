@@ -257,6 +257,15 @@ type CavenRuntimeCustomAgent = {
   triggers: string[];
 };
 
+type PublishedRuntimeAgent = {
+  id: string;
+  name: string;
+  summary: string;
+  actionKey: string;
+  surface: "cavcode" | "center" | "all";
+  triggers: string[];
+};
+
 type CavenRuntimeAgentRef = {
   agentId: string;
   agentActionKey: string;
@@ -557,6 +566,37 @@ function normalizeRuntimeCustomAgents(value: unknown): CavenRuntimeCustomAgent[]
   return rows;
 }
 
+function normalizePublishedRuntimeAgents(value: unknown): PublishedRuntimeAgent[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const rows: PublishedRuntimeAgent[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const row = entry as Record<string, unknown>;
+    const id = s(row.id).toLowerCase();
+    const actionKey = s(row.actionKey).toLowerCase();
+    if (!id || !actionKey || !CAVEN_AGENT_ID_RE.test(id) || !CAVEN_AGENT_ACTION_KEY_RE.test(actionKey) || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    const triggersRaw = Array.isArray(row.triggers) ? row.triggers : [];
+    const triggers = triggersRaw
+      .map((item) => s(item))
+      .filter(Boolean)
+      .slice(0, 12);
+    rows.push({
+      id,
+      name: s(row.name),
+      summary: s(row.summary),
+      actionKey,
+      surface: normalizeRuntimeAgentSurface(row.surface),
+      triggers,
+    });
+    if (rows.length >= 240) break;
+  }
+  return rows;
+}
+
 function normalizeAgentRef(args: {
   agentId?: unknown;
   agentActionKey?: unknown;
@@ -568,7 +608,10 @@ function normalizeAgentRef(args: {
   return { agentId, agentActionKey };
 }
 
-function scorePromptForCustomAgent(promptLower: string, agent: CavenRuntimeCustomAgent): number {
+function scorePromptForCustomAgent(
+  promptLower: string,
+  agent: Pick<CavenRuntimeCustomAgent, "actionKey" | "name" | "triggers">
+): number {
   let score = 0;
   const actionNeedle = agent.actionKey.replace(/_/g, " ");
   const nameNeedle = s(agent.name).toLowerCase();
@@ -588,15 +631,16 @@ function resolvePromptCustomAgentRef(args: {
   requestedAction: CavCodeAssistAction;
   installedAgentIds: string[];
   customAgents: CavenRuntimeCustomAgent[];
+  publishedAgents?: PublishedRuntimeAgent[];
 }): CavenRuntimeAgentRef | null {
   const installedSet = new Set(args.installedAgentIds.map((id) => s(id).toLowerCase()));
-  const eligible = args.customAgents.filter(
+  const eligible = [...args.customAgents, ...(args.publishedAgents || [])].filter(
     (agent) => installedSet.has(agent.id) && (agent.surface === "all" || agent.surface === "cavcode")
   );
   if (!eligible.length) return null;
 
   const promptLower = s(args.prompt).toLowerCase();
-  let best: CavenRuntimeCustomAgent | null = null;
+  let best: CavenRuntimeCustomAgent | PublishedRuntimeAgent | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
 
   for (const agent of eligible) {
@@ -1553,7 +1597,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   const [qwenPopoverOpen, setQwenPopoverOpen] = useState(false);
   const [qwenPopoverPinned, setQwenPopoverPinned] = useState(false);
   const [queueEnabled, setQueueEnabled] = useState(false);
-  const [badgeTone, setBadgeTone] = useState<BadgeTone>("default");
+  const [, setBadgeTone] = useState<BadgeTone>("default");
   const [openComposerMenu, setOpenComposerMenu] = useState<ComposerMenu>(null);
   const [promptFocused, setPromptFocused] = useState(false);
   const [transcribingAudio, setTranscribingAudio] = useState(false);
@@ -1571,6 +1615,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   const [cavenSettings, setCavenSettings] = useState<CavenWorkspaceSettings>(CAVEN_DEFAULT_SETTINGS);
   const [installedAgentIds, setInstalledAgentIds] = useState<string[]>([]);
   const [customAgents, setCustomAgents] = useState<CavenRuntimeCustomAgent[]>([]);
+  const [publishedAgents, setPublishedAgents] = useState<PublishedRuntimeAgent[]>([]);
   const [savingCavenSettingsKey, setSavingCavenSettingsKey] = useState("");
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [settingsDropdownSections, setSettingsDropdownSections] = useState<Record<CavenSettingsDropdownSection, boolean>>({
@@ -1921,7 +1966,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     track(event, payload);
   }, [cavenSettings.telemetryOptIn]);
 
-  const applyLoadedSettings = useCallback((value: unknown) => {
+  const applyLoadedSettings = useCallback((value: unknown, publishedValue?: unknown) => {
     const next = toCavenWorkspaceSettings(value);
     const raw = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
     setCavenSettings(next);
@@ -1930,6 +1975,9 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     }
     if ("customAgents" in raw) {
       setCustomAgents(normalizeRuntimeCustomAgents(raw.customAgents));
+    }
+    if (publishedValue !== undefined) {
+      setPublishedAgents(normalizePublishedRuntimeAgents(publishedValue));
     }
     if (!sessionId) {
       setQueueEnabled(next.queueFollowUps);
@@ -1948,16 +1996,16 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
         credentials: "include",
         cache: "no-store",
       });
-      const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ settings?: unknown }>;
+      const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ settings?: unknown; publishedAgents?: unknown }>;
       if (!res.ok || !body.ok) {
         emitGuardDecisionFromPayload(body);
-        applyLoadedSettings(CAVEN_DEFAULT_SETTINGS);
+        applyLoadedSettings(CAVEN_DEFAULT_SETTINGS, []);
         return;
       }
-      applyLoadedSettings(body.settings || CAVEN_DEFAULT_SETTINGS);
+      applyLoadedSettings(body.settings || CAVEN_DEFAULT_SETTINGS, body.publishedAgents);
     } catch (err) {
       console.warn("[caven] settings load failed, using defaults", err);
-      applyLoadedSettings(CAVEN_DEFAULT_SETTINGS);
+      applyLoadedSettings(CAVEN_DEFAULT_SETTINGS, []);
     }
   }, [applyLoadedSettings]);
 
@@ -1980,12 +2028,12 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
           },
           body: JSON.stringify(patch),
         });
-        const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ settings?: unknown }>;
+        const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ settings?: unknown; publishedAgents?: unknown }>;
         if (!res.ok || !body.ok) {
           emitGuardDecisionFromPayload(body);
           throw new Error(s((body as { message?: unknown }).message) || "Failed to update Caven settings.");
         }
-        applyLoadedSettings(body.settings);
+        applyLoadedSettings(body.settings, body.publishedAgents);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to update Caven settings.");
         void loadCavenSettings();
@@ -2712,6 +2760,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       requestedAction: action,
       installedAgentIds,
       customAgents,
+      publishedAgents,
     });
     let resolvedSessionId = s(options?.sessionId) || s(sessionId);
     if (!resolvedSessionId) {
@@ -2894,6 +2943,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     projectId,
     props.projectRootName,
     props.projectRootPath,
+    publishedAgents,
     queueEnabled,
     loadQwenPopoverState,
     ensureActiveSessionId,
@@ -3279,6 +3329,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       requestedAction: inferredAction,
       installedAgentIds,
       customAgents,
+      publishedAgents,
     });
 
     let targetSessionId = s(sessionId);
@@ -3408,6 +3459,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     projectId,
     props.projectRootName,
     props.projectRootPath,
+    publishedAgents,
     queueEnabled,
     ensureActiveSessionId,
     resolveSelectedCode,

@@ -274,6 +274,27 @@ type CustomCavenAgentRecord = {
   iconSvg: string;
   iconBackground: string | null;
   createdAt: string;
+  publicationRequested: boolean;
+  publicationRequestedAt: string | null;
+};
+
+type PublishedOperatorAgentRecord = {
+  id: string;
+  sourceAgentId: string;
+  sourceUserId: string;
+  sourceAccountId: string;
+  ownerName: string;
+  ownerUsername: string | null;
+  name: string;
+  summary: string;
+  actionKey: string;
+  surface: "cavcode" | "center" | "all";
+  triggers: string[];
+  instructions: string;
+  iconSvg: string;
+  iconBackground: string | null;
+  publishedAt: string;
+  updatedAt: string;
 };
 
 type AgentBuilderAiMode = "help_write" | "generate_agent";
@@ -2449,6 +2470,12 @@ function normalizeCustomAgentsFromUnknown(
     const iconSvg = normalizeAgentIconSvgFromUnknown(row.iconSvg);
     const iconBackground = normalizeAgentColorHexFromUnknown(row.iconBackground) || null;
     const createdAt = String(row.createdAt || "").trim() || new Date().toISOString();
+    const publicationRequested = row.publicationRequested === true;
+    const publicationRequestedAt = publicationRequested
+      ? (Number.isFinite(Date.parse(String(row.publicationRequestedAt || "").trim()))
+        ? new Date(String(row.publicationRequestedAt || "").trim()).toISOString()
+        : createdAt)
+      : null;
     rows.push({
       id,
       name,
@@ -2460,6 +2487,76 @@ function normalizeCustomAgentsFromUnknown(
       iconSvg,
       iconBackground,
       createdAt,
+      publicationRequested,
+      publicationRequestedAt,
+    });
+    seen.add(id);
+  }
+  return rows;
+}
+
+function normalizePublishedOperatorAgentsFromUnknown(value: unknown): PublishedOperatorAgentRecord[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const rows: PublishedOperatorAgentRecord[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const row = raw as Record<string, unknown>;
+    const id = String(row.id || "").trim().toLowerCase();
+    const sourceAgentId = String(row.sourceAgentId || "").trim().toLowerCase();
+    const sourceUserId = String(row.sourceUserId || "").trim();
+    const sourceAccountId = String(row.sourceAccountId || "").trim();
+    const name = String(row.name || "").trim().replace(/\s+/g, " ");
+    const summary = String(row.summary || "").trim().replace(/\s+/g, " ");
+    const instructions = String(row.instructions || "").trim();
+    const actionKey = String(row.actionKey || "").trim().toLowerCase();
+    if (
+      !id
+      || !sourceAgentId
+      || !sourceUserId
+      || !sourceAccountId
+      || !name
+      || !summary
+      || !instructions
+      || !actionKey
+      || seen.has(id)
+      || !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(id)
+      || !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(sourceAgentId)
+      || !/^[a-z0-9][a-z0-9_]{1,63}$/.test(actionKey)
+    ) {
+      continue;
+    }
+    const surface = row.surface === "center" ? "center" : row.surface === "cavcode" ? "cavcode" : "all";
+    const triggers = Array.isArray(row.triggers)
+      ? row.triggers.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 12)
+      : [];
+    const iconSvg = normalizeAgentIconSvgFromUnknown(row.iconSvg);
+    const iconBackground = normalizeAgentColorHexFromUnknown(row.iconBackground) || null;
+    const publishedAtRaw = String(row.publishedAt || "").trim();
+    const updatedAtRaw = String(row.updatedAt || "").trim();
+    const publishedAt = Number.isFinite(Date.parse(publishedAtRaw))
+      ? new Date(publishedAtRaw).toISOString()
+      : new Date().toISOString();
+    const updatedAt = Number.isFinite(Date.parse(updatedAtRaw))
+      ? new Date(updatedAtRaw).toISOString()
+      : publishedAt;
+    rows.push({
+      id,
+      sourceAgentId,
+      sourceUserId,
+      sourceAccountId,
+      ownerName: String(row.ownerName || "").trim() || "Operator",
+      ownerUsername: String(row.ownerUsername || "").trim() || null,
+      name,
+      summary,
+      actionKey,
+      surface,
+      triggers,
+      instructions,
+      iconSvg,
+      iconBackground,
+      publishedAt,
+      updatedAt,
     });
     seen.add(id);
   }
@@ -2487,6 +2584,19 @@ function buildCavenConfigToml(settings: CavenIdeSettings): string {
 }
 
 function customAgentToCard(record: CustomCavenAgentRecord): IdeAgentCard {
+  return {
+    id: record.id,
+    name: record.name,
+    summary: record.summary,
+    iconSrc: svgToDataUri(record.iconSvg),
+    iconBackground: record.iconBackground,
+    actionKey: record.actionKey,
+    surface: record.surface,
+    defaultInstalled: false,
+  };
+}
+
+function publishedOperatorAgentToCard(record: PublishedOperatorAgentRecord): IdeAgentCard {
   return {
     id: record.id,
     name: record.name,
@@ -2554,7 +2664,6 @@ const SYS_PROFILE_PATH = "/system/profile";
 const SYS_README_PATH = "/system/profile/README.md";
 const SYS_CAVEN_PATH = "/system/caven";
 const SYS_CAVEN_CONFIG_PATH = "/system/caven/config.toml";
-const PROFILE_README_SAVE_RETRY_MS = 15_000;
 
 /* =========================
   Utils
@@ -5636,6 +5745,8 @@ export default function CavCodePage() {
   const [createAgentTriggers, setCreateAgentTriggers] = useState("");
   const [createAgentInstructions, setCreateAgentInstructions] = useState("");
   const [createAgentSurface, setCreateAgentSurface] = useState<"cavcode" | "center" | "all">("all");
+  const [createAgentPublicationRequested, setCreateAgentPublicationRequested] = useState(false);
+  const [createAgentPublicationInfoOpen, setCreateAgentPublicationInfoOpen] = useState(false);
   const [createAgentIconSvg, setCreateAgentIconSvg] = useState("");
   const [createAgentIconBackground, setCreateAgentIconBackground] = useState("");
   const [createAgentIconPalette, setCreateAgentIconPalette] = useState<string[]>([]);
@@ -5671,6 +5782,7 @@ export default function CavCodePage() {
   const [agentRegistrySnapshot, setAgentRegistrySnapshot] = useState<AgentRegistrySnapshot>({
     ...EMPTY_AGENT_REGISTRY_SNAPSHOT,
   });
+  const [publishedAgents, setPublishedAgents] = useState<PublishedOperatorAgentRecord[]>([]);
   const agentRegistrySnapshotRef = useRef<AgentRegistrySnapshot>({
     ...EMPTY_AGENT_REGISTRY_SNAPSHOT,
   });
@@ -5861,18 +5973,10 @@ export default function CavCodePage() {
   });
   const sysOpenRef = useRef(false);
   const cloudOpenRef = useRef("");
-  const sysAutosaveRef = useRef<{
-    timer: number | null;
-    lastSavedHash: string;
-    lastSavedRevision: number;
-    unavailableUntil: number;
-    lastUnavailableMessage: string;
-  }>({
+  const sysAutosaveRef = useRef<{ timer: number | null; lastSavedHash: string; lastSavedRevision: number }>({
     timer: null,
     lastSavedHash: "",
     lastSavedRevision: 0,
-    unavailableUntil: 0,
-    lastUnavailableMessage: "",
   });
 
   // Monaco refs
@@ -6592,6 +6696,7 @@ export default function CavCodePage() {
     return () => window.clearTimeout(timer);
   }, [activeKeyboardShortcutsTab]);
   const customAgentIdSet = useMemo(() => new Set(customAgents.map((agent) => agent.id)), [customAgents]);
+  const publishedAgentIdSet = useMemo(() => new Set(publishedAgents.map((agent) => agent.id)), [publishedAgents]);
   const installedAgentSet = useMemo(() => new Set(installedAgentIds), [installedAgentIds]);
   const builtInRegistryCards = useMemo(
     () => flattenBuiltInRegistryCards(agentRegistrySnapshot),
@@ -6613,6 +6718,10 @@ export default function CavCodePage() {
     return map;
   }, [builtInRegistryCards]);
   const customAgentCards = useMemo(() => customAgents.map((agent) => customAgentToCard(agent)), [customAgents]);
+  const publishedAgentCards = useMemo(
+    () => publishedAgents.map((agent) => publishedOperatorAgentToCard(agent)),
+    [publishedAgents]
+  );
   const normalizedAgentSearchQuery = useMemo(
     () => agentsSearchQuery.trim().toLowerCase(),
     [agentsSearchQuery]
@@ -6625,6 +6734,10 @@ export default function CavCodePage() {
   const visibleCustomAgents = useMemo(
     () => customAgentCards.filter((agent) => matchesAgentQuery(agent)),
     [customAgentCards, matchesAgentQuery]
+  );
+  const visiblePublishedAgents = useMemo(
+    () => publishedAgentCards.filter((agent) => (agent.surface === "all" || agent.surface === "cavcode") && matchesAgentQuery(agent)),
+    [matchesAgentQuery, publishedAgentCards]
   );
   const cavenNativeUnlockedCards = useMemo(() => {
     const seen = new Set<string>();
@@ -6697,6 +6810,7 @@ export default function CavCodePage() {
     settings: Record<string, unknown>;
     fallbackInstalled: string[];
     agentRegistry?: unknown;
+    publishedAgents?: unknown;
     planId?: unknown;
   }) => {
     const nextRegistrySnapshot = args.agentRegistry !== undefined
@@ -6711,16 +6825,19 @@ export default function CavCodePage() {
     const nextBuiltInIds = flattenBuiltInRegistryCards(nextRegistrySnapshot).map((card) => card.id);
     const nextBuiltInIdSet = new Set(nextBuiltInIds);
     const nextCustomAgents = normalizeCustomAgentsFromUnknown(args.settings.customAgents, nextBuiltInIdSet);
+    const nextPublishedAgents = normalizePublishedOperatorAgentsFromUnknown(args.publishedAgents);
     const customIdSet = new Set(nextCustomAgents.map((agent) => agent.id));
+    const publishedIdSet = new Set(nextPublishedAgents.map((agent) => agent.id));
     const normalizedInstalled = normalizeInstalledAgentIdsFromUnknown(
       args.settings.installedAgentIds,
       args.fallbackInstalled,
-      customIdSet,
+      new Set([...customIdSet, ...publishedIdSet]),
       nextBuiltInIds
     );
     const normalizedEditorSettings = normalizeEditorSettingsFromUnknown(args.settings.editorSettings);
     const normalizedCavenIdeSettings = normalizeCavenIdeSettingsFromUnknown(args.settings);
     setCustomAgents(nextCustomAgents);
+    setPublishedAgents(nextPublishedAgents);
     setInstalledAgentIds(normalizedInstalled);
     setSettings(normalizedEditorSettings);
     setCavenIdeSettings(normalizedCavenIdeSettings);
@@ -6765,6 +6882,7 @@ export default function CavCodePage() {
         ok?: boolean;
         settings?: unknown;
         agentRegistry?: unknown;
+        publishedAgents?: unknown;
         planId?: unknown;
         message?: unknown;
       };
@@ -6776,6 +6894,7 @@ export default function CavCodePage() {
         settings,
         fallbackInstalled: installedAgentIdsRef.current,
         agentRegistry: body.agentRegistry,
+        publishedAgents: body.publishedAgents,
         planId: body.planId,
       });
       if (!silent) pushToast("Agents list refreshed.", "good");
@@ -6815,6 +6934,7 @@ export default function CavCodePage() {
           ok?: boolean;
           settings?: unknown;
           agentRegistry?: unknown;
+          publishedAgents?: unknown;
           planId?: unknown;
           message?: unknown;
         };
@@ -6826,6 +6946,7 @@ export default function CavCodePage() {
           settings,
           fallbackInstalled: installedAgentIds,
           agentRegistry: body.agentRegistry,
+          publishedAgents: body.publishedAgents,
           planId: body.planId,
         });
       } catch (err) {
@@ -6868,9 +6989,10 @@ export default function CavCodePage() {
   const toggleAgentInstalled = useCallback((agentId: string, install: boolean) => {
     if (savingAgentId) return;
     const customAgent = customAgents.find((row) => row.id === agentId) || null;
+    const publishedAgent = publishedAgents.find((row) => row.id === agentId) || null;
     const builtInAgent = builtInRegistryById.get(agentId) || null;
-    const agentName = customAgent?.name || builtInAgent?.name || "Agent";
-    if (!customAgent && !builtInAgent) return;
+    const agentName = customAgent?.name || publishedAgent?.name || builtInAgent?.name || "Agent";
+    if (!customAgent && !publishedAgent && !builtInAgent) return;
     if (install && builtInAgent?.locked) {
       const required = requiredPlanLabel(builtInAgent.minimumPlan);
       pushToast(`${agentName} requires ${required}.`, "watch");
@@ -6881,10 +7003,11 @@ export default function CavCodePage() {
     else nextSet.delete(agentId);
     const orderedBuiltIn = knownBuiltInAgentIds.filter((id) => nextSet.has(id));
     const orderedCustom = customAgents.map((row) => row.id).filter((id) => nextSet.has(id));
+    const orderedPublished = publishedAgents.map((row) => row.id).filter((id) => nextSet.has(id));
     const orderedUnknown = installedAgentIds.filter(
-      (id) => !knownBuiltInAgentIdSet.has(id) && !customAgentIdSet.has(id) && nextSet.has(id)
+      (id) => !knownBuiltInAgentIdSet.has(id) && !customAgentIdSet.has(id) && !publishedAgentIdSet.has(id) && nextSet.has(id)
     );
-    const nextIds = [...orderedBuiltIn, ...orderedCustom, ...orderedUnknown];
+    const nextIds = [...orderedBuiltIn, ...orderedCustom, ...orderedPublished, ...orderedUnknown];
     const prevIds = [...installedAgentIds];
     setInstalledAgentIds(nextIds);
 
@@ -6908,6 +7031,7 @@ export default function CavCodePage() {
           ok?: boolean;
           settings?: unknown;
           agentRegistry?: unknown;
+          publishedAgents?: unknown;
           planId?: unknown;
           message?: unknown;
         };
@@ -6919,6 +7043,7 @@ export default function CavCodePage() {
           settings,
           fallbackInstalled: nextIds,
           agentRegistry: body.agentRegistry,
+          publishedAgents: body.publishedAgents,
           planId: body.planId,
         });
         pushToast(`${agentName} ${install ? "installed" : "uninstalled"}.`, "good");
@@ -6937,6 +7062,8 @@ export default function CavCodePage() {
     installedAgentIds,
     knownBuiltInAgentIds,
     knownBuiltInAgentIdSet,
+    publishedAgentIdSet,
+    publishedAgents,
     pushToast,
     savingAgentId,
   ]);
@@ -6969,6 +7096,7 @@ export default function CavCodePage() {
           ok?: boolean;
           settings?: unknown;
           agentRegistry?: unknown;
+          publishedAgents?: unknown;
           planId?: unknown;
           message?: unknown;
         };
@@ -6980,6 +7108,7 @@ export default function CavCodePage() {
           settings,
           fallbackInstalled: args.nextInstalledIds,
           agentRegistry: body.agentRegistry,
+          publishedAgents: body.publishedAgents,
           planId: body.planId,
         });
         pushToast(args.successToast, "good");
@@ -7545,6 +7674,8 @@ export default function CavCodePage() {
     setCreateAgentTriggers("");
     setCreateAgentInstructions("");
     setCreateAgentSurface("all");
+    setCreateAgentPublicationRequested(false);
+    setCreateAgentPublicationInfoOpen(false);
     setCreateAgentIconSvg("");
     setCreateAgentIconBackground("");
     setCreateAgentIconPalette([]);
@@ -7647,6 +7778,8 @@ export default function CavCodePage() {
       iconSvg,
       iconBackground,
       createdAt: new Date().toISOString(),
+      publicationRequested: createAgentPublicationRequested,
+      publicationRequestedAt: createAgentPublicationRequested ? new Date().toISOString() : null,
     };
 
     const nextCustomAgents = [record, ...customAgents];
@@ -7676,6 +7809,7 @@ export default function CavCodePage() {
           ok?: boolean;
           settings?: unknown;
           agentRegistry?: unknown;
+          publishedAgents?: unknown;
           planId?: unknown;
           message?: unknown;
         };
@@ -7687,6 +7821,7 @@ export default function CavCodePage() {
           settings,
           fallbackInstalled: nextInstalled,
           agentRegistry: body.agentRegistry,
+          publishedAgents: body.publishedAgents,
           planId: body.planId,
         });
         setAgentsSearchQuery("");
@@ -7707,6 +7842,7 @@ export default function CavCodePage() {
     createAgentIconBackground,
     createAgentIconSvg,
     createAgentName,
+    createAgentPublicationRequested,
     createAgentSummary,
     createAgentSurface,
     createAgentTriggers,
@@ -10352,94 +10488,6 @@ export default function CavCodePage() {
     [activeFile, pushToast]
   );
 
-  const saveProfileReadmeToServer = useCallback(async (markdown: string) => {
-    const ref = sysAutosaveRef.current;
-    const now = Date.now();
-    if (ref.unavailableUntil > now) {
-      return {
-        ok: false as const,
-        kind: "retryable" as const,
-        message: ref.lastUnavailableMessage || "Profile README storage is temporarily unavailable. Try again shortly.",
-        retryAt: ref.unavailableUntil,
-      };
-    }
-
-    const expectedRevision = Math.max(0, Math.trunc(Number(ref.lastSavedRevision || 0)));
-
-    try {
-      const res = await fetch("/api/profile/readme", {
-        method: "PUT",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "x-cavbot-csrf": "1",
-        },
-        body: JSON.stringify({ markdown, expectedRevision }),
-      });
-      const j = (await res.json().catch(() => null)) as unknown;
-      const r = j && typeof j === "object" ? (j as Record<string, unknown>) : null;
-
-      if (r && r.ok === true) {
-        const revisionRaw = Number(r.revision);
-        const revision =
-          Number.isFinite(revisionRaw) && Number.isInteger(revisionRaw) && revisionRaw >= 0
-            ? Math.trunc(revisionRaw)
-            : expectedRevision + 1;
-        ref.unavailableUntil = 0;
-        ref.lastUnavailableMessage = "";
-        return {
-          ok: true as const,
-          revision,
-        };
-      }
-
-      if (r && r.error === "REVISION_CONFLICT") {
-        const currentRevisionRaw = Number(r.currentRevision);
-        const currentRevision =
-          Number.isFinite(currentRevisionRaw) && Number.isInteger(currentRevisionRaw) && currentRevisionRaw >= 0
-            ? Math.trunc(currentRevisionRaw)
-            : expectedRevision;
-        ref.unavailableUntil = 0;
-        ref.lastUnavailableMessage = "";
-        return {
-          ok: false as const,
-          kind: "conflict" as const,
-          currentRevision,
-        };
-      }
-
-      const message = String(r?.message || "Save failed.");
-      if (res.status >= 500 || r?.error === "README_STORAGE_UNAVAILABLE") {
-        const retryAt = Date.now() + PROFILE_README_SAVE_RETRY_MS;
-        ref.unavailableUntil = retryAt;
-        ref.lastUnavailableMessage = message;
-        return {
-          ok: false as const,
-          kind: "retryable" as const,
-          message,
-          retryAt,
-        };
-      }
-
-      return {
-        ok: false as const,
-        kind: "error" as const,
-        message,
-      };
-    } catch {
-      const retryAt = Date.now() + PROFILE_README_SAVE_RETRY_MS;
-      const message = ref.lastUnavailableMessage || "Profile README storage is temporarily unavailable. Try again shortly.";
-      ref.unavailableUntil = retryAt;
-      ref.lastUnavailableMessage = message;
-      return {
-        ok: false as const,
-        kind: "retryable" as const,
-        message,
-        retryAt,
-      };
-    }
-  }, []);
-
   const saveNow = useCallback(async () => {
     try {
       if (settings.formatOnSave) {
@@ -10455,25 +10503,48 @@ export default function CavCodePage() {
         pushToast("README too large (max 64KB).", "bad");
         return;
       }
-      const result = await saveProfileReadmeToServer(md);
-      if (result.ok) {
-        sysAutosaveRef.current.lastSavedHash = hashString(md);
-        sysAutosaveRef.current.lastSavedRevision = result.revision;
-        setSysProfileReadme({ markdown: md, loaded: true, revision: result.revision });
-        publishSysProfileReadme(md, result.revision);
-        if (activeFile?.id) {
-          markFileSaved(activeFile.id, md);
+      try {
+        const expectedRevision = Math.max(0, Math.trunc(Number(sysAutosaveRef.current.lastSavedRevision || 0)));
+        const res = await fetch("/api/profile/readme", {
+          method: "PUT",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "x-cavbot-csrf": "1",
+          },
+          body: JSON.stringify({ markdown: md, expectedRevision }),
+        });
+        const j = (await res.json().catch(() => null)) as unknown;
+        const r = j && typeof j === "object" ? (j as Record<string, unknown>) : null;
+        if (r && r.ok === true) {
+          const revisionRaw = Number(r.revision);
+          const revision =
+            Number.isFinite(revisionRaw) && Number.isInteger(revisionRaw) && revisionRaw >= 0
+              ? Math.trunc(revisionRaw)
+              : expectedRevision + 1;
+          sysAutosaveRef.current.lastSavedHash = hashString(md);
+          sysAutosaveRef.current.lastSavedRevision = revision;
+          setSysProfileReadme({ markdown: md, loaded: true, revision });
+          publishSysProfileReadme(md, revision);
+          if (activeFile?.id) {
+            markFileSaved(activeFile.id, md);
+          }
+          pushToast("Saved.", "good");
+        } else if (r && r.error === "REVISION_CONFLICT") {
+          const currentRevisionRaw = Number(r.currentRevision);
+          const currentRevision =
+            Number.isFinite(currentRevisionRaw) && Number.isInteger(currentRevisionRaw) && currentRevisionRaw >= 0
+              ? Math.trunc(currentRevisionRaw)
+              : expectedRevision;
+          sysAutosaveRef.current.lastSavedRevision = currentRevision;
+          setSysProfileReadme({ markdown: md, loaded: true, revision: currentRevision });
+          publishSysProfileReadme(md, currentRevision);
+          pushToast("README changed in another tab. Save again to apply your latest edit.", "watch");
+        } else {
+          pushToast(String(r?.message || "Save failed."), "bad");
         }
-        pushToast("Saved.", "good");
-      } else if (result.kind === "conflict") {
-        sysAutosaveRef.current.lastSavedRevision = result.currentRevision;
-        setSysProfileReadme({ markdown: md, loaded: true, revision: result.currentRevision });
-        publishSysProfileReadme(md, result.currentRevision);
-        pushToast("README changed in another tab. Save again to apply your latest edit.", "watch");
-      } else if (result.kind === "retryable") {
-        pushToast(result.message, "watch");
-      } else {
-        pushToast(result.message, "bad");
+      } catch {
+        pushToast("Save failed.", "bad");
       }
       return;
     }
@@ -10531,7 +10602,6 @@ export default function CavCodePage() {
     setSysProfileReadme,
     markFileSaved,
     saveCodebaseFileToServer,
-    saveProfileReadmeToServer,
     syncCodebaseFsFromServer,
   ]);
 
@@ -10550,59 +10620,56 @@ export default function CavCodePage() {
 
     const ref = sysAutosaveRef.current;
     if (ref.timer) window.clearTimeout(ref.timer);
-    let cancelled = false;
-
-    const attemptSave = async () => {
-      if (cancelled) return;
-      ref.timer = null;
-
+    ref.timer = window.setTimeout(async () => {
+      // Timer fired; clear only if it is still ours.
+      if (ref.timer) ref.timer = null;
+      // Recheck latest
       const latest = findNodeByPath(fs, SYS_README_PATH);
       if (!latest || !isFile(latest)) return;
       const latestMd = String(latest.content ?? "");
       const latestHash = hashString(latestMd);
       if (latestHash === ref.lastSavedHash) return;
-      if (Buffer.byteLength(latestMd, "utf8") > 64 * 1024) return;
+      if (Buffer.byteLength(latestMd, "utf8") > 64 * 1024) return; // don't spam API; user will see size error on hard save
 
-      const result = await saveProfileReadmeToServer(latestMd);
-      if (cancelled) return;
-
-      if (result.ok) {
-        ref.lastSavedHash = latestHash;
-        ref.lastSavedRevision = result.revision;
-        setSysProfileReadme({ markdown: latestMd, loaded: true, revision: result.revision });
-        publishSysProfileReadme(latestMd, result.revision);
-        markFileSaved(latest.id, latestMd);
-        return;
-      }
-
-      if (result.kind === "conflict") {
-        ref.lastSavedRevision = result.currentRevision;
-        return;
-      }
-
-      if (result.kind === "retryable") {
-        const delay = Math.max(1000, result.retryAt - Date.now());
-        ref.timer = window.setTimeout(() => {
-          void attemptSave();
-        }, delay);
-      }
-    };
-
-    const initialDelay = ref.unavailableUntil > Date.now()
-      ? Math.max(650, ref.unavailableUntil - Date.now())
-      : 650;
-    ref.timer = window.setTimeout(() => {
-      void attemptSave();
-    }, initialDelay);
+      try {
+        const expectedRevision = Math.max(0, Math.trunc(Number(ref.lastSavedRevision || 0)));
+        const res = await fetch("/api/profile/readme", {
+          method: "PUT",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "x-cavbot-csrf": "1",
+          },
+          body: JSON.stringify({ markdown: latestMd, expectedRevision }),
+        });
+        const j = (await res.json().catch(() => null)) as unknown;
+        const r = j && typeof j === "object" ? (j as Record<string, unknown>) : null;
+        if (r && r.ok === true) {
+          const revisionRaw = Number(r.revision);
+          const revision =
+            Number.isFinite(revisionRaw) && Number.isInteger(revisionRaw) && revisionRaw >= 0
+              ? Math.trunc(revisionRaw)
+              : expectedRevision + 1;
+          ref.lastSavedHash = latestHash;
+          ref.lastSavedRevision = revision;
+          setSysProfileReadme({ markdown: latestMd, loaded: true, revision });
+          publishSysProfileReadme(latestMd, revision);
+          markFileSaved(latest.id, latestMd);
+        } else if (r && r.error === "REVISION_CONFLICT") {
+          const currentRevisionRaw = Number(r.currentRevision);
+          if (Number.isFinite(currentRevisionRaw) && Number.isInteger(currentRevisionRaw) && currentRevisionRaw >= 0) {
+            ref.lastSavedRevision = Math.trunc(currentRevisionRaw);
+          }
+        }
+      } catch {}
+    }, 650);
+    const timerId = ref.timer;
 
     return () => {
-      cancelled = true;
-      if (ref.timer) {
-        window.clearTimeout(ref.timer);
-        ref.timer = null;
-      }
+      if (timerId) window.clearTimeout(timerId);
+      if (ref.timer === timerId) ref.timer = null;
     };
-  }, [activeFile, markFileSaved, saveProfileReadmeToServer, settings.autosave, fs]);
+  }, [activeFile, markFileSaved, settings.autosave, fs]);
 
   /* =========================
     Editor content updates (autosave)
@@ -16115,6 +16182,64 @@ export default function CavCodePage() {
                             </div>
                           </fieldset>
 
+                          <section className="cc-agentCreateSection cc-agentCreateSection--review" aria-labelledby="cc-agent-create-review-title">
+                            <div className="cc-agentCreateSectionHead cc-agentCreateSectionHead--tight">
+                              <div>
+                                <span className="cc-agentCreateSectionEyebrow">Review</span>
+                                <h4 id="cc-agent-create-review-title">Offer this agent for publication review</h4>
+                              </div>
+                              <p className="cc-agentCreateSectionNote">
+                                Private by default. Turn this on if you want CavBot HQ to review it for possible release to other operators.
+                              </p>
+                            </div>
+                            <div className="cc-agentCreateReviewCard">
+                              <label className={`cc-agentCreateReviewToggle ${createAgentPublicationRequested ? "is-on" : ""}`}>
+                                <input
+                                  className="cc-agentCreateReviewToggleInput"
+                                  type="checkbox"
+                                  checked={createAgentPublicationRequested}
+                                  onChange={(event) => setCreateAgentPublicationRequested(event.currentTarget.checked)}
+                                />
+                                <span className="cc-agentCreateReviewToggleBox" aria-hidden="true">
+                                  <span className="cc-agentCreateReviewToggleTick" />
+                                </span>
+                                <span className="cc-agentCreateReviewToggleCopy">
+                                  <span className="cc-agentCreateReviewToggleTitle">Put this agent up for review</span>
+                                  <span className="cc-agentCreateReviewToggleHint">
+                                    CavBot can review the agent, store the submitted profile, and decide whether it can be published to the shared operator catalog.
+                                  </span>
+                                </span>
+                              </label>
+                              <button
+                                type="button"
+                                className={`cc-agentCreateReviewInfoBtn ${createAgentPublicationInfoOpen ? "is-open" : ""}`}
+                                onClick={() => setCreateAgentPublicationInfoOpen((prev) => !prev)}
+                                aria-label="Publication review information"
+                                aria-expanded={createAgentPublicationInfoOpen}
+                              >
+                                <svg viewBox="0 0 20 20" aria-hidden="true" className="cc-agentCreateReviewInfoBtnIcon">
+                                  <circle cx="10" cy="10" r="7.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+                                  <path d="M10 8.05v4.35" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                                  <circle cx="10" cy="5.7" r="1" fill="currentColor" />
+                                </svg>
+                              </button>
+                            </div>
+                            {createAgentPublicationInfoOpen ? (
+                              <div className="cc-agentCreateReviewInfoPanel" role="note">
+                                <div className="cc-agentCreateReviewInfoTitle">What this means</div>
+                                <p>
+                                  CavBot stores the submitted agent profile, icon, triggers, and operating instructions so HQ can review it.
+                                </p>
+                                <p>
+                                  If HQ approves it later, a published copy can appear under <strong>Published by other operators</strong> for other users.
+                                </p>
+                                <p>
+                                  Do not submit secrets, private credentials, or instructions you do not want CavBot to review for publication.
+                                </p>
+                              </div>
+                            ) : null}
+                          </section>
+
                           {createAgentError ? <div className="cc-agentCreateError" role="alert">{createAgentError}</div> : null}
 
                           <div className="cc-agentCreateActions">
@@ -16432,6 +16557,20 @@ export default function CavCodePage() {
                           </span>
                           <div className="cc-skills-cardBody">
                             <div className="cc-skills-cardTitle">{agent.name}</div>
+                            <div className="cc-skills-cardSummary">{agent.summary}</div>
+                            <div className="cc-skills-cardMeta">
+                              {(() => {
+                                const row = customAgents.find((item) => item.id === agent.id) || null;
+                                const placementLabel = row?.surface === "center"
+                                  ? "CavAi only"
+                                  : row?.surface === "cavcode"
+                                    ? "Caven only"
+                                    : "All surfaces";
+                                return row?.publicationRequested
+                                  ? `${placementLabel} · In review`
+                                  : placementLabel;
+                              })()}
+                            </div>
                           </div>
                           {installedAgentSet.has(agent.id) ? (
                             <span className="cc-skills-cardActionWrap" data-agent-manage-id={agent.id}>
@@ -16541,6 +16680,101 @@ export default function CavCodePage() {
                           )}
                         </article>
                       ))}
+                      {!visibleCustomAgents.length ? (
+                        <div className="cc-skills-empty">No private agents match your search yet.</div>
+                      ) : null}
+                    </div>
+
+                    <div className="cc-skills-sectionLabel">Published by other operators</div>
+                    <div className="cc-skills-grid">
+                      {visiblePublishedAgents.map((agent) => {
+                        const published = publishedAgents.find((row) => row.id === agent.id) || null;
+                        return (
+                          <article key={agent.id} className="cc-skills-card" title={agent.summary}>
+                            <span
+                              className="cc-skills-cardIcon"
+                              data-agent-id={agent.id}
+                              aria-hidden="true"
+                              style={buildAgentIconSurfaceStyle(agent.iconBackground)}
+                            >
+                              <Image src={agent.iconSrc} alt="" width={22} height={22} unoptimized />
+                            </span>
+                            <div className="cc-skills-cardBody">
+                              <div className="cc-skills-cardTitle">{agent.name}</div>
+                              <div className="cc-skills-cardSummary">{agent.summary}</div>
+                              <div className="cc-skills-cardMeta">
+                                {published?.ownerUsername ? `by @${published.ownerUsername}` : `by ${published?.ownerName || "Operator"}`}
+                              </div>
+                            </div>
+                            {installedAgentSet.has(agent.id) ? (
+                              <span className="cc-skills-cardActionWrap" data-agent-manage-id={agent.id}>
+                                <button
+                                  type="button"
+                                  className="cc-skills-cardIconBtn is-installed cc-skills-cardManageBtn"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setAgentManageMenuId((prev) => (prev === agent.id ? "" : agent.id));
+                                  }}
+                                  disabled={Boolean(savingAgentId)}
+                                  title={`Manage ${agent.name}`}
+                                  aria-label={`Manage ${agent.name}`}
+                                >
+                                  <svg className="cc-skills-cardManageCheck" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                    <path
+                                      d="M3.25 8.5L6.5 11.75L12.75 4.75"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="1.9"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
+                                  <svg className="cc-skills-cardManageDots" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                    <circle cx="3.5" cy="8" r="1.2" fill="currentColor" />
+                                    <circle cx="8" cy="8" r="1.2" fill="currentColor" />
+                                    <circle cx="12.5" cy="8" r="1.2" fill="currentColor" />
+                                  </svg>
+                                </button>
+                                {agentManageMenuId === agent.id ? (
+                                  <div className="cc-skills-cardManageMenu" role="menu" onClick={(event) => event.stopPropagation()}>
+                                    <button
+                                      type="button"
+                                      className="cc-skills-cardManageMenuItem"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setAgentManageMenuId("");
+                                        toggleAgentInstalled(agent.id, false);
+                                      }}
+                                    >
+                                      Uninstall
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                className="cc-skills-cardIconBtn"
+                                onClick={() => toggleAgentInstalled(agent.id, true)}
+                                disabled={Boolean(savingAgentId)}
+                                title={`Install ${agent.name}`}
+                                aria-label={`Install ${agent.name}`}
+                              >
+                                <Image
+                                  src="/icons/app/cavcode/plus-large-svgrepo-com.svg"
+                                  alt=""
+                                  width={15}
+                                  height={15}
+                                  aria-hidden="true"
+                                />
+                              </button>
+                            )}
+                          </article>
+                        );
+                      })}
+                      {!visiblePublishedAgents.length ? (
+                        <div className="cc-skills-empty">No published operator agents match your search yet.</div>
+                      ) : null}
                     </div>
                   </>
                 ) : skillsPageView === "general" ? (

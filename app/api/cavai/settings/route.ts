@@ -12,6 +12,7 @@ import {
   buildFallbackAgentRegistryUiSnapshot,
   getAgentRegistryUiSnapshot,
 } from "@/lib/cavai/agentRegistry.server";
+import { listPublishedOperatorAgents } from "@/lib/cavai/operatorAgents.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,6 +41,7 @@ export async function GET(req: Request) {
       planId: ctx.planId,
       installedAgentIds: settings.installedAgentIds,
     });
+    let publishedAgents: unknown[] = [];
     try {
       agentRegistry = await getAgentRegistryUiSnapshot({
         accountId: String(ctx.accountId || ""),
@@ -51,8 +53,17 @@ export async function GET(req: Request) {
       degraded = true;
       console.error("[cavai/settings] getAgentRegistryUiSnapshot failed, using catalog fallback", err);
     }
+    try {
+      publishedAgents = await listPublishedOperatorAgents({
+        excludeUserId: String(ctx.userId || ""),
+        limit: 120,
+      });
+    } catch (err) {
+      degraded = true;
+      console.error("[cavai/settings] listPublishedOperatorAgents failed, using empty fallback", err);
+    }
 
-    const baseResponse = { ok: true, settings, planId: ctx.planId, agentRegistry };
+    const baseResponse = { ok: true, settings, planId: ctx.planId, agentRegistry, publishedAgents };
     return jsonNoStore(degraded ? { ...baseResponse, degraded: true } : baseResponse, 200);
   } catch (err) {
     return cavcloudErrorResponse(err, "Failed to load Caven settings.");
@@ -89,6 +100,7 @@ async function saveSettings(req: Request) {
     planId: ctx.planId,
     installedAgentIds: settings.installedAgentIds,
   });
+  let publishedAgents: unknown[] = [];
   let degraded = false;
   try {
     agentRegistry = await getAgentRegistryUiSnapshot({
@@ -101,9 +113,18 @@ async function saveSettings(req: Request) {
     degraded = true;
     console.error("[cavai/settings] getAgentRegistryUiSnapshot failed after save, using catalog fallback", err);
   }
+  try {
+    publishedAgents = await listPublishedOperatorAgents({
+      excludeUserId: String(ctx.userId || ""),
+      limit: 120,
+    });
+  } catch (err) {
+    degraded = true;
+    console.error("[cavai/settings] listPublishedOperatorAgents failed after save, using empty fallback", err);
+  }
 
-  const baseResponse = { ok: true, settings, planId: ctx.planId };
-  return jsonNoStore(degraded ? { ...baseResponse, agentRegistry, degraded: true } : { ...baseResponse, agentRegistry }, 200);
+  const baseResponse = { ok: true, settings, planId: ctx.planId, agentRegistry, publishedAgents };
+  return jsonNoStore(degraded ? { ...baseResponse, degraded: true } : baseResponse, 200);
 }
 
 export async function PATCH(req: Request) {

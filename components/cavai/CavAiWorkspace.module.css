@@ -6644,7 +6644,8 @@
 
 .centerAgentModeMenuLabelWrap {
   min-width: 0;
-  display: block;
+  display: grid;
+  gap: 2px;
 }
 
 .centerAgentModeMenuLabel {
@@ -6655,6 +6656,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 680;
+}
+
+.centerAgentModeMenuMeta {
+  min-width: 0;
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.03em;
+  color: rgba(190, 204, 232, 0.68);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .centerAgentModeFamilyTag {
