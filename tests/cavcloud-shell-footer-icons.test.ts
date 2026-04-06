@@ -33,8 +33,7 @@ test("cavcloud and cavsafe footer restore surface quick tools and keep premium p
   assert.match(safe, /onOpenCompanion: openCavCloud/);
   assert.match(cloud, /companionIconWidth: 18/);
   assert.match(safe, /companionIconWidth: 18/);
-  assert.match(cloud, /surfaceTitle = "CavCloud"/);
-  assert.equal(cloud.includes("CavCloud Storage"), false);
+  assert.match(cloud, /surfaceTitle = "CavCloud Storage"/);
   assert.equal(cloud.includes('key: "Settings",\n    label: "Settings",\n    icon: "settings"'), false);
   assert.equal(safe.includes('key: "Settings",\n    label: "Settings",\n    icon: "settings"'), false);
   assert.equal(cloud.includes('className: "cavcloud-paneSubFolderName"'), false);

@@ -7790,7 +7790,7 @@ function ek(e) {
   let profileHandle = resolveCavcloudInitialUsername(eH).trim().toLowerCase(),
     publicProfileHref = buildCanonicalPublicProfileHref(profileHandle),
     profileMenuLabel = "public" === profilePublicEnabled ? "Public Profile" : "private" === profilePublicEnabled ? "Private Profile" : "Profile",
-    surfaceTitle = "CavCloud",
+    surfaceTitle = "CavCloud Storage",
     surfaceVerified = "PREMIUM_PLUS" === resolveCavcloudPlanTier({
       tier: eK
     }),
