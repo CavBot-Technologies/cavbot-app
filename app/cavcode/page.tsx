@@ -14562,8 +14562,8 @@ export default function CavCodePage() {
                                         className="cc-agentCreateColorPreview"
                                         onClick={() => createAgentColorNativeInputRef.current?.click()}
                                         style={{ background: createAgentIconBackground || DEFAULT_CUSTOM_AGENT_ICON_BACKGROUND }}
+                                        aria-label="Open color picker"
                                       >
-                                        <span className="cc-agentCreateColorPreviewLabel">Open color picker</span>
                                       </button>
                                       <input
                                         ref={createAgentColorNativeInputRef}
@@ -14581,30 +14581,40 @@ export default function CavCodePage() {
                                       />
                                       <label className="cc-agentCreateColorField" htmlFor="cc-agent-create-color-input">
                                         <span className="cc-agentCreateColorFieldLabel">Hex</span>
-                                        <input
-                                          ref={createAgentColorInputRef}
-                                          id="cc-agent-create-color-input"
-                                          className="cc-agentCreateColorHexInput"
-                                          value={createAgentColorInput}
-                                          onChange={(event) => {
-                                            const next = String(event.currentTarget.value || "").slice(0, 9);
-                                            setCreateAgentColorInput(next);
-                                            const normalized = normalizeAgentColorHexFromUnknown(next);
-                                            if (normalized) setCreateAgentIconBackground(normalized);
-                                          }}
-                                          onBlur={() => {
-                                            void commitCreateAgentIconBackground(createAgentColorInput);
-                                          }}
-                                          onKeyDown={(event) => {
-                                            if (event.key !== "Enter") return;
-                                            event.preventDefault();
-                                            void commitCreateAgentIconBackground(createAgentColorInput);
-                                          }}
-                                          placeholder="#4EA8FF"
-                                          spellCheck={false}
-                                          autoCapitalize="off"
-                                          autoCorrect="off"
-                                        />
+                                        <span className="cc-agentCreateColorFieldControl">
+                                          <input
+                                            ref={createAgentColorInputRef}
+                                            id="cc-agent-create-color-input"
+                                            className="cc-agentCreateColorHexInput"
+                                            value={createAgentColorInput}
+                                            onChange={(event) => {
+                                              const next = String(event.currentTarget.value || "").slice(0, 9);
+                                              setCreateAgentColorInput(next);
+                                              const normalized = normalizeAgentColorHexFromUnknown(next);
+                                              if (normalized) setCreateAgentIconBackground(normalized);
+                                            }}
+                                            onBlur={() => {
+                                              void commitCreateAgentIconBackground(createAgentColorInput);
+                                            }}
+                                            onKeyDown={(event) => {
+                                              if (event.key !== "Enter") return;
+                                              event.preventDefault();
+                                              void commitCreateAgentIconBackground(createAgentColorInput);
+                                            }}
+                                            placeholder="#4EA8FF"
+                                            spellCheck={false}
+                                            autoCapitalize="off"
+                                            autoCorrect="off"
+                                          />
+                                          <button
+                                            type="button"
+                                            className="cc-agentCreateColorFieldChevron"
+                                            onClick={() => createAgentColorNativeInputRef.current?.click()}
+                                            aria-label="Open color picker"
+                                          >
+                                            <Image src="/icons/chevron-right-svgrepo-com.svg" alt="" width={12} height={12} />
+                                          </button>
+                                        </span>
                                       </label>
                                       {createAgentIconPalette.length ? (
                                         <div className="cc-agentCreateColorSwatches" aria-label="Detected icon colors">
