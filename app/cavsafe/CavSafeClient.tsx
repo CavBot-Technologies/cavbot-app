@@ -10,7 +10,11 @@ import * as nav from "next/navigation";
 import * as c from "react";
 import { CavCloudPreviewPanel } from "@/components/cavcloud/CavCloudPreviewPanel";
 import CavSafeOwnerCommandDashboard from "@/components/cavsafe/CavSafeOwnerCommandDashboard";
-import CavAiCenterLauncher from "@/components/cavai/CavAiCenterLauncher";
+import {
+  CavSurfaceLauncherMenu,
+  CavSurfacePlanButton,
+  CavSurfaceSidebarBrandMenu
+} from "@/components/cavcloud/CavSurfaceShellControls";
 import { LockIcon } from "@/components/LockIcon";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { countDriveListingItems, debugDriveLog, getDriveDebugEnabled, useDriveChildren } from "@/lib/cavdrive/liveData.client";
@@ -5394,49 +5398,6 @@ function ek() {
         }
       }
     }, [sJ, l3, ib, refreshTreePostMutation, ir, io]),
-    iC = (0, c.useMemo)(() => {
-      if (eV && ez > 0) {
-        let e = Math.max(1, Math.min(365, Number.isFinite(ez) ? Math.trunc(ez) : 1));
-        return {
-          kind: "TRIAL",
-          kicker: "Free trial",
-          title: `Trial active \xb7 ${e} day${1 === e ? "" : "s"} left`,
-          sub: "Explore Premium features before you upgrade. Your workspace stays protected throughout your trial.",
-          ctaText: "Upgrade Now ↗",
-          ctaHref: "/plan",
-          isLink: !0
-        };
-      }
-      return "FREE" === eK ? {
-        kind: "FREE",
-        kicker: "Free tier",
-        title: "Unlock Premium",
-        sub: "Higher scan capacity, priority alerts, and advanced diagnostics.",
-        ctaText: "Upgrade Now ↗",
-        ctaHref: "/plan",
-        isLink: !0
-      } : "PREMIUM" === eK ? {
-        kind: "PREMIUM",
-        kicker: "Premium plan",
-        title: "Unlock Premium+",
-        sub: "Integrity enforcement, audit intelligence, and secured storage command.",
-        ctaText: "Upgrade to Premium+ ↗",
-        ctaHref: "/plan",
-        isLink: !0
-      } : {
-        kind: "PREMIUM_PLUS",
-        kicker: "PREMIUM+",
-        title: "Full Access",
-        sub: "Your workspace is running with maximum monitoring, advanced coverage, and complete intelligence.",
-        ctaText: "VIEW PLANS",
-        ctaHref: "/plan",
-        isLink: !0
-      };
-    }, [eK, eV, ez]),
-    planStarColor = (0, c.useMemo)(() => {
-      let e = String(eA || "").trim().toLowerCase();
-      return "violet" === e ? "#8b5cff" : "blue" === e ? "#4da3ff" : "white" === e ? "#f7fbff" : "navy" === e ? "#9fb6ff" : "transparent" === e ? "#f7fbff" : "#b9c85a";
-    }, [eA]),
     ik = "Explore" === S || "Folders" === S || "Files" === S || "Gallery" === S,
     iw = "Search CavSafe",
     iS = (0, c.useCallback)(() => {
@@ -5983,8 +5944,41 @@ function ek() {
   let profileHandle = resolveCavsafeInitialUsername(eH).trim().toLowerCase(),
     publicProfileHref = buildCanonicalPublicProfileHref(profileHandle),
     profileMenuLabel = "public" === profilePublicEnabled ? "Public Profile" : "private" === profilePublicEnabled ? "Private Profile" : "Profile",
+    surfaceTitle = "CavSafe Secured Storage",
+    surfaceVerified = "PREMIUM_PLUS" === resolveCavsafePlanTier({
+      tier: eK
+    }),
     settingsTotalPages = 2,
-    settingsPageSafe = Math.max(1, Math.min(settingsPage, settingsTotalPages));
+    settingsPageSafe = Math.max(1, Math.min(settingsPage, settingsTotalPages)),
+    openSurfaceProfile = (0, c.useCallback)(() => {
+      openCanonicalPublicProfileWindow({
+        href: publicProfileHref,
+        fallbackHref: "/settings?tab=account"
+      });
+    }, [publicProfileHref]),
+    logoutToAuth = (0, c.useCallback)(async () => {
+      try {
+        await fetch("/api/auth/logout", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          cache: "no-store",
+          credentials: "include"
+        });
+      } catch {}
+      if ("undefined" != typeof window) {
+        window.location.replace("/auth?mode=login");
+        return;
+      }
+      l.replace("/auth?mode=login");
+      try {
+        l.refresh();
+      } catch {}
+    }, [l]),
+    openPlans = (0, c.useCallback)(() => {
+      l.push("/plan");
+    }, [l]);
   return (0, t.jsxs)("div", {
     className: "cavcloud-root",
     "data-theme": eA,
@@ -5992,82 +5986,13 @@ function ek() {
       className: "cavcloud-side",
       children: [(0, t.jsxs)("div", {
         className: "cavcloud-brand",
-        children: [(0, t.jsxs)("details", {
-          className: "cavcloud-profileMenuWrap",
-          children: [t.jsx("summary", {
-            className: "cavcloud-avatar",
-            "aria-label": "Open account menu",
-            children: eR
-          }), (0, t.jsxs)("div", {
-            className: "cavcloud-profile-menu",
-            role: "menu",
-            "aria-label": "Account menu",
-            children: [t.jsx("button", {
-              className: "cavcloud-profile-item",
-              type: "button",
-              role: "menuitem",
-              onClick: e => {
-                e.preventDefault(), e.stopPropagation(), e.currentTarget.closest("details")?.removeAttribute("open"), openCanonicalPublicProfileWindow({ href: publicProfileHref, fallbackHref: "/settings?tab=account" });
-              },
-              children: profileMenuLabel
-            }), t.jsx("button", {
-              className: "cavcloud-profile-item danger",
-              type: "button",
-              role: "menuitem",
-              onClick: async e => {
-                e.preventDefault(), e.stopPropagation(), e.currentTarget.closest("details")?.removeAttribute("open");
-                try {
-                  await fetch("/api/auth/logout", {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json"
-                    },
-                    cache: "no-store",
-                    credentials: "include"
-                  });
-                } catch {}
-                if ("undefined" != typeof window) {
-                  window.location.replace("/auth?mode=login");
-                  return;
-                }
-                l.replace("/auth?mode=login");
-                try {
-                  l.refresh();
-                } catch {}
-              },
-              children: "Log out"
-            })]
-          })]
-        }), t.jsx("div", {
-          children: (0, t.jsxs)("div", {
-            className: "cavcloud-brandTitle",
-            children: [t.jsx("span", {
-              className: "cavcloud-brandTitlePrefix",
-              children: "Hi, "
-            }), (0, t.jsxs)("span", {
-              className: "cavcloud-brandTitleNameWrap",
-              children: [t.jsx("span", {
-                className: "cavcloud-brandTitleAccent",
-                children: eP
-              }), "PREMIUM_PLUS" === resolveCavsafePlanTier({
-                tier: eK
-              }) ? t.jsx("span", {
-                className: "cavcloud-verifiedBadge",
-                role: "img",
-                "aria-label": "Premium plus verified account",
-                title: "Premium+ verified",
-                children: t.jsx("svg", {
-                  className: "cavcloud-verifiedIcon",
-                  viewBox: "0 0 16 16",
-                  "aria-hidden": "true",
-                  focusable: "false",
-                  children: t.jsx("path", {
-                    d: "M4 8.35 6.5 10.8 12.05 5.2"
-                  })
-                })
-              }) : null]
-            })]
-          })
+        children: [t.jsx(CavSurfaceSidebarBrandMenu, {
+          surfaceTitle: surfaceTitle,
+          accountName: eP,
+          showVerified: surfaceVerified,
+          profileMenuLabel: profileMenuLabel,
+          onOpenProfile: openSurfaceProfile,
+          onLogout: logoutToAuth
         })]
       }), t.jsx("nav", {
         className: "cavcloud-nav",
@@ -6090,190 +6015,35 @@ function ek() {
             }), e.label]
           }, e.key);
         })
-      }), (0, t.jsxs)("div", {
-        className: "cavcloud-sidePaletteStack",
-        children: [(0, t.jsxs)("button", {
-          className: "cavcloud-sidePalette cavcloud-sidePaletteSafeBtn cavcloud-sideSwitchBtn",
-          type: "button",
-          "aria-label": "Open CavCloud",
-          title: "Open CavCloud",
-          onClick: openCavCloud,
-          children: [t.jsx(s.default, {
-            src: "/logo/cavbot-logomark.svg",
-            alt: "CavCloud logomark",
-            width: 14,
-            height: 14,
-            className: "cavcloud-sidePaletteIcon cavcloud-sidePaletteIconSafe cavcloud-sidePaletteIconMark"
-          }), t.jsx("span", {
-            className: "cavcloud-sidePaletteLabel",
-            children: "CavCloud"
-          })]
-        }), t.jsx("button", {
-          className: `cavcloud-sidePalette ${"Gallery" === S ? "is-active" : ""}`,
-          type: "button",
-          "aria-label": "Open gallery",
-          title: "Open gallery",
-          onClick: () => l2("Gallery"),
-          children: t.jsx(s.default, {
-            src: "/icons/color-palette.png",
-            alt: "Color palette icon",
-            width: 22,
-            height: 22,
-            className: "cavcloud-sidePaletteIcon"
-          })
-        }), t.jsx(CavAiCenterLauncher, {
-          surface: "cavsafe",
-          contextLabel: "CavSafe context",
-          triggerClassName: "cavcloud-sidePalette",
-          triggerAriaLabel: "Open CavAi for CavSafe",
-          iconClassName: "cavcloud-sidePaletteIcon",
-          iconSizePx: 22,
-          iconOnly: !0
-        })]
       }), t.jsx("div", {
-        className: "cavcloud-sideFoot",
-        children: t.jsx("div", {
-          className: "cb-side-plan",
-          "aria-label": "Plan",
-          children: "PREMIUM_PLUS" === iC.kind ? (0, t.jsxs)("div", {
-            className: "cb-upgrade-card cb-upgrade-card-static",
-            "aria-label": iC.kicker,
-            children: [(0, t.jsxs)("div", {
-              className: "cb-upgrade-top",
-              children: [t.jsx("span", {
-                className: "cb-upgrade-kicker",
-                children: iC.kicker
-              }), t.jsx(i.default, {
-                className: "cb-upgrade-badge cb-upgrade-badge-link",
-                href: "/settings?tab=account#sx-theme-switcher",
-                "data-cb-route-intent": "/settings?tab=account#sx-theme-switcher",
-                "aria-label": "Open theme color switcher",
-                style: {
-                  color: planStarColor
-                },
-                children: t.jsx(IconPremiumPlusStar, {})
-              })]
-            }), (0, t.jsxs)("div", {
-              className: "cb-upgrade-body",
-              children: [t.jsx("div", {
-                className: "cb-upgrade-title",
-                children: iC.title
-              }), t.jsx("div", {
-                className: "cb-upgrade-sub",
-                children: iC.sub
-              })]
-            }), t.jsx("div", {
-              className: "cb-upgrade-actions",
-              children: t.jsx(i.default, {
-                className: "cb-upgrade-btn",
-                href: iC.ctaHref,
-                "data-cb-route-intent": iC.ctaHref,
-                "aria-label": iC.ctaText,
-                children: iC.ctaText
-              })
-            })]
-          }) : iC.isLink ? (0, t.jsxs)(i.default, {
-            className: "cb-upgrade-card",
-            href: iC.ctaHref,
-            "aria-label": iC.kicker,
-            children: [(0, t.jsxs)("div", {
-              className: "cb-upgrade-top",
-              children: [t.jsx("span", {
-                className: "cb-upgrade-kicker",
-                children: iC.kicker
-              }), t.jsx("span", {
-                className: "cb-upgrade-badge",
-                "aria-hidden": "true",
-                children: t.jsx(s.default, {
-                  src: "/icons/app/spark-svgrepo-com.svg",
-                  alt: "",
-                  width: 18,
-                  height: 18,
-                  className: "cb-upgrade-badgeIcon"
-                })
-              })]
-            }), (0, t.jsxs)("div", {
-              className: "cb-upgrade-body",
-              children: [t.jsx("div", {
-                className: "cb-upgrade-title",
-                children: iC.title
-              }), t.jsx("div", {
-                className: "cb-upgrade-sub",
-                children: iC.sub
-              })]
-            }), t.jsx("div", {
-              className: "cb-upgrade-actions",
-              children: t.jsx("span", {
-                className: "cb-upgrade-btn",
-                children: iC.ctaText
-              })
-            })]
-          }) : (0, t.jsxs)("div", {
-            className: "cb-upgrade-card is-premium",
-            "aria-label": iC.kicker,
-            children: [(0, t.jsxs)("div", {
-              className: "cb-upgrade-top",
-              children: [t.jsx("span", {
-                className: "cb-upgrade-kicker",
-                children: iC.kicker
-              }), t.jsx("span", {
-                className: "cb-upgrade-badge",
-                "aria-hidden": "true",
-                children: t.jsx(s.default, {
-                  src: "/icons/app/spark-svgrepo-com.svg",
-                  alt: "",
-                  width: 18,
-                  height: 18,
-                  className: "cb-upgrade-badgeIcon"
-                })
-              })]
-            }), (0, t.jsxs)("div", {
-              className: "cb-upgrade-body",
-              children: [t.jsx("div", {
-                className: "cb-upgrade-title",
-                children: iC.title
-              }), t.jsx("div", {
-                className: "cb-upgrade-sub",
-                children: iC.sub
-              })]
-            }), t.jsx("div", {
-              className: "cb-upgrade-actions",
-              children: t.jsx("span", {
-                className: "cb-upgrade-active",
-                children: iC.ctaText
-              })
-            })]
-          })
+        className: "cavcloud-sidePaletteStack cavcloud-sideLauncherStack",
+        children: t.jsx(CavSurfaceLauncherMenu, {
+          surface: "cavsafe",
+          galleryActive: "Gallery" === S,
+          onOpenGallery: () => l2("Gallery"),
+          onOpenCompanion: openCavCloud,
+          companionLabel: "Open CavCloud",
+          companionIconSrc: "/logo/cavbot-logomark.svg",
+          companionIconAlt: "CavCloud logomark",
+          companionIconClassName: "cavcloud-surfaceLauncherActionIconMark",
+          companionIconWidth: 16,
+          companionIconHeight: 16,
+          cavAiSurface: "cavsafe",
+          cavAiContextLabel: "CavSafe context"
         })
       })]
     }), (0, t.jsxs)("main", {
       className: "cavcloud-main",
       children: [(0, t.jsxs)("div", {
         className: "cavcloud-top",
-        children: [(0, t.jsxs)("div", {
-          className: "cavcloud-title",
-          "aria-label": "CavSafe Secured Storage",
-          children: [t.jsx("div", {
-            className: "cb-badge-left",
-            children: t.jsx("div", {
-              className: "cb-badge cavcloud-markBadge",
-              children: t.jsx(i.default, {
-                href: "/",
-                "aria-label": "Go to home",
-                className: "cavcloud-markBadgeLink",
-                children: t.jsx(s.default, {
-                  src: "/logo/cavbot-logomark.svg",
-                  alt: "",
-                  width: 30,
-                  height: 30,
-                  className: "cavcloud-markBadgeImg"
-                })
-              })
-            })
-          }), t.jsx("div", {
-            className: "cavcloud-headline",
-            children: "CavSafe Secured Storage"
-          })]
+        children: [t.jsx("div", {
+          className: "cavcloud-title cavcloud-titlePlanSlot",
+          children: t.jsx(CavSurfacePlanButton, {
+            planTier: eK,
+            trialActive: eV,
+            trialDaysLeft: ez,
+            onOpenPlans: openPlans
+          })
         }), (0, t.jsxs)("div", {
           className: "cavcloud-actions",
           children: [t.jsx("input", {
