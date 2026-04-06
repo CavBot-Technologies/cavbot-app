@@ -1718,6 +1718,12 @@ function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(safeString(email).trim());
 }
 
+function normalizeStaffCode(value: string) {
+  const digits = safeString(value).replace(/\D+/g, "");
+  if (!digits) return "";
+  return `CAV-${digits.padStart(6, "0").slice(-6)}`;
+}
+
 async function resolveOtpEmail(args: {
   req: Request;
   actionType: VerifyActionType;
@@ -1741,6 +1747,22 @@ async function resolveOtpEmail(args: {
         select: { email: true },
       });
       if (user?.email) return String(user.email).trim().toLowerCase();
+    }
+
+    const staffCode = normalizeStaffCode(identifier);
+    if (staffCode) {
+      const { prisma } = await import("@/lib/prisma");
+      const staff = await prisma.staffProfile.findUnique({
+        where: { staffCode },
+        select: {
+          user: {
+            select: {
+              email: true,
+            },
+          },
+        },
+      });
+      if (staff?.user?.email) return String(staff.user.email).trim().toLowerCase();
     }
   }
 

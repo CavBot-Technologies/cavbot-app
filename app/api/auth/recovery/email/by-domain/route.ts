@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mintResetToken, hashToken, safeOkResponse } from "@/lib/auth/passwordReset";
+import { recordAdminEventSafe } from "@/lib/admin/events";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { AuthTokenType } from "@prisma/client";
 import { assertWriteOrigin, getAppOrigin } from "@/lib/apiAuth";
@@ -13,6 +14,7 @@ import {
   extractVerifySessionId,
   recordVerifyActionSuccess,
 } from "@/lib/auth/cavbotVerify";
+import { readCoarseRequestGeo } from "@/lib/requestGeo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,6 +66,12 @@ function hostFromOrigin(origin: string) {
 function domainMatches(host: string, domain: string) {
   if (!host || !domain) return false;
   return host === domain || host.endsWith(`.${domain}`);
+}
+
+function emailDomainFromAddress(value: string | null | undefined) {
+  const email = String(value || "").trim().toLowerCase();
+  const parts = email.split("@");
+  return parts.length === 2 ? parts[1] || "" : "";
 }
 
 export async function POST(req: Request) {
@@ -166,6 +174,7 @@ export async function POST(req: Request) {
     const token = mintResetToken();
     const tokenHash = hashToken(token);
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    const geo = readCoarseRequestGeo(req);
 
     await prisma.authToken.create({
       data: {
@@ -173,6 +182,14 @@ export async function POST(req: Request) {
         tokenHash,
         type: AuthTokenType.EMAIL_RECOVERY,
         expiresAt,
+        metaJson: {
+          purpose: "email_lookup_recovery",
+          requestedDomain: domain,
+          emailDomain: emailDomainFromAddress(recipient),
+          accountId,
+          projectId,
+          siteId: matches[0]?.id || null,
+        },
       },
     });
 
@@ -205,6 +222,25 @@ export async function POST(req: Request) {
           </p>
         </div>
       `,
+    });
+
+    await recordAdminEventSafe({
+      name: "auth_email_recovery_requested",
+      subjectUserId: userId,
+      accountId,
+      projectId,
+      siteId: matches[0]?.id || null,
+      origin: domain,
+      status: "requested",
+      result: "matched",
+      country: geo.country,
+      region: geo.region,
+      metaJson: {
+        recoveryType: "email",
+        requestedDomain: domain,
+        matchedOrigin: matches[0]?.host || domain,
+        emailDomain: emailDomainFromAddress(recipient),
+      },
     });
 
     recordVerifyActionSuccess(req, { actionType: "reset", sessionIdHint: verificationGate.sessionId });

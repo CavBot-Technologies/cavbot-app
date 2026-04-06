@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { assertWriteOrigin } from "@/lib/apiAuth";
+import { assertWriteOrigin, getSession } from "@/lib/apiAuth";
+import { recordAdminEventSafe } from "@/lib/admin/events";
 import { confirmVerifyOtp, parseVerifyActionType } from "@/lib/auth/cavbotVerify";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
@@ -35,6 +36,7 @@ type OtpConfirmBody = {
 export async function POST(req: Request) {
   try {
     assertWriteOrigin(req);
+    const session = await getSession(req);
     const body = (await readSanitizedJson(req, ({}))) as OtpConfirmBody;
 
     const actionType = body?.actionType ? parseVerifyActionType(body.actionType) : null;
@@ -47,6 +49,17 @@ export async function POST(req: Request) {
       code: body?.code ? String(body.code) : "",
       actionType,
       sessionIdHint: body?.sessionId ? String(body.sessionId) : "",
+    });
+
+    await recordAdminEventSafe({
+      name: result.ok ? "cavverify_passed" : "cavverify_failed",
+      actorUserId: session?.systemRole === "user" ? session.sub : null,
+      accountId: session?.systemRole === "user" ? session.accountId || null : null,
+      sessionKey: body?.sessionId ? String(body.sessionId) : null,
+      result: result.ok ? "otp_passed" : `otp_${String(result.error || "failed").toLowerCase()}`,
+      metaJson: {
+        actionType: actionType || null,
+      },
     });
 
     return json(result, result.ok ? 200 : 400);

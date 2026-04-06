@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mintResetToken, hashToken, safeOkResponse } from "@/lib/auth/passwordReset";
+import { recordAdminEventSafe } from "@/lib/admin/events";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { normalizeUsername } from "@/lib/username";
 import { assertWriteOrigin, getAppOrigin } from "@/lib/apiAuth";
@@ -13,6 +14,7 @@ import {
   extractVerifySessionId,
   recordVerifyActionSuccess,
 } from "@/lib/auth/cavbotVerify";
+import { readCoarseRequestGeo } from "@/lib/requestGeo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +29,12 @@ function noStore() {
 
 function appUrl() {
   return getAppOrigin().replace(/\/+$/, "");
+}
+
+function emailDomainFromAddress(value: string | null | undefined) {
+  const email = String(value || "").trim().toLowerCase();
+  const parts = email.split("@");
+  return parts.length === 2 ? parts[1] || "" : "";
 }
 
 export async function POST(req: Request) {
@@ -77,6 +85,7 @@ export async function POST(req: Request) {
     // Mint secure token + store hashed only
     const token = mintResetToken();
     const tokenHash = hashToken(token);
+    const geo = readCoarseRequestGeo(req);
 
     // Expire in 30 minutes
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
@@ -87,6 +96,11 @@ export async function POST(req: Request) {
         tokenHash,
         type: "PASSWORD_RESET",
         expiresAt,
+        metaJson: {
+          purpose: "password_reset",
+          identifierType: email ? "email" : "username",
+          emailDomain: emailDomainFromAddress(user.email),
+        },
       },
     });
 
@@ -133,6 +147,20 @@ export async function POST(req: Request) {
           </p>
         </div>
       `,
+    });
+
+    await recordAdminEventSafe({
+      name: "auth_password_recovery_requested",
+      subjectUserId: user.id,
+      status: "requested",
+      result: "matched",
+      country: geo.country,
+      region: geo.region,
+      metaJson: {
+        recoveryType: "password",
+        identifierType: email ? "email" : "username",
+        emailDomain: emailDomainFromAddress(user.email),
+      },
     });
 
     recordVerifyActionSuccess(req, { actionType: "reset", sessionIdHint: verificationGate.sessionId });
