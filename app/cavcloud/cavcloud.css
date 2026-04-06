@@ -110,6 +110,9 @@ body{ margin:0; }
   color: inherit;
   cursor: pointer;
 }
+.cavcloud-brandMenuTriggerStatic{
+  cursor: default;
+}
 .cavcloud-brandMenuTrigger:focus-visible{
   outline: 1px solid rgba(255,255,255,0.24);
   outline-offset: 6px;
@@ -267,12 +270,30 @@ body{ margin:0; }
 }
 
 .cavcloud-sideFoot{
-  margin-top: 0;
-  padding-top: 6px;
+  margin-top: auto;
+  padding-top: 28px;
+  padding-bottom: 14px;
   border-top: none;
   display:flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 16px;
+  align-items: flex-start;
+  width: 100%;
+}
+.cavcloud-surfaceFooter{
+  width: 100%;
+}
+.cavcloud-surfaceFooterIcons{
+  width: 100%;
+}
+.cavcloud-surfaceFooterPlan{
+  width: 100%;
+}
+.cavcloud-surfaceAccountWrap{
+  width: 100%;
+}
+.cavcloud-surfaceAccountMenu{
+  min-width: 190px;
 }
 .cavcloud-sidePaletteStack{
   margin-top: auto;
@@ -399,80 +420,73 @@ body{ margin:0; }
 .cavcloud-surfaceLauncherWrap{
   position: relative;
 }
-.cavcloud-surfaceLauncherTrigger{
-  width: 40px;
-  height: 40px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(0,0,0,0.18);
+.cb-icon-btn.cavcloud-surfaceLauncherTrigger,
+.cb-icon-btn.cavcloud-surfaceFooterSettings{
   color: rgba(247,251,255,0.94);
-  cursor: pointer;
-  transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
 }
-.cavcloud-surfaceLauncherTrigger:hover,
-.cavcloud-surfaceLauncherTrigger.is-open{
+.cb-icon-btn.cavcloud-surfaceLauncherTrigger:hover,
+.cb-icon-btn.cavcloud-surfaceLauncherTrigger.is-open,
+.cb-icon-btn.cavcloud-surfaceFooterSettings:hover{
   transform: translateY(-1px);
-  border-color: rgba(255,255,255,0.22);
-  background: rgba(255,255,255,0.05);
-  box-shadow: 0 10px 20px rgba(0,0,0,0.24);
+  border-color: transparent;
+  background: transparent;
 }
 .cavcloud-surfaceLauncherTrigger:focus-visible{
   outline: 1px solid rgba(255,255,255,0.3);
   outline-offset: 3px;
 }
 .cavcloud-surfaceLauncherTriggerIcon{
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   display: block;
 }
 .cavcloud-surfaceLauncherMenu{
   position: absolute;
   left: calc(100% + 10px);
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  top: 0;
+  transform: none;
+  display: grid;
+  gap: 4px;
+  min-width: 180px;
   padding: 8px;
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(3,6,22,0.94);
-  backdrop-filter: blur(10px);
   z-index: 260;
 }
-.cavcloud-surfaceLauncherActionWrap{
-  display: flex;
+.cavcloud-surfaceLauncherMenuItem{
+  width: 100%;
 }
-.cavcloud-surfaceLauncherAction{
-  width: 40px;
-  height: 40px;
+.cavcloud-surfaceLauncherMenuItemLead{
+  width: 18px;
+  height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
-  border-radius: 12px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: rgba(247,251,255,0.92);
-  cursor: pointer;
-  transition: transform .16s ease, border-color .16s ease, background .16s ease;
+  flex: 0 0 18px;
 }
-.cavcloud-surfaceLauncherAction:hover{
-  transform: translateY(-1px);
-  border-color: rgba(78,168,255,0.26);
-  background: rgba(78,168,255,0.08);
+.cavcloud-surfaceLauncherMenuItemLead .cavcloud-surfaceLauncherActionIcon{
+  width: 18px;
+  height: 18px;
 }
-.cavcloud-surfaceLauncherAction.is-active{
-  border-color: rgba(185,200,90,.46);
-  background: rgba(185,200,90,.14);
+.cavcloud-surfaceLauncherMenuCavAiWrap{
+  display: block;
 }
-.cavcloud-surfaceLauncherAction:focus-visible{
-  outline: 1px solid rgba(255,255,255,0.28);
-  outline-offset: 2px;
+.cavcloud-surfaceLauncherMenuCavAiWrap > .cavcloud-surfaceLauncherMenuItemCavAi{
+  width: 100%;
+}
+.cavcloud-surfaceLauncherMenuItemCavAi{
+  position: relative;
+  padding-left: 38px;
+}
+.cavcloud-surfaceLauncherMenuItemCavAi::before{
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  transform: translateY(-50%);
+  background-color: currentColor;
+  -webkit-mask: url("/icons/app/smart-optimization-svgrepo-com.svg") center / contain no-repeat;
+  mask: url("/icons/app/smart-optimization-svgrepo-com.svg") center / contain no-repeat;
 }
 .cavcloud-surfaceLauncherActionIcon{
   width: 22px;
@@ -1072,7 +1086,7 @@ body{ margin:0; }
 }
 .cavcloud-mountQuickAction{
   margin-top: 20px;
-  align-self: flex-start;
+  align-self: flex-end;
 }
 .cavcloud-mountQuickCard .cavcloud-mountGate{
   margin-top: 20px;

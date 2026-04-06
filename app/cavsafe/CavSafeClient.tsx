@@ -11,9 +11,9 @@ import * as c from "react";
 import { CavCloudPreviewPanel } from "@/components/cavcloud/CavCloudPreviewPanel";
 import CavSafeOwnerCommandDashboard from "@/components/cavsafe/CavSafeOwnerCommandDashboard";
 import {
-  CavSurfaceLauncherMenu,
   CavSurfacePlanButton,
-  CavSurfaceSidebarBrandMenu
+  CavSurfaceSidebarBrandMenu,
+  CavSurfaceSidebarFooter
 } from "@/components/cavcloud/CavSurfaceShellControls";
 import { LockIcon } from "@/components/LockIcon";
 import { copyTextToClipboard } from "@/lib/clipboard";
@@ -5978,7 +5978,10 @@ function ek() {
     }, [l]),
     openPlans = (0, c.useCallback)(() => {
       l.push("/plan");
-    }, [l]);
+    }, [l]),
+    openSurfaceSettings = (0, c.useCallback)(() => {
+      setSettingsPage(1), l2("Settings");
+    }, [l2]);
   return (0, t.jsxs)("div", {
     className: "cavcloud-root",
     "data-theme": eA,
@@ -5989,10 +5992,7 @@ function ek() {
         children: [t.jsx(CavSurfaceSidebarBrandMenu, {
           surfaceTitle: surfaceTitle,
           accountName: eP,
-          showVerified: surfaceVerified,
-          profileMenuLabel: profileMenuLabel,
-          onOpenProfile: openSurfaceProfile,
-          onLogout: logoutToAuth
+          showVerified: surfaceVerified
         })]
       }), t.jsx("nav", {
         className: "cavcloud-nav",
@@ -6015,22 +6015,28 @@ function ek() {
             }), e.label]
           }, e.key);
         })
-      }), t.jsx("div", {
-        className: "cavcloud-sidePaletteStack cavcloud-sideLauncherStack",
-        children: t.jsx(CavSurfaceLauncherMenu, {
-          surface: "cavsafe",
-          galleryActive: "Gallery" === S,
-          onOpenGallery: () => l2("Gallery"),
-          onOpenCompanion: openCavCloud,
-          companionLabel: "Open CavCloud",
-          companionIconSrc: "/logo/cavbot-logomark.svg",
-          companionIconAlt: "CavCloud logomark",
-          companionIconClassName: "cavcloud-surfaceLauncherActionIconMark",
-          companionIconWidth: 16,
-          companionIconHeight: 16,
-          cavAiSurface: "cavsafe",
-          cavAiContextLabel: "CavSafe context"
-        })
+      }), t.jsx(CavSurfaceSidebarFooter, {
+        accountName: eP,
+        profileMenuLabel: profileMenuLabel,
+        planTier: eK,
+        trialActive: eV,
+        trialDaysLeft: ez,
+        onOpenSettings: openSurfaceSettings,
+        onOpenProfile: openSurfaceProfile,
+        onOpenPlans: openPlans,
+        onLogout: logoutToAuth,
+        surface: "cavsafe",
+        galleryActive: "Gallery" === S,
+        onOpenGallery: () => l2("Gallery"),
+        onOpenCompanion: openCavCloud,
+        companionLabel: "Open CavCloud",
+        companionIconSrc: "/logo/cavbot-logomark.svg",
+        companionIconAlt: "CavCloud logomark",
+        companionIconClassName: "cavcloud-surfaceLauncherActionIconMark",
+        companionIconWidth: 16,
+        companionIconHeight: 16,
+        cavAiSurface: "cavsafe",
+        cavAiContextLabel: "CavSafe context"
       })]
     }), (0, t.jsxs)("main", {
       className: "cavcloud-main",

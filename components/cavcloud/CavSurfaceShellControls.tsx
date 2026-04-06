@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
 
 import CavAiCenterLauncher, { type AiCenterSurface } from "@/components/cavai/CavAiCenterLauncher";
 
@@ -11,9 +11,6 @@ type CavSurfaceSidebarBrandMenuProps = {
   surfaceTitle: string;
   accountName: string;
   showVerified?: boolean;
-  profileMenuLabel: string;
-  onOpenProfile: () => void;
-  onLogout: () => void | Promise<void>;
 };
 
 type CavSurfacePlanButtonProps = {
@@ -38,6 +35,177 @@ type CavSurfaceLauncherMenuProps = {
   cavAiContextLabel: string;
 };
 
+type CavSurfaceSidebarFooterProps = CavSurfaceLauncherMenuProps & {
+  accountName: string;
+  profileMenuLabel: string;
+  planTier: SurfacePlanTier;
+  trialActive: boolean;
+  trialDaysLeft: number;
+  onOpenSettings: () => void;
+  onOpenProfile: () => void;
+  onOpenPlans: () => void;
+  onLogout: () => void | Promise<void>;
+};
+
+type SurfaceProfileSnapshot = {
+  fullName: string;
+  username: string;
+  avatar: string;
+  tone: string;
+  storedInitials: string;
+};
+
+function s(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function firstInitialChar(input: string): string {
+  const hit = String(input || "").match(/[A-Za-z0-9]/);
+  return hit?.[0]?.toUpperCase() || "";
+}
+
+function normalizeInitialUsernameSource(rawUsername: string): string {
+  const trimmed = String(rawUsername || "").trim().replace(/^@+/, "");
+  if (!trimmed) return "";
+  if (!/^https?:\/\//i.test(trimmed)) return trimmed;
+  try {
+    const pathname = new URL(trimmed).pathname;
+    const parts = pathname.split("/").filter(Boolean);
+    const tail = parts[parts.length - 1] || "";
+    return tail.replace(/^@+/, "");
+  } catch {
+    return trimmed;
+  }
+}
+
+function deriveAccountInitials(fullName?: string | null, username?: string | null, fallback?: string | null): string {
+  const name = s(fullName);
+  if (name) {
+    const parts = name.split(/\s+/g).filter(Boolean);
+    if (parts.length >= 2) {
+      const duo = `${firstInitialChar(parts[0] || "")}${firstInitialChar(parts[1] || "")}`.trim();
+      if (duo) return duo;
+    }
+    const single = firstInitialChar(parts[0] || "");
+    if (single) return single;
+  }
+
+  const userInitial = firstInitialChar(normalizeInitialUsernameSource(s(username)));
+  if (userInitial) return userInitial;
+
+  const fallbackInitial = firstInitialChar(s(fallback));
+  if (fallbackInitial) return fallbackInitial;
+  return "C";
+}
+
+function readStoredInitials(): string {
+  try {
+    return s(globalThis.__cbLocalStore.getItem("cb_account_initials")).slice(0, 3).toUpperCase();
+  } catch {
+    return "";
+  }
+}
+
+function persistStoredInitials(value: string): void {
+  try {
+    if (value) {
+      globalThis.__cbLocalStore.setItem("cb_account_initials", value);
+    } else {
+      globalThis.__cbLocalStore.removeItem("cb_account_initials");
+    }
+  } catch {}
+}
+
+function readSurfaceProfileSnapshot(): SurfaceProfileSnapshot {
+  try {
+    return {
+      fullName: s(globalThis.__cbLocalStore.getItem("cb_profile_fullName_v1")),
+      username: s(globalThis.__cbLocalStore.getItem("cb_profile_username_v1")).replace(/^@+/, "").toLowerCase(),
+      avatar: s(globalThis.__cbLocalStore.getItem("cb_settings_avatar_image_v2")),
+      tone: s(globalThis.__cbLocalStore.getItem("cb_settings_avatar_tone_v2")) || "lime",
+      storedInitials: readStoredInitials(),
+    };
+  } catch {
+    return {
+      fullName: "",
+      username: "",
+      avatar: "",
+      tone: "lime",
+      storedInitials: "",
+    };
+  }
+}
+
+function useSurfaceProfileIdentity(fallbackAccountName: string) {
+  const [snapshot, setSnapshot] = useState<SurfaceProfileSnapshot>(() => readSurfaceProfileSnapshot());
+
+  useEffect(() => {
+    const sync = () => {
+      setSnapshot(readSurfaceProfileSnapshot());
+    };
+
+    sync();
+    window.addEventListener("storage", sync);
+    window.addEventListener("cb:profile", sync as EventListener);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("cb:profile", sync as EventListener);
+    };
+  }, []);
+
+  const displayName = useMemo(() => {
+    const full = s(snapshot.fullName);
+    if (full) return full;
+    const handle = s(snapshot.username);
+    if (handle) return `@${handle}`;
+    const fallback = s(fallbackAccountName);
+    return fallback || "CavBot Account";
+  }, [fallbackAccountName, snapshot.fullName, snapshot.username]);
+
+  const greetingName = useMemo(() => {
+    const full = s(snapshot.fullName);
+    if (full) return full;
+    const fallback = s(fallbackAccountName);
+    if (fallback) return fallback;
+    const handle = s(snapshot.username);
+    return handle ? `@${handle}` : "CavBot";
+  }, [fallbackAccountName, snapshot.fullName, snapshot.username]);
+
+  const initials = useMemo(() => {
+    const resolved = deriveAccountInitials(snapshot.fullName, snapshot.username, snapshot.storedInitials);
+    persistStoredInitials(resolved);
+    return resolved;
+  }, [snapshot.fullName, snapshot.storedInitials, snapshot.username]);
+
+  return {
+    ...snapshot,
+    displayName,
+    greetingName,
+    initials,
+  };
+}
+
+function avatarChipStyle(profileTone: string, profileAvatar: string) {
+  return {
+    background: profileAvatar
+      ? "transparent"
+      : profileTone === "transparent"
+        ? "transparent"
+        : profileTone === "violet"
+          ? "rgba(139,92,255,0.22)"
+          : profileTone === "blue"
+            ? "rgba(78,168,255,0.22)"
+            : profileTone === "white"
+              ? "rgba(255,255,255,0.92)"
+              : profileTone === "navy"
+                ? "rgba(1,3,15,0.78)"
+                : "rgba(185,200,90,0.92)",
+    overflow: "hidden",
+    display: "grid",
+    placeItems: "center",
+  } as const;
+}
+
 function VerifiedBadge() {
   return (
     <span
@@ -53,10 +221,11 @@ function VerifiedBadge() {
   );
 }
 
-function usePopoverState() {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-
+function usePopoverDismiss(
+  open: boolean,
+  setOpen: Dispatch<SetStateAction<boolean>>,
+  wrapRef: RefObject<HTMLDivElement | null>,
+) {
   useEffect(() => {
     if (!open) return;
 
@@ -76,9 +245,7 @@ function usePopoverState() {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [open]);
-
-  return { open, setOpen, wrapRef };
+  }, [open, setOpen, wrapRef]);
 }
 
 function resolvePlanStatusLabel(planTier: SurfacePlanTier, trialActive: boolean, trialDaysLeft: number) {
@@ -92,19 +259,23 @@ function resolvePlanActionLabel(planTier: SurfacePlanTier) {
   return planTier === "PREMIUM_PLUS" ? "See Plans" : "Upgrade Plan";
 }
 
+function LauncherGridIcon() {
+  return (
+    <svg className="cavcloud-surfaceLauncherTriggerIcon" viewBox="0 0 20 20" aria-hidden="true">
+      <rect x="2" y="2" width="6" height="6" rx="1.8" fill="#b9c85a" />
+      <rect x="12" y="2" width="6" height="6" rx="1.8" fill="#4da3ff" />
+      <rect x="2" y="12" width="6" height="6" rx="1.8" fill="#fb923c" />
+      <rect x="12" y="12" width="6" height="6" rx="1.8" fill="#8b5cff" />
+    </svg>
+  );
+}
+
 export function CavSurfaceSidebarBrandMenu(props: CavSurfaceSidebarBrandMenuProps) {
-  const { open, setOpen, wrapRef } = usePopoverState();
+  const profile = useSurfaceProfileIdentity(props.accountName);
 
   return (
-    <div className="cavcloud-brandMenuWrap" ref={wrapRef}>
-      <button
-        type="button"
-        className="cavcloud-brandMenuTrigger"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={`${props.surfaceTitle}. Account: ${props.accountName}`}
-        onClick={() => setOpen((prev) => !prev)}
-      >
+    <div className="cavcloud-brandMenuWrap">
+      <div className="cavcloud-brandMenuTrigger cavcloud-brandMenuTriggerStatic">
         <span className="cavcloud-brandMenuSurface">
           <Image
             src="/logo/cavbot-logomark.svg"
@@ -121,38 +292,11 @@ export function CavSurfaceSidebarBrandMenu(props: CavSurfaceSidebarBrandMenuProp
         <span className="cavcloud-brandTitle">
           <span className="cavcloud-brandTitlePrefix">Hi, </span>
           <span className="cavcloud-brandTitleNameWrap">
-            <span className="cavcloud-brandTitleAccent">{props.accountName}</span>
+            <span className="cavcloud-brandTitleAccent">{profile.greetingName}</span>
             {props.showVerified ? <VerifiedBadge /> : null}
           </span>
         </span>
-      </button>
-
-      {open ? (
-        <div className="cb-menu cavcloud-brandMenuMenu" role="menu" aria-label="Account">
-          <button
-            className="cb-menu-item"
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              props.onOpenProfile();
-            }}
-          >
-            {props.profileMenuLabel}
-          </button>
-          <button
-            className="cb-menu-item danger"
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              void props.onLogout();
-            }}
-          >
-            Log out
-          </button>
-        </div>
-      ) : null}
+      </div>
     </div>
   );
 }
@@ -199,102 +343,223 @@ export function CavSurfacePlanButton(props: CavSurfacePlanButtonProps) {
   );
 }
 
-function LauncherGridIcon() {
-  return (
-    <svg className="cavcloud-surfaceLauncherTriggerIcon" viewBox="0 0 20 20" aria-hidden="true">
-      <rect x="2" y="2" width="6" height="6" rx="1.8" fill="#b9c85a" />
-      <rect x="12" y="2" width="6" height="6" rx="1.8" fill="#4da3ff" />
-      <rect x="2" y="12" width="6" height="6" rx="1.8" fill="#fb923c" />
-      <rect x="12" y="12" width="6" height="6" rx="1.8" fill="#8b5cff" />
-    </svg>
+export function CavSurfaceSidebarFooter(props: CavSurfaceSidebarFooterProps) {
+  const [launcherOpen, setLauncherOpen] = useState(false);
+  const launcherWrapRef = useRef<HTMLDivElement | null>(null);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountWrapRef = useRef<HTMLDivElement | null>(null);
+  const profile = useSurfaceProfileIdentity(props.accountName);
+  const planStatusLabel = useMemo(
+    () => resolvePlanStatusLabel(props.planTier, props.trialActive, props.trialDaysLeft),
+    [props.planTier, props.trialActive, props.trialDaysLeft],
   );
-}
+  const planActionLabel = useMemo(() => resolvePlanActionLabel(props.planTier), [props.planTier]);
 
-export function CavSurfaceLauncherMenu(props: CavSurfaceLauncherMenuProps) {
-  const { open, setOpen, wrapRef } = usePopoverState();
+  usePopoverDismiss(launcherOpen, setLauncherOpen, launcherWrapRef);
+  usePopoverDismiss(accountOpen, setAccountOpen, accountWrapRef);
 
   return (
-    <div className="cavcloud-surfaceLauncherWrap" ref={wrapRef}>
-      <button
-        type="button"
-        className={`cavcloud-surfaceLauncherTrigger ${open ? "is-open" : ""}`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={`Open ${props.surface === "cavcloud" ? "CavCloud" : "CavSafe"} quick launcher`}
-        title="Open quick launcher"
-        onClick={() => setOpen((prev) => !prev)}
-      >
-        <LauncherGridIcon />
-      </button>
-
-      {open ? (
-        <div className="cavcloud-surfaceLauncherMenu" role="menu" aria-label="Quick launcher">
+    <div className="cb-side-bottom cavcloud-sideFoot cavcloud-surfaceFooter" aria-label="Sidebar footer">
+      <div className="cb-side-icons cavcloud-surfaceFooterIcons" aria-label="Quick tools">
+        <div className="cavcloud-surfaceLauncherWrap" ref={launcherWrapRef}>
           <button
             type="button"
-            role="menuitem"
-            className="cavcloud-surfaceLauncherAction"
-            aria-label={props.companionLabel}
-            title={props.companionLabel}
-            onClick={() => {
-              setOpen(false);
-              props.onOpenCompanion();
-            }}
+            className={`cb-icon-btn cavcloud-surfaceLauncherTrigger ${launcherOpen ? "is-open" : ""}`}
+            aria-haspopup="menu"
+            aria-expanded={launcherOpen}
+            aria-label={`Open ${props.surface === "cavcloud" ? "CavCloud" : "CavSafe"} quick launcher`}
+            title="Open quick launcher"
+            onClick={() => setLauncherOpen((prev) => !prev)}
           >
-            <Image
-              src={props.companionIconSrc}
-              alt={props.companionIconAlt}
-              width={props.companionIconWidth || 18}
-              height={props.companionIconHeight || 18}
-              className={[
-                "cavcloud-surfaceLauncherActionIcon",
-                props.companionIconClassName || "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              loading="eager"
-              unoptimized
-            />
+            <LauncherGridIcon />
           </button>
 
-          <button
-            type="button"
-            role="menuitem"
-            className={`cavcloud-surfaceLauncherAction ${props.galleryActive ? "is-active" : ""}`}
-            aria-label="Open gallery"
-            title="Open gallery"
-            onClick={() => {
-              setOpen(false);
-              props.onOpenGallery();
-            }}
-          >
-            <Image
-              src="/icons/color-palette.png"
-              alt="Gallery icon"
-              width={22}
-              height={22}
-              className="cavcloud-surfaceLauncherActionIcon"
-              unoptimized
-            />
-          </button>
+          {launcherOpen ? (
+            <div className="cb-menu cavcloud-surfaceLauncherMenu" role="menu" aria-label="Quick launcher">
+              <button
+                type="button"
+                role="menuitem"
+                className="cb-menu-item cavcloud-surfaceLauncherMenuItem"
+                aria-label={props.companionLabel}
+                title={props.companionLabel}
+                onClick={() => {
+                  setLauncherOpen(false);
+                  props.onOpenCompanion();
+                }}
+              >
+                <span className="cavcloud-surfaceLauncherMenuItemLead" aria-hidden="true">
+                  <Image
+                    src={props.companionIconSrc}
+                    alt=""
+                    width={props.companionIconWidth || 18}
+                    height={props.companionIconHeight || 18}
+                    className={[
+                      "cavcloud-surfaceLauncherActionIcon",
+                      props.companionIconClassName || "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    unoptimized
+                  />
+                </span>
+                <span>{props.companionLabel}</span>
+              </button>
 
-          <div
-            className="cavcloud-surfaceLauncherActionWrap"
-            onClickCapture={() => {
-              setOpen(false);
-            }}
-          >
-            <CavAiCenterLauncher
-              surface={props.cavAiSurface}
-              contextLabel={props.cavAiContextLabel}
-              triggerClassName="cavcloud-surfaceLauncherAction cavcloud-surfaceLauncherActionCavAi"
-              triggerAriaLabel={`Open CavAi for ${props.cavAiContextLabel}`}
-              iconClassName="cavcloud-surfaceLauncherActionIcon"
-              iconSizePx={22}
-              iconOnly
-            />
-          </div>
+              <button
+                type="button"
+                role="menuitem"
+                className={`cb-menu-item cavcloud-surfaceLauncherMenuItem ${props.galleryActive ? "is-active" : ""}`}
+                aria-label="Open gallery"
+                title="Open gallery"
+                onClick={() => {
+                  setLauncherOpen(false);
+                  props.onOpenGallery();
+                }}
+              >
+                <span className="cavcloud-surfaceLauncherMenuItemLead" aria-hidden="true">
+                  <Image
+                    src="/icons/color-palette.png"
+                    alt=""
+                    width={18}
+                    height={18}
+                    className="cavcloud-surfaceLauncherActionIcon"
+                    unoptimized
+                  />
+                </span>
+                <span>Gallery</span>
+              </button>
+
+              <div
+                className="cavcloud-surfaceLauncherMenuCavAiWrap"
+                onClickCapture={() => {
+                  setLauncherOpen(false);
+                }}
+              >
+                <CavAiCenterLauncher
+                  surface={props.cavAiSurface}
+                  contextLabel={props.cavAiContextLabel}
+                  triggerClassName="cb-menu-item cavcloud-surfaceLauncherMenuItem cavcloud-surfaceLauncherMenuItemCavAi"
+                  triggerLabel="CavAi"
+                  triggerAriaLabel={`Open CavAi for ${props.cavAiContextLabel}`}
+                />
+              </div>
+            </div>
+          ) : null}
         </div>
-      ) : null}
+
+        <button
+          type="button"
+          className="cb-icon-btn cavcloud-surfaceFooterSettings"
+          aria-label={`Open ${props.surface === "cavcloud" ? "CavCloud" : "CavSafe"} settings`}
+          title="Open settings"
+          onClick={props.onOpenSettings}
+        >
+          <Image
+            src="/icons/app/settings-svgrepo-com.svg"
+            alt=""
+            width={22}
+            height={22}
+            className="cb-settings-icon"
+            aria-hidden="true"
+            unoptimized
+          />
+        </button>
+      </div>
+
+      <div className="cb-side-plan cavcloud-surfaceFooterPlan" aria-label="Account">
+        <div className="cb-account-wrap cb-side-account-wrap cavcloud-surfaceAccountWrap" ref={accountWrapRef}>
+          <button
+            className="cb-side-account cavcloud-surfaceAccount"
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={accountOpen}
+            aria-label="Open account menu"
+            onClick={() => setAccountOpen((prev) => !prev)}
+          >
+            <span
+              className="cb-account-chip cb-side-account-chip"
+              data-tone={profile.tone || "lime"}
+              aria-hidden="true"
+              style={avatarChipStyle(profile.tone || "lime", profile.avatar)}
+            >
+              {profile.avatar ? (
+                <Image
+                  src={profile.avatar}
+                  alt=""
+                  width={96}
+                  height={96}
+                  quality={60}
+                  unoptimized
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                />
+              ) : (
+                <span className="cb-account-initials">{profile.initials}</span>
+              )}
+            </span>
+
+            <span className="cb-side-account-meta">
+              <span className="cb-side-account-name">{profile.displayName}</span>
+              <span className="cb-side-account-plan">{planStatusLabel}</span>
+            </span>
+
+            <span className="cb-side-account-spark" aria-hidden="true">
+              <Image
+                src="/icons/app/spark-svgrepo-com.svg"
+                alt=""
+                width={18}
+                height={18}
+                className="cb-upgrade-badgeIcon"
+                unoptimized
+              />
+            </span>
+          </button>
+
+          {accountOpen ? (
+            <div className="cb-menu cb-menu-right cb-account-menu cavcloud-surfaceAccountMenu" role="menu" aria-label="Account">
+              <button
+                className="cb-menu-item"
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setAccountOpen(false);
+                  props.onOpenProfile();
+                }}
+              >
+                {props.profileMenuLabel}
+              </button>
+
+              <button
+                className="cb-menu-item"
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setAccountOpen(false);
+                  props.onOpenPlans();
+                }}
+              >
+                {planActionLabel}
+              </button>
+
+              <button
+                className="cb-menu-item danger"
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setAccountOpen(false);
+                  void props.onLogout();
+                }}
+              >
+                Log out
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
