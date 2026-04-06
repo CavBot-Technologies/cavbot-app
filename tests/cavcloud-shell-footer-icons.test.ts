@@ -15,9 +15,13 @@ test("cavcloud and cavsafe footer restore surface quick tools and keep premium p
   const safe = read("app/cavsafe/CavSafeClient.tsx");
   const css = read("app/cavcloud/cavcloud.css");
 
-  assert.match(controls, /className=\{`cb-icon-btn cavcloud-surfaceQuickTool \$\{props\.galleryActive \? "is-active" : ""\}`\}/);
-  assert.match(controls, /onClick=\{props\.onOpenCompanion\}/);
+  assert.match(controls, /cavcloud-surfaceQuickToolLauncherBtn/);
+  assert.match(controls, /onClick=\{\(\) => setToolsOpen\(\(prev\) => !prev\)\}/);
+  assert.match(controls, /cavcloud-surfaceQuickToolRail/);
+  assert.match(controls, /onClick=\{\(\) => \{\s*setToolsOpen\(false\);\s*props\.onOpenCompanion\(\);/);
+  assert.match(controls, /onClick=\{\(\) => \{\s*setToolsOpen\(false\);\s*props\.onOpenGallery\(\);/);
   assert.match(controls, /<IconGallerySquares \/>/);
+  assert.match(controls, /<IconGalleryPalette \/>/);
   assert.match(controls, /<IconGear \/>/);
   assert.match(controls, /props\.planTier === "PREMIUM_PLUS" \? \(\s*<IconPremiumPlusStar \/>/);
   assert.match(cloud, /galleryActive: "Gallery" === S/);
@@ -25,7 +29,9 @@ test("cavcloud and cavsafe footer restore surface quick tools and keep premium p
   assert.match(safe, /onOpenCompanion: openCavCloud/);
   assert.match(cloud, /eB\(l\.name \|\| resolveCavcloudGreetingName\(l\)\)/);
   assert.match(safe, /eB\(l\.name \|\| resolveCavsafeGreetingName\(l\)\)/);
-  assert.match(css, /\.cavcloud-surfaceFooterIcons\{[\s\S]*display: inline-flex;[\s\S]*align-items: center;/);
-  assert.match(css, /\.cavcloud-surfaceQuickToolGridCell\.is-violet\{/);
+  assert.match(css, /\.cavcloud-surfaceFooterIcons\{[\s\S]*display: flex;[\s\S]*background: transparent;/);
+  assert.match(css, /\.cavcloud-surfaceQuickToolLauncher\{/);
+  assert.match(css, /\.cavcloud-surfaceQuickToolRail\{[\s\S]*display: inline-flex;/);
+  assert.match(css, /\.cavcloud-surfaceQuickToolGrid \.is-violet\{/);
   assert.match(css, /\.cavcloud-headerGreeting\{[\s\S]*gap: 4px;[\s\S]*font-size: 16px;/);
 });

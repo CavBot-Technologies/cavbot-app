@@ -272,12 +272,26 @@ function IconGear() {
 
 function IconGallerySquares() {
   return (
-    <span className="cavcloud-surfaceQuickToolGrid" aria-hidden="true">
-      <span className="cavcloud-surfaceQuickToolGridCell is-lime" />
-      <span className="cavcloud-surfaceQuickToolGridCell is-coral" />
-      <span className="cavcloud-surfaceQuickToolGridCell is-blue" />
-      <span className="cavcloud-surfaceQuickToolGridCell is-violet" />
-    </span>
+    <svg width="18" height="18" viewBox="0 0 18 18" className="cavcloud-surfaceQuickToolGrid" aria-hidden="true">
+      <rect x="1" y="1" width="6" height="6" rx="2" className="is-lime" />
+      <rect x="11" y="1" width="6" height="6" rx="2" className="is-coral" />
+      <rect x="1" y="11" width="6" height="6" rx="2" className="is-blue" />
+      <rect x="11" y="11" width="6" height="6" rx="2" className="is-violet" />
+    </svg>
+  );
+}
+
+function IconGalleryPalette() {
+  return (
+    <Image
+      src="/icons/color-palette.png"
+      alt=""
+      width={18}
+      height={18}
+      className="cavcloud-surfaceQuickToolIcon"
+      aria-hidden="true"
+      unoptimized
+    />
   );
 }
 
@@ -328,7 +342,9 @@ export function CavSurfaceHeaderGreeting(props: CavSurfaceHeaderGreetingProps) {
 
 export function CavSurfaceSidebarFooter(props: CavSurfaceSidebarFooterProps) {
   const [accountOpen, setAccountOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const accountWrapRef = useRef<HTMLDivElement | null>(null);
+  const toolsWrapRef = useRef<HTMLDivElement | null>(null);
   const profile = useSurfaceProfileIdentity(props.accountName);
   const planStatusLabel = useMemo(
     () => resolvePlanStatusLabel(props.planTier, props.trialActive, props.trialDaysLeft),
@@ -337,57 +353,84 @@ export function CavSurfaceSidebarFooter(props: CavSurfaceSidebarFooterProps) {
   const planActionLabel = useMemo(() => resolvePlanActionLabel(props.planTier), [props.planTier]);
 
   usePopoverDismiss(accountOpen, setAccountOpen, accountWrapRef);
+  usePopoverDismiss(toolsOpen, setToolsOpen, toolsWrapRef);
 
   return (
     <div className="cb-side-bottom cavcloud-sideFoot cavcloud-surfaceFooter" aria-label="Sidebar footer">
       <div className="cb-side-icons cavcloud-surfaceFooterIcons" aria-label="Quick tools">
-        <button
-          type="button"
-          className="cb-icon-btn cavcloud-surfaceQuickTool"
-          aria-label={props.companionLabel}
-          title={props.companionLabel}
-          onClick={props.onOpenCompanion}
-        >
-          <Image
-            src={props.companionIconSrc}
-            alt={props.companionIconAlt}
-            width={props.companionIconWidth || 18}
-            height={props.companionIconHeight || 18}
-            className={["cavcloud-surfaceQuickToolIcon", props.companionIconClassName || ""].filter(Boolean).join(" ")}
-            aria-hidden="true"
-            unoptimized
-          />
-        </button>
+        <div className="cavcloud-surfaceQuickToolLauncher" ref={toolsWrapRef}>
+          <button
+            type="button"
+            className={`cb-icon-btn cavcloud-surfaceQuickTool cavcloud-surfaceQuickToolLauncherBtn ${toolsOpen ? "is-active" : ""}`}
+            aria-label="Open surface tools"
+            title="Open surface tools"
+            aria-expanded={toolsOpen}
+            onClick={() => setToolsOpen((prev) => !prev)}
+          >
+            <IconGallerySquares />
+          </button>
 
-        <button
-          type="button"
-          className={`cb-icon-btn cavcloud-surfaceQuickTool ${props.galleryActive ? "is-active" : ""}`}
-          aria-label="Open gallery"
-          title="Open gallery"
-          aria-pressed={props.galleryActive ? true : undefined}
-          onClick={props.onOpenGallery}
-        >
-          <IconGallerySquares />
-        </button>
+          {toolsOpen ? (
+            <div className="cavcloud-surfaceQuickToolRail" role="group" aria-label="Surface tools">
+              <button
+                type="button"
+                className="cb-icon-btn cavcloud-surfaceQuickTool"
+                aria-label={props.companionLabel}
+                title={props.companionLabel}
+                onClick={() => {
+                  setToolsOpen(false);
+                  props.onOpenCompanion();
+                }}
+              >
+                <Image
+                  src={props.companionIconSrc}
+                  alt={props.companionIconAlt}
+                  width={props.companionIconWidth || 18}
+                  height={props.companionIconHeight || 18}
+                  className={["cavcloud-surfaceQuickToolIcon", props.companionIconClassName || ""].filter(Boolean).join(" ")}
+                  aria-hidden="true"
+                  unoptimized
+                />
+              </button>
 
-        <CavAiCenterLauncher
-          surface={props.cavAiSurface}
-          contextLabel={props.cavAiContextLabel}
-          triggerClassName="cb-icon-btn cavcloud-surfaceQuickTool cavcloud-surfaceQuickToolCavAi"
-          triggerAriaLabel={`Open CavAi for ${props.cavAiContextLabel}`}
-          iconOnly
-          iconSizePx={20}
-        />
+              <button
+                type="button"
+                className={`cb-icon-btn cavcloud-surfaceQuickTool ${props.galleryActive ? "is-active" : ""}`}
+                aria-label="Open gallery"
+                title="Open gallery"
+                aria-pressed={props.galleryActive ? true : undefined}
+                onClick={() => {
+                  setToolsOpen(false);
+                  props.onOpenGallery();
+                }}
+              >
+                <IconGalleryPalette />
+              </button>
 
-        <button
-          type="button"
-          className="cb-icon-btn cavcloud-surfaceQuickTool"
-          aria-label={`Open ${props.surface === "cavcloud" ? "CavCloud" : "CavSafe"} settings`}
-          title="Open settings"
-          onClick={props.onOpenSettings}
-        >
-          <IconGear />
-        </button>
+              <CavAiCenterLauncher
+                surface={props.cavAiSurface}
+                contextLabel={props.cavAiContextLabel}
+                triggerClassName="cb-icon-btn cavcloud-surfaceQuickTool cavcloud-surfaceQuickToolCavAi"
+                triggerAriaLabel={`Open CavAi for ${props.cavAiContextLabel}`}
+                iconOnly
+                iconSizePx={20}
+              />
+
+              <button
+                type="button"
+                className="cb-icon-btn cavcloud-surfaceQuickTool"
+                aria-label={`Open ${props.surface === "cavcloud" ? "CavCloud" : "CavSafe"} settings`}
+                title="Open settings"
+                onClick={() => {
+                  setToolsOpen(false);
+                  props.onOpenSettings();
+                }}
+              >
+                <IconGear />
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="cb-side-plan cavcloud-surfaceFooterPlan" aria-label="Account">

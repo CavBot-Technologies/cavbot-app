@@ -269,12 +269,22 @@ body{ margin:0; }
 .cavcloud-surfaceFooterIcons{
   width: auto;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  align-items: flex-start;
+  align-items: center;
+  gap: 0;
   padding: 0;
   border: 0;
   background: transparent;
+  box-shadow: none;
+}
+.cavcloud-surfaceQuickToolLauncher{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.cavcloud-surfaceQuickToolRail{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .cavcloud-surfaceFooterPlan{
   width: 100%;
@@ -427,6 +437,40 @@ body{ margin:0; }
 .cb-icon-btn.cavcloud-surfaceQuickTool:focus-visible{
   outline: 1px solid rgba(255,255,255,0.24);
   outline-offset: 2px;
+}
+.cavcloud-surfaceQuickToolIcon{
+  width: 18px;
+  height: 18px;
+  display: block;
+  object-fit: contain;
+}
+.cavcloud-surfaceQuickToolGrid{
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+.cavcloud-surfaceQuickToolGrid rect{
+  stroke: rgba(255,255,255,0.34);
+  stroke-width: .5;
+}
+.cavcloud-surfaceQuickToolGrid .is-lime{
+  fill: rgba(198,214,97,0.98);
+}
+.cavcloud-surfaceQuickToolGrid .is-coral{
+  fill: rgba(255,164,114,0.98);
+}
+.cavcloud-surfaceQuickToolGrid .is-blue{
+  fill: rgba(104,185,255,0.98);
+}
+.cavcloud-surfaceQuickToolGrid .is-violet{
+  fill: rgba(182,120,255,0.98);
+}
+.cavcloud-surfaceLauncherActionIconCavsafe{
+  filter: brightness(0) saturate(100%) invert(100%);
+}
+.cavcloud-surfaceLauncherActionIconMark{
+  width: 16px;
+  height: 16px;
 }
 .cavcloud-surfaceQuickToolCavAi{
   display: inline-grid;
