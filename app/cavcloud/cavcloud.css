@@ -5425,8 +5425,8 @@ body{ margin:0; }
     top: 0;
     left: 0;
     bottom: var(--cb-global-footer-height);
-    width: min(320px, 86vw);
-    max-width: 320px;
+    width: 86vw;
+    max-width: 340px;
     height: auto;
     z-index: 34;
     padding: 18px 14px 10px;
@@ -5531,7 +5531,7 @@ body{ margin:0; }
 
   .cavcloud-actions{
     margin-left: auto;
-    gap: 6px;
+    gap: 4px;
   }
 
   .cavcloud-search{
@@ -5541,16 +5541,29 @@ body{ margin:0; }
   .cavcloud-btnIconOnly,
   .cavcloud-mobileHeaderBtn,
   .cavcloud-btnUpload.is-mobile{
-    width: 34px;
-    height: 34px;
-    border-radius: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
   }
 
   .cavcloud-btnIconOnly svg,
   .cavcloud-mobileHeaderBtn svg,
   .cavcloud-btnUpload.is-mobile svg{
-    width: 15px;
-    height: 15px;
+    width: 14px;
+    height: 14px;
+  }
+
+  .cavcloud-top .cavcloud-btnGhost.cavcloud-btnIconOnly,
+  .cavcloud-top .cavcloud-mobileHeaderBtn,
+  .cavcloud-top .cavcloud-collabLaunchBtn.cavcloud-collabLaunchBtnIconOnly{
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .cavcloud-top .cavcloud-collabLaunchBtn.cavcloud-collabLaunchBtnIconOnly .cavcloud-collabLaunchBtnIcon{
+    width: 14px;
+    height: 14px;
   }
 
   .cavcloud-btnUpload.is-mobile{

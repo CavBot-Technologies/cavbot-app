@@ -66,6 +66,18 @@ test("cavcloud and cavsafe compact shells clip horizontal overflow while keeping
   assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-side,\s*[\s\S]*\.cavcloud-top,\s*[\s\S]*\.cavcloud-grid > \*,[\s\S]*max-width: 100%;/);
 });
 
+test("cavcloud and cavsafe mobile drawer width and compact header controls match the tighter app shell footprint", () => {
+  const globals = read("app/globals.css");
+  const css = read("app/cavcloud/cavcloud.css");
+
+  assert.match(globals, /@media \(max-width: 979px\)\{[\s\S]*\.cb-sidebar\{[\s\S]*width: 86vw;[\s\S]*max-width: 340px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-side\{[\s\S]*width: 86vw;[\s\S]*max-width: 340px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-actions\{[\s\S]*gap: 4px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-btnIconOnly,[\s\S]*width: 32px;[\s\S]*height: 32px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-btnIconOnly svg,[\s\S]*width: 14px;[\s\S]*height: 14px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-top \.cavcloud-btnGhost\.cavcloud-btnIconOnly,[\s\S]*background: transparent;/);
+});
+
 test("cavcloud and cavsafe direct surfaces persist full profile state and keep the legacy there/username footer fallback logic", () => {
   const cloud = read("app/cavcloud/CavCloudClient.tsx");
   const safe = read("app/cavsafe/CavSafeClient.tsx");
