@@ -564,6 +564,8 @@ body{ margin:0; }
   display: block;
   flex: 0 0 auto;
   object-fit: contain;
+  filter: brightness(0) invert(.96);
+  opacity: .96;
 }
 .cavcloud-badgeWrap .cavbot-dm-avatar{
   transform: scale(.72);
@@ -6993,6 +6995,7 @@ body{ margin:0; }
     align-items: center;
     justify-content: flex-end;
     gap: 6px;
+    padding-right: 8px;
   }
 
   .cavcloud-btnIconOnly,

@@ -81,11 +81,11 @@ test("cavcloud and cavsafe mobile drawer width and compact header controls match
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-titleCompactShell\{[\s\S]*flex: 0 0 auto;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-headerBadgeWrap\{[\s\S]*width: 46px;[\s\S]*height: 46px;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-headerBadgeWrap \.cavbot-dm-avatar\{[\s\S]*transform: scale\(\.82\);/);
-  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-actions\{[\s\S]*justify-content: flex-end;[\s\S]*gap: 6px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-actions\{[\s\S]*justify-content: flex-end;[\s\S]*gap: 6px;[\s\S]*padding-right: 8px;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-btnIconOnly,[\s\S]*width: 34px;[\s\S]*height: 34px;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-btnIconOnly svg,[\s\S]*width: 15px;[\s\S]*height: 15px;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-top \.cavcloud-btnGhost\.cavcloud-btnIconOnly,[\s\S]*background: rgba\(0,0,0,.22\);/);
-  assert.match(css, /\.cavcloud-mobileMenuGlyph\{\s*width: 15px;\s*height: 15px;[\s\S]*display: block;/);
+  assert.match(css, /\.cavcloud-mobileMenuGlyph\{\s*width: 15px;\s*height: 15px;[\s\S]*display: block;[\s\S]*filter: brightness\(0\) invert\(\.96\);/);
   assert.match(css, /\.cavcloud-pageIntroHeading\{[\s\S]*font-size: 16px;/);
   assert.match(css, /\.cavcloud-headerBadgeWrap\{/);
   assert.doesNotMatch(css, /\.cavcloud-pageIntroSub\{/);
