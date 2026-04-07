@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type RefObject, type SetStateAction } from "react";
 
 import CdnBadgeEyes from "@/components/CdnBadgeEyes";
@@ -385,7 +386,7 @@ function IconPremiumPlusStar() {
 export function CavSurfaceSidebarBrandMenu(props: CavSurfaceSidebarBrandMenuProps) {
   return (
     <div className="cavcloud-brandMenuWrap">
-      <div className="cavcloud-brandMenuTrigger cavcloud-brandMenuTriggerStatic">
+      <Link className="cavcloud-brandMenuTrigger" href="/" aria-label="Go to CavBot home">
         <span className="cavcloud-brandMenuSurface">
           <Image
             src="/logo/cavbot-logomark.svg"
@@ -398,7 +399,7 @@ export function CavSurfaceSidebarBrandMenu(props: CavSurfaceSidebarBrandMenuProp
           />
           <span className="cavcloud-brandMenuSurfaceLabel">{props.surfaceTitle}</span>
         </span>
-      </div>
+      </Link>
     </div>
   );
 }

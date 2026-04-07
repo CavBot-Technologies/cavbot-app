@@ -108,6 +108,7 @@ body{ margin:0; }
   border: 0;
   background: transparent;
   color: inherit;
+  text-decoration: none;
   cursor: pointer;
 }
 .cavcloud-brandMenuTriggerStatic{

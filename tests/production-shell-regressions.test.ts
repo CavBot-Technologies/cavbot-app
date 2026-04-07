@@ -120,6 +120,7 @@ test("cavcloud and cavsafe direct surfaces persist full profile state and keep t
   assert.match(safe, /isCompactShell \? null : t\.jsx\("button", \{\s*className: "cavcloud-btn cavcloud-btnGhost cavcloud-btnIconOnly",[\s\S]*"aria-label": "Refresh"/);
   assert.match(controls, /export function CavSurfaceHeaderBadge/);
   assert.match(controls, /export function CavSurfacePageIntro/);
+  assert.match(controls, /<Link className="cavcloud-brandMenuTrigger" href="\/" aria-label="Go to CavBot home">/);
   assert.match(controls, /CdnBadgeEyes/);
   assert.doesNotMatch(controls, /Welcome back to your command center!/);
   assert.match(controls, /return "CavBot Account";/);
