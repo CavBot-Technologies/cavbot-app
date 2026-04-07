@@ -35,13 +35,23 @@ test("auth session bootstrap exposes effective tier instead of only the raw memb
 });
 
 test("CavAi and CavCode clients clamp models and reasoning to the resolved plan", () => {
+  const helper = read("lib/clientPlan.ts");
   const center = read("components/cavai/CavAiCenterWorkspace.tsx");
   const code = read("components/cavai/CavAiCodeWorkspace.tsx");
   const cavcode = read("app/cavcode/page.tsx");
 
+  assert.equal(helper.includes('export const SHELL_PLAN_SNAPSHOT_KEY = "cb_shell_plan_snapshot_v1";'), true);
+  assert.equal(helper.includes('export const PLAN_EVENT = "cb:plan";'), true);
+  assert.equal(helper.includes("readBootClientPlanBootstrap"), true);
+  assert.equal(helper.includes("subscribeClientPlan"), true);
+
   assert.equal(center.includes("clampCenterModelOptionsToPlan"), true);
   assert.equal(center.includes("clampCenterReasoningLevelsToPlan"), true);
   assert.equal(center.includes("setAccountPlanId(authPlanId);"), true);
+  assert.equal(center.includes("const boot = readBootClientPlanBootstrap();"), true);
+  assert.equal(center.includes("setModelOptions(centerPlanModelOptions(boot.planId));"), true);
+  assert.equal(center.includes("setAvailableReasoningLevels(reasoningLevelsForPlan(boot.planId));"), true);
+  assert.equal(center.includes("return subscribeClientPlan((planId) => {"), true);
   assert.equal(
     center.includes("planTierRank(authPlanId) >= planTierRank(prev) ? authPlanId : prev"),
     false,
@@ -50,6 +60,9 @@ test("CavAi and CavCode clients clamp models and reasoning to the resolved plan"
   assert.equal(code.includes("if (!coder) return [];"), true);
   assert.equal(code.includes('accountPlanId === "free" || s(qwenPopoverState?.entitlement?.state).toLowerCase() === "locked_free"'), true);
   assert.equal(code.includes("cavCodePlanModelOptions(accountPlanId)"), true);
+  assert.equal(code.includes("const boot = readBootClientPlanBootstrap();"), true);
+  assert.equal(code.includes('setModelOptions(boot.planId === "free" ? [] : cavCodePlanModelOptions(boot.planId));'), true);
+  assert.equal(code.includes("return subscribeClientPlan((planId) => {"), true);
   assert.equal(
     code.includes("planTierRank(authPlanId) >= planTierRank(prev) ? authPlanId : prev"),
     false,
@@ -58,5 +71,9 @@ test("CavAi and CavCode clients clamp models and reasoning to the resolved plan"
   assert.equal(cavcode.includes("resolveServerPlanId(body.planId, accountPlanId)"), true);
   assert.equal(cavcode.includes("clampAgentBuilderModelOptionsToPlan"), true);
   assert.equal(cavcode.includes("clampAgentBuilderReasoningOptionsToPlan"), true);
+  assert.equal(cavcode.includes("const boot = readBootClientPlanBootstrap();"), true);
+  assert.equal(cavcode.includes("setCreateAgentAiModelOptions(agentBuilderPlanModelOptions(boot.planId));"), true);
+  assert.equal(cavcode.includes("setChangesCommitAiModelOptions(agentBuilderPlanModelOptions(boot.planId));"), true);
+  assert.equal(cavcode.includes("return subscribeClientPlan((planId) => {"), true);
   assert.equal(cavcode.includes("mergeAgentBuilderModelOptionsWithPlan"), false);
 });

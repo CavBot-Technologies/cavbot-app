@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   CAVAI_SAFE_FALLBACK_LINE,
   pickAndRememberCavAiLine,
@@ -21,6 +21,7 @@ import { emitGuardDecision, emitGuardDecisionFromPayload } from "@/src/lib/cavgu
 import { buildCavGuardDecision } from "@/src/lib/cavguard/cavGuard.registry";
 import { track } from "@/lib/cavbotAnalytics";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
+import { readBootClientPlanBootstrap, subscribeClientPlan } from "@/lib/clientPlan";
 import { CAVAI_UPLOAD_FILE_ICON_ASSETS, resolveUploadFileIcon } from "@/lib/cavai/uploadFileIcons";
 import styles from "./CavAiWorkspace.module.css";
 
@@ -2072,6 +2073,19 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       planLabel: qwenPopoverState.planLabel,
     });
   }, [qwenPopoverOpen, qwenPopoverState, trackCavenEvent]);
+
+  useLayoutEffect(() => {
+    const boot = readBootClientPlanBootstrap();
+    setAccountPlanId(boot.planId);
+    setModelOptions(boot.planId === "free" ? [] : cavCodePlanModelOptions(boot.planId));
+    setAvailableReasoningLevels(reasoningLevelsForPlan(boot.planId));
+  }, []);
+
+  useEffect(() => {
+    return subscribeClientPlan((planId) => {
+      setAccountPlanId(planId);
+    });
+  }, []);
 
   const loadProviderModels = useCallback(async () => {
     try {

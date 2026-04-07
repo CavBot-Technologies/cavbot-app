@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import CdnBadgeEyes from "@/components/CdnBadgeEyes";
@@ -37,6 +37,7 @@ import { inferCenterActionFromPrompt } from "@/src/lib/ai/ai.center-routing";
 import { emitGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
 import { resolveUploadFileIcon } from "@/lib/cavai/uploadFileIcons";
+import { readBootClientPlanBootstrap, subscribeClientPlan } from "@/lib/clientPlan";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 import styles from "./CavAiWorkspace.module.css";
 
@@ -3559,6 +3560,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">("free");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authProbeReady, setAuthProbeReady] = useState(false);
+  const [authBootstrapped, setAuthBootstrapped] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -3688,7 +3690,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [savingAgentId, setSavingAgentId] = useState("");
   const [agentModeQuery, setAgentModeQuery] = useState("");
   const [agentModeManageAgentId, setAgentModeManageAgentId] = useState("");
-  const isGuestPreviewMode = !isAuthenticated;
+  const isGuestPreviewMode = authProbeReady ? !isAuthenticated : authBootstrapped ? !isAuthenticated : false;
 
   const expandHref = useMemo(() => {
     const fallbackHref = buildCavAiSurfaceUrl({
@@ -3735,6 +3737,22 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   useEffect(() => {
     installedAgentIdsRef.current = installedAgentIds;
   }, [installedAgentIds]);
+
+  useLayoutEffect(() => {
+    const boot = readBootClientPlanBootstrap();
+    setAccountPlanId(boot.planId);
+    setModelOptions(centerPlanModelOptions(boot.planId));
+    setAvailableReasoningLevels(reasoningLevelsForPlan(boot.planId));
+    setIsAuthenticated(boot.authenticatedHint);
+    setAuthBootstrapped(true);
+  }, []);
+
+  useEffect(() => {
+    return subscribeClientPlan((planId) => {
+      setAccountPlanId(planId);
+      setIsAuthenticated(true);
+    });
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -5428,9 +5446,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         const authPlanId = normalizePlanId(body.account?.tierEffective ?? body.account?.tier);
         setAccountPlanId(authPlanId);
       } catch {
-        if (!cancelled) {
-          setIsAuthenticated(false);
-        }
+        // Keep the boot snapshot plan live until auth explicitly says otherwise.
       } finally {
         if (!cancelled) {
           setAuthProbeReady(true);

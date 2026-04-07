@@ -14,7 +14,7 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DiffEditorProps, EditorProps } from "@monaco-editor/react";
 import type * as MonacoType from "monaco-editor";
 import type { WorkspaceNode } from "@/src/lib/cavTerminal";
@@ -44,6 +44,7 @@ import {
   resolveAiModelLabel,
 } from "@/src/lib/ai/model-catalog";
 import { toReasoningDisplayHelper, toReasoningDisplayLabel } from "@/src/lib/ai/reasoning-display";
+import { readBootClientPlanBootstrap, subscribeClientPlan } from "@/lib/clientPlan";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 
 type MonacoApi = typeof import("monaco-editor");
@@ -6120,6 +6121,21 @@ export default function CavCodePage() {
     toastTimer.current = timerOwner.setTimeout(() => setToast(null), 2600);
   }, []);
 
+  useLayoutEffect(() => {
+    const boot = readBootClientPlanBootstrap();
+    setAccountPlanId(boot.planId);
+    setCreateAgentAiModelOptions(agentBuilderPlanModelOptions(boot.planId));
+    setCreateAgentAiReasoningOptions(reasoningLevelsForPlan(boot.planId));
+    setChangesCommitAiModelOptions(agentBuilderPlanModelOptions(boot.planId));
+    setChangesCommitAiReasoningOptions(reasoningLevelsForPlan(boot.planId));
+  }, []);
+
+  useEffect(() => {
+    return subscribeClientPlan((planId) => {
+      setAccountPlanId(planId);
+    });
+  }, []);
+
   const persistWorkspaceSnapshotToServer = useCallback(
     async (snapshot: CavCodeWorkspaceSnapshot): Promise<boolean> => {
       try {
@@ -7769,10 +7785,10 @@ export default function CavCodePage() {
   }, [changesCommitAiReasoningLevel, changesCommitAiReasoningOptions]);
 
   useEffect(() => {
-    setChangesCommitAiModelOptions((prev) => clampAgentBuilderModelOptionsToPlan(prev, accountPlanId));
-    setChangesCommitAiReasoningOptions((prev) => clampAgentBuilderReasoningOptionsToPlan(prev, accountPlanId));
-    setCreateAgentAiModelOptions((prev) => clampAgentBuilderModelOptionsToPlan(prev, accountPlanId));
-    setCreateAgentAiReasoningOptions((prev) => clampAgentBuilderReasoningOptionsToPlan(prev, accountPlanId));
+    setChangesCommitAiModelOptions(agentBuilderPlanModelOptions(accountPlanId));
+    setChangesCommitAiReasoningOptions(reasoningLevelsForPlan(accountPlanId));
+    setCreateAgentAiModelOptions(agentBuilderPlanModelOptions(accountPlanId));
+    setCreateAgentAiReasoningOptions(reasoningLevelsForPlan(accountPlanId));
   }, [accountPlanId]);
 
   useEffect(() => {
