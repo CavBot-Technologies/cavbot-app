@@ -6946,19 +6946,19 @@ body{ margin:0; }
     bottom: auto;
     height: calc(100dvh - var(--cb-global-footer-height) + 12px);
     max-height: calc(100dvh - var(--cb-global-footer-height) + 12px);
-    width: min(86vw, 340px);
-    max-width: min(86vw, 340px);
-    padding: 18px 16px 12px;
+    width: min(82vw, 320px);
+    max-width: min(82vw, 320px);
+    padding: 18px 14px 12px;
   }
 
   .cavcloud-main{
     padding: 0 12px calc(var(--cb-global-footer-height) + var(--safe-bottom) + 22px);
-    gap: 14px;
+    gap: 18px;
   }
 
   .cavcloud-top{
-    margin: 0 -12px 0;
-    padding: calc(10px + var(--safe-top, 0px)) 12px 10px;
+    margin: 0 -16px 0 -12px;
+    padding: calc(10px + var(--safe-top, 0px)) 6px 10px 12px;
     gap: 10px;
     align-items: center;
   }
@@ -6967,6 +6967,15 @@ body{ margin:0; }
     flex: 0 0 auto;
     min-width: auto;
     gap: 10px;
+  }
+
+  .cavcloud-headerBadgeWrap{
+    width: 46px;
+    height: 46px;
+  }
+
+  .cavcloud-headerBadgeWrap .cavbot-dm-avatar{
+    transform: scale(.82);
   }
 
   .cavcloud-actions{
@@ -7002,7 +7011,7 @@ body{ margin:0; }
   }
 
   .cavcloud-pageIntro{
-    padding-top: 0;
+    padding-top: 2px;
   }
 
   .cavcloud-pageIntroHeading{

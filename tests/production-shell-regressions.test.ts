@@ -75,9 +75,12 @@ test("cavcloud and cavsafe mobile drawer width and compact header controls match
   const css = read("app/cavcloud/cavcloud.css");
 
   assert.match(globals, /@media \(max-width: 979px\)\{[\s\S]*\.cb-sidebar\{[\s\S]*width: 86vw;[\s\S]*max-width: 340px;/);
-  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-side\{[\s\S]*height: calc\(100dvh - var\(--cb-global-footer-height\) \+ 12px\);[\s\S]*width: min\(86vw, 340px\);[\s\S]*max-width: min\(86vw, 340px\);[\s\S]*padding: 18px 16px 12px;/);
-  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-top\{[\s\S]*margin: 0 -12px 0;[\s\S]*padding: calc\(10px \+ var\(--safe-top, 0px\)\) 12px 10px;[\s\S]*gap: 10px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-side\{[\s\S]*height: calc\(100dvh - var\(--cb-global-footer-height\) \+ 12px\);[\s\S]*width: min\(82vw, 320px\);[\s\S]*max-width: min\(82vw, 320px\);[\s\S]*padding: 18px 14px 12px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-main\{[\s\S]*gap: 18px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-top\{[\s\S]*margin: 0 -16px 0 -12px;[\s\S]*padding: calc\(10px \+ var\(--safe-top, 0px\)\) 6px 10px 12px;[\s\S]*gap: 10px;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-titleCompactShell\{[\s\S]*flex: 0 0 auto;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-headerBadgeWrap\{[\s\S]*width: 46px;[\s\S]*height: 46px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-headerBadgeWrap \.cavbot-dm-avatar\{[\s\S]*transform: scale\(\.82\);/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-actions\{[\s\S]*justify-content: flex-end;[\s\S]*gap: 6px;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-btnIconOnly,[\s\S]*width: 34px;[\s\S]*height: 34px;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-btnIconOnly svg,[\s\S]*width: 15px;[\s\S]*height: 15px;/);
