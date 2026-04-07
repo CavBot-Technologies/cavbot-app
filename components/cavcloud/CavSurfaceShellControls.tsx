@@ -21,7 +21,6 @@ type CavSurfaceHeaderGreetingProps = {
 type CavSurfacePageIntroProps = {
   accountName: string;
   showVerified?: boolean;
-  subtitle?: string;
 };
 
 type CavSurfaceQuickToolsProps = {
@@ -406,7 +405,6 @@ export function CavSurfacePageIntro(props: CavSurfacePageIntroProps) {
         <span className="cavcloud-pageIntroName">{profile.greetingName}</span>
         {props.showVerified || founderProfile ? <VerifiedBadge /> : null}
       </div>
-      <p className="cavcloud-pageIntroSub">{props.subtitle || "Welcome back to your command center!"}</p>
     </section>
   );
 }

@@ -610,6 +610,16 @@ function CommandDeckPageInner() {
     return () => window.removeEventListener("cb:plan", handler as EventListener);
   }, []);
 
+  const welcomeShowsPremiumPlus = useMemo(() => {
+    const normalizedPlanLabel = String(workspacePlanLabel || "").trim().toUpperCase();
+    return (
+      planId === "premium_plus" ||
+      normalizedPlanLabel === "PREMIUM+" ||
+      normalizedPlanLabel === "PREMIUM_PLUS" ||
+      normalizedPlanLabel === "PREMIUM PLUS"
+    );
+  }, [planId, workspacePlanLabel]);
+
   useEffect(() => {
     if (auth.status !== "authed") {
       setUsedBytes(0);
@@ -1663,7 +1673,7 @@ function CommandDeckPageInner() {
                       {welcomeName || cachedName || "there"}
                     </span>
                   </Link>
-                  {planId === "premium_plus" ? (
+                  {welcomeShowsPremiumPlus ? (
                     <span
                       className="cb-welcome-verifiedBadge"
                       role="img"

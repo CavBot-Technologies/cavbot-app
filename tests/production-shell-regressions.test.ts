@@ -41,6 +41,10 @@ test("app shell republishes cached founder and plan state while footer modal and
   assert.match(homePage, /globalThis\.__cbLocalStore\.setItem\("cb_account_initials", initials \|\| ""\)/);
   assert.match(homePage, /window\.dispatchEvent\(\s*new CustomEvent\("cb:profile"/);
   assert.match(homePage, /globalThis\.__cbLocalStore\.setItem\(\s*"cb_shell_plan_snapshot_v1"/);
+  assert.match(homePage, /const welcomeShowsPremiumPlus = useMemo/);
+  assert.match(homePage, /planId === "premium_plus"/);
+  assert.match(homePage, /normalizedPlanLabel === "PREMIUM\+"/);
+  assert.match(homePage, /\{welcomeShowsPremiumPlus \? \(/);
   assert.match(footerTsx, /className=\{`\$\{styles\.developerPanel\} \$\{developerOpen \? styles\.developerPanelOpen : ""\}`\}/);
   assert.match(footerCss, /\.developerPanelOpen,/);
   assert.doesNotMatch(globals, /\.cb-side-account-wrap \.cb-menu\{\s*top: calc\(100% \+ 8px\);/);
@@ -72,14 +76,15 @@ test("cavcloud and cavsafe mobile drawer width and compact header controls match
 
   assert.match(globals, /@media \(max-width: 979px\)\{[\s\S]*\.cb-sidebar\{[\s\S]*width: 86vw;[\s\S]*max-width: 340px;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-side\{[\s\S]*height: calc\(100dvh - var\(--cb-global-footer-height\) \+ 12px\);[\s\S]*width: min\(86vw, 340px\);[\s\S]*max-width: min\(86vw, 340px\);[\s\S]*padding: 18px 16px 12px;/);
-  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-top\{[\s\S]*margin: 0 -12px 0;[\s\S]*padding: calc\(10px \+ var\(--safe-top, 0px\)\) 12px 10px;[\s\S]*gap: 8px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-top\{[\s\S]*margin: 0 -12px 0;[\s\S]*padding: calc\(10px \+ var\(--safe-top, 0px\)\) 12px 10px;[\s\S]*gap: 10px;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-titleCompactShell\{[\s\S]*flex: 0 0 auto;/);
-  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-actions\{[\s\S]*justify-content: flex-end;[\s\S]*gap: 3px;/);
-  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-btnIconOnly,[\s\S]*width: 30px;[\s\S]*height: 30px;/);
-  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-btnIconOnly svg,[\s\S]*width: 13px;[\s\S]*height: 13px;/);
-  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-top \.cavcloud-btnGhost\.cavcloud-btnIconOnly,[\s\S]*background: transparent;/);
-  assert.match(css, /\.cavcloud-pageIntroHeading\{/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-actions\{[\s\S]*justify-content: flex-end;[\s\S]*gap: 6px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-btnIconOnly,[\s\S]*width: 34px;[\s\S]*height: 34px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-btnIconOnly svg,[\s\S]*width: 15px;[\s\S]*height: 15px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-top \.cavcloud-btnGhost\.cavcloud-btnIconOnly,[\s\S]*background: rgba\(0,0,0,.22\);/);
+  assert.match(css, /\.cavcloud-pageIntroHeading\{[\s\S]*font-size: 16px;/);
   assert.match(css, /\.cavcloud-headerBadgeWrap\{/);
+  assert.doesNotMatch(css, /\.cavcloud-pageIntroSub\{/);
 });
 
 test("cavcloud and cavsafe direct surfaces persist full profile state and keep the legacy there/username footer fallback logic", () => {
@@ -108,6 +113,7 @@ test("cavcloud and cavsafe direct surfaces persist full profile state and keep t
   assert.match(controls, /export function CavSurfaceHeaderBadge/);
   assert.match(controls, /export function CavSurfacePageIntro/);
   assert.match(controls, /CdnBadgeEyes/);
+  assert.doesNotMatch(controls, /Welcome back to your command center!/);
   assert.match(controls, /return "CavBot Account";/);
   assert.match(controls, /return "there";/);
   assert.match(controls, /return "C";/);
