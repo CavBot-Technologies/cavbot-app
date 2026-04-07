@@ -2,7 +2,7 @@
 "use client";
 
 
-import AppShell, { useAppShellPlan } from "@/components/AppShell";
+import AppShell from "@/components/AppShell";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -1707,12 +1707,42 @@ function CommandDeckPageInner() {
         <div className="cb-home">
           <div className="cb-workspace-console">
             {/* Welcome header (top of page) */}
-            <WorkspaceWelcomeHeader
-              welcomeName={welcomeName || cachedName || "there"}
-              welcomeAccentColor={welcomeAccentColor}
-              fallbackPlanId={planId}
-              fallbackPlanLabel={workspacePlanLabel}
-            />
+            <header className="cb-welcome" aria-label="Welcome">
+              <div className="cb-welcome-title">
+                Hi,{" "}
+                <span className="cb-welcome-nameWrap">
+                  <Link
+                    href="/settings?tab=account#sx-theme-switcher"
+                    data-cb-route-intent="/settings?tab=account#sx-theme-switcher"
+                    data-cb-perf-source="workspace-welcome-theme-link"
+                    aria-label="Open theme color switcher"
+                    style={{ textDecoration: "none" }}
+                  >
+                    <span className="cb-welcome-name" style={{ color: welcomeAccentColor }}>
+                      {welcomeName || cachedName || "there"}
+                    </span>
+                  </Link>
+                  {welcomeShowsPremiumPlus ? (
+                    <span
+                      className="cb-welcome-verifiedBadge"
+                      role="img"
+                      aria-label="Premium plus verified account"
+                      title="Premium+ verified"
+                    >
+                      <svg
+                        className="cb-welcome-verifiedIcon"
+                        viewBox="0 0 16 16"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="M4 8.35 6.5 10.8 12.05 5.2" />
+                      </svg>
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+              <div className="cb-welcome-sub">Welcome back to your command center!</div>
+            </header>
 
 
            {/* ===== GRID ===== */}
@@ -2202,60 +2232,6 @@ function planTierLabelFromAccount(account?: AccountContext | null) {
   if (raw.includes("enterprise")) return "PREMIUM+";
   if (raw.includes("premium") || raw.includes("pro") || raw.includes("paid")) return "PREMIUM";
   return "FREE";
-}
-
-function WorkspaceWelcomeHeader(props: {
-  welcomeName: string;
-  welcomeAccentColor: string;
-  fallbackPlanId: PlanId;
-  fallbackPlanLabel: string;
-}) {
-  const shellPlan = useAppShellPlan();
-  const shellPlanId = resolvePlanIdFromTier(shellPlan.planTier);
-  const fallbackPlanId = resolvePlanIdFromTier(props.fallbackPlanId || props.fallbackPlanLabel || "free");
-  const showWelcomeVerifiedBadge =
-    shellPlanId === "premium_plus" ||
-    fallbackPlanId === "premium_plus" ||
-    resolvePlanIdFromTier(props.fallbackPlanLabel) === "premium_plus";
-
-  return (
-    <header className="cb-welcome" aria-label="Welcome">
-      <div className="cb-welcome-title">
-        Hi,{" "}
-        <span className="cb-welcome-nameWrap">
-          <Link
-            href="/settings?tab=account#sx-theme-switcher"
-            data-cb-route-intent="/settings?tab=account#sx-theme-switcher"
-            data-cb-perf-source="workspace-welcome-theme-link"
-            aria-label="Open theme color switcher"
-            style={{ textDecoration: "none" }}
-          >
-            <span className="cb-welcome-name" style={{ color: props.welcomeAccentColor }}>
-              {props.welcomeName}
-            </span>
-          </Link>
-          {showWelcomeVerifiedBadge ? (
-            <span
-              className="cb-welcome-verifiedBadge"
-              role="img"
-              aria-label="Premium plus verified account"
-              title="Premium+ verified"
-            >
-              <svg
-                className="cb-welcome-verifiedIcon"
-                viewBox="0 0 16 16"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <path d="M4 8.35 6.5 10.8 12.05 5.2" />
-              </svg>
-            </span>
-          ) : null}
-        </span>
-      </div>
-      <div className="cb-welcome-sub">Welcome back to your command center!</div>
-    </header>
-  );
 }
 
 type ProfileInfo = {
