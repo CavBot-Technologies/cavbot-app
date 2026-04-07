@@ -12,9 +12,15 @@ import {
   type CavCloudPlanAccountInput,
   type CavCloudPlanSubscriptionInput,
 } from "@/lib/cavcloud/plan";
+import { isCavbotFounderAccountIdentity } from "@/lib/profileIdentity";
 
 type PlanReader = Pick<typeof prisma, "account" | "subscription">;
 const PAID_SUBSCRIPTION_STATUSES = ["ACTIVE", "TRIALING", "PAST_DUE"] as const;
+
+type CavCloudPlanAccountRecord = CavCloudPlanAccountInput & {
+  name?: unknown;
+  slug?: unknown;
+};
 
 export type CavCloudPlanContext = ReturnType<typeof resolveCavCloudEffectivePlan> & {
   account: CavCloudPlanAccountInput | null;
@@ -27,13 +33,15 @@ export type CavCloudPlanContext = ReturnType<typeof resolveCavCloudEffectivePlan
 
 export type EffectiveAccountPlanContext = CavCloudPlanContext;
 
-async function readPrismaAccountPlanInput(accountId: string, tx: PlanReader): Promise<CavCloudPlanAccountInput | null> {
+async function readPrismaAccountPlanInput(accountId: string, tx: PlanReader): Promise<CavCloudPlanAccountRecord | null> {
   if (!accountId) return null;
 
   try {
     return await tx.account.findUnique({
       where: { id: accountId },
       select: {
+        name: true,
+        slug: true,
         tier: true,
         trialSeatActive: true,
         trialEndsAt: true,
@@ -45,6 +53,8 @@ async function readPrismaAccountPlanInput(accountId: string, tx: PlanReader): Pr
     return await tx.account.findUnique({
       where: { id: accountId },
       select: {
+        name: true,
+        slug: true,
         tier: true,
       },
     });
@@ -53,7 +63,7 @@ async function readPrismaAccountPlanInput(accountId: string, tx: PlanReader): Pr
   }
 }
 
-async function readAuthAccountPlanInput(accountId: string): Promise<CavCloudPlanAccountInput | null> {
+async function readAuthAccountPlanInput(accountId: string): Promise<CavCloudPlanAccountRecord | null> {
   const key = String(accountId || "").trim();
   if (!key) return null;
 
@@ -62,6 +72,8 @@ async function readAuthAccountPlanInput(accountId: string): Promise<CavCloudPlan
     const account = await findAccountById(pool, key);
     if (!account) return null;
     return {
+      name: account.name,
+      slug: account.slug,
       tier: account.tier,
       trialSeatActive: account.trialSeatActive,
       trialEndsAt: account.trialEndsAt,
@@ -79,7 +91,17 @@ async function readAccountPlanInput(accountId: string, tx: PlanReader): Promise<
     readPrismaAccountPlanInput(accountId, tx),
   ]);
 
-  return mergeCavCloudPlanAccounts(authAccount, prismaAccount);
+  const merged = mergeCavCloudPlanAccounts(authAccount, prismaAccount);
+  const founderAccount = isCavbotFounderAccountIdentity({
+    slug: authAccount?.slug ?? prismaAccount?.slug,
+    name: authAccount?.name ?? prismaAccount?.name,
+  });
+  if (!merged) return null;
+  if (!founderAccount) return merged;
+  return {
+    ...merged,
+    tier: "PREMIUM_PLUS",
+  };
 }
 
 async function readSubscriptionPlanInput(accountId: string, tx: PlanReader): Promise<CavCloudPlanSubscriptionInput> {

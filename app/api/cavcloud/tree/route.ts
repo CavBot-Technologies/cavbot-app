@@ -1,10 +1,9 @@
 import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
-import { findLatestEntitledSubscription, resolveEffectivePlanId as resolveEffectiveAccountPlanId } from "@/lib/accountPlan.server";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { getCavCloudSettings, toCavCloudListingPreferences } from "@/lib/cavcloud/settings.server";
 import { getTree, getTreeLite } from "@/lib/cavcloud/storage.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
-import { prisma } from "@/lib/prisma";
 import { getPlanLimits, type PlanId } from "@/lib/plans";
 
 export const runtime = "nodejs";
@@ -103,31 +102,10 @@ function isCavCloudTreeSchemaMismatch(err: unknown) {
 }
 
 async function fallbackTreeForMissingTables(accountId: string) {
-  const [account, entitledSubscription] = await Promise.all([
-    prisma.account.findUnique({
-      where: { id: accountId },
-      select: { tier: true, trialSeatActive: true, trialEndsAt: true },
-    }).catch((error) => {
-      if (
-        isSchemaMismatchError(error, {
-          tables: ["Account"],
-          columns: ["tier", "trialSeatActive", "trialEndsAt"],
-        })
-      ) {
-        return null;
-      }
-      throw error;
-    }),
-    findLatestEntitledSubscription(accountId),
-  ]);
-
-  const planId: PlanId = resolveEffectiveAccountPlanId({
-    account,
-    subscription: entitledSubscription,
-  });
-
-  const limitBytes = storageLimitBytesForPlan(planId);
-  const perFileMaxBytes = perFileMaxBytesForPlan(planId);
+  const plan = await getEffectiveAccountPlanContext(accountId).catch(() => null);
+  const planId: PlanId = plan?.planId ?? "free";
+  const limitBytes = plan?.limitBytes ?? storageLimitBytesForPlan(planId);
+  const perFileMaxBytes = plan?.perFileMaxBytes ?? perFileMaxBytesForPlan(planId);
   const now = new Date().toISOString();
 
   return {

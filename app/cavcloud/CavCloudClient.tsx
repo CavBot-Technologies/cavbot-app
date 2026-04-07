@@ -3011,6 +3011,24 @@ function ek(e) {
     void loadCavcloudSettings();
   }, [loadCavcloudSettings]);
   (0, c.useEffect)(() => {
+    let eSync = () => {
+      let aProfile = readCachedCavcloudProfileState(),
+        lPlan = readCachedCavcloudPlanState(),
+        tName = String(aProfile?.name || "").trim(),
+        sUsername = String(aProfile?.username || "").trim(),
+        iInitials = resolveCavcloudInitials({
+          ...aProfile,
+          initials: aProfile?.initials
+        }),
+        rPlanTier = resolveCavcloudDisplayPlanTier(lPlan.planTier, tName, sUsername);
+      eD(tName), eW(String(aProfile?.email || "").trim()), eG(sUsername), eB(tName || resolveCavcloudGreetingName(aProfile)), eU(iInitials), setProfilePublicEnabled(aProfile?.publicProfileEnabled || "unknown"), eJ(rPlanTier), eZ(!!lPlan.trialActive), eq(lPlan.trialActive ? Math.max(0, Math.trunc(Number(lPlan.trialDaysLeft || 0)) || 0) : 0);
+    };
+    eSync();
+    return window.addEventListener("storage", eSync), window.addEventListener("cb:profile", eSync), window.addEventListener("cb:plan", eSync), () => {
+      window.removeEventListener("storage", eSync), window.removeEventListener("cb:profile", eSync), window.removeEventListener("cb:plan", eSync);
+    };
+  }, []);
+  (0, c.useEffect)(() => {
     let eCanceled = !1;
     try {
       let eRawPublic = String(globalThis.__cbLocalStore.getItem("cb_profile_public_enabled_v1") || "").trim().toLowerCase();

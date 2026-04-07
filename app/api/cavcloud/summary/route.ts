@@ -1,12 +1,8 @@
 import type { Prisma } from "@prisma/client";
 
 import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
-import {
-  findLatestEntitledSubscription,
-  isTrialSeatEntitled,
-  resolveEffectivePlanId as resolveEffectiveAccountPlanId,
-} from "@/lib/accountPlan.server";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { getPlanLimits, type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
@@ -55,26 +51,9 @@ function extClauses(exts: readonly string[]): Prisma.CavCloudFileWhereInput[] {
   }));
 }
 
-type AccountPlanShape = {
-  tier: unknown;
-  trialSeatActive: boolean;
-  trialEndsAt: Date | null;
-};
-
-function planLimitBytes(account: AccountPlanShape | null, planId: PlanId): number | null {
-  if (isTrialSeatEntitled(account)) return null;
-  return storageLimitBytesForPlan(planId);
-}
-
-function degradedSummaryPayload(
-  account: AccountPlanShape | null = null,
-  subscription: { tier?: unknown; status?: unknown; currentPeriodEnd?: Date | null } | null = null,
-) {
-  const planId = resolveEffectiveAccountPlanId({
-    account,
-    subscription,
-  });
-  const limitBytes = planLimitBytes(account, planId);
+function degradedSummaryPayload(plan: { planId: PlanId; limitBytes: number | null } | null = null) {
+  const planId = plan?.planId ?? "free";
+  const limitBytes = plan ? plan.limitBytes : storageLimitBytesForPlan(planId);
   return {
     ok: true,
     degraded: true,
@@ -100,27 +79,8 @@ async function buildDegradedSummaryResponse(req: Request) {
   requireUser(sess);
 
   const accountId = String(sess.accountId || "");
-  const [account, entitledSubscription] = await Promise.all([
-    prisma.account
-      .findUnique({
-        where: { id: accountId },
-        select: { tier: true, trialSeatActive: true, trialEndsAt: true },
-      })
-      .catch((error) => {
-        if (
-          isSchemaMismatchError(error, {
-            tables: ["Account"],
-            columns: ["trialSeatActive", "trialEndsAt", "tier"],
-          })
-        ) {
-          return null;
-        }
-        return null;
-      }),
-    findLatestEntitledSubscription(accountId),
-  ]);
-
-  return jsonNoStore(degradedSummaryPayload(account, entitledSubscription), 200);
+  const plan = await getEffectiveAccountPlanContext(accountId).catch(() => null);
+  return jsonNoStore(degradedSummaryPayload(plan ? { planId: plan.planId, limitBytes: plan.limitBytes } : null), 200);
 }
 
 export async function GET(req: Request) {
@@ -148,31 +108,10 @@ export async function GET(req: Request) {
       ],
     };
 
-    const accountPromise = prisma.account
-      .findUnique({
-        where: { id: accountId },
-        select: {
-          tier: true,
-          trialSeatActive: true,
-          trialEndsAt: true,
-        },
-      })
-      .catch((error) => {
-        if (
-          isSchemaMismatchError(error, {
-            tables: ["Account"],
-            columns: ["trialSeatActive", "trialEndsAt", "tier"],
-          })
-        ) {
-          return null;
-        }
-        throw error;
-      });
-    const entitledSubscriptionPromise = findLatestEntitledSubscription(accountId);
+    const planContextPromise = getEffectiveAccountPlanContext(accountId).catch(() => null);
 
-    const [account, entitledSubscription, folderCount, fileCount, imageCount, videoCount, bytesAgg] = await Promise.all([
-      accountPromise,
-      entitledSubscriptionPromise,
+    const [planContext, folderCount, fileCount, imageCount, videoCount, bytesAgg] = await Promise.all([
+      planContextPromise,
       prisma.cavCloudFolder.count({
         where: { accountId, deletedAt: null, path: { not: "/" } },
       }),
@@ -193,11 +132,8 @@ export async function GET(req: Request) {
 
     const usedBig = bytesAgg._sum.bytes ?? BigInt(0);
     const usedBytes = toSafeNumber(usedBig);
-    const planId = resolveEffectiveAccountPlanId({
-      account,
-      subscription: entitledSubscription,
-    });
-    const limitBytes = planLimitBytes(account, planId);
+    const planId = planContext?.planId ?? "free";
+    const limitBytes = planContext?.limitBytes ?? storageLimitBytesForPlan(planId);
     const remainingBytes = limitBytes == null ? null : Math.max(0, limitBytes - usedBytes);
     const otherCount = Math.max(0, fileCount - imageCount - videoCount);
 

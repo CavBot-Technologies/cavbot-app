@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   CAVBOT_FOUNDER_DISPLAY_NAME,
   CAVBOT_FOUNDER_USERNAME,
+  isCavbotFounderAccountIdentity,
   isCavbotFounderIdentity,
   normalizeCavbotFounderProfile,
 } from "../lib/profileIdentity";
@@ -27,4 +28,10 @@ test("founder identity is detected from canonical name or username", () => {
   assert.equal(isCavbotFounderIdentity({ fullName: "CavBot Admin" }), true);
   assert.equal(isCavbotFounderIdentity({ displayName: "CavBot Admin" }), true);
   assert.equal(isCavbotFounderIdentity({ username: "someone-else", fullName: "Someone Else" }), false);
+});
+
+test("founder account identity is detected from canonical slug or account name", () => {
+  assert.equal(isCavbotFounderAccountIdentity({ slug: "Cavbot" }), true);
+  assert.equal(isCavbotFounderAccountIdentity({ name: "CavBot Admin" }), true);
+  assert.equal(isCavbotFounderAccountIdentity({ slug: "another-workspace", name: "Another Workspace" }), false);
 });

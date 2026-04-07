@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Prisma } from "@prisma/client";
 
-import { findLatestEntitledSubscription, resolveEffectivePlanId as resolveEffectiveAccountPlanId } from "@/lib/accountPlan.server";
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { prisma } from "@/lib/prisma";
 import { getCavCloudSettings } from "@/lib/cavcloud/settings.server";
 import { CAVCLOUD_NOTIFICATION_KINDS } from "@/lib/notificationKinds";
@@ -132,12 +132,8 @@ async function resolveStorageSnapshot(accountId: string): Promise<{
   limitBytes: bigint | null;
   pct: number | null;
 }> {
-  const [account, entitledSubscription, quota] = await Promise.all([
-    prisma.account.findUnique({
-      where: { id: accountId },
-      select: { tier: true, trialSeatActive: true, trialEndsAt: true },
-    }),
-    findLatestEntitledSubscription(accountId),
+  const [plan, quota] = await Promise.all([
+    getEffectiveAccountPlanContext(accountId).catch(() => null),
     prisma.cavCloudQuota.findUnique({
       where: { accountId },
       select: { usedBytes: true },
@@ -161,10 +157,7 @@ async function resolveStorageSnapshot(accountId: string): Promise<{
     usedBytes = typeof raw === "bigint" ? raw : BigInt(Number(raw || 0));
   }
 
-  const planId = resolveEffectiveAccountPlanId({
-    account,
-    subscription: entitledSubscription,
-  });
+  const planId = plan?.planId ?? "free";
   const storageGb = PLANS[planId]?.limits?.storageGb;
   if (typeof storageGb !== "number" || !Number.isFinite(storageGb) || storageGb <= 0) {
     return {

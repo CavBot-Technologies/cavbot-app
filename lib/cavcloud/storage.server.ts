@@ -7,7 +7,8 @@ import { pipeline } from "stream/promises";
 
 import { Prisma } from "@prisma/client";
 
-import { findLatestEntitledSubscription, resolveEffectivePlanId as resolveEffectiveAccountPlanId } from "@/lib/accountPlan.server";
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import type { PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { buildZipBuffer } from "@/lib/cavcloud/zip.server";
@@ -436,6 +437,30 @@ function isMissingOperationLogTableError(err: unknown): boolean {
   return msg.includes("cavcloudoperationlog") && (msg.includes("does not exist") || msg.includes("relation"));
 }
 
+function relationErrorMessage(err: unknown): string {
+  const e = err as { message?: unknown; meta?: { message?: unknown } };
+  return String(e?.meta?.message || e?.message || "").toLowerCase();
+}
+
+function isMissingNamedRelationError(err: unknown, relationNames: string[]) {
+  const e = err as { code?: unknown; meta?: { code?: unknown } };
+  const prismaCode = String(e?.code || "");
+  const dbCode = String(e?.meta?.code || "");
+  const msg = relationErrorMessage(err);
+  const mentionsRelation = relationNames.some((name) => msg.includes(name.toLowerCase()));
+  if (!mentionsRelation) return false;
+  if (prismaCode === "P2021") return true;
+  if (dbCode === "42P01") return true;
+  return msg.includes("does not exist") || msg.includes("relation");
+}
+
+function isOptionalTreeMetadataSchemaMismatch(err: unknown) {
+  return isSchemaMismatchError(err, {
+    tables: ["CavCloudFileAccess", "CavCloudFolderAccess", "CavCloudFolderUploadSessionFile"],
+    columns: ["fileId", "folderId", "permission", "role", "expiresAt", "status", "errorCode", "errorMessage", "updatedAt"],
+  });
+}
+
 function isMissingFilePathIndexTableError(err: unknown): boolean {
   const e = err as { code?: unknown; message?: unknown; meta?: { code?: unknown; message?: unknown } };
   const prismaCode = String(e?.code || "");
@@ -849,33 +874,55 @@ async function accountPlanSnapshot(accountId: string, tx: DbClient = prisma): Pr
   limitBytes: bigint | null;
   perFileMaxBytes: bigint;
 }> {
-  const [account, entitledSubscription] = await Promise.all([
-    tx.account.findUnique({
-      where: { id: accountId },
-      select: {
-        tier: true,
-        trialSeatActive: true,
-        trialEndsAt: true,
-      },
-    }),
-    findLatestEntitledSubscription(accountId, tx),
-  ]);
-
-  if (!account) throw new CavCloudError("ACCOUNT_NOT_FOUND", 404, "account not found");
-
-  const planId = resolveEffectiveAccountPlanId({
-    account,
-    subscription: entitledSubscription,
-  });
-
-  const limitBytes = storageLimitBytesForPlan(planId);
-  const perFileMaxBytes = perFileLimitBytesForPlan(planId);
+  const plan = await getEffectiveAccountPlanContext(accountId, tx);
+  const planId = plan.planId;
+  const limitBytes = plan.limitBytesBigInt;
+  const perFileMaxBytes = plan.perFileMaxBytesBigInt;
 
   return {
     planId,
     limitBytes,
     perFileMaxBytes,
   };
+}
+
+async function loadFailedUploadMetaByFileId(accountId: string, fileIds: string[]) {
+  const fileIdList = Array.isArray(fileIds) ? fileIds.map((value) => String(value || "").trim()).filter(Boolean) : [];
+  const failedMetaByFileId = new Map<string, { errorCode: string | null; errorMessage: string | null }>();
+  if (!accountId || !fileIdList.length) return failedMetaByFileId;
+
+  try {
+    const failedMetaRows = await prismaFolderUpload.cavCloudFolderUploadSessionFile.findMany({
+      where: {
+        accountId,
+        fileId: { in: fileIdList },
+        status: "FAILED",
+      },
+      orderBy: { updatedAt: "desc" },
+      select: {
+        fileId: true,
+        errorCode: true,
+        errorMessage: true,
+      },
+    });
+    for (const row of failedMetaRows) {
+      if (!failedMetaByFileId.has(row.fileId)) {
+        failedMetaByFileId.set(row.fileId, {
+          errorCode: row.errorCode || null,
+          errorMessage: row.errorMessage || null,
+        });
+      }
+    }
+    return failedMetaByFileId;
+  } catch (err) {
+    if (
+      isMissingNamedRelationError(err, ["cavcloudfolderuploadsessionfile"])
+      || isOptionalTreeMetadataSchemaMismatch(err)
+    ) {
+      return failedMetaByFileId;
+    }
+    throw err;
+  }
 }
 
 async function computeUsedBytes(accountId: string, tx: DbClient = prisma): Promise<bigint> {
@@ -1729,34 +1776,49 @@ async function resolveCollabBadges(args: {
   }
 
   const now = new Date();
-  const [fileRows, folderRows] = await Promise.all([
-    args.fileIds.length
-      ? tx.cavCloudFileAccess.findMany({
-          where: {
-            accountId,
-            fileId: { in: args.fileIds },
-            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-          },
-          select: {
-            fileId: true,
-            permission: true,
-          },
-        })
-      : Promise.resolve([]),
-    args.folderIds.length
-      ? tx.cavCloudFolderAccess.findMany({
-          where: {
-            accountId,
-            folderId: { in: args.folderIds },
-            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-          },
-          select: {
-            folderId: true,
-            role: true,
-          },
-        })
-      : Promise.resolve([]),
-  ]);
+  let fileRows: Array<{ fileId: string; permission: string }> = [];
+  let folderRows: Array<{ folderId: string; role: string }> = [];
+  try {
+    [fileRows, folderRows] = await Promise.all([
+      args.fileIds.length
+        ? tx.cavCloudFileAccess.findMany({
+            where: {
+              accountId,
+              fileId: { in: args.fileIds },
+              OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+            },
+            select: {
+              fileId: true,
+              permission: true,
+            },
+          })
+        : Promise.resolve([]),
+      args.folderIds.length
+        ? tx.cavCloudFolderAccess.findMany({
+            where: {
+              accountId,
+              folderId: { in: args.folderIds },
+              OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+            },
+            select: {
+              folderId: true,
+              role: true,
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+  } catch (err) {
+    if (
+      isMissingNamedRelationError(err, ["cavcloudfileaccess", "cavcloudfolderaccess"])
+      || isOptionalTreeMetadataSchemaMismatch(err)
+    ) {
+      return {
+        fileById: new Map<string, { sharedUserCount: number; collaborationEnabled: boolean }>(),
+        folderById: new Map<string, { sharedUserCount: number; collaborationEnabled: boolean }>(),
+      };
+    }
+    throw err;
+  }
 
   const fileById = new Map<string, { sharedUserCount: number; collaborationEnabled: boolean }>();
   for (const row of fileRows) {
@@ -2306,30 +2368,7 @@ async function loadFolderChildrenPayload(args: {
   const failedFileIds = files
     .filter((row) => normalizeFileStatus(row.status) === "FAILED")
     .map((row) => row.id);
-  const failedMetaByFileId = new Map<string, { errorCode: string | null; errorMessage: string | null }>();
-  if (failedFileIds.length) {
-    const failedMetaRows = await prismaFolderUpload.cavCloudFolderUploadSessionFile.findMany({
-      where: {
-        accountId,
-        fileId: { in: failedFileIds },
-        status: "FAILED",
-      },
-      orderBy: { updatedAt: "desc" },
-      select: {
-        fileId: true,
-        errorCode: true,
-        errorMessage: true,
-      },
-    });
-    for (const row of failedMetaRows) {
-      if (!failedMetaByFileId.has(row.fileId)) {
-        failedMetaByFileId.set(row.fileId, {
-          errorCode: row.errorCode || null,
-          errorMessage: row.errorMessage || null,
-        });
-      }
-    }
-  }
+  const failedMetaByFileId = await loadFailedUploadMetaByFileId(accountId, failedFileIds);
 
   const breadcrumbByPath = new Map(breadcrumbRows.map((row) => [row.path, row]));
   const breadcrumbs = buildBreadcrumbPaths(folder.path)
@@ -2569,30 +2608,7 @@ export async function getTree(args: {
   const failedFileIds = files
     .filter((row) => normalizeFileStatus(row.status) === "FAILED")
     .map((row) => row.id);
-  const failedMetaByFileId = new Map<string, { errorCode: string | null; errorMessage: string | null }>();
-  if (failedFileIds.length) {
-    const failedMetaRows = await prismaFolderUpload.cavCloudFolderUploadSessionFile.findMany({
-      where: {
-        accountId,
-        fileId: { in: failedFileIds },
-        status: "FAILED",
-      },
-      orderBy: { updatedAt: "desc" },
-      select: {
-        fileId: true,
-        errorCode: true,
-        errorMessage: true,
-      },
-    });
-    for (const row of failedMetaRows) {
-      if (!failedMetaByFileId.has(row.fileId)) {
-        failedMetaByFileId.set(row.fileId, {
-          errorCode: row.errorCode || null,
-          errorMessage: row.errorMessage || null,
-        });
-      }
-    }
-  }
+  const failedMetaByFileId = await loadFailedUploadMetaByFileId(accountId, failedFileIds);
 
   const breadcrumbByPath = new Map(breadcrumbRows.map((b) => [b.path, b]));
   const breadcrumbs = buildBreadcrumbPaths(folder.path)

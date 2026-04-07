@@ -14,10 +14,8 @@ test("account plan helper upgrades cavcloud to the highest live entitlement", ()
 
   assert.equal(source.includes("const PLAN_RANK: Record<PlanId, number> = {"), true);
   assert.equal(source.includes('premium_plus: 2,'), true);
-  assert.equal(
-    source.includes('const ENTITLED_SUBSCRIPTION_STATUSES = new Set(["ACTIVE", "TRIALING", "PAST_DUE"]);'),
-    true,
-  );
+  assert.equal(source.includes("const ENTITLED_SUBSCRIPTION_STATUS_LIST = [\"ACTIVE\", \"TRIALING\", \"PAST_DUE\"] as const;"), true);
+  assert.equal(source.includes("const ENTITLED_SUBSCRIPTION_STATUSES = new Set<string>(ENTITLED_SUBSCRIPTION_STATUS_LIST);"), true);
   assert.equal(source.includes('if (isTrialSeatEntitled(args.account, now)) return "premium_plus";'), true);
   assert.equal(
     source.includes("return PLAN_RANK[subscriptionPlanId] > PLAN_RANK[accountPlanId] ? subscriptionPlanId : accountPlanId;"),
@@ -31,22 +29,21 @@ test("cavcloud quota and shell routes use the shared effective plan resolver", (
   const dashboard = read("app/api/cavcloud/dashboard/route.ts");
   const tree = read("app/api/cavcloud/tree/route.ts");
   const storage = read("lib/cavcloud/storage.server.ts");
+  const settings = read("app/api/cavcloud/settings/route.ts");
+  const notifications = read("lib/cavcloud/notifications.server.ts");
+  const collab = read("lib/cavcloud/collab.server.ts");
   const sync = read("app/api/cavcloud/sync/upsert/route.ts");
 
   assert.equal(authMe.includes("findLatestEntitledSubscription(accountId)"), true);
-  assert.equal(authMe.includes("tierEffective: planTierTokenFromPlanId(effectivePlanId)"), true);
+  assert.equal(authMe.includes("planTierTokenFromPlanId(effectivePlanId)"), true);
 
-  assert.equal(summary.includes("findLatestEntitledSubscription(accountId)"), true);
-  assert.equal(summary.includes("subscription: entitledSubscription,"), true);
-
-  assert.equal(dashboard.includes("findLatestEntitledSubscription(accountId)"), true);
-  assert.equal(dashboard.includes("subscription: entitledSubscription,"), true);
-
-  assert.equal(tree.includes("findLatestEntitledSubscription(accountId)"), true);
-  assert.equal(tree.includes("const planId: PlanId = resolveEffectiveAccountPlanId({"), true);
-
-  assert.equal(storage.includes("findLatestEntitledSubscription(accountId, tx)"), true);
-  assert.equal(storage.includes("const planId = resolveEffectiveAccountPlanId({"), true);
+  assert.equal(summary.includes("getEffectiveAccountPlanContext(accountId)"), true);
+  assert.equal(dashboard.includes("getEffectiveAccountPlanContext(accountId)"), true);
+  assert.equal(tree.includes("getEffectiveAccountPlanContext(accountId)"), true);
+  assert.equal(storage.includes("getEffectiveAccountPlanContext(accountId, tx)"), true);
+  assert.equal(settings.includes("getEffectiveAccountPlanContext(accountId)"), true);
+  assert.equal(notifications.includes("getEffectiveAccountPlanContext(accountId)"), true);
+  assert.equal(collab.includes("getEffectiveAccountPlanContext(args.accountId, args.tx)"), true);
 
   assert.equal(sync.includes('findLatestEntitledSubscription(String(sess.accountId || ""))'), true);
   assert.equal(sync.includes("const planId = resolveEffectiveAccountPlanId({"), true);

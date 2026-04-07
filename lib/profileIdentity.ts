@@ -28,6 +28,21 @@ export function isCavbotFounderIdentity(input: {
   return username === CAVBOT_FOUNDER_USERNAME || displayName === founderName || fullName === founderName;
 }
 
+export function isCavbotFounderAccountIdentity(input: {
+  slug?: unknown;
+  name?: unknown;
+  displayName?: unknown;
+  fullName?: unknown;
+}) {
+  const slug = lower(input.slug).replace(/[^a-z0-9]+/g, "");
+  const name = lower(input.name);
+  const displayName = lower(input.displayName);
+  const fullName = lower(input.fullName);
+  const founderSlug = CAVBOT_FOUNDER_USERNAME.toLowerCase();
+  const founderName = CAVBOT_FOUNDER_DISPLAY_NAME.toLowerCase();
+  return slug === founderSlug || name === founderName || displayName === founderName || fullName === founderName;
+}
+
 export function normalizeCavbotFounderProfile<T extends {
   username?: unknown;
   displayName?: unknown;
