@@ -22,8 +22,6 @@ import {
   pickPrimaryMembership,
 } from "@/lib/authDb";
 import { readSanitizedJson } from "@/lib/security/userInput";
-import { readCoarseRequestGeo } from "@/lib/requestGeo";
-import { getAccountDisciplineState } from "@/lib/admin/accountDiscipline.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +41,19 @@ function json<T>(data: T, init?: number | ResponseInit) {
 
 function sha256Hex(s: string) {
   return createHash("sha256").update(s).digest("hex");
+}
+
+function safeStr(v: unknown): string {
+  if (v == null) return "";
+  return String(v);
+}
+
+function readCloudflareGeo(req: NextRequest) {
+  const countryRaw = safeStr(req.headers.get("cf-ipcountry")).trim();
+  const country = countryRaw && countryRaw !== "XX" ? countryRaw : "";
+  const region = safeStr(req.headers.get("cf-region")).trim() || safeStr(req.headers.get("cf-region-code")).trim();
+  const label = [region, country].map((s) => String(s || "").trim()).filter(Boolean).join(", ");
+  return { country: country || null, region: region || null, label: label || (country ? country : null) };
 }
 
 /* =========================
@@ -188,15 +199,6 @@ export async function POST(req: NextRequest) {
 
     const active = pickPrimaryMembership(memberships);
     if (!active) return json({ ok: false, error: "NO_MEMBERSHIP", message: "No workspace membership found." }, 403);
-    {
-      const discipline = await getAccountDisciplineState(active.accountId);
-      if (discipline?.status === "REVOKED") {
-        return json({ ok: false, error: "ACCOUNT_REVOKED", message: "This account has been revoked." }, 403);
-      }
-      if (discipline?.status === "SUSPENDED") {
-        return json({ ok: false, error: "ACCOUNT_SUSPENDED", message: "This account is temporarily suspended." }, 403);
-      }
-    }
 
     // Mint real session cookie
     const memberRole = normalizeRole(active.role);
@@ -231,7 +233,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Mark used
-    const geo = readCoarseRequestGeo(req);
+    const geo = readCloudflareGeo(req);
     const loc = String(meta.geoLabel || meta.location || geo.label || "").trim() || null;
 
     await markAuthTokenUsed(pool, token.id);

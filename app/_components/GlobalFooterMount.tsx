@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import CavbotGlobalFooter from "@/components/footer/CavbotGlobalFooter";
-import { isAdminPublicPath } from "@/lib/admin/config";
 
 const ROUTE_FOOTER_BLOCKLIST = ["/status", "/status/history"] as const;
 const ARCADE_FOOTER_BLOCKLIST = ["/cavbot-arcade", "/cavbot-arcade/gallery"] as const;
@@ -16,7 +15,7 @@ const MODAL_LOCK_CLASSES = [
   "modal-lock",
   "cb-console-lock",
 ] as const;
-const FOOTER_DIALOG_IDS = ["cb-footer-developer-panel", "cb-footer-human-resources-panel"] as const;
+const FOOTER_DEVELOPER_DIALOG_ID = "cb-footer-developer-panel";
 
 function normalizePathname(pathname: string | null): string {
   if (!pathname) return "";
@@ -39,8 +38,8 @@ function isCavcodeRoute(pathname: string): boolean {
 }
 
 function isVisibleModalNode(node: HTMLElement): boolean {
-  if (FOOTER_DIALOG_IDS.includes(node.id as (typeof FOOTER_DIALOG_IDS)[number])) return false;
-  if (FOOTER_DIALOG_IDS.some((dialogId) => node.closest(`#${dialogId}`))) return false;
+  if (node.id === FOOTER_DEVELOPER_DIALOG_ID) return false;
+  if (node.closest(`#${FOOTER_DEVELOPER_DIALOG_ID}`)) return false;
   let current: HTMLElement | null = node;
   while (current) {
     if (current.hasAttribute("hidden")) return false;
@@ -81,7 +80,6 @@ export default function GlobalFooterMount() {
     if (ROUTE_FOOTER_BLOCK_PREFIXES.some((prefix) => normalizedPathname === prefix || normalizedPathname.startsWith(`${prefix}/`))) return true;
     if (isCavcodeRoute(normalizedPathname)) return true;
     if (isAuthRoute(normalizedPathname)) return true;
-    if (isAdminPublicPath(normalizedPathname)) return true;
     return false;
   }, [normalizedPathname]);
 

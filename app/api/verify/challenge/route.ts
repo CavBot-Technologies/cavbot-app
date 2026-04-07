@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { assertWriteOrigin, getSession } from "@/lib/apiAuth";
-import { recordAdminEventSafe } from "@/lib/admin/events";
+import { assertWriteOrigin } from "@/lib/apiAuth";
 import { createVerifyChallenge, parseVerifyActionType } from "@/lib/auth/cavbotVerify";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
@@ -35,7 +34,6 @@ type ChallengeBody = {
 export async function POST(req: Request) {
   try {
     assertWriteOrigin(req);
-    const session = await getSession(req);
 
     const body = (await readSanitizedJson(req, ({}))) as ChallengeBody;
     const actionType = parseVerifyActionType(body?.actionType);
@@ -53,25 +51,6 @@ export async function POST(req: Request) {
       const status = created.error === "RATE_LIMITED" ? 429 : 400;
       return json(created, status);
     }
-
-    await Promise.all([
-      recordAdminEventSafe({
-        name: "cavverify_rendered",
-        actorUserId: session?.systemRole === "user" ? session.sub : null,
-        accountId: session?.systemRole === "user" ? session.accountId || null : null,
-        origin: body?.route ? String(body.route) : null,
-        sessionKey: created.sessionId || (body?.sessionId ? String(body.sessionId) : null),
-        result: actionType,
-      }),
-      recordAdminEventSafe({
-        name: "cavverify_started",
-        actorUserId: session?.systemRole === "user" ? session.sub : null,
-        accountId: session?.systemRole === "user" ? session.accountId || null : null,
-        origin: body?.route ? String(body.route) : null,
-        sessionKey: created.sessionId || (body?.sessionId ? String(body.sessionId) : null),
-        result: actionType,
-      }),
-    ]);
 
     return json(created, 200);
   } catch {

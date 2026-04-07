@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { assertWriteOrigin, getSession } from "@/lib/apiAuth";
-import { recordAdminEventSafe } from "@/lib/admin/events";
+import { assertWriteOrigin } from "@/lib/apiAuth";
 import { submitVerifyChallenge } from "@/lib/auth/cavbotVerify";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
@@ -41,7 +40,6 @@ type SubmitBody = {
 export async function POST(req: Request) {
   try {
     assertWriteOrigin(req);
-    const session = await getSession(req);
     const body = (await readSanitizedJson(req, ({}))) as SubmitBody;
 
     const result = submitVerifyChallenge(req, {
@@ -54,17 +52,6 @@ export async function POST(req: Request) {
       },
       gestureSummary: body?.gestureSummary ?? null,
       sessionIdHint: body?.sessionId ? String(body.sessionId) : "",
-    });
-
-    await recordAdminEventSafe({
-      name: result.ok ? "cavverify_passed" : "cavverify_failed",
-      actorUserId: session?.systemRole === "user" ? session.sub : null,
-      accountId: session?.systemRole === "user" ? session.accountId || null : null,
-      sessionKey: body?.sessionId ? String(body.sessionId) : null,
-      result: result.ok ? "passed" : String(result.error || "failed"),
-      metaJson: {
-        challengeId: body?.challengeId ? String(body.challengeId) : null,
-      },
     });
 
     return json(result, result.ok ? 200 : 400);

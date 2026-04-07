@@ -1,25 +1,16 @@
 "use client";
 
 import AppShell from "@/components/AppShell";
-import { OperatorIdRevealModal } from "@/components/notifications/OperatorIdRevealModal";
 import {
-  formatNotificationExpiry,
   NotificationFilter,
-  NotificationJoinRole,
   NotificationRaw,
   NotificationRow,
   NotificationTone,
   NOTIFICATION_FILTERS,
   filterNotifications,
   isBackendOnlyNotificationRaw,
-  isOperatorIdReadyNotification,
-  isWorkspaceJoinApprovalAction,
   mapRawNotification,
-  normalizeNotificationActions,
-  normalizeNotificationJoinRole,
-  readNotificationShareMeta,
 } from "@/lib/notifications";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import "./page.css";
 
@@ -35,7 +26,6 @@ type NotificationsResponse = {
 };
 
 export default function NotificationsPage() {
-  const router = useRouter();
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,10 +37,6 @@ export default function NotificationsPage() {
   const [markAllLoading, setMarkAllLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [toastTone, setToastTone] = useState<NotificationTone>("good");
-  const [actionBusyKey, setActionBusyKey] = useState("");
-  const [actionErrorById, setActionErrorById] = useState<Record<string, string>>({});
-  const [actionRoleById, setActionRoleById] = useState<Record<string, NotificationJoinRole>>({});
-  const [operatorIdRevealNotificationId, setOperatorIdRevealNotificationId] = useState<string | null>(null);
 
   const hasUnread = items.some((item) => item.unread);
   const filteredItems = useMemo(() => filterNotifications(items, filter), [items, filter]);
@@ -140,105 +126,12 @@ export default function NotificationsPage() {
     }
   }, []);
 
-  const runAction = useCallback(async (item: NotificationRow, action: ReturnType<typeof normalizeNotificationActions>[number]) => {
-    const busyKey = `${item.id}:${action.key}`;
-    if (actionBusyKey === busyKey) return;
-
-    setActionBusyKey(busyKey);
-    setActionErrorById((prev) => ({ ...prev, [item.id]: "" }));
-
-    try {
-      const targetHref = String(action.href || item.href || "/").trim() || "/";
-
-      if (action.method === "GET") {
-        if (item.unread) {
-          await markAsRead(item.id);
-        }
-        router.push(targetHref);
-        return;
-      }
-
-      const payload =
-        action.body && typeof action.body === "object"
-          ? { ...action.body }
-          : ({} as Record<string, unknown>);
-      if (isWorkspaceJoinApprovalAction(action)) {
-        payload.role = normalizeNotificationJoinRole(actionRoleById[item.id]);
-      }
-      const hasPayload = Object.keys(payload).length > 0;
-
-      const response = await fetch(action.href, {
-        method: action.method,
-        credentials: "include",
-        cache: "no-store",
-        headers: {
-          ...(hasPayload ? { "Content-Type": "application/json" } : {}),
-          "x-cavbot-csrf": "1",
-        },
-        body: hasPayload ? JSON.stringify(payload) : undefined,
-      });
-
-      const body = (await response.json().catch(() => null)) as
-        | {
-            ok?: boolean;
-            error?: string;
-            message?: string;
-            refreshSession?: boolean;
-            refreshWorkspace?: boolean;
-            redirectTo?: string;
-          }
-        | null;
-
-      if (!response.ok || body?.ok === false) {
-        throw new Error(body?.message || body?.error || "Action failed.");
-      }
-
-      if (item.unread) {
-        await markAsRead(item.id);
-      }
-      window.dispatchEvent(new CustomEvent("cb:notifications:refresh"));
-      window.dispatchEvent(new CustomEvent("cb:team:refresh"));
-      if (body?.refreshSession) {
-        window.dispatchEvent(new CustomEvent("cb:auth:refresh"));
-      }
-      if (body?.refreshWorkspace) {
-        window.dispatchEvent(new CustomEvent("cb:workspace:refresh"));
-      }
-
-      setToast(body?.message || "Notification updated.");
-      setToastTone("good");
-      await fetchNotifications();
-
-      if (body?.redirectTo) {
-        router.push(String(body.redirectTo));
-      } else if (action.key === "open" || action.key === "openInCavCode") {
-        router.push(targetHref);
-      } else if (action.key === "saveToCavCloud") {
-        router.push("/cavcloud");
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Action failed.";
-      setActionErrorById((prev) => ({ ...prev, [item.id]: message }));
-      setToast(message);
-      setToastTone("bad");
-    } finally {
-      setActionBusyKey((current) => (current === busyKey ? "" : current));
-    }
-  }, [actionBusyKey, actionRoleById, fetchNotifications, markAsRead, router]);
-
   const handleRowClick = (item: NotificationRow) => {
     setExpandedId((prev) => (prev === item.id ? null : item.id));
     if (item.unread) {
       markAsRead(item.id);
     }
   };
-
-  const openOperatorIdReveal = useCallback((item: NotificationRow) => {
-    if (item.unread) {
-      void markAsRead(item.id);
-    }
-    setOperatorIdRevealNotificationId(item.id);
-  }, [markAsRead]);
 
   const handleRefresh = () => {
     setNextCursor(null);
@@ -302,13 +195,13 @@ export default function NotificationsPage() {
   return (
     <AppShell
       title="Notifications"
-      subtitle="Activity, offers, and system updates for your account."
+      subtitle="Activity and system updates for your workspace."
     >
       <div className="notifications-page">
         <header className="notifications-header">
           <div className="notifications-titleblock">
             <h1 className="notifications-header-title">Notifications</h1>
-            <p className="notifications-header-subtitle">Activity, offers, and system updates for your account.</p>
+            <p className="notifications-header-subtitle">Activity and system updates for your workspace.</p>
           </div>
           <div className="notifications-header-actions">
             <button
@@ -327,7 +220,7 @@ export default function NotificationsPage() {
         {markAllConfirm ? (
           <div className="notifications-markall-confirm" role="status">
             <div>
-              Mark every notification as read for this account. This cannot be undone.
+              Mark every notification as read for this workspace. This cannot be undone.
             </div>
             <div className="notifications-markall-confirm-actions">
               <button
@@ -409,16 +302,6 @@ export default function NotificationsPage() {
             <ul className={`notifications-list${filteredItems.length > 12 ? " is-scroll" : ""}`}>
               {filteredItems.map((item) => {
                 const isExpanded = expandedId === item.id;
-                const meta = item.meta && typeof item.meta === "object" && !Array.isArray(item.meta)
-                  ? item.meta
-                  : null;
-                const actions = normalizeNotificationActions(meta);
-                const canRevealOperatorId = isOperatorIdReadyNotification({ kind: item.kind, meta });
-                const shareMeta = readNotificationShareMeta(meta);
-                const expiryLabel = formatNotificationExpiry(shareMeta.expiresAtIso);
-                const hasJoinApprovalAction = actions.some((action) => isWorkspaceJoinApprovalAction(action));
-                const selectedJoinRole = normalizeNotificationJoinRole(actionRoleById[item.id]);
-                const actionError = String(actionErrorById[item.id] || "").trim();
                 return (
                   <li
                     key={item.id}
@@ -466,69 +349,7 @@ export default function NotificationsPage() {
                         <div className="notifications-row-detail-meta">
                           Status: {item.unread ? "Unread" : "Read"}
                         </div>
-                        {shareMeta.permissionLabel || expiryLabel ? (
-                          <div className="notifications-row-tags">
-                            {shareMeta.permissionLabel ? (
-                              <span className="notifications-row-tag">{shareMeta.permissionLabel}</span>
-                            ) : null}
-                            {expiryLabel ? (
-                              <span className="notifications-row-tag">{expiryLabel}</span>
-                            ) : null}
-                          </div>
-                        ) : null}
                         <p className="notifications-row-detail-body">{item.body || "No additional details."}</p>
-                        {canRevealOperatorId ? (
-                          <button
-                            type="button"
-                            className="cb-notif-inlineLink"
-                            onClick={() => openOperatorIdReveal(item)}
-                          >
-                            View staff ID
-                          </button>
-                        ) : null}
-                        {actions.length ? (
-                          <div className="notifications-row-actions">
-                            {hasJoinApprovalAction ? (
-                              <div className="notifications-row-role">
-                                <span className="notifications-row-role-label">Accept as</span>
-                                <select
-                                  className="notifications-row-role-select"
-                                  value={selectedJoinRole}
-                                  onChange={(event) => {
-                                    const nextRole = normalizeNotificationJoinRole(event.currentTarget.value);
-                                    setActionRoleById((prev) => ({ ...prev, [item.id]: nextRole }));
-                                  }}
-                                >
-                                  <option value="member">Member</option>
-                                  <option value="admin">Admin</option>
-                                </select>
-                              </div>
-                            ) : null}
-                            <div className="notifications-row-actionList">
-                              {actions.map((action) => {
-                                const busy = actionBusyKey === `${item.id}:${action.key}`;
-                                return (
-                                  <button
-                                    key={`${item.id}:${action.key}`}
-                                    type="button"
-                                    className={`notifications-row-action${action.key === "deny" || action.key === "decline" ? " is-danger" : ""}`}
-                                    disabled={busy}
-                                    onClick={() => {
-                                      void runAction(item, action);
-                                    }}
-                                  >
-                                    {busy ? "Working…" : action.label}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ) : null}
-                        {actionError ? (
-                          <div className="notifications-row-actionError" role="alert">
-                            {actionError}
-                          </div>
-                        ) : null}
                         <div className="notifications-row-detail-time">{item.createdAt || "—"}</div>
                       </div>
                     ) : null}
@@ -552,12 +373,6 @@ export default function NotificationsPage() {
           ) : null}
         </div>
       </div>
-
-      <OperatorIdRevealModal
-        open={Boolean(operatorIdRevealNotificationId)}
-        notificationId={operatorIdRevealNotificationId}
-        onClose={() => setOperatorIdRevealNotificationId(null)}
-      />
     </AppShell>
   );
 }

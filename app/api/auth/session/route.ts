@@ -20,7 +20,6 @@ import {
   pickPrimaryMembership,
 } from "@/lib/authDb";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
-import { getAccountDisciplineState } from "@/lib/admin/accountDiscipline.server";
 
 
 export const runtime = "nodejs";
@@ -204,13 +203,6 @@ export async function GET(req: Request) {
       return clearSessionCookie(req, res);
     }
 
-    const discipline = await getAccountDisciplineState(membership.accountId);
-    if (discipline?.status === "REVOKED" || discipline?.status === "SUSPENDED") {
-      const reason = discipline.status === "REVOKED" ? "account_revoked" : "account_suspended";
-      const res = json({ ok: true, authed: false, reason, client }, 200);
-      return clearSessionCookie(req, res);
-    }
-
 
     // IMPORTANT:
     // membership.role is the source-of-truth (cookie role can be stale)
@@ -302,15 +294,6 @@ export async function POST(req: Request) {
 
 
     if (!active) return json({ ok: false, error: "user_not_found_or_no_membership" }, 404);
-    {
-      const discipline = await getAccountDisciplineState(active.accountId);
-      if (discipline?.status === "REVOKED") {
-        return json({ ok: false, error: "ACCOUNT_REVOKED" }, 403);
-      }
-      if (discipline?.status === "SUSPENDED") {
-        return json({ ok: false, error: "ACCOUNT_SUSPENDED" }, 403);
-      }
-    }
 
     const memberRole = normalizeRole(active.role);
     const token = await createUserSession({

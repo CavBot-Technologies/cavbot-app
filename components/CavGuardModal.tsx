@@ -1,10 +1,7 @@
 "use client";
 
-import * as React from "react";
-
 import { CavGuardCard } from "./CavGuardCard";
 import styles from "./CavGuardModal.module.css";
-import { emitAdminTelemetry } from "@/lib/admin/clientTelemetry";
 import type { CavGuardDecision } from "@/src/lib/cavguard/cavGuard.types";
 
 type CavGuardModalProps = {
@@ -22,55 +19,6 @@ export function CavGuardModal(props: CavGuardModalProps) {
   const request = String(decision?.request || "Access protected workspace action.").trim();
   const reason = String(decision?.reason || "This action is restricted by workspace access controls.").trim();
   const cta = decision?.cta || null;
-
-  React.useEffect(() => {
-    if (!modalOpen) return;
-    emitAdminTelemetry({
-      event: "cavguard_rendered",
-      result: "visible",
-      meta: {
-        title: headline,
-        hasCta: Boolean(cta),
-      },
-    });
-    emitAdminTelemetry({
-      event: "cavguard_blocked",
-      result: "blocked",
-      meta: {
-        title: headline,
-      },
-    });
-    emitAdminTelemetry({
-      event: "cavguard_flagged",
-      result: "flagged",
-      meta: {
-        title: headline,
-      },
-    });
-  }, [cta, headline, modalOpen]);
-
-  const handleDismiss = React.useCallback(() => {
-    emitAdminTelemetry({
-      event: "cavguard_blocked",
-      result: "dismissed",
-      meta: {
-        title: headline,
-      },
-    });
-    onClose();
-  }, [headline, onClose]);
-
-  const handleCtaClick = React.useCallback(() => {
-    emitAdminTelemetry({
-      event: "cavguard_overridden",
-      result: "cta",
-      meta: {
-        title: headline,
-        href: cta?.href || null,
-      },
-    });
-    onCtaClick?.();
-  }, [cta?.href, headline, onCtaClick]);
 
   return (
     <div
@@ -91,8 +39,8 @@ export function CavGuardModal(props: CavGuardModalProps) {
           reason={reason}
           onClick={(event) => event.stopPropagation()}
           actions={[
-            ...(cta ? [{ label: cta.label.toUpperCase(), href: cta.href, onClick: handleCtaClick }] : []),
-            { label: "DISMISS", onClick: handleDismiss },
+            ...(cta ? [{ label: cta.label.toUpperCase(), href: cta.href, onClick: onCtaClick }] : []),
+            { label: "DISMISS", onClick: onClose },
           ]}
         />
       </div>

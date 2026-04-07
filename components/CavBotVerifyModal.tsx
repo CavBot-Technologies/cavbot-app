@@ -4,7 +4,6 @@ import * as React from "react";
 import Image from "next/image";
 
 import styles from "./CavBotVerifyModal.module.css";
-import { emitAdminTelemetry } from "@/lib/admin/clientTelemetry";
 
 type VerifyActionType = "signup" | "login" | "reset" | "invite";
 type GlyphFillRule = "evenodd" | "nonzero";
@@ -71,8 +70,6 @@ type CavBotVerifyModalProps = {
   route: string;
   sessionId?: string;
   identifierHint?: string;
-  brandTitle?: string;
-  brandSubtitle?: string;
   onClose: () => void;
   onVerified: (value: VerifyModalSuccess) => void;
 };
@@ -293,15 +290,6 @@ export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
 
   React.useEffect(() => {
     if (!open) return;
-    emitAdminTelemetry({
-      event: "cavverify_rendered",
-      result: actionType,
-      sessionKey: s(props.sessionId),
-      meta: {
-        route,
-        actionType,
-      },
-    });
     const initialSession = s(props.sessionId);
     setSessionId(initialSession);
     setOtpIdentifier(s(props.identifierHint));
@@ -311,7 +299,7 @@ export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
     setOtpCode("");
     setOtpStarted(false);
     void loadChallenge(initialSession);
-  }, [actionType, loadChallenge, open, props.identifierHint, props.sessionId, route]);
+  }, [open, props.identifierHint, props.sessionId, loadChallenge]);
 
   const resetDragState = React.useCallback((tileId?: string) => {
     if (tileId) {
@@ -354,34 +342,17 @@ export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
         const usedAttempts = Math.max(0, 3 - remaining);
         const nextFailedAttempts = Math.max(failedAttempts + 1, usedAttempts);
         setFailedAttempts(nextFailedAttempts);
-        emitAdminTelemetry({
-          event: "cavverify_abandoned",
-          result: "challenge_failed",
-          sessionKey: s(fail?.sessionId) || sessionId || challenge.sessionId,
-          meta: {
-            actionType,
-            attemptsRemaining: remaining,
-          },
-        });
         if (nextFailedAttempts >= 2) {
           setMode("otp");
         }
         if (s(fail?.sessionId)) setSessionId(s(fail?.sessionId));
-    } catch {
-      emitAdminTelemetry({
-        event: "cavverify_abandoned",
-        result: "challenge_error",
-        sessionKey: sessionId || challenge?.sessionId,
-        meta: {
-          actionType,
-        },
-      });
-      setError("Verification failed.");
-    } finally {
-      setSubmitting(false);
+      } catch {
+        setError("Verification failed.");
+      } finally {
+        setSubmitting(false);
       }
     },
-    [actionType, challenge, failedAttempts, onVerified, sessionId, submitting],
+    [challenge, failedAttempts, onVerified, sessionId, submitting],
   );
 
   const tileMap = React.useMemo(() => {
@@ -535,14 +506,6 @@ export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
       if (!res.ok || !data || !("ok" in data) || data.ok !== true) {
         const fail = data as { message?: string; error?: string; sessionId?: string };
         setError(s(fail?.message || fail?.error || "Invalid code."));
-        emitAdminTelemetry({
-          event: "cavverify_abandoned",
-          result: "otp_failed",
-          sessionKey: s(fail?.sessionId) || sessionId || challenge?.sessionId,
-          meta: {
-            actionType,
-          },
-        });
         if (s(fail?.sessionId)) setSessionId(s(fail?.sessionId));
         return;
       }
@@ -552,14 +515,6 @@ export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
         sessionId: s(data.sessionId) || sessionId || challenge?.sessionId || "",
       });
     } catch {
-      emitAdminTelemetry({
-        event: "cavverify_abandoned",
-        result: "otp_error",
-        sessionKey: sessionId || challenge?.sessionId,
-        meta: {
-          actionType,
-        },
-      });
       setError("Code verification failed.");
     } finally {
       setOtpBusy(false);
@@ -595,9 +550,9 @@ export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
             </div>
             <div className={styles.verifyMeta}>
               <h2 className={styles.title} id="cbv-title">
-                {props.brandTitle || "Caverify"}
+                Caverify
               </h2>
-              <p className={styles.sub}>{props.brandSubtitle || "Drag the correct tile to complete the CavBot wordmark."}</p>
+              <p className={styles.sub}>Drag the correct tile to complete the CavBot wordmark.</p>
             </div>
           </div>
           <button type="button" className={styles.closeBtn} onClick={onClose} disabled={submitting || otpBusy}>
