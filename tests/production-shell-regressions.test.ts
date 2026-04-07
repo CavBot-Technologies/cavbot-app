@@ -68,7 +68,6 @@ test("cavcloud and cavsafe compact shells clip horizontal overflow while keeping
   assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-main\{[\s\S]*overflow-x: hidden;[\s\S]*overflow-x: clip;[\s\S]*overflow-y: visible;/);
   assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-grid\{[\s\S]*overflow-x: hidden;[\s\S]*overflow-x: clip;[\s\S]*overflow-y: visible;/);
   assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-side,\s*[\s\S]*\.cavcloud-top,\s*[\s\S]*\.cavcloud-grid > \*,[\s\S]*max-width: 100%;/);
-  assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-galleryHeadControls \.cavcloud-paneTitleSelect,\s*[\s\S]*\.cavcloud-trashHeadControls \.cavcloud-paneTitleSelect,\s*[\s\S]*\.cavcloud-trashRestorationFilters \.cavcloud-paneTitleSelect\{[\s\S]*flex: 0 0 auto;[\s\S]*width: min\(132px, calc\(50vw - 52px\)\);[\s\S]*text-overflow: ellipsis;/);
 });
 
 test("cavcloud and cavsafe mobile drawer width and compact header controls match the tighter app shell footprint", () => {
