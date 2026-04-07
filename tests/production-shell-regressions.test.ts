@@ -50,11 +50,20 @@ test("app shell republishes cached founder and plan state while footer modal and
 test("cavcloud compact screens restore document scrolling through tablets and keep quick tools visible", () => {
   const css = read("app/cavcloud/cavcloud.css");
 
-  assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-root\{[\s\S]*height: auto;[\s\S]*overflow: visible;/);
-  assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-main\{[\s\S]*overflow: visible;[\s\S]*padding-bottom: calc\(var\(--cb-global-footer-height\) \+ var\(--safe-bottom\) \+ 22px\);/);
-  assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-grid\{[\s\S]*overflow: visible;[\s\S]*padding-bottom: 12px;/);
+  assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-root\{[\s\S]*height: auto;[\s\S]*overflow-y: visible;/);
+  assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-main\{[\s\S]*overflow-y: visible;[\s\S]*padding-bottom: calc\(var\(--cb-global-footer-height\) \+ var\(--safe-bottom\) \+ 22px\);/);
+  assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-grid\{[\s\S]*overflow-y: visible;[\s\S]*padding-bottom: 12px;/);
   assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-top\{[\s\S]*position: static;/);
   assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-surfaceFooterIcons\{[\s\S]*display: flex;/);
+});
+
+test("cavcloud and cavsafe compact shells clip horizontal overflow while keeping vertical scroll", () => {
+  const css = read("app/cavcloud/cavcloud.css");
+
+  assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-root\{[\s\S]*overflow-x: hidden;[\s\S]*overflow-x: clip;[\s\S]*overflow-y: visible;/);
+  assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-main\{[\s\S]*overflow-x: hidden;[\s\S]*overflow-x: clip;[\s\S]*overflow-y: visible;/);
+  assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-grid\{[\s\S]*overflow-x: hidden;[\s\S]*overflow-x: clip;[\s\S]*overflow-y: visible;/);
+  assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-side,\s*[\s\S]*\.cavcloud-top,\s*[\s\S]*\.cavcloud-grid > \*,[\s\S]*max-width: 100%;/);
 });
 
 test("cavcloud and cavsafe direct surfaces persist full profile state and keep the legacy there/username footer fallback logic", () => {

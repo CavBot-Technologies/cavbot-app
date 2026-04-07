@@ -6843,20 +6843,47 @@ body{ margin:0; }
   .cavcloud-root{
     height: auto;
     min-height: calc(100dvh - var(--cb-global-footer-height));
-    overflow: visible;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-x: clip;
+    overflow-y: visible;
   }
 
   .cavcloud-main{
     min-height: auto;
-    overflow: visible;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-x: clip;
+    overflow-y: visible;
     padding-bottom: calc(var(--cb-global-footer-height) + var(--safe-bottom) + 22px);
   }
 
   .cavcloud-grid{
     height: auto;
     min-height: 0;
-    overflow: visible;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-x: clip;
+    overflow-y: visible;
     padding-bottom: 12px;
+  }
+
+  .cavcloud-side,
+  .cavcloud-top,
+  .cavcloud-grid > *,
+  .cavcloud-homeGrid,
+  .cavcloud-opGrid,
+  .cavsafe-ownerGrid{
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .cavcloud-top{
+    overflow-x: hidden;
+    overflow-x: clip;
   }
 
   .cavcloud-top{
