@@ -2,6 +2,7 @@ import "server-only";
 
 import pg from "pg";
 import { randomUUID } from "crypto";
+import { normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 
 export type MemberRole = "OWNER" | "ADMIN" | "MEMBER";
 
@@ -242,12 +243,17 @@ function mapMembership(row: RawMembershipRow): AuthMembership {
 }
 
 function mapUser(row: RawUserRow): AuthUser {
-  const fullName = row.fullName;
-  const displayName = fullName || row.displayName;
+  const normalized = normalizeCavbotFounderProfile({
+    username: row.username,
+    displayName: row.displayName,
+    fullName: row.fullName,
+  });
+  const fullName = normalized.fullName;
+  const displayName = fullName || normalized.displayName;
   return {
     id: row.id,
     email: row.email,
-    username: row.username,
+    username: normalized.username,
     displayName,
     fullName,
     usernameChangeCount: row.usernameChangeCount ?? 0,

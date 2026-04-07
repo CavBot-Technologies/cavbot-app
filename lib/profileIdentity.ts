@@ -4,9 +4,54 @@ function s(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function lower(value: unknown) {
+  return s(value).toLowerCase();
+}
+
+export const CAVBOT_FOUNDER_USERNAME = "cavbot";
+export const CAVBOT_FOUNDER_DISPLAY_NAME = "CavBot Admin";
+
 export function normalizeProviderDisplayName(value: unknown, max = 64) {
   const normalized = s(value).slice(0, max);
   return normalized || null;
+}
+
+export function isCavbotFounderIdentity(input: {
+  username?: unknown;
+  displayName?: unknown;
+  fullName?: unknown;
+}) {
+  const username = lower(input.username).replace(/^@+/, "");
+  const displayName = lower(input.displayName);
+  const fullName = lower(input.fullName);
+  const founderName = CAVBOT_FOUNDER_DISPLAY_NAME.toLowerCase();
+  return username === CAVBOT_FOUNDER_USERNAME || displayName === founderName || fullName === founderName;
+}
+
+export function normalizeCavbotFounderProfile<T extends {
+  username?: unknown;
+  displayName?: unknown;
+  fullName?: unknown;
+}>(input: T) {
+  const username = s(input.username) || null;
+  const displayName = s(input.displayName) || null;
+  const fullName = s(input.fullName) || null;
+
+  if (!isCavbotFounderIdentity({ username, displayName, fullName })) {
+    return {
+      ...input,
+      username,
+      displayName,
+      fullName,
+    };
+  }
+
+  return {
+    ...input,
+    username: username || CAVBOT_FOUNDER_USERNAME,
+    displayName: CAVBOT_FOUNDER_DISPLAY_NAME,
+    fullName: CAVBOT_FOUNDER_DISPLAY_NAME,
+  };
 }
 
 export function hasMeaningfulProfileName(value: unknown) {

@@ -35,6 +35,10 @@ import { normalizeGuardReturnPath } from "@/src/lib/cavguard/cavGuard.return";
 import type { CavGuardDecision } from "@/src/lib/cavguard/cavGuard.types";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
+import {
+  isCavbotFounderIdentity,
+  normalizeCavbotFounderProfile,
+} from "@/lib/profileIdentity";
 
 type WindowWithGlobals = Window & {
   __CB_NOTIF_SETTINGS__?: Record<string, unknown> | null;
@@ -165,6 +169,14 @@ function persistShellPlanSnapshot(snapshot: PlanSnapshot) {
   try {
     globalThis.__cbLocalStore.setItem(SHELL_PLAN_SNAPSHOT_KEY, JSON.stringify(snapshot));
   } catch {}
+}
+
+function toPlanContextDetail(planTier: PlanTier, trialActive: boolean) {
+  return {
+    planKey: planTier === "PREMIUM_PLUS" ? "premium_plus" : planTier === "PREMIUM" ? "premium" : "free",
+    planLabel: planTier === "PREMIUM_PLUS" ? "PREMIUM+" : planTier === "PREMIUM" ? "PREMIUM" : "FREE",
+    trialActive,
+  };
 }
 
 
@@ -651,7 +663,7 @@ export default function AppShell({
 
 
   // ===== Plan widget (SIDEBAR footer) =====
-  const bootSnapshot = shellPlanSnapshotCache;
+  const [bootSnapshot] = useState<PlanSnapshot | null>(() => readShellPlanSnapshot());
   const [planTier, setPlanTier] = useState<PlanTier>(bootSnapshot?.planTier || "FREE");
   const [memberRole, setMemberRole] = useState<MemberRole>(bootSnapshot?.memberRole || null);
   const [planResolved, setPlanResolved] = useState<boolean>(Boolean(bootSnapshot));
@@ -920,15 +932,22 @@ export default function AppShell({
       ? "Public Profile"
       : "Private Profile";
   const profileDisplayName = useMemo(() => {
-    const full = String(profileFullName || "").trim();
+    const normalized = normalizeCavbotFounderProfile({
+      fullName: profileFullName,
+      displayName: profileFullName,
+      username: profileUsername,
+    });
+    const full = String(normalized.fullName || normalized.displayName || "").trim();
     if (full) return full;
-    const handle = String(profileUsername || "").trim().replace(/^@+/, "");
+    const handle = String(normalized.username || profileUsername || "").trim().replace(/^@+/, "");
     return handle ? `@${handle}` : "CavBot Account";
   }, [profileFullName, profileUsername]);
   const founderProfileShowsPremiumPlus = useMemo(() => {
-    const full = String(profileDisplayName || "").trim().toLowerCase();
-    const handle = String(profileUsername || "").trim().replace(/^@+/, "").toLowerCase();
-    return full === "cavbot admin" || handle === "cavbot";
+    return isCavbotFounderIdentity({
+      fullName: profileDisplayName,
+      displayName: profileDisplayName,
+      username: profileUsername,
+    });
   }, [profileDisplayName, profileUsername]);
   const profileShowsPremiumPlus = planTier === "PREMIUM_PLUS" || founderProfileShowsPremiumPlus;
   const profilePlanLabel = useMemo(() => {
@@ -1364,8 +1383,13 @@ export default function AppShell({
 
   useEffect(() => {
     try {
-      const cachedFullName = (globalThis.__cbLocalStore.getItem("cb_profile_fullName_v1") || "").trim();
-      const cachedUsername = (globalThis.__cbLocalStore.getItem("cb_profile_username_v1") || "").trim().toLowerCase();
+      const cachedIdentity = normalizeCavbotFounderProfile({
+        fullName: (globalThis.__cbLocalStore.getItem("cb_profile_fullName_v1") || "").trim(),
+        displayName: (globalThis.__cbLocalStore.getItem("cb_profile_fullName_v1") || "").trim(),
+        username: (globalThis.__cbLocalStore.getItem("cb_profile_username_v1") || "").trim().toLowerCase(),
+      });
+      const cachedFullName = String(cachedIdentity.fullName || cachedIdentity.displayName || "").trim();
+      const cachedUsername = String(cachedIdentity.username || "").trim().toLowerCase();
       const cachedInitials = readInitials();
       const t = (globalThis.__cbLocalStore.getItem("cb_settings_avatar_tone_v2") || "lime").trim();
       const img = (globalThis.__cbLocalStore.getItem("cb_settings_avatar_image_v2") || "").trim();
@@ -1403,14 +1427,38 @@ export default function AppShell({
       setAuthPlanVerified(true);
 
       // Initials: full name (first two names) -> username first letter.
-      const nextFullName = String(data?.user?.displayName || "").trim();
-      const nextUsername = String(data?.user?.username || "").trim().toLowerCase();
+      const normalizedProfile = normalizeCavbotFounderProfile({
+        fullName: data?.user?.fullName ?? data?.user?.displayName ?? data?.profile?.fullName ?? data?.profile?.displayName,
+        displayName: data?.user?.displayName ?? data?.profile?.displayName,
+        username: data?.user?.username ?? data?.profile?.username,
+      });
+      const nextFullName = String(normalizedProfile.fullName || normalizedProfile.displayName || "").trim();
+      const nextUsername = String(normalizedProfile.username || "").trim().toLowerCase();
       const nextInitials = deriveAccountInitials(nextFullName, nextUsername, String(data?.user?.initials || ""));
       if (res.ok && data?.ok) {
         setProfileFullName(nextFullName);
         setProfileUsername(nextUsername);
         setInitials(nextInitials);
         persistAccountInitials(nextInitials);
+        try {
+          globalThis.__cbLocalStore.setItem("cb_profile_fullName_v1", nextFullName);
+          globalThis.__cbLocalStore.setItem("cb_profile_username_v1", nextUsername);
+          if (typeof data?.user?.publicProfileEnabled === "boolean") {
+            globalThis.__cbLocalStore.setItem(
+              "cb_profile_public_enabled_v1",
+              data.user.publicProfileEnabled ? "true" : "false",
+            );
+          }
+          window.dispatchEvent(
+            new CustomEvent("cb:profile", {
+              detail: {
+                fullName: nextFullName,
+                username: nextUsername,
+                initials: nextInitials,
+              },
+            }),
+          );
+        } catch {}
         if (typeof data?.user?.publicProfileEnabled === "boolean") {
           setProfilePublicEnabled(data.user.publicProfileEnabled);
         }
@@ -1471,6 +1519,11 @@ export default function AppShell({
         trialDaysLeft: nextTrialDaysLeft,
         ts: Date.now(),
       });
+      try {
+        const planDetail = toPlanContextDetail(nextTier, nextTrialActive);
+        globalThis.__cbLocalStore.setItem(PLAN_CONTEXT_KEY, JSON.stringify(planDetail));
+        window.dispatchEvent(new CustomEvent("cb:plan", { detail: planDetail }));
+      } catch {}
     } catch {
       if (signal?.aborted) return;
       setAuthPlanVerified(false);

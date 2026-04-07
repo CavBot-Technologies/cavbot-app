@@ -2164,7 +2164,11 @@ html body :is(
 }
 
 .cb-side-account-wrap .cb-menu{
-  top: calc(100% + 8px);
+  top: auto;
+  right: auto;
+  bottom: calc(100% + 8px);
+  left: 0;
+  transform-origin: left bottom;
 }
 
 .cb-side-account{

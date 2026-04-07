@@ -15,6 +15,7 @@ import {
   planTierTokenFromPlanId,
   resolveEffectivePlanId,
 } from "@/lib/accountPlan.server";
+import { isCavbotFounderIdentity, normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 
 const DEFAULT_CAVCLOUD_COLLAB_POLICY = {
   allowAdminsManageCollaboration: false,
@@ -107,6 +108,18 @@ function computeEffectiveTier(account: PrismaAccount) {
   return { trialActive, daysLeft };
 }
 
+function forceFounderPremiumPlus<T extends { tier?: string | null; tierEffective?: string | null }>(
+  account: T | null,
+  founderUser: boolean,
+) {
+  if (!account || !founderUser) return account;
+  return {
+    ...account,
+    tier: "PREMIUM_PLUS",
+    tierEffective: "PREMIUM_PLUS",
+  };
+}
+
 export async function GET(req: Request) {
   try {
     const pool = getAuthPool();
@@ -129,7 +142,16 @@ export async function GET(req: Request) {
 
     if (!user) return json({ ok: true, authenticated: false }, 200);
 
-    const initials = deriveInitials(user.displayName, user.username);
+    const normalizedUser = {
+      ...user,
+      ...normalizeCavbotFounderProfile({
+        username: user.username,
+        displayName: user.displayName,
+        fullName: user.fullName,
+      }),
+    };
+    const founderUser = isCavbotFounderIdentity(normalizedUser);
+    const initials = deriveInitials(normalizedUser.displayName, normalizedUser.username);
 
     let membership: MembershipRecord | null = null;
     let account: PrismaAccount | null = null;
@@ -158,7 +180,12 @@ export async function GET(req: Request) {
 
       if (!accountRecord) return json({ ok: true, authenticated: false }, 200);
 
-      account = accountRecord;
+      account = founderUser
+        ? {
+            ...accountRecord,
+            tier: "PREMIUM_PLUS",
+          }
+        : accountRecord;
 
       // Compute effective tier for UI + gates
       const eff = computeEffectiveTier(account);
@@ -168,7 +195,7 @@ export async function GET(req: Request) {
       });
       accountWithComputed = {
         ...account,
-        tierEffective: planTierTokenFromPlanId(effectivePlanId),
+        tierEffective: founderUser ? "PREMIUM_PLUS" : planTierTokenFromPlanId(effectivePlanId),
         trialActive: eff.trialActive,
         trialDaysLeft: eff.daysLeft,
       };
@@ -176,16 +203,20 @@ export async function GET(req: Request) {
       collabPolicy = { ...DEFAULT_CAVCLOUD_COLLAB_POLICY };
     }
 
+    const responseUser = {
+      ...normalizedUser,
+      initials,
+    };
+    const responseAccount = forceFounderPremiumPlus(accountWithComputed ?? account, founderUser);
+
     return json(
       {
         ok: true,
         authenticated: true,
         session: sess,
-        user: {
-          ...user,
-          initials,
-        },
-        account: accountWithComputed ?? account,
+        user: responseUser,
+        profile: responseUser,
+        account: responseAccount,
         membership,
         policy: {
           ...collabPolicy,

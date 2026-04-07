@@ -12,6 +12,7 @@ import {
   buildAutoWorkspaceSlugCandidates,
   buildPersonalWorkspaceName,
   buildPreferredPersonalWorkspaceSlug,
+  normalizeCavbotFounderProfile,
 } from "@/lib/profileIdentity";
 import { auditLogWrite } from "@/lib/audit";
 import {
@@ -290,20 +291,31 @@ function clampDataUrlTo2MB(dataUrl: string, maxBytes = 2 * 1024 * 1024): boolean
 }
 
 function normalizePublicProfileSettings(profile: Record<string, unknown>) {
+  const founderIdentity = normalizeCavbotFounderProfile({
+    username: profile["username"],
+    displayName: profile["displayName"],
+    fullName: profile["fullName"],
+  });
+  const normalizedProfile: Record<string, unknown> = {
+    ...profile,
+    username: founderIdentity.username,
+    displayName: founderIdentity.displayName,
+    fullName: founderIdentity.fullName,
+  };
   const pickBool = (key: string, fallback: boolean) => {
-    const v = profile[key];
+    const v = normalizedProfile[key];
     return typeof v === "boolean" ? v : fallback;
   };
 
   const publicWorkspaceId = (() => {
-    const v = profile["publicWorkspaceId"];
+    const v = normalizedProfile["publicWorkspaceId"];
     if (v == null) return null;
     const s = String(v).trim();
     return s ? s : null;
   })();
 
   return {
-    ...profile,
+    ...normalizedProfile,
     // Public is the default posture; "Private mode" is the inverted UI toggle.
     publicProfileEnabled: pickBool("publicProfileEnabled", true),
     publicShowReadme: pickBool("publicShowReadme", true),

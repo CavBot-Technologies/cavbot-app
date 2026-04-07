@@ -10,6 +10,7 @@ import Image from "next/image";
 import Link from "next/link";
 import CavBotLoadingScreen from "@/components/CavBotLoadingScreen";
 import "@/components/CavBotLoadingScreen.css";
+import { normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 import { PLANS, resolvePlanIdFromTier, getPlanLimits, type PlanId } from "@/lib/plans";
 import DashboardToolsModal from "@/components/DashboardToolsModal";
 import ScannerControlCard from "@/components/ScannerControlCard";
@@ -2207,6 +2208,9 @@ type AuthMeResponse = {
   account?: AuthAccount;
   trialActive?: boolean;
   daysLeft?: number;
+  user?: {
+    username?: string;
+  };
   profile?: {
     username?: string;
   };
@@ -2446,10 +2450,15 @@ function ProfileCard() {
 
 
         if (pRes.ok && pJson?.ok) {
-          const name = String(pJson?.profile?.fullName || "").trim();
+          const normalizedProfile = normalizeCavbotFounderProfile({
+            fullName: pJson?.profile?.fullName,
+            displayName: pJson?.profile?.fullName,
+            username: pJson?.profile?.username,
+          });
+          const name = String(normalizedProfile.fullName || normalizedProfile.displayName || "").trim();
           const em = String(pJson?.profile?.email || "").trim();
           const bi = String(pJson?.profile?.bio || "").trim();
-          const usr = String(pJson?.profile?.username || "").trim();
+          const usr = String(normalizedProfile.username || "").trim();
           const sc = String(pJson?.profile?.companySubcategory || "").trim();
           const gh = String(pJson?.profile?.githubUrl || "").trim();
           const ig = String(pJson?.profile?.instagramUrl || "").trim();
@@ -2485,7 +2494,7 @@ function ProfileCard() {
           const planLabel = planTierLabelFromAccount(meJson?.account);
           const planLimits = getPlanLimits(planKey);
           const planSeatLimit = Number(planLimits?.seats ?? 0);
-          const meUsername = String(meJson?.profile?.username || "").trim();
+          const meUsername = String(meJson?.user?.username || meJson?.profile?.username || "").trim();
 
           const planDetail = {
             planKey,
@@ -2504,7 +2513,10 @@ function ProfileCard() {
             setSeatLimit(planSeatLimit);
           }
 
-          if (meUsername) setUsername(meUsername);
+          if (meUsername) {
+            const normalizedIdentity = normalizeCavbotFounderProfile({ username: meUsername });
+            setUsername(String(normalizedIdentity.username || "").trim() || meUsername);
+          }
         }
 
 

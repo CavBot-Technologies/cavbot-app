@@ -42,9 +42,9 @@ test("cavcloud and cavsafe gate compact header controls to compact shell only", 
   assert.match(safe, /children: \[isCompactShell \? t\.jsx\("button"/);
   assert.match(cloud, /isCompactShell \? null : t\.jsx\("input", \{\s*className: "cavcloud-search"/);
   assert.match(safe, /isCompactShell \? null : t\.jsx\("input", \{\s*className: "cavcloud-search"/);
-  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-top\{[\s\S]*position: static;/);
-  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-root\{[\s\S]*height: auto;[\s\S]*overflow: visible;/);
-  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-surfaceFooterIcons\{[\s\S]*display: flex;/);
+  assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-top\{[\s\S]*position: static;/);
+  assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-root\{[\s\S]*height: auto;[\s\S]*overflow: visible;/);
+  assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-surfaceFooterIcons\{[\s\S]*display: flex;/);
 
   const stickyShellIndex = css.lastIndexOf(".cavcloud-top{\n  position: sticky;");
   const mobileStaticIndex = css.lastIndexOf(".cavcloud-top{\n    position: static;");
