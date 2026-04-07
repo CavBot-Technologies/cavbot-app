@@ -6341,7 +6341,16 @@ body{ margin:0; }
   }
   .cavcloud-paneTitleSelect{
     min-width: 0;
-    flex: 1 1 168px;
+  }
+  .cavcloud-galleryHeadControls .cavcloud-paneTitleSelect,
+  .cavcloud-trashHeadControls .cavcloud-paneTitleSelect,
+  .cavcloud-trashRestorationFilters .cavcloud-paneTitleSelect{
+    flex: 0 0 auto;
+    width: min(132px, calc(50vw - 52px));
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .cavcloud-paneSubTrash{
     flex-wrap: wrap;
