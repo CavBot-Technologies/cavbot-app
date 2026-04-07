@@ -131,6 +131,7 @@ const HARD_RELOAD_TS_PARAM = "__ts";
 const LS_CAVCLOUD_STORAGE_HISTORY = "cb_cavcloud_storage_history_v1";
 const SHELL_PLAN_SNAPSHOT_KEY = "cb_shell_plan_snapshot_v1";
 const PLAN_CONTEXT_KEY = "cb_plan_context_v1";
+const SHELL_PLAN_EVENT = "cb:shell-plan";
 
 type StoragePoint = {
   ts: number;
@@ -165,6 +166,7 @@ function safeJsonParse<T>(input: string | null): T | null {
 type WorkspacePlanDetail = {
   planLabel?: string;
   planKey?: PlanId;
+  planTier?: string;
   trialActive?: boolean;
 };
 
@@ -172,6 +174,10 @@ function workspacePlanLabelForId(planId: PlanId) {
   if (planId === "premium_plus") return "PREMIUM+";
   if (planId === "premium") return "PREMIUM";
   return "FREE";
+}
+
+function resolveWorkspacePlanId(detail?: WorkspacePlanDetail | null) {
+  return resolvePlanIdFromTier(detail?.planKey || detail?.planLabel || detail?.planTier || "free");
 }
 
 function readBootWorkspacePlanDetail(): WorkspacePlanDetail | null {
@@ -614,11 +620,11 @@ function CommandDeckPageInner() {
     const detail = readBootWorkspacePlanDetail();
     return typeof detail?.planLabel === "string" && detail.planLabel.trim()
       ? detail.planLabel.trim()
-      : workspacePlanLabelForId(resolvePlanIdFromTier(detail?.planKey || "free"));
+      : workspacePlanLabelForId(resolveWorkspacePlanId(detail));
   });
   const [planId, setPlanId] = useState<PlanId>(() => {
     const detail = readBootWorkspacePlanDetail();
-    return resolvePlanIdFromTier(detail?.planKey || detail?.planLabel || "free");
+    return resolveWorkspacePlanId(detail);
   });
   const [trialActive, setTrialActive] = useState<boolean>(() => Boolean(readBootWorkspacePlanDetail()?.trialActive));
   const [usedBytes, setUsedBytes] = useState<number>(0);
@@ -629,7 +635,7 @@ function CommandDeckPageInner() {
   useEffect(() => {
     function applyPlan(detail: WorkspacePlanDetail | null) {
       if (!detail) return;
-      const nextPlanId = resolvePlanIdFromTier(detail.planKey || detail.planLabel || "free");
+      const nextPlanId = resolveWorkspacePlanId(detail);
       const nextPlanLabel =
         typeof detail.planLabel === "string" && detail.planLabel.trim()
           ? detail.planLabel.trim()
@@ -642,11 +648,22 @@ function CommandDeckPageInner() {
     applyPlan(readBootWorkspacePlanDetail());
 
     type PlanEvent = CustomEvent<WorkspacePlanDetail>;
+    type ShellPlanEvent = CustomEvent<{ planTier?: string; trialActive?: boolean }>;
     const handler = (ev: PlanEvent) => {
       applyPlan(ev.detail);
     };
+    const shellPlanHandler = (ev: ShellPlanEvent) => {
+      applyPlan({
+        planTier: String(ev.detail?.planTier || "").trim(),
+        trialActive: Boolean(ev.detail?.trialActive),
+      });
+    };
     window.addEventListener("cb:plan", handler as EventListener);
-    return () => window.removeEventListener("cb:plan", handler as EventListener);
+    window.addEventListener(SHELL_PLAN_EVENT, shellPlanHandler as EventListener);
+    return () => {
+      window.removeEventListener("cb:plan", handler as EventListener);
+      window.removeEventListener(SHELL_PLAN_EVENT, shellPlanHandler as EventListener);
+    };
   }, []);
 
   const welcomeShowsPremiumPlus = useMemo(() => {

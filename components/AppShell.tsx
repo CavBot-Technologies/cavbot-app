@@ -89,6 +89,7 @@ type PlanSnapshot = {
 
 const SHELL_PLAN_SNAPSHOT_KEY = "cb_shell_plan_snapshot_v1";
 const PLAN_CONTEXT_KEY = "cb_plan_context_v1";
+const SHELL_PLAN_EVENT = "cb:shell-plan";
 let shellPlanSnapshotCache: PlanSnapshot | null = null;
 
 function coercePlanTier(input: unknown): PlanTier {
@@ -168,6 +169,9 @@ function persistShellPlanSnapshot(snapshot: PlanSnapshot) {
   if (typeof window === "undefined") return;
   try {
     globalThis.__cbLocalStore.setItem(SHELL_PLAN_SNAPSHOT_KEY, JSON.stringify(snapshot));
+  } catch {}
+  try {
+    window.dispatchEvent(new CustomEvent(SHELL_PLAN_EVENT, { detail: snapshot }));
   } catch {}
 }
 
