@@ -97,6 +97,7 @@ test("cavcloud and cavsafe mobile drawer width and compact header controls match
 });
 
 test("cavcloud and cavsafe direct surfaces persist full profile state and keep the legacy there/username footer fallback logic", () => {
+  const appShell = read("components/AppShell.tsx");
   const cloud = read("app/cavcloud/CavCloudClient.tsx");
   const safe = read("app/cavsafe/CavSafeClient.tsx");
   const controls = read("components/cavcloud/CavSurfaceShellControls.tsx");
@@ -139,9 +140,14 @@ test("cavcloud and cavsafe direct surfaces persist full profile state and keep t
   assert.match(controls, /<Link className="cavcloud-brandMenuTrigger" href="\/" aria-label="Go to CavBot home">/);
   assert.match(controls, /CdnBadgeEyes/);
   assert.doesNotMatch(controls, /Welcome back to your command center!/);
-  assert.match(controls, /return "CavBot Account";/);
+  assert.match(controls, /return "CavBot";/);
+  assert.match(controls, /return "Premium";/);
+  assert.match(controls, /return "Free";/);
   assert.match(controls, /return "there";/);
   assert.match(controls, /return "C";/);
+  assert.match(appShell, /return handle \? `@\$\{handle\}` : "CavBot";/);
+  assert.match(appShell, /return "Premium";/);
+  assert.match(appShell, /return "Free";/);
 });
 
 test("shared browser store survives reloads and cross-surface navigation with real browser storage", () => {

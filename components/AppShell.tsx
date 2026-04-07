@@ -941,14 +941,14 @@ export default function AppShell({
     const full = String(normalized.fullName || normalized.displayName || "").trim();
     if (full) return full;
     const handle = String(normalized.username || profileUsername || "").trim().replace(/^@+/, "");
-    return handle ? `@${handle}` : "CavBot Account";
+    return handle ? `@${handle}` : "CavBot";
   }, [profileFullName, profileUsername]);
   const profileShowsPremiumPlus = planTier === "PREMIUM_PLUS";
   const profilePlanLabel = useMemo(() => {
-    if (trialActive && trialDaysLeft > 0 && !profileShowsPremiumPlus) return "FREE TRIAL";
-    if (profileShowsPremiumPlus) return "PREMIUM+";
-    if (planTier === "PREMIUM") return "PREMIUM PLAN";
-    return "FREE TIER";
+    if (trialActive && trialDaysLeft > 0 && !profileShowsPremiumPlus) return "Free Trial";
+    if (profileShowsPremiumPlus) return "Premium+";
+    if (planTier === "PREMIUM") return "Premium";
+    return "Free";
   }, [planTier, profileShowsPremiumPlus, trialActive, trialDaysLeft]);
   const planMenuLabel = profileShowsPremiumPlus ? "See Plans" : "Upgrade Plan";
 

@@ -178,7 +178,7 @@ function useSurfaceProfileIdentity(fallbackAccountName: string) {
     if (fallback) return fallback;
     const handle = s(normalizedSnapshot.username);
     if (handle) return `@${handle}`;
-    return "CavBot Account";
+    return "CavBot";
   }, [fallbackAccountName, normalizedSnapshot.displayName, normalizedSnapshot.fullName, normalizedSnapshot.username]);
 
   const greetingName = useMemo(() => {
@@ -323,10 +323,10 @@ function usePopoverDismiss(
 }
 
 function resolvePlanStatusLabel(planTier: SurfacePlanTier, trialActive: boolean, trialDaysLeft: number) {
-  if (trialActive && trialDaysLeft > 0) return "FREE TRIAL";
-  if (planTier === "PREMIUM_PLUS") return "PREMIUM+";
-  if (planTier === "PREMIUM") return "PREMIUM PLAN";
-  return "FREE TIER";
+  if (trialActive && trialDaysLeft > 0) return "Free Trial";
+  if (planTier === "PREMIUM_PLUS") return "Premium+";
+  if (planTier === "PREMIUM") return "Premium";
+  return "Free";
 }
 
 function resolvePlanActionLabel(planTier: SurfacePlanTier) {
