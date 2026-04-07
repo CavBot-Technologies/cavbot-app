@@ -1751,7 +1751,10 @@ function CommandDeckPageInner() {
   <div className="cb-stack">
     {/* Profile (TOP LEFT) */}
     <section className="cb-card" aria-label="Profile">
-      <ProfileCard />
+      <ProfileCard
+        fallbackPlanId={planId}
+        fallbackPlanLabel={workspacePlanLabel}
+      />
     </section>
 
 
@@ -2324,17 +2327,28 @@ function profileToneToAccentColor(tone: string): string {
 }
 
 
-function ProfileCard() {
+function ProfileCard(props: {
+  fallbackPlanId: PlanId;
+  fallbackPlanLabel: string;
+}) {
+  const fallbackPlanLabel = useMemo(() => {
+    return props.fallbackPlanLabel || workspacePlanLabelForId(props.fallbackPlanId);
+  }, [props.fallbackPlanId, props.fallbackPlanLabel]);
+  const fallbackSeatLimit = useMemo(() => {
+    const limits = getPlanLimits(props.fallbackPlanId);
+    const seats = Number(limits?.seats ?? 0);
+    return Number.isFinite(seats) && seats > 0 ? Math.trunc(seats) : null;
+  }, [props.fallbackPlanId]);
   const [fullName, setFullName] = useState<string>("—");
   const [email, setEmail] = useState<string>("—");
   const [username, setUsername] = useState<string>("—");
   const [bio, setBio] = useState<string>("No bio yet.");
-  const [plan, setPlan] = useState<string>("FREE");
+  const [plan, setPlan] = useState<string>(fallbackPlanLabel);
 
 
   const [teamCount, setTeamCount] = useState<number>(0);
   const [seatsUsed, setSeatsUsed] = useState<number>(0);
-  const [seatLimit, setSeatLimit] = useState<number | null>(null);
+  const [seatLimit, setSeatLimit] = useState<number | null>(fallbackSeatLimit);
 
 
   const [initials, setInitials] = useState<string>("");
@@ -2348,6 +2362,14 @@ function ProfileCard() {
   const instagramGradientId = useId();
 
   const lastProfileRevRef = useRef<string>("");
+
+  useEffect(() => {
+    setPlan(fallbackPlanLabel);
+  }, [fallbackPlanLabel]);
+
+  useEffect(() => {
+    setSeatLimit(fallbackSeatLimit);
+  }, [fallbackSeatLimit]);
 
   const syncProfileFromLocalStorage = useCallback(() => {
     try {

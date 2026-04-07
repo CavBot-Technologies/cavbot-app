@@ -4,8 +4,9 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
-import { resolvePlanIdFromTier, getPlanLimits } from "@/lib/plans";
+import { resolvePlanIdFromTier, getPlanLimits, type PlanId } from "@/lib/plans";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,8 +30,7 @@ function json<T>(data: T, init?: number | ResponseInit) {
   });
 }
 
-function degradedMembersPayload() {
-  const planId = resolvePlanIdFromTier("FREE");
+function degradedMembersPayload(planId: PlanId = resolvePlanIdFromTier("FREE")) {
   const limits = getPlanLimits(planId);
   return {
     ok: true,
@@ -50,18 +50,23 @@ function degradedMembersPayload() {
  * - invites[] (pending only)
  */
 export async function GET(req: NextRequest) {
+  let degradedPlanId: PlanId = resolvePlanIdFromTier("FREE");
   try {
     const sess = await requireSession(req);
     requireAccountContext(sess);
 
     const accountId = sess.accountId;
 
-    const account = await prisma.account.findFirst({
-      where: { id: accountId },
-      select: { tier: true },
-    });
+    const [planContext, account] = await Promise.all([
+      getEffectiveAccountPlanContext(accountId).catch(() => null),
+      prisma.account.findFirst({
+        where: { id: accountId },
+        select: { tier: true },
+      }),
+    ]);
 
-    const planId = resolvePlanIdFromTier(account?.tier || "FREE");
+    const planId = planContext?.planId ?? resolvePlanIdFromTier(account?.tier || "FREE");
+    degradedPlanId = planId;
     const limits = getPlanLimits(planId);
     const seatLimit = Number(limits?.seats ?? 0);
 
@@ -116,49 +121,48 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
-return json(
-  {
-    ok: true,
-    planId,
-    seatLimit,
-    seatsUsed: members.length + invites.length,
-
-    members: members.map((m) => ({
-      id: m.id,
-      role: m.role,
-      createdAt: m.createdAt.toISOString(),
-      user: {
-        id: m.user.id,
-        username: m.user.username,
-        email: m.user.email,
-        displayName: m.user.displayName,
-        createdAt: m.user.createdAt.toISOString(),
-        lastLoginAt: m.user.lastLoginAt ? m.user.lastLoginAt.toISOString() : null,
+    return json(
+      {
+        ok: true,
+        planId,
+        seatLimit,
+        seatsUsed: members.length + invites.length,
+        members: members.map((m) => ({
+          id: m.id,
+          role: m.role,
+          createdAt: m.createdAt.toISOString(),
+          user: {
+            id: m.user.id,
+            username: m.user.username,
+            email: m.user.email,
+            displayName: m.user.displayName,
+            createdAt: m.user.createdAt.toISOString(),
+            lastLoginAt: m.user.lastLoginAt ? m.user.lastLoginAt.toISOString() : null,
+          },
+        })),
+        invites: invites.map((i) => ({
+          id: i.id,
+          email: i.email,
+          inviteeEmail: i.inviteeEmail,
+          inviteeUserId: i.inviteeUserId,
+          role: i.role,
+          status: i.status,
+          expiresAt: i.expiresAt.toISOString(),
+          createdAt: i.createdAt.toISOString(),
+          respondedAt: i.respondedAt ? i.respondedAt.toISOString() : null,
+          sentById: i.sentById,
+          invitee: i.invitee
+            ? {
+                id: i.invitee.id,
+                username: i.invitee.username,
+                displayName: i.invitee.displayName,
+                avatarUrl: i.invitee.avatarImage,
+              }
+            : null,
+        })),
       },
-    })),
-    invites: invites.map((i) => ({
-      id: i.id,
-      email: i.email,
-      inviteeEmail: i.inviteeEmail,
-      inviteeUserId: i.inviteeUserId,
-      role: i.role,
-      status: i.status,
-      expiresAt: i.expiresAt.toISOString(),
-      createdAt: i.createdAt.toISOString(),
-      respondedAt: i.respondedAt ? i.respondedAt.toISOString() : null,
-      sentById: i.sentById,
-      invitee: i.invitee
-        ? {
-            id: i.invitee.id,
-            username: i.invitee.username,
-            displayName: i.invitee.displayName,
-            avatarUrl: i.invitee.avatarImage,
-          }
-        : null,
-    })),
-  },
-  200
-);
+      200,
+    );
   } catch (e: unknown) {
     if (isApiAuthError(e)) return json({ error: e.code }, e.status);
     if (
@@ -167,9 +171,9 @@ return json(
         columns: ["displayName", "lastLoginAt", "inviteeEmail", "inviteeUserId", "avatarImage"],
       })
     ) {
-      return json(degradedMembersPayload(), 200);
+      return json(degradedMembersPayload(degradedPlanId), 200);
     }
-    return json(degradedMembersPayload(), 200);
+    return json(degradedMembersPayload(degradedPlanId), 200);
   }
 }
 
