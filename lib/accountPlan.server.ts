@@ -1,5 +1,6 @@
 import "server-only";
 
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
 import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
 
@@ -27,7 +28,13 @@ const PLAN_RANK: Record<PlanId, number> = {
   premium_plus: 2,
 };
 
-const ENTITLED_SUBSCRIPTION_STATUSES = new Set(["ACTIVE", "TRIALING", "PAST_DUE"]);
+const ENTITLED_SUBSCRIPTION_STATUS_LIST = ["ACTIVE", "TRIALING", "PAST_DUE"] as const;
+const ENTITLED_SUBSCRIPTION_STATUSES = new Set<string>(ENTITLED_SUBSCRIPTION_STATUS_LIST);
+
+const SUBSCRIPTION_SCHEMA_HINTS: { tables: string[]; columns: string[] } = {
+  tables: ["Subscription"],
+  columns: ["accountId", "status", "tier", "currentPeriodEnd", "updatedAt", "createdAt"],
+};
 
 function parseDateMs(value: Date | string | null | undefined): number | null {
   if (!value) return null;
@@ -76,6 +83,10 @@ export function planTierTokenFromPlanId(planId: PlanId): "FREE" | "PREMIUM" | "P
   return "FREE";
 }
 
+function isSubscriptionPlanSchemaMismatchError(error: unknown) {
+  return isSchemaMismatchError(error, SUBSCRIPTION_SCHEMA_HINTS);
+}
+
 export async function findLatestEntitledSubscription(
   accountIdRaw: string,
   tx: PlanResolverDbClient = prisma,
@@ -83,22 +94,112 @@ export async function findLatestEntitledSubscription(
   const accountId = String(accountIdRaw || "").trim();
   if (!accountId) return null;
 
-  return tx.subscription.findFirst({
-    where: {
-      accountId,
-      status: {
-        in: ["ACTIVE", "TRIALING", "PAST_DUE"],
+  try {
+    return await tx.subscription.findFirst({
+      where: {
+        accountId,
+        status: {
+          in: [...ENTITLED_SUBSCRIPTION_STATUS_LIST],
+        },
       },
-    },
-    orderBy: [
-      { currentPeriodEnd: "desc" },
-      { updatedAt: "desc" },
-      { createdAt: "desc" },
-    ],
-    select: {
-      tier: true,
-      status: true,
-      currentPeriodEnd: true,
-    },
-  });
+      orderBy: [
+        { currentPeriodEnd: "desc" },
+        { updatedAt: "desc" },
+        { createdAt: "desc" },
+      ],
+      select: {
+        tier: true,
+        status: true,
+        currentPeriodEnd: true,
+      },
+    });
+  } catch (error) {
+    if (!isSubscriptionPlanSchemaMismatchError(error)) throw error;
+  }
+
+  try {
+    return await tx.subscription.findFirst({
+      where: {
+        accountId,
+        status: {
+          in: [...ENTITLED_SUBSCRIPTION_STATUS_LIST],
+        },
+      },
+      orderBy: [
+        { updatedAt: "desc" },
+        { createdAt: "desc" },
+      ],
+      select: {
+        tier: true,
+        status: true,
+      },
+    });
+  } catch (error) {
+    if (!isSubscriptionPlanSchemaMismatchError(error)) throw error;
+  }
+
+  try {
+    return await tx.subscription.findFirst({
+      where: {
+        accountId,
+        status: {
+          in: [...ENTITLED_SUBSCRIPTION_STATUS_LIST],
+        },
+      },
+      orderBy: [{ createdAt: "desc" }],
+      select: {
+        tier: true,
+        status: true,
+      },
+    });
+  } catch (error) {
+    if (!isSubscriptionPlanSchemaMismatchError(error)) throw error;
+  }
+
+  try {
+    return await tx.subscription.findFirst({
+      where: {
+        accountId,
+        status: {
+          in: [...ENTITLED_SUBSCRIPTION_STATUS_LIST],
+        },
+      },
+      select: {
+        tier: true,
+        status: true,
+      },
+    });
+  } catch (error) {
+    if (!isSubscriptionPlanSchemaMismatchError(error)) throw error;
+  }
+
+  try {
+    return await tx.subscription.findFirst({
+      where: { accountId },
+      orderBy: [
+        { updatedAt: "desc" },
+        { createdAt: "desc" },
+      ],
+      select: {
+        tier: true,
+        status: true,
+      },
+    });
+  } catch (error) {
+    if (!isSubscriptionPlanSchemaMismatchError(error)) throw error;
+  }
+
+  try {
+    return await tx.subscription.findFirst({
+      where: { accountId },
+      orderBy: [{ createdAt: "desc" }],
+      select: {
+        tier: true,
+        status: true,
+      },
+    });
+  } catch (error) {
+    if (!isSubscriptionPlanSchemaMismatchError(error)) throw error;
+    return null;
+  }
 }

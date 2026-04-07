@@ -1763,6 +1763,11 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     setReasoningPanelMessageId("");
   }, []);
   const activeFilePath = normalizePathLike(s(props.filePath));
+  const cavenInteractionLocked = useMemo(
+    () => s(qwenPopoverState?.entitlement?.state).toLowerCase() === "locked_free",
+    [qwenPopoverState]
+  );
+  const hasQueuedPrompts = queuedPrompts.length > 0;
   const hasPendingPrompt = submitting && Boolean(s(pendingPromptText));
   const hasInlineEdit = Boolean(inlineEditDraft);
   const hasExistingThread = Boolean(sessionId || visibleMessages.length || currentSession || hasPendingPrompt || hasInlineEdit);
@@ -1841,10 +1846,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     },
     [qwenPopoverState, qwenUsagePercent]
   );
-  const cavenInteractionLocked = useMemo(
-    () => s(qwenPopoverState?.entitlement?.state).toLowerCase() === "locked_free",
-    [qwenPopoverState]
-  );
   const maxImageAttachments = useMemo(() => maxImageAttachmentsForPlan(accountPlanId), [accountPlanId]);
   const emitQwenUpgradeDecision = useCallback(() => {
     const fromPayload = emitGuardDecisionFromPayload({ guardDecision: qwenPopoverState?.guardDecision || null });
@@ -1889,7 +1890,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     const match = REASONING_LEVEL_OPTIONS.find((option) => option.value === reasoningLevel);
     return match?.label || toReasoningDisplayLabel(reasoningLevel);
   }, [reasoningLevel]);
-  const hasQueuedPrompts = queuedPrompts.length > 0;
   const asrAudioSkillEnabled = cavenSettings.asrAudioSkillEnabled;
   const showAudioModelSelector = asrAudioSkillEnabled && audioModelMenuOptions.length > 1;
   const activeSkillInfo = useMemo(

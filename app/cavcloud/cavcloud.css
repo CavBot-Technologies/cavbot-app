@@ -6837,3 +6837,21 @@ body{ margin:0; }
     margin-right: -14px;
   }
 }
+
+/* Re-apply the intended mobile shell after later sticky-shell rules. */
+@media (max-width: 980px){
+  .cavcloud-root{
+    height: auto;
+    min-height: calc(100dvh - var(--cb-global-footer-height));
+    overflow: visible;
+  }
+
+  .cavcloud-top{
+    position: static;
+    top: auto;
+  }
+
+  .cavcloud-surfaceFooterIcons{
+    display: flex;
+  }
+}
