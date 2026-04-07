@@ -35,13 +35,16 @@ test("app shell republishes cached founder and plan state while footer modal and
   const globals = read("app/globals.css");
 
   assert.match(appShell, /const \[bootSnapshot\] = useState<PlanSnapshot \| null>\(\(\) => readShellPlanSnapshot\(\)\)/);
+  assert.match(appShell, /useLayoutEffect\(\(\) => \{/);
   assert.match(appShell, /window\.addEventListener\("cb:plan", onPlan as EventListener\)/);
+  assert.match(appShell, /window\.addEventListener\(SHELL_PLAN_EVENT, onPlan as EventListener\)/);
   assert.match(appShell, /globalThis\.__cbLocalStore\.setItem\("cb_profile_fullName_v1", nextFullName\)/);
   assert.match(appShell, /window\.dispatchEvent\(\s*new CustomEvent\("cb:profile"/);
   assert.match(appShell, /window\.dispatchEvent\(new CustomEvent\("cb:plan", \{ detail: planDetail \}\)\)/);
   assert.match(homePage, /globalThis\.__cbLocalStore\.setItem\("cb_account_initials", initials \|\| ""\)/);
   assert.match(homePage, /window\.dispatchEvent\(\s*new CustomEvent\("cb:profile"/);
   assert.match(homePage, /globalThis\.__cbLocalStore\.setItem\(\s*"cb_shell_plan_snapshot_v1"/);
+  assert.match(homePage, /window\.dispatchEvent\(\s*new CustomEvent\(SHELL_PLAN_EVENT, \{/);
   assert.match(homePage, /const welcomeShowsPremiumPlus = useMemo/);
   assert.match(homePage, /planId === "premium_plus"/);
   assert.match(homePage, /resolvePlanIdFromTier\(workspacePlanLabel\) === "premium_plus"/);

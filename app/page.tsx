@@ -2630,6 +2630,17 @@ function ProfileCard(props: {
               ts: Date.now(),
             }),
           );
+          window.dispatchEvent(
+            new CustomEvent(SHELL_PLAN_EVENT, {
+              detail: {
+                planTier,
+                memberRole,
+                trialActive,
+                trialDaysLeft,
+                ts: Date.now(),
+              },
+            }),
+          );
           window.dispatchEvent(new CustomEvent("cb:plan", { detail: planDetail }));
           globalThis.__cbLocalStore.setItem("cb_plan_context_v1", JSON.stringify(planDetail));
         } catch {}

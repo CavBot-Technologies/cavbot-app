@@ -5,7 +5,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { CavPadDock } from "./CavPad";
 import type { CavPadSite } from "./CavPad";
 import { CavGuardModal } from "./CavGuardModal";
@@ -1203,7 +1203,7 @@ export default function AppShell({
     return () => window.removeEventListener("cb:profile", onProfile);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     function onPlan(event?: Event) {
       try {
         const d = event instanceof CustomEvent ? (event.detail as Record<string, unknown>) || {} : {};
@@ -1231,9 +1231,11 @@ export default function AppShell({
 
     onPlan();
     window.addEventListener("cb:plan", onPlan as EventListener);
+    window.addEventListener(SHELL_PLAN_EVENT, onPlan as EventListener);
     window.addEventListener("storage", onPlan);
     return () => {
       window.removeEventListener("cb:plan", onPlan as EventListener);
+      window.removeEventListener(SHELL_PLAN_EVENT, onPlan as EventListener);
       window.removeEventListener("storage", onPlan);
     };
   }, []);
