@@ -5,7 +5,17 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  Suspense,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { CavPadDock } from "./CavPad";
 import type { CavPadSite } from "./CavPad";
 import { CavGuardModal } from "./CavGuardModal";
@@ -86,6 +96,24 @@ type PlanSnapshot = {
   trialDaysLeft: number;
   ts: number;
 };
+
+type AppShellPlanContextValue = {
+  planTier: PlanTier;
+  planResolved: boolean;
+  memberRole: MemberRole;
+  trialActive: boolean;
+};
+
+const AppShellPlanContext = createContext<AppShellPlanContextValue>({
+  planTier: "FREE",
+  planResolved: false,
+  memberRole: null,
+  trialActive: false,
+});
+
+export function useAppShellPlan() {
+  return useContext(AppShellPlanContext);
+}
 
 const SHELL_PLAN_SNAPSHOT_KEY = "cb_shell_plan_snapshot_v1";
 const PLAN_CONTEXT_KEY = "cb_plan_context_v1";
@@ -2166,12 +2194,20 @@ export default function AppShell({
     return null;
   }
 
+  const shellPlanContextValue = useMemo<AppShellPlanContextValue>(() => ({
+    planTier,
+    planResolved,
+    memberRole,
+    trialActive,
+  }), [planTier, planResolved, memberRole, trialActive]);
+
   return (
-    <div
-      className={`cb-shell${isCavbotPage ? " cb-route-cavbot" : ""}`}
-      data-cavbot-page-type="console"
-      data-shell-subtitle={subtitle || undefined}
-    >
+    <AppShellPlanContext.Provider value={shellPlanContextValue}>
+      <div
+        className={`cb-shell${isCavbotPage ? " cb-route-cavbot" : ""}`}
+        data-cavbot-page-type="console"
+        data-shell-subtitle={subtitle || undefined}
+      >
       <Suspense fallback={null}>
         <SearchParamsBridge onChange={setSearchParamsSerialized} />
       </Suspense>
@@ -2789,7 +2825,8 @@ export default function AppShell({
           {children || null}
         </main>
       </div>
-    </div>
+      </div>
+    </AppShellPlanContext.Provider>
   );
 }
 
