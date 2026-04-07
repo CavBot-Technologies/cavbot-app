@@ -558,6 +558,13 @@ body{ margin:0; }
 .cavcloud-headerBadgeWrap{
   flex: 0 0 auto;
 }
+.cavcloud-mobileMenuGlyph{
+  width: 15px;
+  height: 15px;
+  display: block;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
 .cavcloud-badgeWrap .cavbot-dm-avatar{
   transform: scale(.72);
   transform-origin: center;

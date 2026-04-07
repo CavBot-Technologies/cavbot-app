@@ -6214,26 +6214,14 @@ function ek() {
             "aria-label": mobileNavOpen ? "Close menu" : "Open menu",
             "aria-expanded": mobileNavOpen,
             "aria-controls": "cavsafe-mobile-nav",
-            children: (0, t.jsxs)("svg", {
-              viewBox: "0 0 24 24",
-              fill: "none",
-              "aria-hidden": "true",
-              children: [t.jsx("path", {
-                d: "M4 7h16",
-                stroke: "currentColor",
-                strokeWidth: "1.9",
-                strokeLinecap: "round"
-              }), t.jsx("path", {
-                d: "M4 12h16",
-                stroke: "currentColor",
-                strokeWidth: "1.9",
-                strokeLinecap: "round"
-              }), t.jsx("path", {
-                d: "M4 17h16",
-                stroke: "currentColor",
-                strokeWidth: "1.9",
-                strokeLinecap: "round"
-              })]
+            children: t.jsx(s.default, {
+              src: "/icons/menu-svgrepo-com.svg",
+              alt: "",
+              width: 15,
+              height: 15,
+              className: "cavcloud-mobileMenuGlyph",
+              "aria-hidden": !0,
+              unoptimized: !0
             })
           }) : null, isCompactShell ? null : t.jsx(CavSurfaceHeaderGreeting, {
             accountName: eE,
@@ -6271,7 +6259,7 @@ function ek() {
             value: eM,
             onChange: e => eI(e.currentTarget.value),
             placeholder: iw
-          }), t.jsx("button", {
+          }), isCompactShell ? null : t.jsx("button", {
             className: "cavcloud-btn cavcloud-btnGhost cavcloud-btnIconOnly",
             disabled: ew || eC,
             onClick: () => void ta(),

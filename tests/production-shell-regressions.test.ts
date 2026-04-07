@@ -85,6 +85,7 @@ test("cavcloud and cavsafe mobile drawer width and compact header controls match
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-btnIconOnly,[\s\S]*width: 34px;[\s\S]*height: 34px;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-btnIconOnly svg,[\s\S]*width: 15px;[\s\S]*height: 15px;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-top \.cavcloud-btnGhost\.cavcloud-btnIconOnly,[\s\S]*background: rgba\(0,0,0,.22\);/);
+  assert.match(css, /\.cavcloud-mobileMenuGlyph\{\s*width: 15px;\s*height: 15px;[\s\S]*display: block;/);
   assert.match(css, /\.cavcloud-pageIntroHeading\{[\s\S]*font-size: 16px;/);
   assert.match(css, /\.cavcloud-headerBadgeWrap\{/);
   assert.doesNotMatch(css, /\.cavcloud-pageIntroSub\{/);
@@ -104,6 +105,8 @@ test("cavcloud and cavsafe direct surfaces persist full profile state and keep t
   assert.match(cloud, /CavSurfacePageIntro/);
   assert.match(cloud, /accountName: eE/);
   assert.match(cloud, /displayPlanTier = resolveCavcloudDisplayPlanTier\(eK, eE, eH\)/);
+  assert.match(cloud, /src: "\/icons\/menu-svgrepo-com\.svg"/);
+  assert.match(cloud, /isCompactShell \? null : t\.jsx\("button", \{\s*className: "cavcloud-btn cavcloud-btnGhost cavcloud-btnIconOnly",[\s\S]*"aria-label": "Refresh"/);
   assert.match(safe, /readCachedCavsafeProfileState/);
   assert.match(safe, /persistCavsafeProfileState/);
   assert.match(safe, /persistCavsafePlanState/);
@@ -113,6 +116,8 @@ test("cavcloud and cavsafe direct surfaces persist full profile state and keep t
   assert.match(safe, /CavSurfacePageIntro/);
   assert.match(safe, /accountName: eE/);
   assert.match(safe, /displayPlanTier = resolveCavsafeDisplayPlanTier\(eK, eE, eH\)/);
+  assert.match(safe, /src: "\/icons\/menu-svgrepo-com\.svg"/);
+  assert.match(safe, /isCompactShell \? null : t\.jsx\("button", \{\s*className: "cavcloud-btn cavcloud-btnGhost cavcloud-btnIconOnly",[\s\S]*"aria-label": "Refresh"/);
   assert.match(controls, /export function CavSurfaceHeaderBadge/);
   assert.match(controls, /export function CavSurfacePageIntro/);
   assert.match(controls, /CdnBadgeEyes/);
