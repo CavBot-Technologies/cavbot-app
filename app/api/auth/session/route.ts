@@ -21,6 +21,7 @@ import {
   membershipTierRank,
   pickPrimaryMembership,
 } from "@/lib/authDb";
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
 
 
@@ -73,6 +74,13 @@ function normalizeRole(value: string | null | undefined): Role {
 
 function normalizeEmail(x: unknown) {
   return String(x ?? "").trim().toLowerCase();
+}
+
+function planTierToken(planId: unknown) {
+  const value = String(planId || "").trim().toLowerCase();
+  if (value === "premium_plus") return "PREMIUM_PLUS";
+  if (value === "premium") return "PREMIUM";
+  return "FREE";
 }
 
 
@@ -229,6 +237,7 @@ export async function GET(req: Request) {
       ? await findSessionMembership(pool, userId, primaryMembership.accountId)
       : null;
     const effectiveMembership = promotedMembership ?? membership;
+    const effectivePlan = await getEffectiveAccountPlanContext(effectiveMembership.accountId).catch(() => null);
 
 
     // IMPORTANT:
@@ -249,6 +258,7 @@ export async function GET(req: Request) {
           id: effectiveMembership.accountId,
           slug: effectiveMembership.accountSlug,
           tier: effectiveMembership.accountTier,
+          tierEffective: planTierToken(effectivePlan?.planId),
           name: effectiveMembership.accountName,
         },
         client,

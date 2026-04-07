@@ -2,6 +2,7 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, isApiAuthError } from "@/lib/apiAuth";
 import { resolvePlanIdFromTier, PLANS } from "@/lib/plans";
@@ -232,7 +233,8 @@ export async function GET(req: NextRequest) {
 
     if (!account) return json(buildEmptyBillingSummary(), 200);
 
-    const currentPlanId = resolvePlanIdFromTier(account.tier);
+    const effectivePlan = await getEffectiveAccountPlanContext(accountId).catch(() => null);
+    const currentPlanId = effectivePlan?.planId ?? resolvePlanIdFromTier(account.tier);
     const planDef = PLANS[currentPlanId];
 
     const [membersCount, invitesCount] = await Promise.all([

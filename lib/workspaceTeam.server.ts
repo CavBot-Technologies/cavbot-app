@@ -4,6 +4,7 @@ import crypto from "crypto";
 
 import type { Prisma } from "@prisma/client";
 
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { WORKSPACE_NOTIFICATION_KINDS } from "@/lib/notificationKinds";
 import { resolvePlanIdFromTier, getPlanLimits } from "@/lib/plans";
@@ -250,7 +251,8 @@ async function currentSeatCapacity(accountId: string): Promise<{ seatLimit: numb
     select: { tier: true },
   });
 
-  const planId = resolvePlanIdFromTier(account?.tier || "FREE");
+  const plan = await getEffectiveAccountPlanContext(accountId).catch(() => null);
+  const planId = plan?.planId ?? resolvePlanIdFromTier(account?.tier || "FREE");
   const limits = getPlanLimits(planId);
   return {
     seatLimit: Number(limits?.seats ?? 0),

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
@@ -45,6 +46,9 @@ async function resolveAccountTier(accountId?: string): Promise<Tier> {
   if (!accountId) {
     return "free";
   }
+  const effectivePlan = await getEffectiveAccountPlanContext(accountId).catch(() => null);
+  if (effectivePlan?.planId === "premium_plus") return "premium_plus";
+  if (effectivePlan?.planId === "premium") return "premium";
   const account = await prisma.account.findUnique({
     where: { id: accountId },
     select: {

@@ -689,12 +689,15 @@ function resolvePreferredCavCodeModel(modelOptions: CavAiModelOption[], fallback
 
 function normalizeCavCodeModelOptions(options: CavAiModelOption[]): CavAiModelOption[] {
   const coder = options.find((option) => s(option.id) === ALIBABA_QWEN_CODER_MODEL_ID);
-  if (coder) {
-    return [{
-      id: ALIBABA_QWEN_CODER_MODEL_ID,
-      label: resolveAiModelLabel(ALIBABA_QWEN_CODER_MODEL_ID),
-    }];
-  }
+  if (!coder) return [];
+  return [{
+    id: ALIBABA_QWEN_CODER_MODEL_ID,
+    label: resolveAiModelLabel(ALIBABA_QWEN_CODER_MODEL_ID),
+  }];
+}
+
+function cavCodePlanModelOptions(planIdRaw: unknown): CavAiModelOption[] {
+  if (normalizePlanId(planIdRaw) === "free") return [];
   return [{
     id: ALIBABA_QWEN_CODER_MODEL_ID,
     label: resolveAiModelLabel(ALIBABA_QWEN_CODER_MODEL_ID),
@@ -1101,15 +1104,16 @@ function reasoningLevelsForPlan(planIdRaw: unknown): ReasoningLevel[] {
 
 function normalizePlanId(value: unknown): "free" | "premium" | "premium_plus" {
   const raw = s(value).toLowerCase();
-  if (raw === "premium_plus") return "premium_plus";
+  if (raw === "premium_plus" || raw === "premium+") return "premium_plus";
   if (raw === "premium") return "premium";
   return "free";
 }
 
-function planTierRank(planId: "free" | "premium" | "premium_plus"): number {
-  if (planId === "premium_plus") return 3;
-  if (planId === "premium") return 2;
-  return 1;
+function resolveServerPlanId(
+  planIdRaw: unknown,
+  fallback: "free" | "premium" | "premium_plus"
+): "free" | "premium" | "premium_plus" {
+  return s(planIdRaw) ? normalizePlanId(planIdRaw) : fallback;
 }
 
 function maxImageAttachmentsForPlan(planId: "free" | "premium" | "premium_plus"): number {
@@ -1127,17 +1131,14 @@ function normalizeReasoningOptions(raw: unknown): ReasoningLevel[] {
     .filter((level) => unique.includes(level));
 }
 
-function mergeReasoningLevelsWithPlan(
+function clampReasoningLevelsToPlan(
   options: ReasoningLevel[],
   planIdRaw: unknown
 ): ReasoningLevel[] {
-  const set = new Set<ReasoningLevel>([
-    ...reasoningLevelsForPlan(planIdRaw),
-    ...options,
-  ]);
+  const set = new Set<ReasoningLevel>(reasoningLevelsForPlan(planIdRaw));
   return REASONING_LEVEL_OPTIONS
     .map((option) => option.value)
-    .filter((level) => set.has(level));
+    .filter((level) => set.has(level) && options.includes(level));
 }
 
 function toModelOption(value: unknown): CavAiModelOption | null {
@@ -1764,8 +1765,8 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   }, []);
   const activeFilePath = normalizePathLike(s(props.filePath));
   const cavenInteractionLocked = useMemo(
-    () => s(qwenPopoverState?.entitlement?.state).toLowerCase() === "locked_free",
-    [qwenPopoverState]
+    () => accountPlanId === "free" || s(qwenPopoverState?.entitlement?.state).toLowerCase() === "locked_free",
+    [accountPlanId, qwenPopoverState]
   );
   const hasQueuedPrompts = queuedPrompts.length > 0;
   const hasPendingPrompt = submitting && Boolean(s(pendingPromptText));
@@ -2098,27 +2099,21 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       };
       if (!res.ok || body.ok !== true) {
         emitGuardDecisionFromPayload(body);
-        setAvailableReasoningLevels((prev) => mergeReasoningLevelsWithPlan(prev, accountPlanId));
+        setModelOptions(cavCodePlanModelOptions(accountPlanId));
+        setAvailableReasoningLevels(reasoningLevelsForPlan(accountPlanId));
         return;
       }
-      const policyPlanId = normalizePlanId(body.planId);
-      const effectivePlanId =
-        planTierRank(policyPlanId) >= planTierRank(accountPlanId) ? policyPlanId : accountPlanId;
+      const effectivePlanId = resolveServerPlanId(body.planId, accountPlanId);
       setAccountPlanId(effectivePlanId);
       const hasCatalog = Boolean(body.modelCatalog && typeof body.modelCatalog === "object");
       const textOptions = Array.isArray(body.modelCatalog?.text)
         ? body.modelCatalog?.text.map((row) => toModelOption(row)).filter(Boolean) as CavAiModelOption[]
         : [];
       if (hasCatalog) {
-        setModelOptions(normalizeCavCodeModelOptions(textOptions));
+        const nextOptions = normalizeCavCodeModelOptions(textOptions);
+        setModelOptions(nextOptions.length ? nextOptions : cavCodePlanModelOptions(effectivePlanId));
       } else {
-        const fallbackOptions = [s(body.models?.chat), s(body.models?.reasoning)]
-          .filter(Boolean)
-          .map((id) => ({
-            id,
-            label: resolveAiModelLabel(id),
-          }));
-        setModelOptions(normalizeCavCodeModelOptions(fallbackOptions));
+        setModelOptions(cavCodePlanModelOptions(effectivePlanId));
       }
 
       const audioOptions = Array.isArray(body.modelCatalog?.audio)
@@ -2128,11 +2123,13 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
 
       const optionsFromPolicy = normalizeReasoningOptions(body.reasoning?.options);
       if (optionsFromPolicy.length) {
-        setAvailableReasoningLevels(mergeReasoningLevelsWithPlan(optionsFromPolicy, effectivePlanId));
+        const nextReasoning = clampReasoningLevelsToPlan(optionsFromPolicy, effectivePlanId);
+        setAvailableReasoningLevels(nextReasoning.length ? nextReasoning : reasoningLevelsForPlan(effectivePlanId));
       } else {
         const optionsFromMax = reasoningLevelsUpTo(body.reasoning?.maxLevel);
         const nextReasoning = optionsFromMax.length ? optionsFromMax : reasoningLevelsForPlan(effectivePlanId);
-        setAvailableReasoningLevels(mergeReasoningLevelsWithPlan(nextReasoning, effectivePlanId));
+        const nextReasoningLevels = clampReasoningLevelsToPlan(nextReasoning, effectivePlanId);
+        setAvailableReasoningLevels(nextReasoningLevels.length ? nextReasoningLevels : reasoningLevelsForPlan(effectivePlanId));
       }
 
       const qwenState = toQwenPopoverUiState(body);
@@ -2141,7 +2138,8 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       }
     } catch {
       // Best effort only.
-      setAvailableReasoningLevels((prev) => mergeReasoningLevelsWithPlan(prev, accountPlanId));
+      setModelOptions(cavCodePlanModelOptions(accountPlanId));
+      setAvailableReasoningLevels(reasoningLevelsForPlan(accountPlanId));
     }
   }, [accountPlanId]);
 
@@ -2345,14 +2343,20 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
             tierEffective?: unknown;
           };
         };
-        if (cancelled || !res.ok || body.ok !== true || body.authenticated !== true) return;
+        if (cancelled) return;
+        if (!res.ok || body.ok !== true || body.authenticated !== true) {
+          if (res.status === 401 || body.authenticated === false) {
+            setAccountPlanId("free");
+          }
+          return;
+        }
         const nextIdentity = rememberCavAiIdentity({
           fullName: s(body.user?.displayName),
           username: s(body.user?.username),
         });
         setProfileIdentity(nextIdentity);
         const authPlanId = normalizePlanId(body.account?.tierEffective ?? body.account?.tier);
-        setAccountPlanId((prev) => (planTierRank(authPlanId) >= planTierRank(prev) ? authPlanId : prev));
+        setAccountPlanId(authPlanId);
       } catch {
         // Best effort only.
       }
@@ -2474,7 +2478,12 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   }, [audioModelOptions, selectedAudioModel]);
 
   useEffect(() => {
-    setAvailableReasoningLevels((prev) => mergeReasoningLevelsWithPlan(prev, accountPlanId));
+    setModelOptions((prev) => {
+      const nextOptions = normalizeCavCodeModelOptions(prev);
+      if (normalizePlanId(accountPlanId) === "free") return [];
+      return nextOptions.length ? nextOptions : cavCodePlanModelOptions(accountPlanId);
+    });
+    setAvailableReasoningLevels(reasoningLevelsForPlan(accountPlanId));
   }, [accountPlanId]);
 
   useEffect(() => {

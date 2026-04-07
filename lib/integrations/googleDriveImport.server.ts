@@ -7,6 +7,7 @@ import { pipeline } from "stream/promises";
 
 import { CavCloudImportItemStatus, CavCloudImportSessionStatus, IntegrationProvider, Prisma } from "@prisma/client";
 
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { putCavcloudObjectStream } from "@/lib/cavcloud/r2.server";
 import { writeCavCloudOperationLog } from "@/lib/cavcloud/operationLog.server";
 import {
@@ -233,7 +234,7 @@ function mapFailedRow(row: {
 }
 
 async function resolveStorageGuard(accountId: string): Promise<StorageGuard> {
-  const [account, aggregate] = await Promise.all([
+  const [account, plan, aggregate] = await Promise.all([
     prisma.account.findUnique({
       where: { id: accountId },
       select: {
@@ -242,6 +243,7 @@ async function resolveStorageGuard(accountId: string): Promise<StorageGuard> {
         trialEndsAt: true,
       },
     }),
+    getEffectiveAccountPlanContext(accountId).catch(() => null),
     prisma.cavCloudFile.aggregate({
       where: {
         accountId,
@@ -256,7 +258,8 @@ async function resolveStorageGuard(accountId: string): Promise<StorageGuard> {
   const usedBytes = aggregate._sum.bytes ?? BigInt(0);
 
   const trialEndsAtMs = account?.trialEndsAt ? account.trialEndsAt.getTime() : 0;
-  const trialActive = Boolean(account?.trialSeatActive) && Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now();
+  const trialActive = plan?.trialActive
+    ?? (Boolean(account?.trialSeatActive) && Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now());
   if (trialActive) {
     return {
       usedBytes,
@@ -264,7 +267,7 @@ async function resolveStorageGuard(accountId: string): Promise<StorageGuard> {
     };
   }
 
-  const planId = resolvePlanIdFromTier(account?.tier || "FREE");
+  const planId = plan?.planId ?? resolvePlanIdFromTier(account?.tier || "FREE");
   const storageGb = getPlanLimits(planId).storageGb;
   if (storageGb === "unlimited" || typeof storageGb !== "number" || !Number.isFinite(storageGb) || storageGb <= 0) {
     return {

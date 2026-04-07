@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { auditLogWrite } from "@/lib/audit";
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { PLANS, getPlanLimits, resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
 import { Prisma, type ScanJobStatus, type ScanFindingSeverity } from "@prisma/client";
 
@@ -92,6 +93,10 @@ async function fetchProjectContext(projectId: number) {
 
 async function getAccountPlan(accountId: string | undefined): Promise<PlanId> {
   if (!accountId) return "free";
+  const plan = await getEffectiveAccountPlanContext(accountId).catch(() => null);
+  if (plan?.planId) {
+    return plan.planId;
+  }
   const account = await prisma.account.findUnique({
     where: { id: accountId },
     select: { tier: true, trialSeatActive: true, trialEndsAt: true },

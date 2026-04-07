@@ -4,6 +4,7 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { prisma } from "@/lib/prisma";
 import {
   getAppOrigin,
@@ -137,7 +138,8 @@ export async function POST(req: NextRequest) {
 
     if (!account) return reject({ error: "ACCOUNT_NOT_FOUND" }, 404);
 
-    const planId = resolvePlanIdFromTier(account.tier);
+    const plan = await getEffectiveAccountPlanContext(accountId).catch(() => null);
+    const planId = plan?.planId ?? resolvePlanIdFromTier(account.tier);
     const limits = getPlanLimits(planId);
     const seatLimit = Number(limits?.seats ?? 0);
 

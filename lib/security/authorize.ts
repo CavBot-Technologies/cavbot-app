@@ -9,6 +9,7 @@ import {
   requireUser,
   type CavbotAccountSession,
 } from "@/lib/apiAuth";
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 
@@ -58,6 +59,11 @@ function ensureCavsafePlan(planId: PlanId): CavsafePlanId {
 async function resolveAccountPlan(accountId: string): Promise<PlanId> {
   const id = s(accountId);
   if (!id) throw new ApiAuthError("UNAUTHORIZED", 401);
+
+  const effectivePlan = await getEffectiveAccountPlanContext(id).catch(() => null);
+  if (effectivePlan?.planId) {
+    return effectivePlan.planId;
+  }
 
   const account = await prisma.account.findUnique({
     where: { id },

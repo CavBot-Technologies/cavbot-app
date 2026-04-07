@@ -12,6 +12,7 @@ import {
   findActiveProjectByIdForAccount,
   getAuthPool,
 } from "@/lib/authDb";
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
 import { AiServiceError, type AiSurface } from "@/src/lib/ai/ai.types";
@@ -33,6 +34,10 @@ function isTrialActive(trialSeatActive: boolean | null, trialEndsAt: Date | null
 }
 
 async function resolvePlanId(accountId: string): Promise<PlanId> {
+  const effectivePlan = await getEffectiveAccountPlanContext(accountId).catch(() => null);
+  if (effectivePlan?.planId) {
+    return effectivePlan.planId;
+  }
   const pool = getAuthPool();
   await clearExpiredTrialSeat(pool, accountId);
   const account = await findAccountById(pool, accountId);

@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import { auditLogWrite } from "@/lib/audit";
+import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 
 // Plan system enforcement
 import { resolvePlanIdFromTier, getPlanLimits } from "@/lib/plans";
@@ -172,7 +173,8 @@ export async function POST(req: Request, ctx: unknown) {
       select: { tier: true },
     });
 
-    const planId = resolvePlanIdFromTier(account?.tier || "FREE");
+    const plan = await getEffectiveAccountPlanContext(sess.accountId!).catch(() => null);
+    const planId = plan?.planId ?? resolvePlanIdFromTier(account?.tier || "FREE");
     const limits = getPlanLimits(planId);
 
     const body = (await readSanitizedJson(req, null)) as null | {

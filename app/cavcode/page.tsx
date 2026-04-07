@@ -1826,6 +1826,13 @@ function normalizePlanId(value: unknown): "free" | "premium" | "premium_plus" {
   return "free";
 }
 
+function resolveServerPlanId(
+  planIdRaw: unknown,
+  fallback: "free" | "premium" | "premium_plus"
+): "free" | "premium" | "premium_plus" {
+  return String(planIdRaw || "").trim() ? normalizePlanId(planIdRaw) : fallback;
+}
+
 function planTierRank(planId: "free" | "premium" | "premium_plus"): number {
   if (planId === "premium_plus") return 3;
   if (planId === "premium") return 2;
@@ -1995,27 +2002,24 @@ function agentBuilderPlanModelOptions(planIdRaw: unknown): AgentBuilderModelOpti
   }));
 }
 
-function mergeAgentBuilderModelOptionsWithPlan(
+function clampAgentBuilderModelOptionsToPlan(
   options: AgentBuilderModelOption[],
   planIdRaw: unknown
 ): AgentBuilderModelOption[] {
-  return normalizeAgentBuilderModelOptions([
-    ...agentBuilderPlanModelOptions(planIdRaw),
-    ...options,
-  ]);
+  const allowed = new Set(agentBuilderPlanModelIds(planIdRaw));
+  const nextOptions = normalizeAgentBuilderModelOptions(options.filter((option) => allowed.has(String(option.id || "").trim())));
+  return nextOptions.length ? nextOptions : agentBuilderPlanModelOptions(planIdRaw);
 }
 
-function mergeAgentBuilderReasoningOptionsWithPlan(
+function clampAgentBuilderReasoningOptionsToPlan(
   options: AgentBuilderReasoningLevel[],
   planIdRaw: unknown
 ): AgentBuilderReasoningLevel[] {
-  const set = new Set<AgentBuilderReasoningLevel>([
-    ...reasoningLevelsForPlan(planIdRaw),
-    ...options,
-  ]);
-  return AGENT_BUILDER_REASONING_OPTIONS
+  const set = new Set<AgentBuilderReasoningLevel>(reasoningLevelsForPlan(planIdRaw));
+  const nextOptions = AGENT_BUILDER_REASONING_OPTIONS
     .map((option) => option.value)
-    .filter((level) => set.has(level));
+    .filter((level) => set.has(level) && options.includes(level));
+  return nextOptions.length ? nextOptions : reasoningLevelsForPlan(planIdRaw);
 }
 
 function normalizeAgentSurfaceFromUnknown(value: unknown): "cavcode" | "center" | "all" {
@@ -7474,14 +7478,13 @@ export default function CavCodePage() {
         modelCatalog?: { text?: unknown[] };
         reasoning?: { maxLevel?: unknown; options?: unknown[] };
       };
-      const policyPlanId = normalizePlanId(body.planId);
-      const effectivePlanId =
-        planTierRank(policyPlanId) >= planTierRank(accountPlanId) ? policyPlanId : accountPlanId;
+      const effectivePlanId = resolveServerPlanId(body.planId, accountPlanId);
       if (!res.ok || body.ok !== true) {
-        setChangesCommitAiModelOptions((prev) => mergeAgentBuilderModelOptionsWithPlan(prev, effectivePlanId));
-        setChangesCommitAiReasoningOptions((prev) => mergeAgentBuilderReasoningOptionsWithPlan(prev, effectivePlanId));
+        setChangesCommitAiModelOptions(agentBuilderPlanModelOptions(effectivePlanId));
+        setChangesCommitAiReasoningOptions(reasoningLevelsForPlan(effectivePlanId));
         return;
       }
+      setAccountPlanId(effectivePlanId);
 
       const catalogRows = Array.isArray(body.modelCatalog?.text)
         ? body.modelCatalog?.text.map((row) => toModelOptionFromUnknown(row)).filter(Boolean) as AgentBuilderModelOption[]
@@ -7490,7 +7493,7 @@ export default function CavCodePage() {
         .filter(Boolean)
         .map((id) => ({ id, label: resolveAiModelLabel(id) }));
       const nextModels = normalizeAgentBuilderModelOptions(catalogRows.length ? catalogRows : fallbackRows);
-      setChangesCommitAiModelOptions(mergeAgentBuilderModelOptionsWithPlan(nextModels, effectivePlanId));
+      setChangesCommitAiModelOptions(clampAgentBuilderModelOptionsToPlan(nextModels, effectivePlanId));
 
       const optionsFromPolicy = normalizeReasoningOptions(body.reasoning?.options);
       const optionsFromMax = reasoningLevelsUpTo(body.reasoning?.maxLevel);
@@ -7501,10 +7504,10 @@ export default function CavCodePage() {
           : optionsFromMax.length
             ? optionsFromMax
             : optionsFromPlan;
-      setChangesCommitAiReasoningOptions(mergeAgentBuilderReasoningOptionsWithPlan(nextReasoning, effectivePlanId));
+      setChangesCommitAiReasoningOptions(clampAgentBuilderReasoningOptionsToPlan(nextReasoning, effectivePlanId));
     } catch {
-      setChangesCommitAiModelOptions((prev) => mergeAgentBuilderModelOptionsWithPlan(prev, accountPlanId));
-      setChangesCommitAiReasoningOptions((prev) => mergeAgentBuilderReasoningOptionsWithPlan(prev, accountPlanId));
+      setChangesCommitAiModelOptions(agentBuilderPlanModelOptions(accountPlanId));
+      setChangesCommitAiReasoningOptions(reasoningLevelsForPlan(accountPlanId));
     } finally {
       setChangesCommitAiModelsLoaded(true);
     }
@@ -7524,14 +7527,13 @@ export default function CavCodePage() {
         modelCatalog?: { text?: unknown[] };
         reasoning?: { maxLevel?: unknown; options?: unknown[] };
       };
-      const policyPlanId = normalizePlanId(body.planId);
-      const effectivePlanId =
-        planTierRank(policyPlanId) >= planTierRank(accountPlanId) ? policyPlanId : accountPlanId;
+      const effectivePlanId = resolveServerPlanId(body.planId, accountPlanId);
       if (!res.ok || body.ok !== true) {
-        setCreateAgentAiModelOptions((prev) => mergeAgentBuilderModelOptionsWithPlan(prev, effectivePlanId));
-        setCreateAgentAiReasoningOptions((prev) => mergeAgentBuilderReasoningOptionsWithPlan(prev, effectivePlanId));
+        setCreateAgentAiModelOptions(agentBuilderPlanModelOptions(effectivePlanId));
+        setCreateAgentAiReasoningOptions(reasoningLevelsForPlan(effectivePlanId));
         return;
       }
+      setAccountPlanId(effectivePlanId);
 
       const catalogRows = Array.isArray(body.modelCatalog?.text)
         ? body.modelCatalog?.text.map((row) => toModelOptionFromUnknown(row)).filter(Boolean) as AgentBuilderModelOption[]
@@ -7540,7 +7542,7 @@ export default function CavCodePage() {
         .filter(Boolean)
         .map((id) => ({ id, label: resolveAiModelLabel(id) }));
       const nextModels = normalizeAgentBuilderModelOptions(catalogRows.length ? catalogRows : fallbackRows);
-      setCreateAgentAiModelOptions(mergeAgentBuilderModelOptionsWithPlan(nextModels, effectivePlanId));
+      setCreateAgentAiModelOptions(clampAgentBuilderModelOptionsToPlan(nextModels, effectivePlanId));
 
       const optionsFromPolicy = normalizeReasoningOptions(body.reasoning?.options);
       const optionsFromMax = reasoningLevelsUpTo(body.reasoning?.maxLevel);
@@ -7551,10 +7553,10 @@ export default function CavCodePage() {
           : optionsFromMax.length
             ? optionsFromMax
             : optionsFromPlan;
-      setCreateAgentAiReasoningOptions(mergeAgentBuilderReasoningOptionsWithPlan(nextReasoning, effectivePlanId));
+      setCreateAgentAiReasoningOptions(clampAgentBuilderReasoningOptionsToPlan(nextReasoning, effectivePlanId));
     } catch {
-      setCreateAgentAiModelOptions((prev) => mergeAgentBuilderModelOptionsWithPlan(prev, accountPlanId));
-      setCreateAgentAiReasoningOptions((prev) => mergeAgentBuilderReasoningOptionsWithPlan(prev, accountPlanId));
+      setCreateAgentAiModelOptions(agentBuilderPlanModelOptions(accountPlanId));
+      setCreateAgentAiReasoningOptions(reasoningLevelsForPlan(accountPlanId));
     } finally {
       setCreateAgentAiModelsLoaded(true);
     }
@@ -7767,10 +7769,10 @@ export default function CavCodePage() {
   }, [changesCommitAiReasoningLevel, changesCommitAiReasoningOptions]);
 
   useEffect(() => {
-    setChangesCommitAiModelOptions((prev) => mergeAgentBuilderModelOptionsWithPlan(prev, accountPlanId));
-    setChangesCommitAiReasoningOptions((prev) => mergeAgentBuilderReasoningOptionsWithPlan(prev, accountPlanId));
-    setCreateAgentAiModelOptions((prev) => mergeAgentBuilderModelOptionsWithPlan(prev, accountPlanId));
-    setCreateAgentAiReasoningOptions((prev) => mergeAgentBuilderReasoningOptionsWithPlan(prev, accountPlanId));
+    setChangesCommitAiModelOptions((prev) => clampAgentBuilderModelOptionsToPlan(prev, accountPlanId));
+    setChangesCommitAiReasoningOptions((prev) => clampAgentBuilderReasoningOptionsToPlan(prev, accountPlanId));
+    setCreateAgentAiModelOptions((prev) => clampAgentBuilderModelOptionsToPlan(prev, accountPlanId));
+    setCreateAgentAiReasoningOptions((prev) => clampAgentBuilderReasoningOptionsToPlan(prev, accountPlanId));
   }, [accountPlanId]);
 
   useEffect(() => {
@@ -8684,7 +8686,7 @@ export default function CavCodePage() {
         if (typeof u?.publicProfileEnabled === "boolean") {
           setProfilePublicEnabled(u.publicProfileEnabled);
         }
-        setAccountPlanId((prev) => (planTierRank(authPlanId) >= planTierRank(prev) ? authPlanId : prev));
+        setAccountPlanId(authPlanId);
       } catch {}
     })();
     return () => {
