@@ -8170,10 +8170,7 @@ function ek(e) {
             })]
             })]
           })]
-      }), isCompactShell ? t.jsx(CavSurfacePageIntro, {
-        accountName: eE,
-        showVerified: surfaceVerified
-      }) : null, isCompactShell && mobileSearchOpen ? t.jsx("div", {
+      }), isCompactShell && mobileSearchOpen ? t.jsx("div", {
         className: "cavcloud-mobileSearchPanel",
         children: t.jsx("input", {
           className: "cavcloud-search cavcloud-searchMobile",
@@ -8182,6 +8179,9 @@ function ek(e) {
           placeholder: iw,
           autoFocus: !0
         })
+      }) : null, isCompactShell ? t.jsx(CavSurfacePageIntro, {
+        accountName: eE,
+        showVerified: surfaceVerified
       }) : null, t.jsx("input", {
         ref: lV,
         className: "cavcloud-file",
