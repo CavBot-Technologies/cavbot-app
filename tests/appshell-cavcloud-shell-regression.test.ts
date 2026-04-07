@@ -38,8 +38,12 @@ test("cavcloud and cavsafe gate compact header controls to compact shell only", 
 
   assert.match(cloud, /\[isCompactShell, setIsCompactShell\]/);
   assert.match(safe, /\[isCompactShell, setIsCompactShell\]/);
-  assert.match(cloud, /children: \[isCompactShell \? t\.jsx\("button"/);
-  assert.match(safe, /children: \[isCompactShell \? t\.jsx\("button"/);
+  assert.match(cloud, /children: \[isCompactShell \? t\.jsx\(CavSurfaceHeaderBadge, \{\}\) : null, isCompactShell \? t\.jsx\("button"/);
+  assert.match(safe, /children: \[isCompactShell \? t\.jsx\(CavSurfaceHeaderBadge, \{\}\) : null, isCompactShell \? t\.jsx\("button"/);
+  assert.match(cloud, /isCompactShell \? null : t\.jsx\(CavSurfaceHeaderGreeting/);
+  assert.match(safe, /isCompactShell \? null : t\.jsx\(CavSurfaceHeaderGreeting/);
+  assert.match(cloud, /\}\), isCompactShell \? t\.jsx\(CavSurfacePageIntro, \{/);
+  assert.match(safe, /\}\), isCompactShell \? t\.jsx\(CavSurfacePageIntro, \{/);
   assert.match(cloud, /isCompactShell \? null : t\.jsx\("input", \{\s*className: "cavcloud-search"/);
   assert.match(safe, /isCompactShell \? null : t\.jsx\("input", \{\s*className: "cavcloud-search"/);
   assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-top\{[\s\S]*position: static;/);

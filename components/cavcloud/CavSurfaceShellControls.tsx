@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
 
+import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import CavAiCenterLauncher, { type AiCenterSurface } from "@/components/cavai/CavAiCenterLauncher";
 import { isCavbotFounderIdentity, normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 
@@ -15,6 +16,12 @@ type CavSurfaceSidebarBrandMenuProps = {
 type CavSurfaceHeaderGreetingProps = {
   accountName: string;
   showVerified?: boolean;
+};
+
+type CavSurfacePageIntroProps = {
+  accountName: string;
+  showVerified?: boolean;
+  subtitle?: string;
 };
 
 type CavSurfaceQuickToolsProps = {
@@ -367,6 +374,40 @@ export function CavSurfaceHeaderGreeting(props: CavSurfaceHeaderGreetingProps) {
         {props.showVerified || founderProfile ? <VerifiedBadge /> : null}
       </span>
     </div>
+  );
+}
+
+export function CavSurfaceHeaderBadge() {
+  return (
+    <div className="cavcloud-badgeWrap cavcloud-headerBadgeWrap" aria-hidden="true">
+      <div className="cb-badge cb-badge-inline">
+        <CdnBadgeEyes />
+      </div>
+    </div>
+  );
+}
+
+export function CavSurfacePageIntro(props: CavSurfacePageIntroProps) {
+  const profile = useSurfaceProfileIdentity(props.accountName);
+  const founderProfile = useMemo(
+    () =>
+      isCavbotFounderIdentity({
+        fullName: profile.fullName,
+        displayName: profile.displayName,
+        username: profile.username,
+      }),
+    [profile.displayName, profile.fullName, profile.username],
+  );
+
+  return (
+    <section className="cavcloud-pageIntro" aria-label={`Hi, ${profile.greetingName}`}>
+      <div className="cavcloud-pageIntroHeading">
+        <span className="cavcloud-pageIntroPrefix">Hi,</span>
+        <span className="cavcloud-pageIntroName">{profile.greetingName}</span>
+        {props.showVerified || founderProfile ? <VerifiedBadge /> : null}
+      </div>
+      <p className="cavcloud-pageIntroSub">{props.subtitle || "Welcome back to your command center!"}</p>
+    </section>
   );
 }
 

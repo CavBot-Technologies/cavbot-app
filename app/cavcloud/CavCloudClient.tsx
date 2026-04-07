@@ -13,7 +13,9 @@ import { CavCloudCollaborateModal } from "@/components/cavcloud/CavCloudCollabor
 import CavCloudOperationalDashboard from "@/components/cavcloud/CavCloudOperationalDashboard";
 import CavCloudGoogleDriveImportModal from "@/components/cavcloud/CavCloudGoogleDriveImportModal";
 import {
+  CavSurfaceHeaderBadge,
   CavSurfaceHeaderGreeting,
+  CavSurfacePageIntro,
   CavSurfaceSidebarBrandMenu,
   CavSurfaceSidebarFooter
 } from "@/components/cavcloud/CavSurfaceShellControls";
@@ -8052,10 +8054,10 @@ function ek(e) {
     }), (0, t.jsxs)("main", {
       className: "cavcloud-main",
       children: [(0, t.jsxs)("div", {
-        className: "cavcloud-top",
-        children: [t.jsxs("div", {
-          className: "cavcloud-title cavcloud-titleGreetingSlot",
-          children: [isCompactShell ? t.jsx("button", {
+      className: "cavcloud-top",
+      children: [t.jsxs("div", {
+          className: `cavcloud-title ${isCompactShell ? "cavcloud-titleCompactShell" : "cavcloud-titleGreetingSlot"}`,
+          children: [isCompactShell ? t.jsx(CavSurfaceHeaderBadge, {}) : null, isCompactShell ? t.jsx("button", {
             type: "button",
             className: "cavcloud-btn cavcloud-btnGhost cavcloud-btnIconOnly cavcloud-mobileHeaderBtn cavcloud-mobileMenuBtn",
             onClick: () => {
@@ -8085,7 +8087,7 @@ function ek(e) {
                 strokeLinecap: "round"
               })]
             })
-          }) : null, t.jsx(CavSurfaceHeaderGreeting, {
+          }) : null, isCompactShell ? null : t.jsx(CavSurfaceHeaderGreeting, {
             accountName: eE,
             showVerified: surfaceVerified
           })]
@@ -8178,9 +8180,12 @@ function ek(e) {
               className: "cavcloud-btnUploadLabel",
               children: "New"
             })]
+            })]
           })]
-        })]
-      }), isCompactShell && mobileSearchOpen ? t.jsx("div", {
+      }), isCompactShell ? t.jsx(CavSurfacePageIntro, {
+        accountName: eE,
+        showVerified: surfaceVerified
+      }) : null, isCompactShell && mobileSearchOpen ? t.jsx("div", {
         className: "cavcloud-mobileSearchPanel",
         children: t.jsx("input", {
           className: "cavcloud-search cavcloud-searchMobile",
