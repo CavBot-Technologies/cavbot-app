@@ -14600,6 +14600,16 @@ export default function CavCodePage() {
         {/* Primary Sidebar */}
         {sidebarOpen ? (
           <aside className="cc-sidebar" aria-label="Primary Sidebar">
+            <div className="cc-sidebar-brandMark" aria-hidden="true">
+              <Image
+                src="/icons/app/cavcode/atom-svgrepo-com.svg"
+                alt=""
+                width={88}
+                height={88}
+                className="cc-sidebar-brandMarkImg"
+                unoptimized
+              />
+            </div>
             {activity === "explorer" ? (
               <>
                 <div className="cc-sidebar-head">

@@ -22,6 +22,7 @@ import { copyTextToClipboard } from "@/lib/clipboard";
 import { countDriveListingItems, debugDriveLog, getDriveDebugEnabled, useDriveChildren } from "@/lib/cavdrive/liveData.client";
 import { formatSnippetForThumbnail, getExtensionLabel, isTextLikeFile } from "@/lib/filePreview";
 import { selectDesktopItemMap, shouldClearDesktopSelectionFromTarget } from "@/lib/hooks/useDesktopSelection";
+import { resolvePlanIdFromTier } from "@/lib/plans";
 import { normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 import "../cavcloud/cavcloud.css";
@@ -81,6 +82,7 @@ const CAVCLOUD_GALLERY_PAGE_SIZE = 6;
 const CAVCLOUD_DELETE_VISUAL_MS = 190;
 const CAVCLOUD_POST_MUTATION_RETRY_ATTEMPTS = 4;
 const CAVCLOUD_POST_MUTATION_RETRY_DELAY_MS = 220;
+const SHELL_PLAN_EVENT = "cb:shell-plan";
 const CAVSAFE_TREE_CACHE_KEY = "cb_cavsafe_tree_cache_v2";
 const CAVSAFE_TREE_NAV_CACHE_KEY = `${CAVSAFE_TREE_CACHE_KEY}:nav`;
 const PUBLIC_ARTIFACTS_SYNC_CHANNEL = "cb-public-profile-artifacts-v1";
@@ -727,6 +729,25 @@ function resolveCavsafePlanTier(e) {
   if ("PREMIUM" === a || "PRO" === a || "PAID" === a) return "PREMIUM";
   return "FREE";
 }
+function cavsafePlanTierFromPlanId(ePlanId) {
+  let a = resolvePlanIdFromTier(ePlanId || "free");
+  return "premium_plus" === a ? "PREMIUM_PLUS" : "premium" === a ? "PREMIUM" : "FREE";
+}
+function cavsafePlanTierRank(ePlanTier) {
+  let a = resolveCavsafePlanTier({
+    tierEffective: ePlanTier
+  });
+  return "PREMIUM_PLUS" === a ? 2 : "PREMIUM" === a ? 1 : 0;
+}
+function resolveCavsafePreferredPlanTier(ePlanTier, aFallbackTier) {
+  let l = resolveCavsafePlanTier({
+      tierEffective: ePlanTier
+    }),
+    t = resolveCavsafePlanTier({
+      tierEffective: aFallbackTier
+    });
+  return cavsafePlanTierRank(t) > cavsafePlanTierRank(l) ? t : l;
+}
 function resolveCavsafeDisplayPlanTier(e, a, l) {
   return resolveCavsafePlanTier({
     tier: e
@@ -840,6 +861,9 @@ function persistCavsafePlanState(ePlanTier, aTrialState) {
   try {
     window.dispatchEvent(new CustomEvent("cb:plan", {
       detail: t
+    }));
+    window.dispatchEvent(new CustomEvent(SHELL_PLAN_EVENT, {
+      detail: l
     }));
   } catch {}
 }
@@ -2193,6 +2217,11 @@ function ek() {
               usedBytesExact: String(nextUsedBytes)
             }), sortedPoints.slice(-96);
           }(payloadHistory.length ? payloadHistory : cachedHistory, Number(payload.usage.usedBytes || 0), Date.now()),
+          nextPlanTier = cavsafePlanTierFromPlanId(payload?.usage?.planId || eK),
+          nextTrialState = {
+            active: "PREMIUM_PLUS" === nextPlanTier && !!eV,
+            daysLeft: "PREMIUM_PLUS" === nextPlanTier && !!eV ? Math.max(0, Math.trunc(Number(ez || 0)) || 0) : 0
+          },
           nextTree = {
             folder: payload.folder,
             breadcrumbs: Array.isArray(payload.breadcrumbs) ? payload.breadcrumbs : [],
@@ -2203,6 +2232,7 @@ function ek() {
             activity: mergedActivity,
             storageHistory: mergedHistory
           };
+        eJ(nextPlanTier), eZ(nextTrialState.active), eq(nextTrialState.daysLeft), persistCavsafePlanState(nextPlanTier, nextTrialState);
         let nextServerCount = countDriveListingItems(nextTree);
         setDriveDebugServerCount(nextServerCount), setDriveDebugLastFetchAt(new Date().toISOString()), treeHasLoadedRef.current = !0, q(nextTree.folder.path), ey(nextTree), upsertTreeNavSnapshot(nextTree.folder.path, nextTree), logDriveDebug("tree.fetch.complete", {
           folderPath: nextTree.folder.path,
@@ -2540,7 +2570,7 @@ function ek() {
         if (!eRes.ok || !aPayload?.ok || !aPayload?.authenticated) return;
         eApplyProfile(aPayload);
         let lAccount = R(aPayload?.account),
-          tTier = resolveCavsafeDisplayPlanTier(resolveCavsafePlanTier(lAccount), String(aPayload?.user?.fullName || aPayload?.user?.displayName || aPayload?.user?.name || "").trim(), String(aPayload?.user?.username || "").trim()),
+          tTier = resolveCavsafeDisplayPlanTier(resolveCavsafePreferredPlanTier(resolveCavsafePlanTier(lAccount), readCachedCavsafePlanState().planTier), String(aPayload?.user?.fullName || aPayload?.user?.displayName || aPayload?.user?.name || "").trim(), String(aPayload?.user?.username || "").trim()),
           sTrial = resolveCavsafeTrialState(lAccount);
         eJ(tTier), eZ(sTrial.active), eq(sTrial.daysLeft), persistCavsafePlanState(tTier, sTrial);
       } catch {}

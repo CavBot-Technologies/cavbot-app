@@ -167,13 +167,33 @@ type WorkspacePlanDetail = {
   planLabel?: string;
   planKey?: PlanId;
   planTier?: string;
+  memberRole?: string | null;
   trialActive?: boolean;
+  trialDaysLeft?: number;
 };
 
 function workspacePlanLabelForId(planId: PlanId) {
   if (planId === "premium_plus") return "PREMIUM+";
   if (planId === "premium") return "PREMIUM";
   return "FREE";
+}
+
+function workspacePlanTierForId(planId: PlanId) {
+  if (planId === "premium_plus") return "PREMIUM_PLUS";
+  if (planId === "premium") return "PREMIUM";
+  return "FREE";
+}
+
+function workspacePlanRank(planId: PlanId) {
+  if (planId === "premium_plus") return 2;
+  if (planId === "premium") return 1;
+  return 0;
+}
+
+function strongerWorkspacePlanId(currentPlanId: PlanId, candidatePlanId?: PlanId | null) {
+  return candidatePlanId && workspacePlanRank(candidatePlanId) > workspacePlanRank(currentPlanId)
+    ? candidatePlanId
+    : currentPlanId;
 }
 
 function resolveWorkspacePlanId(detail?: WorkspacePlanDetail | null) {
@@ -183,7 +203,12 @@ function resolveWorkspacePlanId(detail?: WorkspacePlanDetail | null) {
 function readBootWorkspacePlanDetail(): WorkspacePlanDetail | null {
   if (typeof window === "undefined") return null;
 
-  const shellSnapshot = safeJsonParse<{ planTier?: string; trialActive?: boolean }>(
+  const shellSnapshot = safeJsonParse<{
+    planTier?: string;
+    memberRole?: string | null;
+    trialActive?: boolean;
+    trialDaysLeft?: number;
+  }>(
     globalThis.__cbLocalStore.getItem(SHELL_PLAN_SNAPSHOT_KEY),
   );
   if (shellSnapshot) {
@@ -191,11 +216,85 @@ function readBootWorkspacePlanDetail(): WorkspacePlanDetail | null {
     return {
       planKey,
       planLabel: workspacePlanLabelForId(planKey),
+      memberRole: typeof shellSnapshot.memberRole === "string" ? shellSnapshot.memberRole : null,
       trialActive: Boolean(shellSnapshot.trialActive),
+      trialDaysLeft: Boolean(shellSnapshot.trialActive) ? Math.max(0, Math.trunc(Number(shellSnapshot.trialDaysLeft || 0)) || 0) : 0,
     };
   }
 
   return safeJsonParse<WorkspacePlanDetail | null>(globalThis.__cbLocalStore.getItem(PLAN_CONTEXT_KEY));
+}
+
+function publishWorkspacePlanDetail(
+  planIdInput: PlanId,
+  options?: {
+    memberRole?: string | null;
+    trialActive?: boolean;
+    trialDaysLeft?: number;
+    preserveStrongerCached?: boolean;
+  },
+) {
+  const cachedSnapshot =
+    typeof window === "undefined" || typeof globalThis.__cbLocalStore === "undefined"
+      ? null
+      : safeJsonParse<{
+          planTier?: string;
+          memberRole?: string | null;
+          trialActive?: boolean;
+          trialDaysLeft?: number;
+        }>(globalThis.__cbLocalStore.getItem(SHELL_PLAN_SNAPSHOT_KEY));
+  const cachedPlanId = cachedSnapshot ? resolvePlanIdFromTier(cachedSnapshot.planTier || "free") : null;
+  const planId =
+    options?.preserveStrongerCached && cachedPlanId
+      ? strongerWorkspacePlanId(planIdInput, cachedPlanId)
+      : planIdInput;
+  const planTier = workspacePlanTierForId(planId);
+  const memberRole =
+    typeof options?.memberRole === "string"
+      ? options.memberRole
+      : typeof cachedSnapshot?.memberRole === "string"
+        ? cachedSnapshot.memberRole
+        : null;
+  const trialActive =
+    typeof options?.trialActive === "boolean" ? options.trialActive : Boolean(cachedSnapshot?.trialActive);
+  const trialDaysLeftRaw =
+    typeof options?.trialDaysLeft !== "undefined" ? Number(options.trialDaysLeft) : Number(cachedSnapshot?.trialDaysLeft || 0);
+  const trialDaysLeft = trialActive && Number.isFinite(trialDaysLeftRaw) && trialDaysLeftRaw > 0 ? Math.trunc(trialDaysLeftRaw) : 0;
+  const planDetail = {
+    planKey: planId,
+    planLabel: workspacePlanLabelForId(planId),
+    planTier,
+    memberRole,
+    trialActive,
+    trialDaysLeft,
+  };
+
+  if (typeof window !== "undefined" && typeof globalThis.__cbLocalStore !== "undefined") {
+    try {
+      globalThis.__cbLocalStore.setItem(
+        SHELL_PLAN_SNAPSHOT_KEY,
+        JSON.stringify({
+          planTier,
+          memberRole,
+          trialActive,
+          trialDaysLeft,
+          ts: Date.now(),
+        }),
+      );
+      globalThis.__cbLocalStore.setItem(PLAN_CONTEXT_KEY, JSON.stringify(planDetail));
+      const snapshot = {
+        planTier,
+        memberRole,
+        trialActive,
+        trialDaysLeft,
+        ts: Date.now(),
+      };
+      window.dispatchEvent(new CustomEvent(SHELL_PLAN_EVENT, { detail: snapshot }));
+      window.dispatchEvent(new CustomEvent("cb:plan", { detail: planDetail }));
+    } catch {}
+  }
+
+  return planDetail;
 }
 
 function formatBytes(bytes: number) {
@@ -687,6 +786,7 @@ function CommandDeckPageInner() {
       summary?: {
         usedBytes?: unknown;
         limitBytes?: unknown;
+        planId?: unknown;
         folders?: unknown;
         files?: unknown;
         images?: unknown;
@@ -723,6 +823,13 @@ function CommandDeckPageInner() {
         if (!res.ok || !payload?.ok || !payload.summary) throw new Error("SUMMARY_UNAVAILABLE");
 
         const nextLimitRaw = payload.summary.limitBytes;
+        const summaryPlanId = resolvePlanIdFromTier(payload.summary.planId || "free");
+        const bootPlanDetail = readBootWorkspacePlanDetail();
+        publishWorkspacePlanDetail(summaryPlanId, {
+          memberRole: bootPlanDetail?.memberRole ?? null,
+          trialActive: summaryPlanId === "premium_plus" ? Boolean(bootPlanDetail?.trialActive) : false,
+          trialDaysLeft: summaryPlanId === "premium_plus" ? Number(bootPlanDetail?.trialDaysLeft || 0) : 0,
+        });
         if (nextLimitRaw == null || nextLimitRaw === "") {
           setCavcloudLimitBytes(null);
           setCavcloudLimitLoaded(true);
@@ -2590,9 +2697,6 @@ function ProfileCard(props: {
 
       if (meRes?.ok && meJson?.ok) {
         const planKey = resolvePlanIdFromTier(meJson?.account);
-        const planLabel = planTierLabelFromAccount(meJson?.account);
-        const planLimits = getPlanLimits(planKey);
-        const planSeatLimit = Number(planLimits?.seats ?? 0);
         const meUsername = String(meJson?.user?.username || meJson?.profile?.username || "").trim();
         const meAccount = (meJson?.account as {
           trialDaysLeft?: unknown;
@@ -2605,47 +2709,23 @@ function ProfileCard(props: {
           rawMemberRole === "OWNER" || rawMemberRole === "ADMIN" || rawMemberRole === "MEMBER"
             ? rawMemberRole
             : null;
-        const planTier = planKey === "premium_plus" ? "PREMIUM_PLUS" : planKey === "premium" ? "PREMIUM" : "FREE";
         const trialDaysLeftRaw = Number(meAccount?.trialDaysLeft ?? meAccount?.trial?.daysLeft ?? 0);
         const trialDaysLeft = Number.isFinite(trialDaysLeftRaw) && trialDaysLeftRaw > 0 ? Math.trunc(trialDaysLeftRaw) : 0;
         const trialActive = Boolean(meAccount?.trialActive ?? meJson?.trialActive ?? trialDaysLeft > 0);
-
-        const planDetail = {
-          planKey,
-          planLabel,
-          planTier,
+        const planDetail = publishWorkspacePlanDetail(planKey, {
           memberRole,
           trialActive,
           trialDaysLeft,
-        };
+          preserveStrongerCached: true,
+        });
+        const resolvedPlanId = resolvePlanIdFromTier(planDetail.planKey || planDetail.planTier || planDetail.planLabel || planKey);
+        const resolvedPlanLabel =
+          typeof planDetail.planLabel === "string" && planDetail.planLabel.trim()
+            ? planDetail.planLabel.trim()
+            : workspacePlanLabelForId(resolvedPlanId);
+        const planSeatLimit = Number(getPlanLimits(resolvedPlanId)?.seats ?? 0);
 
-        try {
-          globalThis.__cbLocalStore.setItem(
-            "cb_shell_plan_snapshot_v1",
-            JSON.stringify({
-              planTier,
-              memberRole,
-              trialActive,
-              trialDaysLeft,
-              ts: Date.now(),
-            }),
-          );
-          window.dispatchEvent(
-            new CustomEvent(SHELL_PLAN_EVENT, {
-              detail: {
-                planTier,
-                memberRole,
-                trialActive,
-                trialDaysLeft,
-                ts: Date.now(),
-              },
-            }),
-          );
-          window.dispatchEvent(new CustomEvent("cb:plan", { detail: planDetail }));
-          globalThis.__cbLocalStore.setItem("cb_plan_context_v1", JSON.stringify(planDetail));
-        } catch {}
-
-        setPlan(planLabel);
+        setPlan(resolvedPlanLabel);
 
         if (planSeatLimit > 0) {
           setSeatLimit(planSeatLimit);

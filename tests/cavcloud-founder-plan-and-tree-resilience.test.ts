@@ -51,4 +51,6 @@ test("cavcloud direct surface resyncs shared shell profile and plan state from c
   assert.match(cavcloudClient, /window\.addEventListener\("storage", eSync\)/);
   assert.match(cavcloudClient, /window\.addEventListener\("cb:profile", eSync\)/);
   assert.match(cavcloudClient, /window\.addEventListener\("cb:plan", eSync\)/);
+  assert.match(cavcloudClient, /window\.addEventListener\(SHELL_PLAN_EVENT, eSync\)/);
+  assert.match(cavcloudClient, /cavcloudPlanTierFromPlanId\(payload\?\.usage\?\.planId \|\| eK\)/);
 });

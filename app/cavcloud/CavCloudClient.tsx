@@ -92,6 +92,7 @@ const CAVCLOUD_TREE_CACHE_KEY = "cb_cavcloud_tree_cache_v2";
 const CAVCLOUD_DELETE_VISUAL_MS = 190;
 const CAVCLOUD_POST_MUTATION_RETRY_ATTEMPTS = 4;
 const CAVCLOUD_POST_MUTATION_RETRY_DELAY_MS = 220;
+const SHELL_PLAN_EVENT = "cb:shell-plan";
 const CAVCODE_MOUNT_CONTEXT_TYPE = "CAVCODE_MOUNT_CONTEXT";
 const CAVCODE_VIEWER_PREFIX = "/cavcode-viewer";
 const CAVCLOUD_SW_EVICT_RELOAD_GUARD_KEY = "cb_cavcloud_sw_evict_reload_v1";
@@ -612,6 +613,25 @@ function resolveCavcloudPlanTier(e) {
   if ("PREMIUM" === a || "PRO" === a || "PAID" === a) return "PREMIUM";
   return "FREE";
 }
+function cavcloudPlanTierFromPlanId(ePlanId) {
+  let a = resolvePlanIdFromTier(ePlanId || "free");
+  return "premium_plus" === a ? "PREMIUM_PLUS" : "premium" === a ? "PREMIUM" : "FREE";
+}
+function cavcloudPlanTierRank(ePlanTier) {
+  let a = resolveCavcloudPlanTier({
+    tierEffective: ePlanTier
+  });
+  return "PREMIUM_PLUS" === a ? 2 : "PREMIUM" === a ? 1 : 0;
+}
+function resolveCavcloudPreferredPlanTier(ePlanTier, aFallbackTier) {
+  let l = resolveCavcloudPlanTier({
+      tierEffective: ePlanTier
+    }),
+    t = resolveCavcloudPlanTier({
+      tierEffective: aFallbackTier
+    });
+  return cavcloudPlanTierRank(t) > cavcloudPlanTierRank(l) ? t : l;
+}
 function resolveCavcloudDisplayPlanTier(e, a, l) {
   return resolveCavcloudPlanTier({
     tier: e
@@ -688,6 +708,9 @@ function persistCavcloudPlanState(ePlanTier, aTrialState) {
   try {
     window.dispatchEvent(new CustomEvent("cb:plan", {
       detail: t
+    }));
+    window.dispatchEvent(new CustomEvent(SHELL_PLAN_EVENT, {
+      detail: l
     }));
   } catch {}
 }
@@ -2579,6 +2602,12 @@ function ek(e) {
           });
         }
         mergedHistory = mergedHistory.slice(-96);
+        let nextPlanTier = cavcloudPlanTierFromPlanId(payload?.usage?.planId || eK),
+          nextTrialState = {
+            active: "PREMIUM_PLUS" === nextPlanTier && !!eV,
+            daysLeft: "PREMIUM_PLUS" === nextPlanTier && !!eV ? Math.max(0, Math.trunc(Number(ez || 0)) || 0) : 0
+          };
+        eJ(nextPlanTier), eZ(nextTrialState.active), eq(nextTrialState.daysLeft), persistCavcloudPlanState(nextPlanTier, nextTrialState);
         let nextTree = {
           folder: payload.folder,
           breadcrumbs: Array.isArray(payload.breadcrumbs) ? payload.breadcrumbs : [],
@@ -3036,8 +3065,8 @@ function ek(e) {
       eD(tName), eW(String(aProfile?.email || "").trim()), eG(sUsername), eB(tName || resolveCavcloudGreetingName(aProfile)), eU(iInitials), setProfilePublicEnabled(aProfile?.publicProfileEnabled || "unknown"), eJ(rPlanTier), eZ(!!lPlan.trialActive), eq(lPlan.trialActive ? Math.max(0, Math.trunc(Number(lPlan.trialDaysLeft || 0)) || 0) : 0);
     };
     eSync();
-    return window.addEventListener("storage", eSync), window.addEventListener("cb:profile", eSync), window.addEventListener("cb:plan", eSync), () => {
-      window.removeEventListener("storage", eSync), window.removeEventListener("cb:profile", eSync), window.removeEventListener("cb:plan", eSync);
+    return window.addEventListener("storage", eSync), window.addEventListener("cb:profile", eSync), window.addEventListener("cb:plan", eSync), window.addEventListener(SHELL_PLAN_EVENT, eSync), () => {
+      window.removeEventListener("storage", eSync), window.removeEventListener("cb:profile", eSync), window.removeEventListener("cb:plan", eSync), window.removeEventListener(SHELL_PLAN_EVENT, eSync);
     };
   }, []);
   (0, c.useEffect)(() => {
@@ -3081,7 +3110,7 @@ function ek(e) {
         if (!eRes.ok || !aPayload?.ok || !aPayload?.authenticated) return;
         eApplyProfile(aPayload);
         let lAccount = R(aPayload?.account),
-          tTier = resolveCavcloudDisplayPlanTier(resolveCavcloudPlanTier(lAccount), String(aPayload?.user?.fullName || aPayload?.user?.displayName || aPayload?.user?.name || "").trim(), String(aPayload?.user?.username || "").trim()),
+          tTier = resolveCavcloudDisplayPlanTier(resolveCavcloudPreferredPlanTier(resolveCavcloudPlanTier(lAccount), readCachedCavcloudPlanState().planTier), String(aPayload?.user?.fullName || aPayload?.user?.displayName || aPayload?.user?.name || "").trim(), String(aPayload?.user?.username || "").trim()),
           sTrial = resolveCavcloudTrialState(lAccount);
         eJ(tTier), eZ(sTrial.active), eq(sTrial.daysLeft), persistCavcloudPlanState(tTier, sTrial);
         let roleRaw = String(aPayload?.membership?.role || "").trim().toUpperCase();

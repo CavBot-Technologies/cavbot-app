@@ -39,6 +39,10 @@ test("workspace command center keeps plan and profile hydration even when one bo
   assert.equal(source.includes('const meRes = authMeResult.status === "fulfilled" ? authMeResult.value : null;'), true);
   assert.equal(source.includes('const teamRes = membersResult.status === "fulfilled" ? membersResult.value : null;'), true);
   assert.equal(source.includes("if (meRes?.ok && meJson?.ok) {"), true);
+  assert.equal(source.includes("function publishWorkspacePlanDetail("), true);
+  assert.equal(source.includes('const summaryPlanId = resolvePlanIdFromTier(payload.summary.planId || "free");'), true);
+  assert.equal(source.includes("publishWorkspacePlanDetail(summaryPlanId, {"), true);
+  assert.equal(source.includes("preserveStrongerCached: true,"), true);
 });
 
 test("workspace command center profile card boots from the known workspace plan instead of hardcoded free defaults", () => {

@@ -43,7 +43,8 @@ test("app shell republishes cached founder and plan state while footer modal and
   assert.match(appShell, /window\.dispatchEvent\(new CustomEvent\("cb:plan", \{ detail: planDetail \}\)\)/);
   assert.match(homePage, /globalThis\.__cbLocalStore\.setItem\("cb_account_initials", initials \|\| ""\)/);
   assert.match(homePage, /window\.dispatchEvent\(\s*new CustomEvent\("cb:profile"/);
-  assert.match(homePage, /globalThis\.__cbLocalStore\.setItem\(\s*"cb_shell_plan_snapshot_v1"/);
+  assert.match(homePage, /function publishWorkspacePlanDetail\(/);
+  assert.match(homePage, /globalThis\.__cbLocalStore\.setItem\(\s*SHELL_PLAN_SNAPSHOT_KEY,/);
   assert.match(homePage, /window\.dispatchEvent\(\s*new CustomEvent\(SHELL_PLAN_EVENT, \{/);
   assert.match(homePage, /const welcomeShowsPremiumPlus = useMemo/);
   assert.match(homePage, /planId === "premium_plus"/);
@@ -109,6 +110,11 @@ test("cavcloud and cavsafe direct surfaces persist full profile state and keep t
   assert.match(cloud, /CavSurfacePageIntro/);
   assert.match(cloud, /accountName: eE/);
   assert.match(cloud, /displayPlanTier = resolveCavcloudDisplayPlanTier\(eK, eE, eH\)/);
+  assert.match(cloud, /const SHELL_PLAN_EVENT = "cb:shell-plan";/);
+  assert.match(cloud, /window\.dispatchEvent\(new CustomEvent\(SHELL_PLAN_EVENT, \{/);
+  assert.match(cloud, /window\.addEventListener\(SHELL_PLAN_EVENT, eSync\)/);
+  assert.match(cloud, /cavcloudPlanTierFromPlanId\(payload\?\.usage\?\.planId \|\| eK\)/);
+  assert.match(cloud, /resolveCavcloudPreferredPlanTier\(resolveCavcloudPlanTier\(lAccount\), readCachedCavcloudPlanState\(\)\.planTier\)/);
   assert.doesNotMatch(cloud, /"cavbot admin" === t \|\| "cavbot" === s \? "PREMIUM_PLUS"/);
   assert.match(cloud, /src: "\/icons\/menu-svgrepo-com\.svg"/);
   assert.match(cloud, /isCompactShell \? null : t\.jsx\("button", \{\s*className: "cavcloud-btn cavcloud-btnGhost cavcloud-btnIconOnly",[\s\S]*"aria-label": "Refresh"/);
@@ -121,6 +127,10 @@ test("cavcloud and cavsafe direct surfaces persist full profile state and keep t
   assert.match(safe, /CavSurfacePageIntro/);
   assert.match(safe, /accountName: eE/);
   assert.match(safe, /displayPlanTier = resolveCavsafeDisplayPlanTier\(eK, eE, eH\)/);
+  assert.match(safe, /const SHELL_PLAN_EVENT = "cb:shell-plan";/);
+  assert.match(safe, /window\.dispatchEvent\(new CustomEvent\(SHELL_PLAN_EVENT, \{/);
+  assert.match(safe, /cavsafePlanTierFromPlanId\(payload\?\.usage\?\.planId \|\| eK\)/);
+  assert.match(safe, /resolveCavsafePreferredPlanTier\(resolveCavsafePlanTier\(lAccount\), readCachedCavsafePlanState\(\)\.planTier\)/);
   assert.doesNotMatch(safe, /"cavbot admin" === t \|\| "cavbot" === s \? "PREMIUM_PLUS"/);
   assert.match(safe, /src: "\/icons\/menu-svgrepo-com\.svg"/);
   assert.match(safe, /isCompactShell \? null : t\.jsx\("button", \{\s*className: "cavcloud-btn cavcloud-btnGhost cavcloud-btnIconOnly",[\s\S]*"aria-label": "Refresh"/);
