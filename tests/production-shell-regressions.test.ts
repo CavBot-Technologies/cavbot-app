@@ -80,3 +80,14 @@ test("cavcloud and cavsafe direct surfaces persist full profile state and keep t
   assert.match(controls, /return "there";/);
   assert.match(controls, /return "C";/);
 });
+
+test("shared browser store survives reloads and cross-surface navigation with real browser storage", () => {
+  const layout = read("app/layout.tsx");
+  const browserStore = read("lib/browserMemoryStore.ts");
+
+  assert.match(layout, /window\.localStorage/);
+  assert.match(layout, /window\.sessionStorage/);
+  assert.match(browserStore, /createStorageBackedStore/);
+  assert.match(browserStore, /window\.localStorage/);
+  assert.match(browserStore, /window\.sessionStorage/);
+});

@@ -19,6 +19,10 @@ test("cavcloud founder account plan context upgrades the canonical founder works
 
   assert.match(profileIdentity, /export function isCavbotFounderAccountIdentity/);
   assert.match(planServer, /isCavbotFounderAccountIdentity/);
+  assert.match(planServer, /resolveRequestScopedFounderUser/);
+  assert.match(planServer, /headers\(\)/);
+  assert.match(planServer, /getSession\(req\)/);
+  assert.match(planServer, /isCavbotFounderIdentity/);
   assert.match(planServer, /tier: "PREMIUM_PLUS"/);
   assert.match(summaryRoute, /getEffectiveAccountPlanContext/);
   assert.match(dashboardRoute, /getEffectiveAccountPlanContext/);

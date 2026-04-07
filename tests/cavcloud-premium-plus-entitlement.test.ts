@@ -25,6 +25,7 @@ test("account plan helper upgrades cavcloud to the highest live entitlement", ()
 
 test("cavcloud quota and shell routes use the shared effective plan resolver", () => {
   const authMe = read("app/api/auth/me/route.ts");
+  const planServer = read("lib/cavcloud/plan.server.ts");
   const summary = read("app/api/cavcloud/summary/route.ts");
   const dashboard = read("app/api/cavcloud/dashboard/route.ts");
   const tree = read("app/api/cavcloud/tree/route.ts");
@@ -36,6 +37,9 @@ test("cavcloud quota and shell routes use the shared effective plan resolver", (
 
   assert.equal(authMe.includes("findLatestEntitledSubscription(accountId)"), true);
   assert.equal(authMe.includes("planTierTokenFromPlanId(effectivePlanId)"), true);
+  assert.equal(planServer.includes("resolveRequestScopedFounderUser"), true);
+  assert.equal(planServer.includes("getSession(req)"), true);
+  assert.equal(planServer.includes("tier: \"PREMIUM_PLUS\""), true);
 
   assert.equal(summary.includes("getEffectiveAccountPlanContext(accountId)"), true);
   assert.equal(dashboard.includes("getEffectiveAccountPlanContext(accountId)"), true);
