@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch
 
 import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import CavAiCenterLauncher, { type AiCenterSurface } from "@/components/cavai/CavAiCenterLauncher";
-import { isCavbotFounderIdentity, normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
+import { normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 
 type SurfacePlanTier = "FREE" | "PREMIUM" | "PREMIUM_PLUS";
 
@@ -406,22 +406,13 @@ export function CavSurfaceSidebarBrandMenu(props: CavSurfaceSidebarBrandMenuProp
 
 export function CavSurfaceHeaderGreeting(props: CavSurfaceHeaderGreetingProps) {
   const profile = useSurfaceProfileIdentity(props.accountName);
-  const founderProfile = useMemo(
-    () =>
-      isCavbotFounderIdentity({
-        fullName: profile.fullName,
-        displayName: profile.displayName,
-        username: profile.username,
-      }),
-    [profile.displayName, profile.fullName, profile.username],
-  );
 
   return (
     <div className="cavcloud-headerGreeting" aria-label={`Hi, ${profile.greetingName}`}>
       <span className="cavcloud-headerGreetingPrefix">Hi,</span>
       <span className="cavcloud-headerGreetingNameWrap">
         <span className="cavcloud-headerGreetingName">{profile.greetingName}</span>
-        {props.showVerified || founderProfile ? <VerifiedBadge /> : null}
+        {props.showVerified ? <VerifiedBadge /> : null}
       </span>
     </div>
   );
@@ -439,22 +430,13 @@ export function CavSurfaceHeaderBadge() {
 
 export function CavSurfacePageIntro(props: CavSurfacePageIntroProps) {
   const profile = useSurfaceProfileIdentity(props.accountName);
-  const founderProfile = useMemo(
-    () =>
-      isCavbotFounderIdentity({
-        fullName: profile.fullName,
-        displayName: profile.displayName,
-        username: profile.username,
-      }),
-    [profile.displayName, profile.fullName, profile.username],
-  );
 
   return (
     <section className="cavcloud-pageIntro" aria-label={`Hi, ${profile.greetingName}`}>
       <div className="cavcloud-pageIntroHeading">
         <span className="cavcloud-pageIntroPrefix">Hi,</span>
         <span className="cavcloud-pageIntroName">{profile.greetingName}</span>
-        {props.showVerified || founderProfile ? <VerifiedBadge /> : null}
+        {props.showVerified ? <VerifiedBadge /> : null}
       </div>
     </section>
   );
@@ -466,16 +448,7 @@ export function CavSurfaceSidebarFooter(props: CavSurfaceSidebarFooterProps) {
   const accountWrapRef = useRef<HTMLDivElement | null>(null);
   const toolsWrapRef = useRef<HTMLDivElement | null>(null);
   const profile = useSurfaceProfileIdentity(props.accountName);
-  const founderProfile = useMemo(
-    () =>
-      isCavbotFounderIdentity({
-        fullName: profile.fullName,
-        displayName: profile.displayName,
-        username: profile.username,
-      }),
-    [profile.displayName, profile.fullName, profile.username],
-  );
-  const effectivePlanTier = founderProfile ? "PREMIUM_PLUS" : props.planTier;
+  const effectivePlanTier = props.planTier;
   const planStatusLabel = useMemo(
     () => resolvePlanStatusLabel(effectivePlanTier, props.trialActive, props.trialDaysLeft),
     [effectivePlanTier, props.trialActive, props.trialDaysLeft],

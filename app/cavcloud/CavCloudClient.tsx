@@ -613,9 +613,7 @@ function resolveCavcloudPlanTier(e) {
   return "FREE";
 }
 function resolveCavcloudDisplayPlanTier(e, a, l) {
-  let t = String(a || "").trim().toLowerCase(),
-    s = resolveCavcloudInitialUsername(l).trim().toLowerCase();
-  return "cavbot admin" === t || "cavbot" === s ? "PREMIUM_PLUS" : resolveCavcloudPlanTier({
+  return resolveCavcloudPlanTier({
     tier: e
   });
 }

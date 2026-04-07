@@ -35,10 +35,7 @@ import { normalizeGuardReturnPath } from "@/src/lib/cavguard/cavGuard.return";
 import type { CavGuardDecision } from "@/src/lib/cavguard/cavGuard.types";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
-import {
-  isCavbotFounderIdentity,
-  normalizeCavbotFounderProfile,
-} from "@/lib/profileIdentity";
+import { normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 
 type WindowWithGlobals = Window & {
   __CB_NOTIF_SETTINGS__?: Record<string, unknown> | null;
@@ -946,14 +943,7 @@ export default function AppShell({
     const handle = String(normalized.username || profileUsername || "").trim().replace(/^@+/, "");
     return handle ? `@${handle}` : "CavBot Account";
   }, [profileFullName, profileUsername]);
-  const founderProfileShowsPremiumPlus = useMemo(() => {
-    return isCavbotFounderIdentity({
-      fullName: profileDisplayName,
-      displayName: profileDisplayName,
-      username: profileUsername,
-    });
-  }, [profileDisplayName, profileUsername]);
-  const profileShowsPremiumPlus = planTier === "PREMIUM_PLUS" || founderProfileShowsPremiumPlus;
+  const profileShowsPremiumPlus = planTier === "PREMIUM_PLUS";
   const profilePlanLabel = useMemo(() => {
     if (trialActive && trialDaysLeft > 0 && !profileShowsPremiumPlus) return "FREE TRIAL";
     if (profileShowsPremiumPlus) return "PREMIUM+";

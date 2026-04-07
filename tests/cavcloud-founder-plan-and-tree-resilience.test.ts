@@ -9,7 +9,7 @@ function read(relPath: string) {
   return readFileSync(path.join(repoRoot, relPath), "utf8");
 }
 
-test("cavcloud founder account plan context upgrades the canonical founder workspace to premium plus", () => {
+test("cavcloud plan context does not force founder workspaces to premium plus", () => {
   const profileIdentity = read("lib/profileIdentity.ts");
   const planServer = read("lib/cavcloud/plan.server.ts");
   const summaryRoute = read("app/api/cavcloud/summary/route.ts");
@@ -18,12 +18,12 @@ test("cavcloud founder account plan context upgrades the canonical founder works
   const storageServer = read("lib/cavcloud/storage.server.ts");
 
   assert.match(profileIdentity, /export function isCavbotFounderAccountIdentity/);
-  assert.match(planServer, /isCavbotFounderAccountIdentity/);
-  assert.match(planServer, /resolveRequestScopedFounderUser/);
-  assert.match(planServer, /headers\(\)/);
-  assert.match(planServer, /getSession\(req\)/);
-  assert.match(planServer, /isCavbotFounderIdentity/);
-  assert.match(planServer, /tier: "PREMIUM_PLUS"/);
+  assert.doesNotMatch(planServer, /isCavbotFounderAccountIdentity/);
+  assert.doesNotMatch(planServer, /resolveRequestScopedFounderUser/);
+  assert.doesNotMatch(planServer, /headers\(\)/);
+  assert.doesNotMatch(planServer, /getSession\(req\)/);
+  assert.doesNotMatch(planServer, /isCavbotFounderIdentity/);
+  assert.doesNotMatch(planServer, /tier: "PREMIUM_PLUS"/);
   assert.match(summaryRoute, /getEffectiveAccountPlanContext/);
   assert.match(dashboardRoute, /getEffectiveAccountPlanContext/);
   assert.match(treeRoute, /getEffectiveAccountPlanContext/);

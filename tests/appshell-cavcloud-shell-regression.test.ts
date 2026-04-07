@@ -9,13 +9,13 @@ function read(relPath: string) {
   return readFileSync(path.join(repoRoot, relPath), "utf8");
 }
 
-test("app shell keeps the multicolor quick tools trigger and founder premium plus display", () => {
+test("app shell keeps the multicolor quick tools trigger while Premium+ display stays plan-driven", () => {
   const appShell = read("components/AppShell.tsx");
   const globals = read("app/globals.css");
 
   assert.equal(appShell.includes('grid-svgrepo-com copy.svg'), false);
-  assert.match(appShell, /const founderProfileShowsPremiumPlus = useMemo/);
-  assert.match(appShell, /const profileShowsPremiumPlus = planTier === "PREMIUM_PLUS" \|\| founderProfileShowsPremiumPlus/);
+  assert.doesNotMatch(appShell, /founderProfileShowsPremiumPlus/);
+  assert.match(appShell, /const profileShowsPremiumPlus = planTier === "PREMIUM_PLUS";/);
   assert.match(appShell, /if \(profileShowsPremiumPlus\) return "PREMIUM\+"/);
   assert.match(appShell, /className="cb-side-tools-grid"/);
   assert.match(globals, /\.cb-side-tools-grid\{/);

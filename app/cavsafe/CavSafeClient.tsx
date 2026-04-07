@@ -728,9 +728,7 @@ function resolveCavsafePlanTier(e) {
   return "FREE";
 }
 function resolveCavsafeDisplayPlanTier(e, a, l) {
-  let t = String(a || "").trim().toLowerCase(),
-    s = resolveCavsafeInitialUsername(l).trim().toLowerCase();
-  return "cavbot admin" === t || "cavbot" === s ? "PREMIUM_PLUS" : resolveCavsafePlanTier({
+  return resolveCavsafePlanTier({
     tier: e
   });
 }

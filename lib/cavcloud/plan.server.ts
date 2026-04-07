@@ -1,9 +1,6 @@
 import "server-only";
 
-import { headers } from "next/headers";
-
-import { getAppOrigin, getSession } from "@/lib/apiAuth";
-import { findAccountById, findUserById, getAuthPool } from "@/lib/authDb";
+import { findAccountById, getAuthPool } from "@/lib/authDb";
 import { prisma } from "@/lib/prisma";
 import {
   cavcloudPerFileMaxBytesBigIntForPlan,
@@ -15,7 +12,6 @@ import {
   type CavCloudPlanAccountInput,
   type CavCloudPlanSubscriptionInput,
 } from "@/lib/cavcloud/plan";
-import { isCavbotFounderAccountIdentity, isCavbotFounderIdentity } from "@/lib/profileIdentity";
 
 type PlanReader = Pick<typeof prisma, "account" | "subscription">;
 const PAID_SUBSCRIPTION_STATUSES = ["ACTIVE", "TRIALING", "PAST_DUE"] as const;
@@ -86,63 +82,17 @@ async function readAuthAccountPlanInput(accountId: string): Promise<CavCloudPlan
   }
 }
 
-async function resolveRequestScopedFounderUser(): Promise<boolean> {
-  try {
-    const headerStore = headers();
-    const cookie = String(headerStore.get("cookie") || "").trim();
-    if (!cookie) return false;
-
-    const fallback = new URL(getAppOrigin());
-    const host = String(headerStore.get("x-forwarded-host") || headerStore.get("host") || fallback.host).trim();
-    const proto = String(headerStore.get("x-forwarded-proto") || fallback.protocol.replace(/:$/, "")).trim() || "http";
-
-    const req = new Request(`${proto}://${host}/api/auth/me`, {
-      headers: {
-        cookie,
-        host,
-      },
-    });
-
-    const sess = await getSession(req);
-    if (!sess || sess.systemRole !== "user") return false;
-
-    const userId = String(sess.sub || "").trim();
-    if (!userId) return false;
-
-    const pool = getAuthPool();
-    const user = await findUserById(pool, userId);
-    if (!user) return false;
-
-    return isCavbotFounderIdentity({
-      username: user.username,
-      displayName: user.displayName,
-      fullName: user.fullName,
-    });
-  } catch {
-    return false;
-  }
-}
-
 async function readAccountPlanInput(accountId: string, tx: PlanReader): Promise<CavCloudPlanAccountInput | null> {
   if (!accountId) return null;
 
-  const [authAccount, prismaAccount, founderViewer] = await Promise.all([
+  const [authAccount, prismaAccount] = await Promise.all([
     readAuthAccountPlanInput(accountId),
     readPrismaAccountPlanInput(accountId, tx),
-    resolveRequestScopedFounderUser(),
   ]);
 
   const merged = mergeCavCloudPlanAccounts(authAccount, prismaAccount);
-  const founderAccount = isCavbotFounderAccountIdentity({
-    slug: authAccount?.slug ?? prismaAccount?.slug,
-    name: authAccount?.name ?? prismaAccount?.name,
-  });
   if (!merged) return null;
-  if (!founderAccount && !founderViewer) return merged;
-  return {
-    ...merged,
-    tier: "PREMIUM_PLUS",
-  };
+  return merged;
 }
 
 async function readSubscriptionPlanInput(accountId: string, tx: PlanReader): Promise<CavCloudPlanSubscriptionInput> {

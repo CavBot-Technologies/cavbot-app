@@ -19,7 +19,7 @@ import {
   planTierTokenFromPlanId,
   resolveEffectivePlanId,
 } from "@/lib/accountPlan.server";
-import { isCavbotFounderIdentity, normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
+import { normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 
 const DEFAULT_CAVCLOUD_COLLAB_POLICY = {
   allowAdminsManageCollaboration: false,
@@ -122,18 +122,6 @@ function computeEffectiveTier(account: PrismaAccount) {
   return { trialActive, daysLeft };
 }
 
-function forceFounderPremiumPlus<T extends { tier?: string | null; tierEffective?: string | null }>(
-  account: T | null,
-  founderUser: boolean,
-) {
-  if (!account || !founderUser) return account;
-  return {
-    ...account,
-    tier: "PREMIUM_PLUS",
-    tierEffective: "PREMIUM_PLUS",
-  };
-}
-
 export async function GET(req: Request) {
   try {
     const pool = getAuthPool();
@@ -164,7 +152,6 @@ export async function GET(req: Request) {
         fullName: user.fullName,
       }),
     };
-    const founderUser = isCavbotFounderIdentity(normalizedUser);
     const initials = deriveInitials(normalizedUser.displayName, normalizedUser.username);
 
     let membership: MembershipRecord | null = null;
@@ -214,12 +201,7 @@ export async function GET(req: Request) {
 
     if (!accountRecord) return json({ ok: true, authenticated: false }, 200);
 
-    account = founderUser
-      ? {
-          ...accountRecord,
-          tier: "PREMIUM_PLUS",
-        }
-      : accountRecord;
+    account = accountRecord;
 
     // Compute effective tier for UI + gates
     const eff = computeEffectiveTier(account);
@@ -229,7 +211,7 @@ export async function GET(req: Request) {
     });
     accountWithComputed = {
       ...account,
-      tierEffective: founderUser ? "PREMIUM_PLUS" : planTierTokenFromPlanId(effectivePlanId),
+      tierEffective: planTierTokenFromPlanId(effectivePlanId),
       trialActive: eff.trialActive,
       trialDaysLeft: eff.daysLeft,
     };
@@ -240,7 +222,6 @@ export async function GET(req: Request) {
       ...normalizedUser,
       initials,
     };
-    const responseAccount = forceFounderPremiumPlus(accountWithComputed ?? account, founderUser);
     const response = json(
       {
         ok: true,
@@ -254,7 +235,7 @@ export async function GET(req: Request) {
           : sess,
         user: responseUser,
         profile: responseUser,
-        account: responseAccount,
+        account: accountWithComputed ?? account,
         membership,
         policy: {
           ...collabPolicy,

@@ -15,8 +15,9 @@ test("auth and settings routes normalize founder identity and keep the legacy au
   const apiAuth = read("lib/apiAuth.ts");
 
   assert.match(authMe, /profile: responseUser/);
-  assert.match(authMe, /tierEffective: founderUser \? "PREMIUM_PLUS" : planTierTokenFromPlanId\(effectivePlanId\)/);
-  assert.match(authMe, /const responseAccount = forceFounderPremiumPlus\(accountWithComputed \?\? account, founderUser\)/);
+  assert.match(authMe, /tierEffective: planTierTokenFromPlanId\(effectivePlanId\)/);
+  assert.doesNotMatch(authMe, /forceFounderPremiumPlus/);
+  assert.doesNotMatch(authMe, /founderUser \? "PREMIUM_PLUS"/);
   assert.match(settingsRoute, /const founderIdentity = normalizeCavbotFounderProfile/);
   assert.match(settingsRoute, /fullName: founderIdentity\.fullName/);
   assert.match(apiAuth, /if \(\s*sess\?\.systemRole === "user"/);
@@ -43,7 +44,7 @@ test("app shell republishes cached founder and plan state while footer modal and
   assert.match(homePage, /globalThis\.__cbLocalStore\.setItem\(\s*"cb_shell_plan_snapshot_v1"/);
   assert.match(homePage, /const welcomeShowsPremiumPlus = useMemo/);
   assert.match(homePage, /planId === "premium_plus"/);
-  assert.match(homePage, /normalizedPlanLabel === "PREMIUM\+"/);
+  assert.match(homePage, /resolvePlanIdFromTier\(workspacePlanLabel\) === "premium_plus"/);
   assert.match(homePage, /\{welcomeShowsPremiumPlus \? \(/);
   assert.match(footerTsx, /className=\{`\$\{styles\.developerPanel\} \$\{developerOpen \? styles\.developerPanelOpen : ""\}`\}/);
   assert.match(footerCss, /\.developerPanelOpen,/);
@@ -105,6 +106,7 @@ test("cavcloud and cavsafe direct surfaces persist full profile state and keep t
   assert.match(cloud, /CavSurfacePageIntro/);
   assert.match(cloud, /accountName: eE/);
   assert.match(cloud, /displayPlanTier = resolveCavcloudDisplayPlanTier\(eK, eE, eH\)/);
+  assert.doesNotMatch(cloud, /"cavbot admin" === t \|\| "cavbot" === s \? "PREMIUM_PLUS"/);
   assert.match(cloud, /src: "\/icons\/menu-svgrepo-com\.svg"/);
   assert.match(cloud, /isCompactShell \? null : t\.jsx\("button", \{\s*className: "cavcloud-btn cavcloud-btnGhost cavcloud-btnIconOnly",[\s\S]*"aria-label": "Refresh"/);
   assert.match(safe, /readCachedCavsafeProfileState/);
@@ -116,6 +118,7 @@ test("cavcloud and cavsafe direct surfaces persist full profile state and keep t
   assert.match(safe, /CavSurfacePageIntro/);
   assert.match(safe, /accountName: eE/);
   assert.match(safe, /displayPlanTier = resolveCavsafeDisplayPlanTier\(eK, eE, eH\)/);
+  assert.doesNotMatch(safe, /"cavbot admin" === t \|\| "cavbot" === s \? "PREMIUM_PLUS"/);
   assert.match(safe, /src: "\/icons\/menu-svgrepo-com\.svg"/);
   assert.match(safe, /isCompactShell \? null : t\.jsx\("button", \{\s*className: "cavcloud-btn cavcloud-btnGhost cavcloud-btnIconOnly",[\s\S]*"aria-label": "Refresh"/);
   assert.match(controls, /export function CavSurfaceHeaderBadge/);
