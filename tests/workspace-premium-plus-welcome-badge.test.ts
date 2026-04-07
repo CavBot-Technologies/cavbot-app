@@ -16,6 +16,7 @@ test("workspace command center welcome badge boots from shell snapshot and label
   assert.equal(source.includes("function resolveWorkspacePlanId(detail?: WorkspacePlanDetail | null)"), true);
   assert.equal(source.includes("globalThis.__cbLocalStore.getItem(SHELL_PLAN_SNAPSHOT_KEY)"), true);
   assert.equal(source.includes("resolvePlanIdFromTier(detail?.planKey || detail?.planLabel || detail?.planTier || \"free\")"), true);
+  assert.equal(source.includes("useLayoutEffect(() => {"), true);
   assert.equal(source.includes("window.addEventListener(SHELL_PLAN_EVENT, shellPlanHandler as EventListener)"), true);
 });
 

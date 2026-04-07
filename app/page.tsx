@@ -4,7 +4,7 @@
 
 import AppShell from "@/components/AppShell";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -632,7 +632,7 @@ function CommandDeckPageInner() {
   const [cavcloudLimitBytes, setCavcloudLimitBytes] = useState<number | null>(null);
   const [cavcloudLimitLoaded, setCavcloudLimitLoaded] = useState<boolean>(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     function applyPlan(detail: WorkspacePlanDetail | null) {
       if (!detail) return;
       const nextPlanId = resolveWorkspacePlanId(detail);
