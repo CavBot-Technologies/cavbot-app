@@ -20,21 +20,27 @@ test("auth and settings routes normalize founder identity and keep the legacy au
   assert.match(settingsRoute, /const founderIdentity = normalizeCavbotFounderProfile/);
   assert.match(settingsRoute, /fullName: founderIdentity\.fullName/);
   assert.match(apiAuth, /if \(\s*sess\?\.systemRole === "user"/);
-  assert.match(apiAuth, /const memberships = await findMembershipsForUser\(getAuthPool\(\), String\(sess\.sub\)\)/);
+  assert.match(apiAuth, /activeMembership = await findSessionMembership\(pool, userId, String\(sess\.accountId\)\)/);
+  assert.match(apiAuth, /const memberships = await findMembershipsForUser\(pool, userId\)/);
   assert.match(apiAuth, /sess\.accountId = String\(active\.accountId\)/);
   assert.match(apiAuth, /sess\.memberRole = active\.role/);
 });
 
 test("app shell republishes cached founder and plan state while footer modal and sidebar menu stay visible", () => {
   const appShell = read("components/AppShell.tsx");
+  const homePage = read("app/page.tsx");
   const footerTsx = read("components/footer/CavbotGlobalFooter.tsx");
   const footerCss = read("components/footer/CavbotGlobalFooter.module.css");
   const globals = read("app/globals.css");
 
   assert.match(appShell, /const \[bootSnapshot\] = useState<PlanSnapshot \| null>\(\(\) => readShellPlanSnapshot\(\)\)/);
+  assert.match(appShell, /window\.addEventListener\("cb:plan", onPlan as EventListener\)/);
   assert.match(appShell, /globalThis\.__cbLocalStore\.setItem\("cb_profile_fullName_v1", nextFullName\)/);
   assert.match(appShell, /window\.dispatchEvent\(\s*new CustomEvent\("cb:profile"/);
   assert.match(appShell, /window\.dispatchEvent\(new CustomEvent\("cb:plan", \{ detail: planDetail \}\)\)/);
+  assert.match(homePage, /globalThis\.__cbLocalStore\.setItem\("cb_account_initials", initials \|\| ""\)/);
+  assert.match(homePage, /window\.dispatchEvent\(\s*new CustomEvent\("cb:profile"/);
+  assert.match(homePage, /globalThis\.__cbLocalStore\.setItem\(\s*"cb_shell_plan_snapshot_v1"/);
   assert.match(footerTsx, /className=\{`\$\{styles\.developerPanel\} \$\{developerOpen \? styles\.developerPanelOpen : ""\}`\}/);
   assert.match(footerCss, /\.developerPanelOpen,/);
   assert.doesNotMatch(globals, /\.cb-side-account-wrap \.cb-menu\{\s*top: calc\(100% \+ 8px\);/);
@@ -51,7 +57,7 @@ test("cavcloud compact screens restore document scrolling through tablets and ke
   assert.match(css, /@media \(max-width: 1100px\)\{[\s\S]*\.cavcloud-surfaceFooterIcons\{[\s\S]*display: flex;/);
 });
 
-test("cavcloud and cavsafe direct surfaces persist full profile state and never fall back to there/CavBot Account", () => {
+test("cavcloud and cavsafe direct surfaces persist full profile state and keep the legacy there/username footer fallback logic", () => {
   const cloud = read("app/cavcloud/CavCloudClient.tsx");
   const safe = read("app/cavsafe/CavSafeClient.tsx");
   const controls = read("components/cavcloud/CavSurfaceShellControls.tsx");
@@ -59,13 +65,18 @@ test("cavcloud and cavsafe direct surfaces persist full profile state and never 
   assert.match(cloud, /readCachedCavcloudProfileState/);
   assert.match(cloud, /persistCavcloudProfileState/);
   assert.match(cloud, /persistCavcloudPlanState/);
-  assert.match(cloud, /accountName: eE \|\| eP/);
-  assert.match(cloud, /displayPlanTier = resolveCavcloudDisplayPlanTier\(eK, eE \|\| eP, eH\)/);
+  assert.match(cloud, /return "there";/);
+  assert.match(cloud, /return t \|\| "C";/);
+  assert.match(cloud, /accountName: eE/);
+  assert.match(cloud, /displayPlanTier = resolveCavcloudDisplayPlanTier\(eK, eE, eH\)/);
   assert.match(safe, /readCachedCavsafeProfileState/);
   assert.match(safe, /persistCavsafeProfileState/);
   assert.match(safe, /persistCavsafePlanState/);
-  assert.match(safe, /accountName: eE \|\| eP/);
-  assert.match(safe, /displayPlanTier = resolveCavsafeDisplayPlanTier\(eK, eE \|\| eP, eH\)/);
-  assert.doesNotMatch(controls, /return "CavBot Account";/);
-  assert.doesNotMatch(controls, /return "there";/);
+  assert.match(safe, /return "there";/);
+  assert.match(safe, /return t \|\| "C";/);
+  assert.match(safe, /accountName: eE/);
+  assert.match(safe, /displayPlanTier = resolveCavsafeDisplayPlanTier\(eK, eE, eH\)/);
+  assert.match(controls, /return "CavBot Account";/);
+  assert.match(controls, /return "there";/);
+  assert.match(controls, /return "C";/);
 });

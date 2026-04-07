@@ -1209,6 +1209,41 @@ export default function AppShell({
     return () => window.removeEventListener("cb:profile", onProfile);
   }, []);
 
+  useEffect(() => {
+    function onPlan(event?: Event) {
+      try {
+        const d = event instanceof CustomEvent ? (event.detail as Record<string, unknown>) || {} : {};
+        const cached = readShellPlanSnapshot();
+        const detailPlanToken = d.planTier ?? d.planKey ?? d.planLabel;
+        const detailPlanTier = detailPlanToken == null ? null : coercePlanTier(detailPlanToken);
+        const detailMemberRole = coerceMemberRole(d.memberRole);
+        const detailTrialActive = typeof d.trialActive === "boolean" ? d.trialActive : cached?.trialActive ?? false;
+        const detailTrialDaysLeftRaw = Number(d.trialDaysLeft);
+        const detailTrialDaysLeft =
+          detailTrialActive && Number.isFinite(detailTrialDaysLeftRaw) && detailTrialDaysLeftRaw > 0
+            ? clampInt(detailTrialDaysLeftRaw, 0, 365)
+            : cached?.trialActive
+              ? clampInt(Number(cached?.trialDaysLeft || 0), 0, 365)
+              : 0;
+
+        setPlanTier(detailPlanTier ?? cached?.planTier ?? "FREE");
+        setMemberRole(detailMemberRole ?? cached?.memberRole ?? null);
+        setTrialActive(Boolean(detailTrialActive));
+        setTrialDaysLeft(detailTrialActive ? detailTrialDaysLeft : 0);
+        setPlanResolved(true);
+        setPlanResolveError("");
+      } catch {}
+    }
+
+    onPlan();
+    window.addEventListener("cb:plan", onPlan as EventListener);
+    window.addEventListener("storage", onPlan);
+    return () => {
+      window.removeEventListener("cb:plan", onPlan as EventListener);
+      window.removeEventListener("storage", onPlan);
+    };
+  }, []);
+
 
   // ===== ALWAYS RESET GLOBAL LOCKS ON NAV (fixes "needs Cmd+R") =====
   useEffect(() => {

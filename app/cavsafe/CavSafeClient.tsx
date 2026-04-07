@@ -683,8 +683,7 @@ function resolveCavsafeGreetingName(e) {
     }),
     l = String(a?.fullName || a?.displayName || "").trim();
   if (l) return l;
-  let t = String(a?.username || "").trim().replace(/^@+/, "");
-  return t ? `@${t}` : "";
+  return "there";
 }
 function resolveCavsafeInitialChar(e) {
   let a = String(e || "").match(/[A-Za-z0-9]/);
@@ -718,7 +717,7 @@ function resolveCavsafeInitials(e) {
   let l = resolveCavsafeInitialChar(resolveCavsafeInitialUsername(e?.username));
   if (l) return l;
   let t = resolveCavsafeInitialChar(e?.initials);
-  return t || "";
+  return t || "C";
 }
 function resolveCavsafePlanTier(e) {
   let a = String(e?.tierEffective || e?.tier || "").trim().toUpperCase();
@@ -6095,7 +6094,7 @@ function ek() {
     publicProfileHref = buildCanonicalPublicProfileHref(profileHandle),
     profileMenuLabel = "public" === profilePublicEnabled ? "Public Profile" : "private" === profilePublicEnabled ? "Private Profile" : "Profile",
     surfaceTitle = "CavSafe Secured Storage",
-    displayPlanTier = resolveCavsafeDisplayPlanTier(eK, eE || eP, eH),
+    displayPlanTier = resolveCavsafeDisplayPlanTier(eK, eE, eH),
     surfaceVerified = "PREMIUM_PLUS" === displayPlanTier,
     settingsTotalPages = 2,
     settingsPageSafe = Math.max(1, Math.min(settingsPage, settingsTotalPages)),
@@ -6176,7 +6175,7 @@ function ek() {
           }, e.key);
         })
       }), t.jsx(CavSurfaceSidebarFooter, {
-        accountName: eE || eP,
+        accountName: eE,
         profileMenuLabel: profileMenuLabel,
         planTier: displayPlanTier,
         trialActive: eV,
@@ -6235,7 +6234,7 @@ function ek() {
               })]
             })
           }) : null, t.jsx(CavSurfaceHeaderGreeting, {
-            accountName: eE || eP,
+            accountName: eE,
             showVerified: surfaceVerified
           })]
         }), (0, t.jsxs)("div", {

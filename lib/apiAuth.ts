@@ -4,6 +4,7 @@ import "server-only";
 import { createHmac as nodeCreateHmac, pbkdf2 as nodePbkdf2, webcrypto as nodeCrypto } from "crypto";
 import {
   findMembershipsForUser,
+  findSessionMembership,
   findUserAuth,
   getAuthPool,
   pickPrimaryMembership,
@@ -564,18 +565,26 @@ export async function getSession(req: Request): Promise<CavbotSession | null> {
     for (const token of cookieFirstCandidates) {
       try {
         const sess = await verifySession(token);
-        if (
-          sess?.systemRole === "user"
-          && sess.sub
-          && sess.sub !== "system"
-          && (!sess.accountId || !sess.memberRole)
-        ) {
+        if (sess?.systemRole === "user" && sess.sub && sess.sub !== "system") {
           try {
-            const memberships = await findMembershipsForUser(getAuthPool(), String(sess.sub));
-            const active = pickPrimaryMembership(memberships);
-            if (active?.accountId) {
-              sess.accountId = String(active.accountId);
-              sess.memberRole = active.role;
+            const pool = getAuthPool();
+            const userId = String(sess.sub);
+            let activeMembership = null;
+
+            if (sess.accountId) {
+              activeMembership = await findSessionMembership(pool, userId, String(sess.accountId));
+            }
+
+            if (!activeMembership || !sess.memberRole) {
+              const memberships = await findMembershipsForUser(pool, userId);
+              const active = pickPrimaryMembership(memberships);
+              if (active?.accountId) {
+                sess.accountId = String(active.accountId);
+                sess.memberRole = active.role;
+              }
+            } else {
+              sess.accountId = String(activeMembership.accountId);
+              sess.memberRole = activeMembership.role;
             }
           } catch {}
         }

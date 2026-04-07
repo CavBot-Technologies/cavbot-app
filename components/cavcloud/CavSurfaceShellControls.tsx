@@ -92,7 +92,7 @@ function deriveAccountInitials(fullName?: string | null, username?: string | nul
 
   const fallbackInitial = firstInitialChar(s(fallback));
   if (fallbackInitial) return fallbackInitial;
-  return "";
+  return "C";
 }
 
 function readStoredInitials(): string {
@@ -171,7 +171,7 @@ function useSurfaceProfileIdentity(fallbackAccountName: string) {
     if (fallback) return fallback;
     const handle = s(normalizedSnapshot.username);
     if (handle) return `@${handle}`;
-    return "";
+    return "CavBot Account";
   }, [fallbackAccountName, normalizedSnapshot.displayName, normalizedSnapshot.fullName, normalizedSnapshot.username]);
 
   const greetingName = useMemo(() => {
@@ -179,9 +179,8 @@ function useSurfaceProfileIdentity(fallbackAccountName: string) {
     if (full) return full;
     const fallback = s(fallbackAccountName);
     if (fallback) return fallback;
-    const handle = s(normalizedSnapshot.username);
-    return handle ? `@${handle}` : "";
-  }, [fallbackAccountName, normalizedSnapshot.displayName, normalizedSnapshot.fullName, normalizedSnapshot.username]);
+    return "there";
+  }, [fallbackAccountName, normalizedSnapshot.displayName, normalizedSnapshot.fullName]);
 
   const initials = useMemo(() => {
     const resolved = deriveAccountInitials(
