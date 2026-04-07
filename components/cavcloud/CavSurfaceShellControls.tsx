@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type RefObject, type SetStateAction } from "react";
 
 import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import CavAiCenterLauncher, { type AiCenterSurface } from "@/components/cavai/CavAiCenterLauncher";
@@ -229,6 +229,56 @@ function avatarChipStyle(profileTone: string, profileAvatar: string) {
   } as const;
 }
 
+function resolveSurfaceAccentStyle(profileTone: string): CSSProperties {
+  const tone = s(profileTone).toLowerCase();
+
+  if (tone === "violet") {
+    return {
+      "--cb-cavsafe-accent": "#8b5cff",
+      "--cb-cavsafe-accent-strong": "rgba(139,92,255,0.52)",
+      "--cb-cavsafe-accent-soft": "rgba(139,92,255,0.22)",
+    } as CSSProperties;
+  }
+
+  if (tone === "blue") {
+    return {
+      "--cb-cavsafe-accent": "#4da3ff",
+      "--cb-cavsafe-accent-strong": "rgba(77,163,255,0.52)",
+      "--cb-cavsafe-accent-soft": "rgba(77,163,255,0.22)",
+    } as CSSProperties;
+  }
+
+  if (tone === "white") {
+    return {
+      "--cb-cavsafe-accent": "#f7fbff",
+      "--cb-cavsafe-accent-strong": "rgba(247,251,255,0.62)",
+      "--cb-cavsafe-accent-soft": "rgba(247,251,255,0.2)",
+    } as CSSProperties;
+  }
+
+  if (tone === "navy") {
+    return {
+      "--cb-cavsafe-accent": "#9fb6ff",
+      "--cb-cavsafe-accent-strong": "rgba(159,182,255,0.55)",
+      "--cb-cavsafe-accent-soft": "rgba(159,182,255,0.22)",
+    } as CSSProperties;
+  }
+
+  if (tone === "transparent") {
+    return {
+      "--cb-cavsafe-accent": "#f7fbff",
+      "--cb-cavsafe-accent-strong": "rgba(247,251,255,0.5)",
+      "--cb-cavsafe-accent-soft": "rgba(247,251,255,0.16)",
+    } as CSSProperties;
+  }
+
+  return {
+    "--cb-cavsafe-accent": "#b9c85a",
+    "--cb-cavsafe-accent-strong": "rgba(185,200,90,0.52)",
+    "--cb-cavsafe-accent-soft": "rgba(185,200,90,0.22)",
+  } as CSSProperties;
+}
+
 function VerifiedBadge() {
   return (
     <span
@@ -430,6 +480,7 @@ export function CavSurfaceSidebarFooter(props: CavSurfaceSidebarFooterProps) {
     [effectivePlanTier, props.trialActive, props.trialDaysLeft],
   );
   const planActionLabel = useMemo(() => resolvePlanActionLabel(effectivePlanTier), [effectivePlanTier]);
+  const premiumAccentStyle = useMemo(() => resolveSurfaceAccentStyle(profile.tone || "lime"), [profile.tone]);
 
   usePopoverDismiss(accountOpen, setAccountOpen, accountWrapRef);
   usePopoverDismiss(toolsOpen, setToolsOpen, toolsWrapRef);
@@ -553,8 +604,12 @@ export function CavSurfaceSidebarFooter(props: CavSurfaceSidebarFooterProps) {
               <span className="cb-side-account-plan">{planStatusLabel}</span>
             </span>
 
-            <span className="cb-side-account-spark" aria-hidden="true">
-              {props.planTier === "PREMIUM_PLUS" ? (
+            <span
+              className="cb-side-account-spark"
+              aria-hidden="true"
+              style={effectivePlanTier === "PREMIUM_PLUS" ? premiumAccentStyle : undefined}
+            >
+              {effectivePlanTier === "PREMIUM_PLUS" ? (
                 <IconPremiumPlusStar />
               ) : (
                 <Image

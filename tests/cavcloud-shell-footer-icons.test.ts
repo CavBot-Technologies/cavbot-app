@@ -27,7 +27,10 @@ test("cavcloud and cavsafe footer restore surface quick tools and keep premium p
   assert.match(controls, /iconSizePx=\{18\}/);
   assert.match(controls, /cavcloud-surfaceQuickToolIconGallery/);
   assert.match(controls, /cavcloud-surfaceQuickToolIconSettings/);
-  assert.match(controls, /props\.planTier === "PREMIUM_PLUS" \? \(\s*<IconPremiumPlusStar \/>/);
+  assert.match(controls, /function resolveSurfaceAccentStyle\(profileTone: string\): CSSProperties/);
+  assert.match(controls, /const premiumAccentStyle = useMemo\(\(\) => resolveSurfaceAccentStyle\(profile\.tone \|\| "lime"\), \[profile\.tone\]\);/);
+  assert.match(controls, /style=\{effectivePlanTier === "PREMIUM_PLUS" \? premiumAccentStyle : undefined\}/);
+  assert.match(controls, /effectivePlanTier === "PREMIUM_PLUS" \? \(\s*<IconPremiumPlusStar \/>/);
   assert.match(cloud, /galleryActive: "Gallery" === S/);
   assert.match(cloud, /onOpenCompanion: openCavSafe/);
   assert.match(safe, /onOpenCompanion: openCavCloud/);
