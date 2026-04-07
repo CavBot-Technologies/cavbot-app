@@ -19,6 +19,7 @@ type RawMembershipRow = {
   userId: string;
   role: string;
   createdAt: string | Date;
+  accountTier?: string | null;
 };
 
 type RawUserRow = {
@@ -111,6 +112,7 @@ export type AuthMembership = {
   userId: string;
   role: MemberRole;
   createdAt: Date;
+  accountTier?: string | null;
 };
 
 export type AuthUser = {
@@ -232,6 +234,33 @@ function normalizeRole(value: string | null | undefined): MemberRole {
   return "MEMBER";
 }
 
+export function membershipTierRank(value: string | null | undefined) {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (
+    normalized.includes("PREMIUM_PLUS") ||
+    normalized.includes("PREMIUM+") ||
+    normalized.includes("ENTERPRISE") ||
+    normalized.includes("PLUS")
+  ) {
+    return 3;
+  }
+  if (
+    normalized.includes("PREMIUM") ||
+    normalized.includes("PRO") ||
+    normalized.includes("PAID")
+  ) {
+    return 2;
+  }
+  return 1;
+}
+
+function membershipRoleRank(value: string | null | undefined) {
+  const role = normalizeRole(value);
+  if (role === "OWNER") return 3;
+  if (role === "ADMIN") return 2;
+  return 1;
+}
+
 function mapMembership(row: RawMembershipRow): AuthMembership {
   return {
     id: row.id,
@@ -239,6 +268,7 @@ function mapMembership(row: RawMembershipRow): AuthMembership {
     userId: row.userId,
     role: normalizeRole(row.role),
     createdAt: asDate(row.createdAt) || new Date(0),
+    accountTier: typeof row.accountTier === "string" ? row.accountTier : null,
   };
 }
 
@@ -396,15 +426,22 @@ export function pgUniqueViolationMentions(error: unknown, field: string) {
   return detail.includes(`(${hit})`) || constraint.includes(hit);
 }
 
-export function pickPrimaryMembership<T extends { role: string; createdAt: Date }>(rows: T[]) {
+export function compareMembershipPriority<T extends { role: string; createdAt: Date; accountTier?: string | null }>(
+  left: T,
+  right: T,
+) {
+  const tierRank = membershipTierRank(right.accountTier) - membershipTierRank(left.accountTier);
+  if (tierRank !== 0) return tierRank;
+
+  const roleRank = membershipRoleRank(right.role) - membershipRoleRank(left.role);
+  if (roleRank !== 0) return roleRank;
+
+  return left.createdAt.getTime() - right.createdAt.getTime();
+}
+
+export function pickPrimaryMembership<T extends { role: string; createdAt: Date; accountTier?: string | null }>(rows: T[]) {
   return [...rows].sort((a, b) => {
-    const aRank = normalizeRole(a.role);
-    const bRank = normalizeRole(b.role);
-    const rank =
-      (bRank === "OWNER" ? 3 : bRank === "ADMIN" ? 2 : 1) -
-      (aRank === "OWNER" ? 3 : aRank === "ADMIN" ? 2 : 1);
-    if (rank !== 0) return rank;
-    return a.createdAt.getTime() - b.createdAt.getTime();
+    return compareMembershipPriority(a, b);
   })[0] ?? null;
 }
 
@@ -561,13 +598,15 @@ export async function findUserAuth(queryable: Queryable, userId: string) {
 export async function findMembershipsForUser(queryable: Queryable, userId: string) {
   const result = await queryable.query<RawMembershipRow>(
     `SELECT
-        "id",
-        "accountId",
-        "userId",
-        "role",
-        "createdAt"
-      FROM "Membership"
-      WHERE "userId" = $1`,
+        m."id",
+        m."accountId",
+        m."userId",
+        m."role",
+        m."createdAt",
+        a."tier" AS "accountTier"
+      FROM "Membership" m
+      JOIN "Account" a ON a."id" = m."accountId"
+      WHERE m."userId" = $1`,
     [userId],
   );
   return result.rows.map(mapMembership);

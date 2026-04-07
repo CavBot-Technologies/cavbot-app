@@ -13,10 +13,12 @@ import {
 } from "@/lib/apiAuth";
 import type { CavbotSession } from "@/lib/apiAuth";
 import {
+  compareMembershipPriority,
   findMembershipsForUser,
   findSessionMembership,
   findUserByEmail,
   getAuthPool,
+  membershipTierRank,
   pickPrimaryMembership,
 } from "@/lib/authDb";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
@@ -46,6 +48,16 @@ function json<T>(payload: T, init?: number | ResponseInit) {
 function clearSessionCookie(req: Request, res: NextResponse) {
   const { name, ...cookieOpts } = sessionCookieOptions(req);
   res.cookies.set(name, "", { ...cookieOpts, maxAge: 0 });
+  return res;
+}
+
+function attachUserSessionCookie(req: Request, res: NextResponse, token: string) {
+  const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
+  const cookieOpts = {
+    ...cookieOptsFromLib,
+    secure: process.env.NODE_ENV === "production" ? cookieOptsFromLib.secure : false,
+  };
+  res.cookies.set(name, token, cookieOpts);
   return res;
 }
 
@@ -172,6 +184,7 @@ export async function GET(req: Request) {
   try {
     const sess: CavbotSession | null = await getSession(req);
     const client = makeClientMeta(req);
+    const pool = getAuthPool();
 
 
     // Not logged in -> always 200
@@ -195,7 +208,7 @@ export async function GET(req: Request) {
 
 
     // Validate membership still exists (prevents stale cookies causing loops)
-    const membership = await findSessionMembership(getAuthPool(), userId, accountId);
+    const membership = await findSessionMembership(pool, userId, accountId);
 
 
     if (!membership) {
@@ -203,31 +216,54 @@ export async function GET(req: Request) {
       return clearSessionCookie(req, res);
     }
 
+    const memberships = await findMembershipsForUser(pool, userId);
+    const primaryMembership = pickPrimaryMembership(memberships);
+    const shouldPromoteMembership = primaryMembership
+      ? (
+          primaryMembership.accountId !== membership.accountId &&
+          membershipTierRank(primaryMembership.accountTier) > membershipTierRank(membership.accountTier) &&
+          compareMembershipPriority(primaryMembership, membership) < 0
+        )
+      : false;
+    const promotedMembership = shouldPromoteMembership && primaryMembership
+      ? await findSessionMembership(pool, userId, primaryMembership.accountId)
+      : null;
+    const effectiveMembership = promotedMembership ?? membership;
+
 
     // IMPORTANT:
     // membership.role is the source-of-truth (cookie role can be stale)
-    return json(
+    const response = json(
       {
         ok: true,
         authed: true,
         mode: "user",
         session: {
-          userId: membership.userId,
-          email: membership.userEmail,
-          displayName: membership.userDisplayName,
-          accountId: membership.accountId,
-          memberRole: membership.role,
+          userId: effectiveMembership.userId,
+          email: effectiveMembership.userEmail,
+          displayName: effectiveMembership.userDisplayName,
+          accountId: effectiveMembership.accountId,
+          memberRole: effectiveMembership.role,
         },
         account: {
-          id: membership.accountId,
-          slug: membership.accountSlug,
-          tier: membership.accountTier,
-          name: membership.accountName,
+          id: effectiveMembership.accountId,
+          slug: effectiveMembership.accountSlug,
+          tier: effectiveMembership.accountTier,
+          name: effectiveMembership.accountName,
         },
         client,
       },
       200
     );
+    if (promotedMembership) {
+      const token = await createUserSession({
+        userId: promotedMembership.userId,
+        accountId: promotedMembership.accountId,
+        memberRole: normalizeRole(promotedMembership.role),
+      });
+      return attachUserSessionCookie(req, response, token);
+    }
+    return response;
   } catch (error) {
     // Always return 200 for session bootstrap stability
     const client = makeClientMeta(req);

@@ -1,13 +1,17 @@
 // app/api/auth/me/route.ts
 import { NextResponse } from "next/server";
-import { getSession, isApiAuthError } from "@/lib/apiAuth";
+import { createUserSession, getSession, isApiAuthError, sessionCookieOptions } from "@/lib/apiAuth";
 import type { CavbotSession } from "@/lib/apiAuth";
 import {
+  compareMembershipPriority,
   clearExpiredTrialSeat,
   findAccountById,
+  findMembershipsForUser,
   findSessionMembership,
   findUserById,
   getAuthPool,
+  membershipTierRank,
+  pickPrimaryMembership,
 } from "@/lib/authDb";
 import {
   findLatestEntitledSubscription,
@@ -43,6 +47,16 @@ function json<T>(payload: T, init?: number | ResponseInit) {
     ...resInit,
     headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS },
   });
+}
+
+function attachUserSessionCookie(req: Request, res: NextResponse, token: string) {
+  const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
+  const cookieOpts = {
+    ...cookieOptsFromLib,
+    secure: process.env.NODE_ENV === "production" ? cookieOptsFromLib.secure : false,
+  };
+  res.cookies.set(name, token, cookieOpts);
+  return res;
 }
 
 function firstInitialChar(input: string) {
@@ -158,62 +172,86 @@ export async function GET(req: Request) {
     let accountWithComputed: AccountWithComputed | null = null;
     let collabPolicy = { ...DEFAULT_CAVCLOUD_COLLAB_POLICY };
 
-    if (accountId) {
-      const membershipRecord = await findSessionMembership(pool, userId, accountId);
+    const currentMembershipRecord = accountId
+      ? await findSessionMembership(pool, userId, accountId)
+      : null;
+    const memberships = await findMembershipsForUser(pool, userId).catch(() => []);
+    const primaryMembership = pickPrimaryMembership(memberships);
+    const shouldPromoteMembership = primaryMembership
+      ? (
+          primaryMembership.accountId !== currentMembershipRecord?.accountId &&
+          (
+            !currentMembershipRecord ||
+            membershipTierRank(primaryMembership.accountTier) > membershipTierRank(currentMembershipRecord.accountTier)
+          ) &&
+          (
+            !currentMembershipRecord ||
+            compareMembershipPriority(primaryMembership, currentMembershipRecord) < 0
+          )
+        )
+      : false;
+    const promotedMembershipRecord = shouldPromoteMembership && primaryMembership
+      ? await findSessionMembership(pool, userId, primaryMembership.accountId)
+      : null;
+    const effectiveMembershipRecord = promotedMembershipRecord ?? currentMembershipRecord;
 
-      membership = membershipRecord
-        ? {
-            role: membershipRecord.role,
-            createdAt: membershipRecord.createdAt,
-            accountId: membershipRecord.accountId,
-            userId: membershipRecord.userId,
-          }
-        : null;
-
-      if (!membership) return json({ ok: true, authenticated: false }, 200);
-
-      await clearExpiredTrialSeat(pool, accountId);
-      const [accountRecord, entitledSubscription] = await Promise.all([
-        findAccountById(pool, accountId),
-        findLatestEntitledSubscription(accountId),
-      ]);
-
-      if (!accountRecord) return json({ ok: true, authenticated: false }, 200);
-
-      account = founderUser
-        ? {
-            ...accountRecord,
-            tier: "PREMIUM_PLUS",
-          }
-        : accountRecord;
-
-      // Compute effective tier for UI + gates
-      const eff = computeEffectiveTier(account);
-      const effectivePlanId = resolveEffectivePlanId({
-        account,
-        subscription: entitledSubscription,
-      });
-      accountWithComputed = {
-        ...account,
-        tierEffective: founderUser ? "PREMIUM_PLUS" : planTierTokenFromPlanId(effectivePlanId),
-        trialActive: eff.trialActive,
-        trialDaysLeft: eff.daysLeft,
-      };
-
-      collabPolicy = { ...DEFAULT_CAVCLOUD_COLLAB_POLICY };
+    if (!effectiveMembershipRecord) {
+      return json({ ok: true, authenticated: false }, 200);
     }
+
+    membership = {
+      role: effectiveMembershipRecord.role,
+      createdAt: effectiveMembershipRecord.createdAt,
+      accountId: effectiveMembershipRecord.accountId,
+      userId: effectiveMembershipRecord.userId,
+    };
+
+    await clearExpiredTrialSeat(pool, effectiveMembershipRecord.accountId);
+    const [accountRecord, entitledSubscription] = await Promise.all([
+      findAccountById(pool, effectiveMembershipRecord.accountId),
+      findLatestEntitledSubscription(effectiveMembershipRecord.accountId),
+    ]);
+
+    if (!accountRecord) return json({ ok: true, authenticated: false }, 200);
+
+    account = founderUser
+      ? {
+          ...accountRecord,
+          tier: "PREMIUM_PLUS",
+        }
+      : accountRecord;
+
+    // Compute effective tier for UI + gates
+    const eff = computeEffectiveTier(account);
+    const effectivePlanId = resolveEffectivePlanId({
+      account,
+      subscription: entitledSubscription,
+    });
+    accountWithComputed = {
+      ...account,
+      tierEffective: founderUser ? "PREMIUM_PLUS" : planTierTokenFromPlanId(effectivePlanId),
+      trialActive: eff.trialActive,
+      trialDaysLeft: eff.daysLeft,
+    };
+
+    collabPolicy = { ...DEFAULT_CAVCLOUD_COLLAB_POLICY };
 
     const responseUser = {
       ...normalizedUser,
       initials,
     };
     const responseAccount = forceFounderPremiumPlus(accountWithComputed ?? account, founderUser);
-
-    return json(
+    const response = json(
       {
         ok: true,
         authenticated: true,
-        session: sess,
+        session: membership
+          ? {
+              ...sess,
+              accountId: membership.accountId,
+              memberRole: membership.role,
+            }
+          : sess,
         user: responseUser,
         profile: responseUser,
         account: responseAccount,
@@ -225,6 +263,19 @@ export async function GET(req: Request) {
       },
       200
     );
+    if (promotedMembershipRecord) {
+      const token = await createUserSession({
+        userId: promotedMembershipRecord.userId,
+        accountId: promotedMembershipRecord.accountId,
+        memberRole: String(promotedMembershipRecord.role).toUpperCase() === "OWNER"
+          ? "OWNER"
+          : String(promotedMembershipRecord.role).toUpperCase() === "ADMIN"
+            ? "ADMIN"
+            : "MEMBER",
+      });
+      return attachUserSessionCookie(req, response, token);
+    }
+    return response;
   } catch (error) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
     return json({ ok: true, authenticated: false }, 200);

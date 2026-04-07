@@ -2494,154 +2494,153 @@ function ProfileCard() {
 
 
     (async () => {
-      try {
-        const [pRes, meRes, teamRes] = await Promise.all([
-          fetch("/api/settings/account", { method: "GET", cache: "no-store", signal: ctrl.signal }),
-          fetch("/api/auth/me", { method: "GET", cache: "no-store", signal: ctrl.signal }),
-          fetch("/api/members", { method: "GET", cache: "no-store", signal: ctrl.signal }),
-        ]);
+      const [profileResult, authMeResult, membersResult] = await Promise.allSettled([
+        fetch("/api/settings/account", { method: "GET", cache: "no-store", signal: ctrl.signal }),
+        fetch("/api/auth/me", { method: "GET", cache: "no-store", signal: ctrl.signal }),
+        fetch("/api/members", { method: "GET", cache: "no-store", signal: ctrl.signal }),
+      ]);
+      if (!alive) return;
+
+      const pRes = profileResult.status === "fulfilled" ? profileResult.value : null;
+      const meRes = authMeResult.status === "fulfilled" ? authMeResult.value : null;
+      const teamRes = membersResult.status === "fulfilled" ? membersResult.value : null;
+      const pJson = (await pRes?.json().catch(() => ({}))) as ProfileApiResponse | undefined;
+      const meJson = (await meRes?.json().catch(() => ({}))) as AuthMeResponse | undefined;
+      const teamJson = (await teamRes?.json().catch(() => ({}))) as MembersApiResponse | undefined;
+      if (!alive) return;
+
+      if (pRes?.ok && pJson?.ok) {
+        const normalizedProfile = normalizeCavbotFounderProfile({
+          fullName: pJson?.profile?.fullName,
+          displayName: pJson?.profile?.fullName,
+          username: pJson?.profile?.username,
+        });
+        const name = String(normalizedProfile.fullName || normalizedProfile.displayName || "").trim();
+        const em = String(pJson?.profile?.email || "").trim();
+        const bi = String(pJson?.profile?.bio || "").trim();
+        const usr = String(normalizedProfile.username || "").trim();
+        const sc = String(pJson?.profile?.companySubcategory || "").trim();
+        const gh = String(pJson?.profile?.githubUrl || "").trim();
+        const ig = String(pJson?.profile?.instagramUrl || "").trim();
+        const li = String(pJson?.profile?.linkedinUrl || "").trim();
+        const cu = String(pJson?.profile?.customLinkUrl || "").trim();
+        const initials = deriveProfileInitials(name, usr, "");
+        const publicProfileFlag = (pJson?.profile as { publicProfileEnabled?: unknown } | undefined)
+          ?.publicProfileEnabled;
+        const publicProfileEnabled =
+          typeof publicProfileFlag === "boolean" ? publicProfileFlag : undefined;
+
+        setFullName(name || "—");
+        setEmail(em || "—");
+        setUsername(usr || "—");
+        setBio(bi || "No bio yet.");
+        setCompanySubcategory(sc);
+        setGithubUrl(gh);
+        setInstagramUrl(ig);
+        setLinkedinUrl(li);
+        setCustomLinkUrl(cu);
+
+        try {
+          globalThis.__cbLocalStore.setItem("cb_profile_fullName_v1", name || "");
+          globalThis.__cbLocalStore.setItem("cb_profile_email_v1", em || "");
+          globalThis.__cbLocalStore.setItem("cb_profile_username_v1", usr || "");
+          globalThis.__cbLocalStore.setItem("cb_profile_bio_v1", bi || "");
+          globalThis.__cbLocalStore.setItem("cb_profile_company_subcategory_v1", sc || "");
+          globalThis.__cbLocalStore.setItem("cb_profile_github_url_v1", gh || "");
+          globalThis.__cbLocalStore.setItem("cb_profile_instagram_url_v1", ig || "");
+          globalThis.__cbLocalStore.setItem("cb_profile_linkedin_url_v1", li || "");
+          globalThis.__cbLocalStore.setItem("cb_profile_custom_link_url_v1", cu || "");
+          globalThis.__cbLocalStore.setItem("cb_account_initials", initials || "");
+          window.dispatchEvent(
+            new CustomEvent("cb:profile", {
+              detail: {
+                fullName: name || "",
+                email: em || "",
+                username: usr || "",
+                initials,
+                publicProfileEnabled,
+              },
+            }),
+          );
+        } catch {}
+      }
 
 
-        const pJson = (await pRes.json().catch(() => ({}))) as ProfileApiResponse;
-        const meJson = (await meRes.json().catch(() => ({}))) as AuthMeResponse;
-        const teamJson = (await teamRes.json().catch(() => ({}))) as MembersApiResponse;
-        if (!alive) return;
+      if (meRes?.ok && meJson?.ok) {
+        const planKey = resolvePlanIdFromTier(meJson?.account);
+        const planLabel = planTierLabelFromAccount(meJson?.account);
+        const planLimits = getPlanLimits(planKey);
+        const planSeatLimit = Number(planLimits?.seats ?? 0);
+        const meUsername = String(meJson?.user?.username || meJson?.profile?.username || "").trim();
+        const meAccount = (meJson?.account as {
+          trialDaysLeft?: unknown;
+          trialActive?: unknown;
+          trial?: { daysLeft?: unknown } | null;
+        } | undefined);
+        const membershipRoleRaw = ((meJson as { membership?: { role?: unknown } } | null)?.membership?.role) ?? "";
+        const rawMemberRole = String(membershipRoleRaw).trim().toUpperCase();
+        const memberRole =
+          rawMemberRole === "OWNER" || rawMemberRole === "ADMIN" || rawMemberRole === "MEMBER"
+            ? rawMemberRole
+            : null;
+        const planTier = planKey === "premium_plus" ? "PREMIUM_PLUS" : planKey === "premium" ? "PREMIUM" : "FREE";
+        const trialDaysLeftRaw = Number(meAccount?.trialDaysLeft ?? meAccount?.trial?.daysLeft ?? 0);
+        const trialDaysLeft = Number.isFinite(trialDaysLeftRaw) && trialDaysLeftRaw > 0 ? Math.trunc(trialDaysLeftRaw) : 0;
+        const trialActive = Boolean(meAccount?.trialActive ?? meJson?.trialActive ?? trialDaysLeft > 0);
 
+        const planDetail = {
+          planKey,
+          planLabel,
+          planTier,
+          memberRole,
+          trialActive,
+          trialDaysLeft,
+        };
 
-        if (pRes.ok && pJson?.ok) {
-          const normalizedProfile = normalizeCavbotFounderProfile({
-            fullName: pJson?.profile?.fullName,
-            displayName: pJson?.profile?.fullName,
-            username: pJson?.profile?.username,
-          });
-          const name = String(normalizedProfile.fullName || normalizedProfile.displayName || "").trim();
-          const em = String(pJson?.profile?.email || "").trim();
-          const bi = String(pJson?.profile?.bio || "").trim();
-          const usr = String(normalizedProfile.username || "").trim();
-          const sc = String(pJson?.profile?.companySubcategory || "").trim();
-          const gh = String(pJson?.profile?.githubUrl || "").trim();
-          const ig = String(pJson?.profile?.instagramUrl || "").trim();
-          const li = String(pJson?.profile?.linkedinUrl || "").trim();
-          const cu = String(pJson?.profile?.customLinkUrl || "").trim();
-          const initials = deriveProfileInitials(name, usr, "");
-          const publicProfileFlag = (pJson?.profile as { publicProfileEnabled?: unknown } | undefined)
-            ?.publicProfileEnabled;
-          const publicProfileEnabled =
-            typeof publicProfileFlag === "boolean" ? publicProfileFlag : undefined;
+        try {
+          globalThis.__cbLocalStore.setItem(
+            "cb_shell_plan_snapshot_v1",
+            JSON.stringify({
+              planTier,
+              memberRole,
+              trialActive,
+              trialDaysLeft,
+              ts: Date.now(),
+            }),
+          );
+          window.dispatchEvent(new CustomEvent("cb:plan", { detail: planDetail }));
+          globalThis.__cbLocalStore.setItem("cb_plan_context_v1", JSON.stringify(planDetail));
+        } catch {}
 
-          setFullName(name || "—");
-          setEmail(em || "—");
-          setUsername(usr || "—");
-          setBio(bi || "No bio yet.");
-          setCompanySubcategory(sc);
-          setGithubUrl(gh);
-          setInstagramUrl(ig);
-          setLinkedinUrl(li);
-          setCustomLinkUrl(cu);
+        setPlan(planLabel);
 
-          try {
-            globalThis.__cbLocalStore.setItem("cb_profile_fullName_v1", name || "");
-            globalThis.__cbLocalStore.setItem("cb_profile_email_v1", em || "");
-            globalThis.__cbLocalStore.setItem("cb_profile_username_v1", usr || "");
-            globalThis.__cbLocalStore.setItem("cb_profile_bio_v1", bi || "");
-            globalThis.__cbLocalStore.setItem("cb_profile_company_subcategory_v1", sc || "");
-            globalThis.__cbLocalStore.setItem("cb_profile_github_url_v1", gh || "");
-            globalThis.__cbLocalStore.setItem("cb_profile_instagram_url_v1", ig || "");
-            globalThis.__cbLocalStore.setItem("cb_profile_linkedin_url_v1", li || "");
-            globalThis.__cbLocalStore.setItem("cb_profile_custom_link_url_v1", cu || "");
-            globalThis.__cbLocalStore.setItem("cb_account_initials", initials || "");
-            window.dispatchEvent(
-              new CustomEvent("cb:profile", {
-                detail: {
-                  fullName: name || "",
-                  email: em || "",
-                  username: usr || "",
-                  initials,
-                  publicProfileEnabled,
-                },
-              }),
-            );
-          } catch {}
+        if (planSeatLimit > 0) {
+          setSeatLimit(planSeatLimit);
         }
 
-
-        if (meRes.ok && meJson?.ok) {
-          const planKey = resolvePlanIdFromTier(meJson?.account);
-          const planLabel = planTierLabelFromAccount(meJson?.account);
-          const planLimits = getPlanLimits(planKey);
-          const planSeatLimit = Number(planLimits?.seats ?? 0);
-          const meUsername = String(meJson?.user?.username || meJson?.profile?.username || "").trim();
-          const meAccount = (meJson?.account as {
-            trialDaysLeft?: unknown;
-            trialActive?: unknown;
-            trial?: { daysLeft?: unknown } | null;
-          } | undefined);
-          const membershipRoleRaw = ((meJson as { membership?: { role?: unknown } } | null)?.membership?.role) ?? "";
-          const rawMemberRole = String(membershipRoleRaw).trim().toUpperCase();
-          const memberRole =
-            rawMemberRole === "OWNER" || rawMemberRole === "ADMIN" || rawMemberRole === "MEMBER"
-              ? rawMemberRole
-              : null;
-          const planTier = planKey === "premium_plus" ? "PREMIUM_PLUS" : planKey === "premium" ? "PREMIUM" : "FREE";
-          const trialDaysLeftRaw = Number(meAccount?.trialDaysLeft ?? meAccount?.trial?.daysLeft ?? 0);
-          const trialDaysLeft = Number.isFinite(trialDaysLeftRaw) && trialDaysLeftRaw > 0 ? Math.trunc(trialDaysLeftRaw) : 0;
-          const trialActive = Boolean(meAccount?.trialActive ?? meJson?.trialActive ?? trialDaysLeft > 0);
-
-          const planDetail = {
-            planKey,
-            planLabel,
-            planTier,
-            memberRole,
-            trialActive,
-            trialDaysLeft,
-          };
-
-          try {
-            globalThis.__cbLocalStore.setItem(
-              "cb_shell_plan_snapshot_v1",
-              JSON.stringify({
-                planTier,
-                memberRole,
-                trialActive,
-                trialDaysLeft,
-                ts: Date.now(),
-              }),
-            );
-            window.dispatchEvent(new CustomEvent("cb:plan", { detail: planDetail }));
-            globalThis.__cbLocalStore.setItem("cb_plan_context_v1", JSON.stringify(planDetail));
-          } catch {}
-
-          setPlan(planLabel);
-
-          if (planSeatLimit > 0) {
-            setSeatLimit(planSeatLimit);
-          }
-
-          if (meUsername) {
-            const normalizedIdentity = normalizeCavbotFounderProfile({ username: meUsername });
-            setUsername(String(normalizedIdentity.username || "").trim() || meUsername);
-          }
+        if (meUsername) {
+          const normalizedIdentity = normalizeCavbotFounderProfile({ username: meUsername });
+          setUsername(String(normalizedIdentity.username || "").trim() || meUsername);
         }
+      }
 
 
-        if (teamRes.ok && teamJson?.ok) {
-          const members = Array.isArray(teamJson?.members) ? teamJson.members : [];
-          const invites = Array.isArray(teamJson?.invites) ? teamJson.invites : [];
+      if (teamRes?.ok && teamJson?.ok) {
+        const members = Array.isArray(teamJson?.members) ? teamJson.members : [];
+        const invites = Array.isArray(teamJson?.invites) ? teamJson.invites : [];
 
 
-          const used = Number(teamJson?.seatsUsed ?? members.length + invites.length) || 0;
+        const used = Number(teamJson?.seatsUsed ?? members.length + invites.length) || 0;
 
 
-          const limitRaw = Number(teamJson?.seatLimit ?? 0);
-          const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : null;
+        const limitRaw = Number(teamJson?.seatLimit ?? 0);
+        const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : null;
 
-          setTeamCount(members.length);
-          setSeatsUsed(Math.max(0, used));
-          if (limit !== null) {
-            setSeatLimit(limit);
-          }
+        setTeamCount(members.length);
+        setSeatsUsed(Math.max(0, used));
+        if (limit !== null) {
+          setSeatLimit(limit);
         }
-      } catch {
       }
     })();
 
