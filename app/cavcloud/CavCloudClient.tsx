@@ -24,6 +24,7 @@ import { countDriveListingItems, debugDriveLog, getDriveDebugEnabled, useDriveCh
 import { formatSnippetForThumbnail, getExtensionLabel, isTextLikeFile } from "@/lib/filePreview";
 import { selectDesktopItemMap, shouldClearDesktopSelectionFromTarget } from "@/lib/hooks/useDesktopSelection";
 import { getPlanLimits, resolvePlanIdFromTier } from "@/lib/plans";
+import { normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 import { buildCavGuardDecision } from "@/src/lib/cavguard/cavGuard.registry";
 import { emitGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
@@ -560,9 +561,15 @@ function resolveCavcloudUserLabel(e) {
   return t || "CavCloud user";
 }
 function resolveCavcloudGreetingName(e) {
-  let a = String(e?.name || "").trim();
-  if (a) return a.split(/\s+/g).filter(Boolean)[0] || "there";
-  return "there";
+  let a = normalizeCavbotFounderProfile({
+      fullName: e?.name,
+      displayName: e?.name,
+      username: e?.username
+    }),
+    l = String(a?.fullName || a?.displayName || "").trim();
+  if (l) return l;
+  let t = String(a?.username || "").trim().replace(/^@+/, "");
+  return t ? `@${t}` : "";
 }
 function resolveCavcloudInitialChar(e) {
   let a = String(e || "").match(/[A-Za-z0-9]/);
@@ -596,7 +603,7 @@ function resolveCavcloudInitials(e) {
   let l = resolveCavcloudInitialChar(resolveCavcloudInitialUsername(e?.username));
   if (l) return l;
   let t = resolveCavcloudInitialChar(e?.initials);
-  return t || "C";
+  return t || "";
 }
 function resolveCavcloudPlanTier(e) {
   let a = String(e?.tierEffective || e?.tier || "").trim().toUpperCase();
@@ -610,6 +617,80 @@ function resolveCavcloudDisplayPlanTier(e, a, l) {
   return "cavbot admin" === t || "cavbot" === s ? "PREMIUM_PLUS" : resolveCavcloudPlanTier({
     tier: e
   });
+}
+function readCachedCavcloudProfileState() {
+  let e = {
+    name: "",
+    email: "",
+    username: "",
+    initials: "",
+    publicProfileEnabled: "unknown"
+  };
+  if ("undefined" == typeof window || "undefined" == typeof globalThis.__cbLocalStore) return e;
+  try {
+    let a = normalizeCavbotFounderProfile({
+        fullName: String(globalThis.__cbLocalStore.getItem("cb_profile_fullName_v1") || "").trim(),
+        displayName: String(globalThis.__cbLocalStore.getItem("cb_profile_fullName_v1") || "").trim(),
+        username: String(globalThis.__cbLocalStore.getItem("cb_profile_username_v1") || "").trim().replace(/^@+/, "").toLowerCase()
+      }),
+      l = String(globalThis.__cbLocalStore.getItem("cb_profile_public_enabled_v1") || "").trim().toLowerCase();
+    return {
+      name: String(a?.fullName || a?.displayName || "").trim(),
+      email: String(globalThis.__cbLocalStore.getItem("cb_profile_email_v1") || "").trim(),
+      username: String(a?.username || "").trim(),
+      initials: String(globalThis.__cbLocalStore.getItem("cb_account_initials") || "").trim().slice(0, 3).toUpperCase(),
+      publicProfileEnabled: "1" === l || "true" === l || "public" === l ? "public" : "0" === l || "false" === l || "private" === l ? "private" : "unknown"
+    };
+  } catch {
+    return e;
+  }
+}
+function persistCavcloudProfileState(eProfile, aInitials, lPublicProfileEnabled) {
+  if ("undefined" == typeof window || "undefined" == typeof globalThis.__cbLocalStore) return;
+  try {
+    globalThis.__cbLocalStore.setItem("cb_profile_fullName_v1", String(eProfile?.name || "").trim());
+    globalThis.__cbLocalStore.setItem("cb_profile_email_v1", String(eProfile?.email || "").trim());
+    globalThis.__cbLocalStore.setItem("cb_profile_username_v1", String(eProfile?.username || "").trim());
+    if (aInitials) globalThis.__cbLocalStore.setItem("cb_account_initials", aInitials);
+    else globalThis.__cbLocalStore.removeItem("cb_account_initials");
+    if ("public" === lPublicProfileEnabled || "private" === lPublicProfileEnabled) {
+      globalThis.__cbLocalStore.setItem("cb_profile_public_enabled_v1", "public" === lPublicProfileEnabled ? "true" : "false");
+    }
+  } catch {}
+  try {
+    window.dispatchEvent(new CustomEvent("cb:profile", {
+      detail: {
+        fullName: String(eProfile?.name || "").trim(),
+        email: String(eProfile?.email || "").trim(),
+        username: String(eProfile?.username || "").trim(),
+        initials: aInitials || ""
+      }
+    }));
+  } catch {}
+}
+function persistCavcloudPlanState(ePlanTier, aTrialState) {
+  if ("undefined" == typeof window || "undefined" == typeof globalThis.__cbLocalStore) return;
+  let l = {
+      planTier: ePlanTier,
+      memberRole: null,
+      trialActive: !!aTrialState?.active,
+      trialDaysLeft: aTrialState?.active ? Math.max(0, Math.trunc(Number(aTrialState?.daysLeft || 0)) || 0) : 0,
+      ts: Date.now()
+    },
+    t = {
+      planKey: "PREMIUM_PLUS" === ePlanTier ? "premium_plus" : "PREMIUM" === ePlanTier ? "premium" : "free",
+      planLabel: "PREMIUM_PLUS" === ePlanTier ? "PREMIUM+" : "PREMIUM" === ePlanTier ? "PREMIUM" : "FREE",
+      trialActive: !!aTrialState?.active
+    };
+  try {
+    globalThis.__cbLocalStore.setItem("cb_shell_plan_snapshot_v1", JSON.stringify(l));
+    globalThis.__cbLocalStore.setItem("cb_plan_context_v1", JSON.stringify(t));
+  } catch {}
+  try {
+    window.dispatchEvent(new CustomEvent("cb:plan", {
+      detail: t
+    }));
+  } catch {}
 }
 function readCachedCavcloudPlanState() {
   let e = {
@@ -1651,6 +1732,7 @@ function ek(e) {
       return e;
     }(),
     [initialTreeSnapshot] = (0, c.useState)(() => readInitialCavcloudTreeSnapshot(treeCacheKey)),
+    [cachedProfileState] = (0, c.useState)(() => readCachedCavcloudProfileState()),
     [cachedPlanState] = (0, c.useState)(() => readCachedCavcloudPlanState()),
     [S, J] = (0, c.useState)(() => pathName.startsWith("/cavcloud/dashboard") ? "Dashboard" : "Explore"),
     [z, q] = (0, c.useState)(() => T(String(initialTreeSnapshot?.folder?.path || "/"))),
@@ -1670,13 +1752,16 @@ function ek(e) {
     [folderUploadDiagnostics, setFolderUploadDiagnostics] = (0, c.useState)(() => createUploadDiagnosticsState()),
     [uploadsPanelOpen, setUploadsPanelOpen] = (0, c.useState)(!1),
     [dashboardRefreshNonce, setDashboardRefreshNonce] = (0, c.useState)(0),
-    [eP, eB] = (0, c.useState)("there"),
-    [eR, eU] = (0, c.useState)("C"),
-    [eE, eD] = (0, c.useState)(""),
-    [e_, eW] = (0, c.useState)(""),
-    [eH, eG] = (0, c.useState)(""),
-    [profilePublicEnabled, setProfilePublicEnabled] = (0, c.useState)("unknown"),
-    [eK, eJ] = (0, c.useState)(cachedPlanState.planTier),
+    [eP, eB] = (0, c.useState)(() => resolveCavcloudGreetingName(cachedProfileState)),
+    [eR, eU] = (0, c.useState)(() => resolveCavcloudInitials({
+      ...cachedProfileState,
+      initials: cachedProfileState.initials
+    })),
+    [eE, eD] = (0, c.useState)(() => String(cachedProfileState.name || "").trim()),
+    [e_, eW] = (0, c.useState)(() => String(cachedProfileState.email || "").trim()),
+    [eH, eG] = (0, c.useState)(() => String(cachedProfileState.username || "").trim()),
+    [profilePublicEnabled, setProfilePublicEnabled] = (0, c.useState)(() => cachedProfileState.publicProfileEnabled || "unknown"),
+    [eK, eJ] = (0, c.useState)(() => resolveCavcloudDisplayPlanTier(cachedPlanState.planTier, cachedProfileState.name, cachedProfileState.username)),
     [memberRole, setMemberRole] = (0, c.useState)(isOwner ? "OWNER" : "ANON"),
     [eV, eZ] = (0, c.useState)(() => !!cachedPlanState.trialActive),
     [ez, eq] = (0, c.useState)(() => Math.max(0, Math.trunc(Number(cachedPlanState.trialDaysLeft || 0)) || 0)),
@@ -2936,16 +3021,26 @@ function ek(e) {
       if (eCanceled) return;
       let a = R(ePayload?.user);
       if (!a) return;
-      let l = {
-          name: String(a?.displayName || a?.name || "").trim(),
+      let lIdentity = normalizeCavbotFounderProfile({
+          fullName: a?.fullName || a?.displayName || a?.name,
+          displayName: a?.displayName || a?.name,
+          username: a?.username
+        }),
+        l = {
+          name: String(lIdentity?.fullName || lIdentity?.displayName || "").trim(),
           email: String(a?.email || "").trim(),
-          username: String(a?.username || "").trim()
+          username: String(lIdentity?.username || "").trim()
         },
-        tInitials = String(a?.initials || "").trim();
+        tInitials = String(a?.initials || "").trim(),
+        sPublicProfileEnabled = "boolean" == typeof a?.publicProfileEnabled ? a.publicProfileEnabled ? "public" : "private" : profilePublicEnabled,
+        iInitials = resolveCavcloudInitials({
+          ...l,
+          initials: tInitials
+        });
       eD(l.name), eW(l.email), eG(l.username), eB(l.name || resolveCavcloudGreetingName(l)), eU(resolveCavcloudInitials({
         ...l,
         initials: tInitials
-      })), "boolean" == typeof a?.publicProfileEnabled && setProfilePublicEnabled(a.publicProfileEnabled ? "public" : "private");
+      })), setProfilePublicEnabled(sPublicProfileEnabled), persistCavcloudProfileState(l, iInitials, sPublicProfileEnabled);
     };
     let eLoadProfile = async () => {
       try {
@@ -2957,9 +3052,9 @@ function ek(e) {
         if (!eRes.ok || !aPayload?.ok || !aPayload?.authenticated) return;
         eApplyProfile(aPayload);
         let lAccount = R(aPayload?.account),
-          tTier = resolveCavcloudPlanTier(lAccount),
+          tTier = resolveCavcloudDisplayPlanTier(resolveCavcloudPlanTier(lAccount), String(aPayload?.user?.fullName || aPayload?.user?.displayName || aPayload?.user?.name || "").trim(), String(aPayload?.user?.username || "").trim()),
           sTrial = resolveCavcloudTrialState(lAccount);
-        eJ(tTier), eZ(sTrial.active), eq(sTrial.daysLeft);
+        eJ(tTier), eZ(sTrial.active), eq(sTrial.daysLeft), persistCavcloudPlanState(tTier, sTrial);
         let roleRaw = String(aPayload?.membership?.role || "").trim().toUpperCase();
         setMemberRole("OWNER" === roleRaw || "ADMIN" === roleRaw || "MEMBER" === roleRaw ? roleRaw : isOwner ? "OWNER" : "ANON");
       } catch {}
@@ -7832,7 +7927,7 @@ function ek(e) {
     publicProfileHref = buildCanonicalPublicProfileHref(profileHandle),
     profileMenuLabel = "public" === profilePublicEnabled ? "Public Profile" : "private" === profilePublicEnabled ? "Private Profile" : "Profile",
     surfaceTitle = "CavCloud Storage",
-    displayPlanTier = resolveCavcloudDisplayPlanTier(eK, eP, eH),
+    displayPlanTier = resolveCavcloudDisplayPlanTier(eK, eE || eP, eH),
     surfaceVerified = "PREMIUM_PLUS" === displayPlanTier,
     settingsTotalPages = 2,
     settingsPageSafe = Math.max(1, Math.min(settingsPage, settingsTotalPages)),
@@ -7915,7 +8010,7 @@ function ek(e) {
           }, e.key);
         })
       }), t.jsx(CavSurfaceSidebarFooter, {
-        accountName: eP,
+        accountName: eE || eP,
         profileMenuLabel: profileMenuLabel,
         planTier: displayPlanTier,
         trialActive: eV,
@@ -7974,7 +8069,7 @@ function ek(e) {
               })]
             })
           }) : null, t.jsx(CavSurfaceHeaderGreeting, {
-            accountName: eP,
+            accountName: eE || eP,
             showVerified: surfaceVerified
           })]
         }), (0, t.jsxs)("div", {

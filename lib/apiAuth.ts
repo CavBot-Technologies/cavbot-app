@@ -563,7 +563,23 @@ export async function getSession(req: Request): Promise<CavbotSession | null> {
     if (!cookieFirstCandidates.length) return null;
     for (const token of cookieFirstCandidates) {
       try {
-        return await verifySession(token);
+        const sess = await verifySession(token);
+        if (
+          sess?.systemRole === "user"
+          && sess.sub
+          && sess.sub !== "system"
+          && (!sess.accountId || !sess.memberRole)
+        ) {
+          try {
+            const memberships = await findMembershipsForUser(getAuthPool(), String(sess.sub));
+            const active = pickPrimaryMembership(memberships);
+            if (active?.accountId) {
+              sess.accountId = String(active.accountId);
+              sess.memberRole = active.role;
+            }
+          } catch {}
+        }
+        return sess;
       } catch {
         // try next candidate token
       }

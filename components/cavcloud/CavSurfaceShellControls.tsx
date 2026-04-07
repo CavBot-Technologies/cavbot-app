@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
 
 import CavAiCenterLauncher, { type AiCenterSurface } from "@/components/cavai/CavAiCenterLauncher";
+import { isCavbotFounderIdentity, normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 
 type SurfacePlanTier = "FREE" | "PREMIUM" | "PREMIUM_PLUS";
 
@@ -91,7 +92,7 @@ function deriveAccountInitials(fullName?: string | null, username?: string | nul
 
   const fallbackInitial = firstInitialChar(s(fallback));
   if (fallbackInitial) return fallbackInitial;
-  return "C";
+  return "";
 }
 
 function readStoredInitials(): string {
@@ -114,9 +115,14 @@ function persistStoredInitials(value: string): void {
 
 function readSurfaceProfileSnapshot(): SurfaceProfileSnapshot {
   try {
-    return {
+    const founderIdentity = normalizeCavbotFounderProfile({
       fullName: s(globalThis.__cbLocalStore.getItem("cb_profile_fullName_v1")),
+      displayName: s(globalThis.__cbLocalStore.getItem("cb_profile_fullName_v1")),
       username: s(globalThis.__cbLocalStore.getItem("cb_profile_username_v1")).replace(/^@+/, "").toLowerCase(),
+    });
+    return {
+      fullName: s(founderIdentity.fullName || founderIdentity.displayName),
+      username: s(founderIdentity.username).replace(/^@+/, "").toLowerCase(),
       avatar: s(globalThis.__cbLocalStore.getItem("cb_settings_avatar_image_v2")),
       tone: s(globalThis.__cbLocalStore.getItem("cb_settings_avatar_tone_v2")) || "lime",
       storedInitials: readStoredInitials(),
@@ -134,6 +140,15 @@ function readSurfaceProfileSnapshot(): SurfaceProfileSnapshot {
 
 function useSurfaceProfileIdentity(fallbackAccountName: string) {
   const [snapshot, setSnapshot] = useState<SurfaceProfileSnapshot>(() => readSurfaceProfileSnapshot());
+  const normalizedSnapshot = useMemo(
+    () =>
+      normalizeCavbotFounderProfile({
+        fullName: snapshot.fullName,
+        displayName: snapshot.fullName,
+        username: snapshot.username,
+      }),
+    [snapshot.fullName, snapshot.username],
+  );
 
   useEffect(() => {
     const sync = () => {
@@ -150,31 +165,38 @@ function useSurfaceProfileIdentity(fallbackAccountName: string) {
   }, []);
 
   const displayName = useMemo(() => {
-    const full = s(snapshot.fullName);
+    const full = s(normalizedSnapshot.fullName || normalizedSnapshot.displayName);
     if (full) return full;
     const fallback = s(fallbackAccountName);
     if (fallback) return fallback;
-    const handle = s(snapshot.username);
+    const handle = s(normalizedSnapshot.username);
     if (handle) return `@${handle}`;
-    return "CavBot Account";
-  }, [fallbackAccountName, snapshot.fullName, snapshot.username]);
+    return "";
+  }, [fallbackAccountName, normalizedSnapshot.displayName, normalizedSnapshot.fullName, normalizedSnapshot.username]);
 
   const greetingName = useMemo(() => {
-    const full = s(snapshot.fullName);
+    const full = s(normalizedSnapshot.fullName || normalizedSnapshot.displayName);
     if (full) return full;
     const fallback = s(fallbackAccountName);
     if (fallback) return fallback;
-    return "there";
-  }, [fallbackAccountName, snapshot.fullName]);
+    const handle = s(normalizedSnapshot.username);
+    return handle ? `@${handle}` : "";
+  }, [fallbackAccountName, normalizedSnapshot.displayName, normalizedSnapshot.fullName, normalizedSnapshot.username]);
 
   const initials = useMemo(() => {
-    const resolved = deriveAccountInitials(snapshot.fullName, snapshot.username, snapshot.storedInitials);
+    const resolved = deriveAccountInitials(
+      s(normalizedSnapshot.fullName || normalizedSnapshot.displayName),
+      s(normalizedSnapshot.username),
+      snapshot.storedInitials,
+    );
     persistStoredInitials(resolved);
     return resolved;
-  }, [snapshot.fullName, snapshot.storedInitials, snapshot.username]);
+  }, [normalizedSnapshot.displayName, normalizedSnapshot.fullName, normalizedSnapshot.username, snapshot.storedInitials]);
 
   return {
     ...snapshot,
+    fullName: s(normalizedSnapshot.fullName || normalizedSnapshot.displayName),
+    username: s(normalizedSnapshot.username),
     displayName,
     greetingName,
     initials,
@@ -328,13 +350,22 @@ export function CavSurfaceSidebarBrandMenu(props: CavSurfaceSidebarBrandMenuProp
 
 export function CavSurfaceHeaderGreeting(props: CavSurfaceHeaderGreetingProps) {
   const profile = useSurfaceProfileIdentity(props.accountName);
+  const founderProfile = useMemo(
+    () =>
+      isCavbotFounderIdentity({
+        fullName: profile.fullName,
+        displayName: profile.displayName,
+        username: profile.username,
+      }),
+    [profile.displayName, profile.fullName, profile.username],
+  );
 
   return (
     <div className="cavcloud-headerGreeting" aria-label={`Hi, ${profile.greetingName}`}>
       <span className="cavcloud-headerGreetingPrefix">Hi,</span>
       <span className="cavcloud-headerGreetingNameWrap">
         <span className="cavcloud-headerGreetingName">{profile.greetingName}</span>
-        {props.showVerified ? <VerifiedBadge /> : null}
+        {props.showVerified || founderProfile ? <VerifiedBadge /> : null}
       </span>
     </div>
   );
@@ -346,11 +377,21 @@ export function CavSurfaceSidebarFooter(props: CavSurfaceSidebarFooterProps) {
   const accountWrapRef = useRef<HTMLDivElement | null>(null);
   const toolsWrapRef = useRef<HTMLDivElement | null>(null);
   const profile = useSurfaceProfileIdentity(props.accountName);
-  const planStatusLabel = useMemo(
-    () => resolvePlanStatusLabel(props.planTier, props.trialActive, props.trialDaysLeft),
-    [props.planTier, props.trialActive, props.trialDaysLeft],
+  const founderProfile = useMemo(
+    () =>
+      isCavbotFounderIdentity({
+        fullName: profile.fullName,
+        displayName: profile.displayName,
+        username: profile.username,
+      }),
+    [profile.displayName, profile.fullName, profile.username],
   );
-  const planActionLabel = useMemo(() => resolvePlanActionLabel(props.planTier), [props.planTier]);
+  const effectivePlanTier = founderProfile ? "PREMIUM_PLUS" : props.planTier;
+  const planStatusLabel = useMemo(
+    () => resolvePlanStatusLabel(effectivePlanTier, props.trialActive, props.trialDaysLeft),
+    [effectivePlanTier, props.trialActive, props.trialDaysLeft],
+  );
+  const planActionLabel = useMemo(() => resolvePlanActionLabel(effectivePlanTier), [effectivePlanTier]);
 
   usePopoverDismiss(accountOpen, setAccountOpen, accountWrapRef);
   usePopoverDismiss(toolsOpen, setToolsOpen, toolsWrapRef);

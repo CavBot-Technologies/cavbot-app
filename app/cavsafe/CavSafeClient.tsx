@@ -20,6 +20,7 @@ import { copyTextToClipboard } from "@/lib/clipboard";
 import { countDriveListingItems, debugDriveLog, getDriveDebugEnabled, useDriveChildren } from "@/lib/cavdrive/liveData.client";
 import { formatSnippetForThumbnail, getExtensionLabel, isTextLikeFile } from "@/lib/filePreview";
 import { selectDesktopItemMap, shouldClearDesktopSelectionFromTarget } from "@/lib/hooks/useDesktopSelection";
+import { normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 import "../cavcloud/cavcloud.css";
 const s = {
@@ -675,9 +676,15 @@ function eo(e) {
   return Number.isFinite(a) ? a : null;
 }
 function resolveCavsafeGreetingName(e) {
-  let a = String(e?.name || "").trim();
-  if (a) return a.split(/\s+/g).filter(Boolean)[0] || "there";
-  return "there";
+  let a = normalizeCavbotFounderProfile({
+      fullName: e?.name,
+      displayName: e?.name,
+      username: e?.username
+    }),
+    l = String(a?.fullName || a?.displayName || "").trim();
+  if (l) return l;
+  let t = String(a?.username || "").trim().replace(/^@+/, "");
+  return t ? `@${t}` : "";
 }
 function resolveCavsafeInitialChar(e) {
   let a = String(e || "").match(/[A-Za-z0-9]/);
@@ -711,7 +718,7 @@ function resolveCavsafeInitials(e) {
   let l = resolveCavsafeInitialChar(resolveCavsafeInitialUsername(e?.username));
   if (l) return l;
   let t = resolveCavsafeInitialChar(e?.initials);
-  return t || "C";
+  return t || "";
 }
 function resolveCavsafePlanTier(e) {
   let a = String(e?.tierEffective || e?.tier || "").trim().toUpperCase();
@@ -725,6 +732,117 @@ function resolveCavsafeDisplayPlanTier(e, a, l) {
   return "cavbot admin" === t || "cavbot" === s ? "PREMIUM_PLUS" : resolveCavsafePlanTier({
     tier: e
   });
+}
+function readCachedCavsafeProfileState() {
+  let e = {
+    name: "",
+    email: "",
+    username: "",
+    initials: "",
+    publicProfileEnabled: "unknown"
+  };
+  if ("undefined" == typeof window || "undefined" == typeof globalThis.__cbLocalStore) return e;
+  try {
+    let a = normalizeCavbotFounderProfile({
+        fullName: String(globalThis.__cbLocalStore.getItem("cb_profile_fullName_v1") || "").trim(),
+        displayName: String(globalThis.__cbLocalStore.getItem("cb_profile_fullName_v1") || "").trim(),
+        username: String(globalThis.__cbLocalStore.getItem("cb_profile_username_v1") || "").trim().replace(/^@+/, "").toLowerCase()
+      }),
+      l = String(globalThis.__cbLocalStore.getItem("cb_profile_public_enabled_v1") || "").trim().toLowerCase();
+    return {
+      name: String(a?.fullName || a?.displayName || "").trim(),
+      email: String(globalThis.__cbLocalStore.getItem("cb_profile_email_v1") || "").trim(),
+      username: String(a?.username || "").trim(),
+      initials: String(globalThis.__cbLocalStore.getItem("cb_account_initials") || "").trim().slice(0, 3).toUpperCase(),
+      publicProfileEnabled: "1" === l || "true" === l || "public" === l ? "public" : "0" === l || "false" === l || "private" === l ? "private" : "unknown"
+    };
+  } catch {
+    return e;
+  }
+}
+function readCachedCavsafePlanState() {
+  let e = {
+    planTier: "FREE",
+    trialActive: !1,
+    trialDaysLeft: 0
+  };
+  if ("undefined" == typeof window || "undefined" == typeof globalThis.__cbLocalStore) return e;
+  try {
+    let a = A(globalThis.__cbLocalStore.getItem("cb_shell_plan_snapshot_v1"));
+    if (a && "object" == typeof a && !Array.isArray(a)) {
+      let l = resolveCavsafePlanTier({
+          tierEffective: String(a?.planTier || "").trim()
+        }),
+        t = !!a?.trialActive,
+        s = Number(a?.trialDaysLeft);
+      return {
+        planTier: l,
+        trialActive: t,
+        trialDaysLeft: t && Number.isFinite(s) && s > 0 ? Math.max(0, Math.trunc(s)) : 0
+      };
+    }
+  } catch {}
+  try {
+    let a = A(globalThis.__cbLocalStore.getItem("cb_plan_context_v1"));
+    if (a && "object" == typeof a && !Array.isArray(a)) {
+      let l = resolveCavsafePlanTier({
+        tierEffective: String(a?.planKey || a?.planLabel || "").trim()
+      });
+      return {
+        planTier: l,
+        trialActive: !!a?.trialActive,
+        trialDaysLeft: 0
+      };
+    }
+  } catch {}
+  return e;
+}
+function persistCavsafeProfileState(eProfile, aInitials, lPublicProfileEnabled) {
+  if ("undefined" == typeof window || "undefined" == typeof globalThis.__cbLocalStore) return;
+  try {
+    globalThis.__cbLocalStore.setItem("cb_profile_fullName_v1", String(eProfile?.name || "").trim());
+    globalThis.__cbLocalStore.setItem("cb_profile_email_v1", String(eProfile?.email || "").trim());
+    globalThis.__cbLocalStore.setItem("cb_profile_username_v1", String(eProfile?.username || "").trim());
+    if (aInitials) globalThis.__cbLocalStore.setItem("cb_account_initials", aInitials);
+    else globalThis.__cbLocalStore.removeItem("cb_account_initials");
+    if ("public" === lPublicProfileEnabled || "private" === lPublicProfileEnabled) {
+      globalThis.__cbLocalStore.setItem("cb_profile_public_enabled_v1", "public" === lPublicProfileEnabled ? "true" : "false");
+    }
+  } catch {}
+  try {
+    window.dispatchEvent(new CustomEvent("cb:profile", {
+      detail: {
+        fullName: String(eProfile?.name || "").trim(),
+        email: String(eProfile?.email || "").trim(),
+        username: String(eProfile?.username || "").trim(),
+        initials: aInitials || ""
+      }
+    }));
+  } catch {}
+}
+function persistCavsafePlanState(ePlanTier, aTrialState) {
+  if ("undefined" == typeof window || "undefined" == typeof globalThis.__cbLocalStore) return;
+  let l = {
+      planTier: ePlanTier,
+      memberRole: null,
+      trialActive: !!aTrialState?.active,
+      trialDaysLeft: aTrialState?.active ? Math.max(0, Math.trunc(Number(aTrialState?.daysLeft || 0)) || 0) : 0,
+      ts: Date.now()
+    },
+    t = {
+      planKey: "PREMIUM_PLUS" === ePlanTier ? "premium_plus" : "PREMIUM" === ePlanTier ? "premium" : "free",
+      planLabel: "PREMIUM_PLUS" === ePlanTier ? "PREMIUM+" : "PREMIUM" === ePlanTier ? "PREMIUM" : "FREE",
+      trialActive: !!aTrialState?.active
+    };
+  try {
+    globalThis.__cbLocalStore.setItem("cb_shell_plan_snapshot_v1", JSON.stringify(l));
+    globalThis.__cbLocalStore.setItem("cb_plan_context_v1", JSON.stringify(t));
+  } catch {}
+  try {
+    window.dispatchEvent(new CustomEvent("cb:plan", {
+      detail: t
+    }));
+  } catch {}
 }
 function resolveCavsafeTrialState(e) {
   let a = !!e?.trialActive,
@@ -1339,6 +1457,8 @@ function ek() {
       if (!e) throw Error("useCavCloudPreview must be used inside CavCloudPreviewProvider.");
       return e;
     }(),
+    [cachedProfileState] = (0, c.useState)(() => readCachedCavsafeProfileState()),
+    [cachedPlanState] = (0, c.useState)(() => readCachedCavsafePlanState()),
     [S, J] = (0, c.useState)(() => resolveCavsafeInitialSection(a)),
     [z, q] = (0, c.useState)("/"),
     [en, ey] = (0, c.useState)(null),
@@ -1356,15 +1476,18 @@ function ek() {
     [cavsafeTier, setCavsafeTier] = (0, c.useState)("PREMIUM"),
     [cavsafeEnforcedPolicySummary, setCavsafeEnforcedPolicySummary] = (0, c.useState)(() => normalizeCavsafePolicySummary(null)),
     [eO, eF] = (0, c.useState)([]),
-    [eP, eB] = (0, c.useState)("there"),
-    [eR, eU] = (0, c.useState)("C"),
-    [eE, eD] = (0, c.useState)(""),
-    [e_, eW] = (0, c.useState)(""),
-    [eH, eG] = (0, c.useState)(""),
-    [profilePublicEnabled, setProfilePublicEnabled] = (0, c.useState)("unknown"),
-    [eK, eJ] = (0, c.useState)("FREE"),
-    [eV, eZ] = (0, c.useState)(!1),
-    [ez, eq] = (0, c.useState)(0),
+    [eP, eB] = (0, c.useState)(() => resolveCavsafeGreetingName(cachedProfileState)),
+    [eR, eU] = (0, c.useState)(() => resolveCavsafeInitials({
+      ...cachedProfileState,
+      initials: cachedProfileState.initials
+    })),
+    [eE, eD] = (0, c.useState)(() => String(cachedProfileState.name || "").trim()),
+    [e_, eW] = (0, c.useState)(() => String(cachedProfileState.email || "").trim()),
+    [eH, eG] = (0, c.useState)(() => String(cachedProfileState.username || "").trim()),
+    [profilePublicEnabled, setProfilePublicEnabled] = (0, c.useState)(() => cachedProfileState.publicProfileEnabled || "unknown"),
+    [eK, eJ] = (0, c.useState)(() => resolveCavsafeDisplayPlanTier(cachedPlanState.planTier, cachedProfileState.name, cachedProfileState.username)),
+    [eV, eZ] = (0, c.useState)(() => !!cachedPlanState.trialActive),
+    [ez, eq] = (0, c.useState)(() => Math.max(0, Math.trunc(Number(cachedPlanState.trialDaysLeft || 0)) || 0)),
     [isCompactShell, setIsCompactShell] = (0, c.useState)(() => "undefined" != typeof window && !!window.matchMedia && window.matchMedia("(max-width: 980px)").matches),
     [mobileNavOpen, setMobileNavOpen] = (0, c.useState)(!1),
     [mobileSearchOpen, setMobileSearchOpen] = (0, c.useState)(!1),
@@ -2387,16 +2510,26 @@ function ek() {
       if (eCanceled) return;
       let a = R(ePayload?.user);
       if (!a) return;
-      let l = {
-          name: String(a?.displayName || a?.name || "").trim(),
+      let lIdentity = normalizeCavbotFounderProfile({
+          fullName: a?.fullName || a?.displayName || a?.name,
+          displayName: a?.displayName || a?.name,
+          username: a?.username
+        }),
+        l = {
+          name: String(lIdentity?.fullName || lIdentity?.displayName || "").trim(),
           email: String(a?.email || "").trim(),
-          username: String(a?.username || "").trim()
+          username: String(lIdentity?.username || "").trim()
         },
-        tInitials = String(a?.initials || "").trim();
+        tInitials = String(a?.initials || "").trim(),
+        sPublicProfileEnabled = "boolean" == typeof a?.publicProfileEnabled ? a.publicProfileEnabled ? "public" : "private" : profilePublicEnabled,
+        iInitials = resolveCavsafeInitials({
+          ...l,
+          initials: tInitials
+        });
       eD(l.name), eW(l.email), eG(l.username), eB(l.name || resolveCavsafeGreetingName(l)), eU(resolveCavsafeInitials({
         ...l,
         initials: tInitials
-      })), "boolean" == typeof a?.publicProfileEnabled && setProfilePublicEnabled(a.publicProfileEnabled ? "public" : "private");
+      })), setProfilePublicEnabled(sPublicProfileEnabled), persistCavsafeProfileState(l, iInitials, sPublicProfileEnabled);
     };
     let eLoadProfile = async () => {
       try {
@@ -2408,9 +2541,9 @@ function ek() {
         if (!eRes.ok || !aPayload?.ok || !aPayload?.authenticated) return;
         eApplyProfile(aPayload);
         let lAccount = R(aPayload?.account),
-          tTier = resolveCavsafePlanTier(lAccount),
+          tTier = resolveCavsafeDisplayPlanTier(resolveCavsafePlanTier(lAccount), String(aPayload?.user?.fullName || aPayload?.user?.displayName || aPayload?.user?.name || "").trim(), String(aPayload?.user?.username || "").trim()),
           sTrial = resolveCavsafeTrialState(lAccount);
-        eJ(tTier), eZ(sTrial.active), eq(sTrial.daysLeft);
+        eJ(tTier), eZ(sTrial.active), eq(sTrial.daysLeft), persistCavsafePlanState(tTier, sTrial);
       } catch {}
     };
     void eLoadProfile();
@@ -5962,7 +6095,7 @@ function ek() {
     publicProfileHref = buildCanonicalPublicProfileHref(profileHandle),
     profileMenuLabel = "public" === profilePublicEnabled ? "Public Profile" : "private" === profilePublicEnabled ? "Private Profile" : "Profile",
     surfaceTitle = "CavSafe Secured Storage",
-    displayPlanTier = resolveCavsafeDisplayPlanTier(eK, eP, eH),
+    displayPlanTier = resolveCavsafeDisplayPlanTier(eK, eE || eP, eH),
     surfaceVerified = "PREMIUM_PLUS" === displayPlanTier,
     settingsTotalPages = 2,
     settingsPageSafe = Math.max(1, Math.min(settingsPage, settingsTotalPages)),
@@ -6043,7 +6176,7 @@ function ek() {
           }, e.key);
         })
       }), t.jsx(CavSurfaceSidebarFooter, {
-        accountName: eP,
+        accountName: eE || eP,
         profileMenuLabel: profileMenuLabel,
         planTier: displayPlanTier,
         trialActive: eV,
@@ -6102,7 +6235,7 @@ function ek() {
               })]
             })
           }) : null, t.jsx(CavSurfaceHeaderGreeting, {
-            accountName: eP,
+            accountName: eE || eP,
             showVerified: surfaceVerified
           })]
         }), (0, t.jsxs)("div", {
