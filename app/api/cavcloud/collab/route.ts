@@ -47,6 +47,25 @@ function isCavCloudCollabSchemaMismatch(err: unknown) {
   });
 }
 
+async function buildDegradedCollabResponse(req: Request, filter: ReturnType<typeof parseFilter>) {
+  const sess = await requireSession(req);
+  requireUser(sess);
+  requireAccountContext(sess);
+
+  return jsonNoStore({
+    ok: true,
+    degraded: true,
+    filter,
+    items: [],
+    summary: {
+      total: 0,
+      readonly: 0,
+      canEdit: 0,
+      expiringSoon: 0,
+    },
+  }, 200);
+}
+
 export async function GET(req: Request) {
   const filter = parseFilter(req);
   try {
@@ -82,6 +101,11 @@ export async function GET(req: Request) {
           expiringSoon: 0,
         },
       }, 200);
+    }
+    try {
+      return await buildDegradedCollabResponse(req, filter);
+    } catch {
+      // Preserve the original error response if degraded auth/context recovery also fails.
     }
     return cavcloudErrorResponse(err, "Failed to load collaboration inbox.");
   }

@@ -152,6 +152,12 @@ function isCavCloudShareSchemaMismatch(err: unknown) {
   });
 }
 
+async function buildDegradedSharesResponse(req: Request) {
+  const sess = await requireSession(req);
+  requireUser(sess);
+  return jsonNoStore({ ok: true, degraded: true, items: [] }, { status: 200 });
+}
+
 export async function GET(req: Request) {
   try {
     const sess = await requireSession(req);
@@ -213,12 +219,27 @@ export async function GET(req: Request) {
       { status: 200 }
     );
   } catch (e: unknown) {
-    if (isCavCloudServiceUnavailableError(e) || isCavCloudShareSchemaMismatch(e)) {
-      return jsonNoStore({ ok: true, degraded: true, items: [] }, { status: 200 });
-    }
     const err = e as { status?: unknown };
     const status = typeof err?.status === "number" ? err.status : 500;
     if (status === 401 || status === 403) return jsonNoStore({ ok: false, message: "Unauthorized" }, { status });
+    if (isCavCloudServiceUnavailableError(e) || isCavCloudShareSchemaMismatch(e)) {
+      try {
+        return await buildDegradedSharesResponse(req);
+      } catch (fallbackError) {
+        const fallbackStatus =
+          typeof (fallbackError as { status?: unknown })?.status === "number"
+            ? Number((fallbackError as { status?: unknown }).status)
+            : 500;
+        if (fallbackStatus === 401 || fallbackStatus === 403) {
+          return jsonNoStore({ ok: false, message: "Unauthorized" }, { status: fallbackStatus });
+        }
+      }
+    }
+    try {
+      return await buildDegradedSharesResponse(req);
+    } catch {
+      // Preserve the original error response if degraded auth/context recovery also fails.
+    }
     if (status === 502 || status === 503 || status === 504) {
       return jsonNoStore({ ok: false, message: "Service temporarily unavailable." }, { status: 503 });
     }
