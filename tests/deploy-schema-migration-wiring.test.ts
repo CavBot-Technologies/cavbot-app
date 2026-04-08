@@ -19,7 +19,10 @@ test("production deploy wiring applies prisma migrations before shipping", () =>
   assert.equal(packageJson.scripts?.["db:migrate"], "prisma migrate deploy");
   assert.match(deployScript, /npm", \["run", "db:migrate"\]/);
   assert.match(workflow, /name:\s*Apply Prisma Migrations/);
+  assert.match(workflow, /environment:\s*production/);
   assert.match(workflow, /npx prisma migrate deploy/);
-  assert.match(workflow, /DATABASE_URL/);
-  assert.match(workflow, /DIRECT_URL/);
+  assert.match(workflow, /MIGRATE_DATABASE_URL/);
+  assert.match(workflow, /MIGRATE_DIRECT_URL/);
+  assert.match(workflow, /Missing database deploy secret/);
+  assert.match(workflow, /DATABASE_URL or DIRECT_URL/);
 });

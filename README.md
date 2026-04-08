@@ -51,11 +51,11 @@ Primary deploy target is Cloudflare via OpenNext.
 
 GitHub Actions is the authoritative production deployment path.
 
-1. In GitHub repo secrets, set:
+1. In GitHub repo secrets, or in the GitHub `production` environment secrets for this workflow, set:
    - `CLOUDFLARE_API_TOKEN`
    - `CLOUDFLARE_ACCOUNT_ID`
-   - `DATABASE_URL`
-   - `DIRECT_URL`
+   - `DATABASE_URL` and/or `DIRECT_URL`
+     At least one production Postgres connection string must be available to the workflow. If only one is set, the migration step mirrors it into the other variable before running Prisma.
 2. Push to `main` (or run `Deploy Cloudflare` from the Actions tab).
 3. Workflow path: `.github/workflows/deploy-cloudflare.yml`
 
