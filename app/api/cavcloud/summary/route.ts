@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
-import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
+import { cavcloudErrorResponse, jsonNoStore, withCavCloudDeadline } from "@/lib/cavcloud/http.server";
 import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { getPlanLimits, type PlanId } from "@/lib/plans";
@@ -73,14 +73,26 @@ function degradedSummaryPayload(plan: { planId: PlanId; limitBytes: number | nul
   };
 }
 
+function buildStaticDegradedSummaryResponse() {
+  return jsonNoStore(degradedSummaryPayload(), 200);
+}
+
 async function buildDegradedSummaryResponse(req: Request) {
   const sess = await requireSession(req);
   requireAccountContext(sess);
   requireUser(sess);
 
   const accountId = String(sess.accountId || "");
-  const plan = await getEffectiveAccountPlanContext(accountId).catch(() => null);
-  return jsonNoStore(degradedSummaryPayload(plan ? { planId: plan.planId, limitBytes: plan.limitBytes } : null), 200);
+  try {
+    const plan = await withCavCloudDeadline(
+      getEffectiveAccountPlanContext(accountId).catch(() => null),
+      { message: "Timed out loading degraded CavCloud summary." },
+    );
+
+    return jsonNoStore(degradedSummaryPayload(plan ? { planId: plan.planId, limitBytes: plan.limitBytes } : null), 200);
+  } catch {
+    return buildStaticDegradedSummaryResponse();
+  }
 }
 
 export async function GET(req: Request) {
@@ -110,25 +122,28 @@ export async function GET(req: Request) {
 
     const planContextPromise = getEffectiveAccountPlanContext(accountId).catch(() => null);
 
-    const [planContext, folderCount, fileCount, imageCount, videoCount, bytesAgg] = await Promise.all([
-      planContextPromise,
-      prisma.cavCloudFolder.count({
-        where: { accountId, deletedAt: null, path: { not: "/" } },
-      }),
-      prisma.cavCloudFile.count({
-        where: { accountId, deletedAt: null },
-      }),
-      prisma.cavCloudFile.count({
-        where: imageWhere,
-      }),
-      prisma.cavCloudFile.count({
-        where: videoWhere,
-      }),
-      prisma.cavCloudFile.aggregate({
-        where: { accountId, deletedAt: null },
-        _sum: { bytes: true },
-      }),
-    ]);
+    const [planContext, folderCount, fileCount, imageCount, videoCount, bytesAgg] = await withCavCloudDeadline(
+      Promise.all([
+        planContextPromise,
+        prisma.cavCloudFolder.count({
+          where: { accountId, deletedAt: null, path: { not: "/" } },
+        }),
+        prisma.cavCloudFile.count({
+          where: { accountId, deletedAt: null },
+        }),
+        prisma.cavCloudFile.count({
+          where: imageWhere,
+        }),
+        prisma.cavCloudFile.count({
+          where: videoWhere,
+        }),
+        prisma.cavCloudFile.aggregate({
+          where: { accountId, deletedAt: null },
+          _sum: { bytes: true },
+        }),
+      ]),
+      { message: "Timed out loading CavCloud summary." },
+    );
 
     const usedBig = bytesAgg._sum.bytes ?? BigInt(0);
     const usedBytes = toSafeNumber(usedBig);
@@ -167,13 +182,19 @@ export async function GET(req: Request) {
       try {
         return await buildDegradedSummaryResponse(req);
       } catch (fallbackError) {
-        return cavcloudErrorResponse(fallbackError, "Failed to load CavCloud summary.");
+        if (fallbackError instanceof ApiAuthError) {
+          return cavcloudErrorResponse(fallbackError, "Failed to load CavCloud summary.");
+        }
+        return buildStaticDegradedSummaryResponse();
       }
     }
     try {
       return await buildDegradedSummaryResponse(req);
     } catch (fallbackError) {
-      return cavcloudErrorResponse(fallbackError, "Failed to load CavCloud summary.");
+      if (fallbackError instanceof ApiAuthError) {
+        return cavcloudErrorResponse(fallbackError, "Failed to load CavCloud summary.");
+      }
+      return buildStaticDegradedSummaryResponse();
     }
   }
 }
