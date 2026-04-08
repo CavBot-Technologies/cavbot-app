@@ -1,9 +1,9 @@
-/* CavCode — VS Code-class IDE shell (Monaco)
+/* CavCode — VS Code-class IDE shell
    REPLACEMENT cavcode.css
    Goals:
    - Match CavCodePage classnames (cc-*)
    - Defensive styling for popovers + Live surface (in case markup differs slightly)
-   - Use Monaco’s REAL widgets for Find / Suggestions / Hover (VS Code DNA)
+   - Use the editor's real widgets for Find / Suggestions / Hover (VS Code DNA)
    - Keep your palette + glass language
 */
 
@@ -29,7 +29,7 @@
   --cb-red: #ff4d4d;
 
   --cb-font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
-  --cb-mono: "JetBrains Mono","SF Mono",SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
+  --cb-mono: "JetBrains Mono","SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
 
   --activity-w: 46px;
   --sidebar-w: 290px;
@@ -116,7 +116,7 @@ body[data-cb-footer-hidden="1"] .cc-root{
   background: transparent;
 }
 
-/* Keep Monaco's VS Code-like right-side scrollbar/overview ruler visible */
+/* Keep the VS Code-like right-side scrollbar and overview ruler visible */
 .cc-root .monaco-scrollable-element > .scrollbar.vertical{
   opacity: 1 !important;
   pointer-events: auto !important;
@@ -5293,10 +5293,10 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 /* IMPORTANT:
-   You said: “Command-F must render Monaco style”.
+   You said: “Command-F must render editor-native style”.
    So this file DOES NOT force a custom panel to look like Find.
    If you still render your own .cc-find panel, it’s styled below,
-   but Monaco’s real find-widget is the priority and is fully styled in the Monaco section.
+   but the real find widget is the priority and is fully styled in the editor section.
 */
 .cc-find{
   position: absolute;
@@ -6511,7 +6511,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   background: rgba(155,171,213,.70);
 }
 
-/* Panel scrollbar override: defeat global scrollbar-hide lock and match Monaco minimap style. */
+/* Panel scrollbar override: defeat global scrollbar-hide lock and match the editor minimap style. */
 html body .cc-root .cc-panel-git,
 html body .cc-root .cc-problems,
 html body .cc-root .cc-panel-ports,
@@ -7030,8 +7030,8 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 }
 
 /* =========================
-   MONACO — VS Code DNA (REAL WIDGETS)
-   This is what makes Cmd/Ctrl+F look “real Monaco/VS Code”.
+   EDITOR — VS Code DNA (REAL WIDGETS)
+   This is what makes Cmd/Ctrl+F look native to CavCode and VS Code.
    ========================= */
 
 /* editor shell */
@@ -7055,7 +7055,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
   -webkit-backdrop-filter: blur(10px);
 }
 
-/* find widget = Monaco’s real Cmd/Ctrl+F */
+/* find widget = the real Cmd/Ctrl+F surface */
 .monaco-editor .find-widget{
   border-radius: 4px !important;
   border: 1px solid rgba(255,255,255,.14) !important;
@@ -7064,7 +7064,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
   -webkit-backdrop-filter: blur(14px);
 }
 
-/* input styling inside Monaco widgets */
+/* input styling inside editor widgets */
 .monaco-editor .find-widget input,
 .monaco-editor .find-widget textarea,
 .monaco-editor .monaco-inputbox .input{
@@ -7075,7 +7075,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
   box-shadow: none !important;
 }
 
-/* focus ring in Monaco widgets */
+/* focus ring in editor widgets */
 .monaco-editor .monaco-inputbox.idle.focused,
 .monaco-editor .monaco-inputbox.focused{
   outline: 0 !important;
@@ -7989,7 +7989,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
   transform: translateY(0px) scale(.98);
 }
 /* =========================
-   Monaco: VS Code-style widgets (square corners)
+   Editor: VS Code-style widgets (square corners)
 ========================= */
 
 /* Inline "peek problem" widget */
@@ -8036,7 +8036,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 .monaco-editor .zone-widget a:hover {
   text-decoration: underline !important;
 }
-/* Monaco Find widget (Cmd/Ctrl+F) */
+/* Find widget (Cmd/Ctrl+F) */
 .monaco-editor .find-widget,
 .monaco-editor .find-widget .monaco-sash,
 .monaco-editor .find-widget .find-part,
@@ -8068,7 +8068,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
   border-color: rgba(185, 200, 90, 0.55) !important; /* lime focus */
 }
 
-/* Remove thick red validation borders from Monaco error input boxes. */
+/* Remove thick red validation borders from editor error input boxes. */
 .monaco-editor .monaco-inputbox.error,
 .monaco-editor .monaco-inputbox.error .ibwrapper,
 .monaco-editor .monaco-inputbox.error .ibwrapper:hover,

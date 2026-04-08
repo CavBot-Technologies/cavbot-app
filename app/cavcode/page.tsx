@@ -1,10 +1,8 @@
 "use client";
 
 /**
- * CavCode — CavBot Code Editor (Monaco) — VS Code-class shell (no toy UI)
+ * CavCode — CavBot Code Editor — VS Code-class shell (no toy UI)
  *
- * Install:
- *   npm i monaco-editor @monaco-editor/react
  */
 
 import "./cavcode.css";
@@ -72,7 +70,7 @@ type MonacoLangs = {
   };
 };
 
-/** @monaco-editor/react default export is the Editor component */
+/** Default export is the editor component */
 const MonacoEditor = dynamic(async () => {
   const mod = await import("@monaco-editor/react");
   return mod.default;
@@ -1162,7 +1160,7 @@ const CAVCODE_SHORTCUTS: ShortcutDefinition[] = [
     id: "find",
     command: "Find in active editor",
     when: "Editor",
-    source: "Monaco",
+    source: "Editor",
     mac: [["⌘", "F"]],
     win: [["Ctrl", "F"]],
     keywords: ["find", "search", "editor"],
@@ -1171,7 +1169,7 @@ const CAVCODE_SHORTCUTS: ShortcutDefinition[] = [
     id: "replace",
     command: "Replace in active editor",
     when: "Editor",
-    source: "Monaco",
+    source: "Editor",
     mac: [["⌘", "H"]],
     win: [["Ctrl", "H"]],
     keywords: ["replace", "editor"],
@@ -1180,7 +1178,7 @@ const CAVCODE_SHORTCUTS: ShortcutDefinition[] = [
     id: "quick-fix",
     command: "Quick fix or CavAi fix",
     when: "Editor diagnostics",
-    source: "Monaco + CavAi",
+    source: "Editor + CavAi",
     mac: [["⌘", "."]],
     win: [["Ctrl", "."]],
     keywords: ["quick fix", "fix", "diagnostics"],
@@ -1189,7 +1187,7 @@ const CAVCODE_SHORTCUTS: ShortcutDefinition[] = [
     id: "organize-imports",
     command: "Organize imports",
     when: "Editor",
-    source: "Monaco",
+    source: "Editor",
     mac: [["⌘", "⇧", "O"]],
     win: [["Ctrl", "Shift", "O"]],
     keywords: ["imports", "organize"],
@@ -5171,7 +5169,7 @@ function isTypingTarget(t: EventTarget | null) {
   const tag = (el.tagName || "").toLowerCase();
   if (tag === "input" || tag === "textarea" || tag === "select") return true;
   if (el.isContentEditable) return true;
-  // If inside Monaco, never treat Delete as filesystem delete.
+  // If inside the editor, never treat Delete as a filesystem delete.
   if (el.closest?.(".monaco-editor")) return true;
   return false;
 }
@@ -6008,7 +6006,7 @@ export default function CavCodePage() {
     lastSavedRevision: 0,
   });
 
-  // Monaco refs
+  // Editor refs
   const editorRef = useRef<MonacoType.editor.IStandaloneCodeEditor | null>(null);
   const editorRefs = useRef<Record<EditorPane, MonacoType.editor.IStandaloneCodeEditor | null>>({
     primary: null,
@@ -8199,8 +8197,8 @@ export default function CavCodePage() {
   }, [activeProjectRoot, fs]);
 
   /* =========================
-    Monaco cancellation noise suppression (dev overlay killer)
-    Monaco can legitimately cancel async work when switching models.
+    Editor cancellation noise suppression (dev overlay killer)
+    The editor can legitimately cancel async work when switching models.
   ========================= */
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -9678,7 +9676,7 @@ export default function CavCodePage() {
   }, [explorerHeaderMenuOpen]);
 
   /* =========================
-    Monaco: workspace model sync
+    Editor: workspace model sync
   ========================= */
   const syncMonacoModels = useCallback((root: FolderNode, activeUriStr?: string) => {
     const monaco = monacoRef.current;
@@ -9708,7 +9706,7 @@ export default function CavCodePage() {
         } catch {}
 
         try {
-          // Avoid fighting the controlled MonacoEditor value prop for the active file.
+          // Avoid fighting the controlled editor value prop for the active file.
           if (activeUriStr && uriStr === activeUriStr) continue;
           const cur = existing.getValue();
           if (cur !== f.content) existing.setValue(f.content);
@@ -12890,7 +12888,7 @@ export default function CavCodePage() {
   }, [termLines]);
 
   /* =========================
-    Monaco mount + diagnostics
+    Editor mount + diagnostics
   ========================= */
   function disposePaneDisposables(pane: EditorPane) {
     const bag = paneDisposablesRef.current[pane];
@@ -12920,7 +12918,7 @@ export default function CavCodePage() {
     monacoRef.current = monaco;
 
     try {
-      // Monaco workers (Next.js compatible)
+      // Editor workers (Next.js compatible)
       const globalEnv = globalThis as typeof globalThis & {
         MonacoEnvironment?: { getWorker: (moduleId: string, label: string) => Worker };
       };
@@ -13082,7 +13080,13 @@ export default function CavCodePage() {
                 ? String(mk.code.value || "")
                 : "";
             const code = String(rawCode || "").trim();
-            const source = String(mk.owner || "monaco").trim() || "monaco";
+            const sourceToken = String(mk.owner || "editor").trim().toLowerCase();
+            const source =
+              sourceToken === "monaco"
+                ? "Editor"
+                : sourceToken === "monaco + cavai"
+                ? "Editor + CavAi"
+                : String(mk.owner || "Editor").trim() || "Editor";
             return {
               severity,
               message: String(mk.message || "").trim(),
@@ -13361,11 +13365,11 @@ export default function CavCodePage() {
   }, [debugBreakpoints, debugCurrentLocation, debugVariables]);
 
   /* =========================
-    VS Code Find (Monaco native)
+    VS Code Find (native editor)
     - No custom modal.
-    - Cmd/Ctrl+F uses Monaco's built-in find widget.
+    - Cmd/Ctrl+F uses the built-in find widget.
   ========================= */
-  function openMonacoFind(mode: "find" | "replace" = "find") {
+  function openEditorFind(mode: "find" | "replace" = "find") {
     const ed = editorRef.current;
     if (!ed) return;
     try {
@@ -13419,7 +13423,7 @@ export default function CavCodePage() {
         }
       }
 
-      // Always capture Cmd/Ctrl+S inside CavCode (including Monaco/editor inputs)
+      // Always capture Cmd/Ctrl+S inside CavCode, including editor inputs.
       // so browser/system "Save Page" never opens here.
       if (mod && !e.shiftKey && !e.altKey && key === "s") {
         e.preventDefault();
@@ -13511,7 +13515,7 @@ export default function CavCodePage() {
 
       if (mod && key === "f") {
         e.preventDefault();
-        openMonacoFind("find");
+        openEditorFind("find");
         setPanelOpen(false);
         return;
       }
@@ -13519,7 +13523,7 @@ export default function CavCodePage() {
       // Optional: VS Code replace shortcut (Cmd/Ctrl+H) -> replace widget
       if (mod && key === "h") {
         e.preventDefault();
-        openMonacoFind("replace");
+        openEditorFind("replace");
         setPanelOpen(false);
         return;
       }
@@ -14139,7 +14143,7 @@ export default function CavCodePage() {
                   verticalScrollbarSize: 14,
                   horizontalScrollbarSize: 10,
                 },
-                fontFamily: '"JetBrains Mono","SF Mono",Menlo,Monaco,Consolas,"Liberation Mono",monospace',
+                fontFamily: '"JetBrains Mono","SF Mono",Menlo,Consolas,"Liberation Mono",monospace',
                 fontSize: settings.fontSize,
                 lineHeight: Math.round(settings.fontSize * 1.5),
                 renderWhitespace: "selection",
@@ -14245,7 +14249,7 @@ export default function CavCodePage() {
           overviewRulerLanes: 3,
           overviewRulerBorder: false,
           readOnly: normalizePath(file.path) === SYS_CAVEN_CONFIG_PATH,
-          fontFamily: '"JetBrains Mono","SF Mono",Menlo,Monaco,Consolas,"Liberation Mono",monospace',
+          fontFamily: '"JetBrains Mono","SF Mono",Menlo,Consolas,"Liberation Mono",monospace',
           fontSize: settings.fontSize,
           lineHeight: Math.round(settings.fontSize * 1.5),
           padding: { top: 12, bottom: 12 },
@@ -15323,7 +15327,7 @@ export default function CavCodePage() {
                       <div className="cc-set-row cc-set-rowDetailed">
                         <div className="cc-set-copy">
                           <span className="cc-set-label">Font Size</span>
-                          <span className="cc-set-note">Editor text scale for Monaco, diffs, and inline diagnostics.</span>
+                          <span className="cc-set-note">Editor text scale for code, diffs, and inline diagnostics.</span>
                         </div>
                         <div className="cc-set-stepper" role="group" aria-label="Font Size">
                           <span className="cc-set-stepperValue" aria-live="polite">{settings.fontSize}</span>
@@ -15405,7 +15409,7 @@ export default function CavCodePage() {
                       <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
                         <span className="cc-set-copy">
                           <span className="cc-set-label">Format on Save</span>
-                          <span className="cc-set-note">Apply Monaco formatting whenever a save is triggered.</span>
+                          <span className="cc-set-note">Apply editor formatting whenever a save is triggered.</span>
                         </span>
                         <input
                           className="cc-set-toggle"
@@ -15462,7 +15466,7 @@ export default function CavCodePage() {
                       <div className="cc-set-head">
                         <div>
                           <div className="cc-set-title">Theme</div>
-                          <div className="cc-set-note">12 professional CavCode themes. Monaco rendering stays on the same theme pipeline.</div>
+                          <div className="cc-set-note">12 professional CavCode themes.</div>
                         </div>
                       </div>
 
@@ -18911,7 +18915,7 @@ export default function CavCodePage() {
                         </div>
                         <div className="cc-prob-file mono">{p.file}</div>
                         <div className="cc-prob-meta mono">
-                          <span>{p.source || "monaco"}</span>
+                          <span>{p.source || "Editor"}</span>
                           {p.code ? <span>{p.code}</span> : <span>no-code</span>}
                           <span>{p.fixReady ? "cavai-fix-ready" : "manual-fix"}</span>
                         </div>
@@ -18986,7 +18990,7 @@ export default function CavCodePage() {
               </button>
 
               <span className="cc-status-sep" aria-hidden="true">•</span>
-              <button className="cc-sbtn" onClick={() => openMonacoFind("find")} title="Find (Cmd/Ctrl+F)">
+              <button className="cc-sbtn" onClick={() => openEditorFind("find")} title="Find (Cmd/Ctrl+F)">
                 FIND
               </button>
 

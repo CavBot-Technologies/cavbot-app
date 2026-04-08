@@ -27,7 +27,14 @@ test("cavcode settings keeps theme in its own section instead of the editor card
   assert.equal(page.includes('<div className="cc-settingsNav">'), false);
   assert.equal(page.includes('{settingsSection === "theme" ? ('), true);
   assert.equal(page.includes('<div className="cc-set-title">Theme</div>'), true);
-  assert.equal(page.includes("12 professional CavCode themes. Monaco rendering stays on the same theme pipeline."), true);
+  assert.equal(page.includes("12 professional CavCode themes."), true);
+  assert.equal(page.includes("12 professional CavCode themes. Monaco rendering stays on the same theme pipeline."), false);
+  assert.equal(page.includes('source: "Monaco"'), false);
+  assert.equal(page.includes('source: "Monaco + CavAi"'), false);
+  assert.equal(page.includes('source: "Editor"'), true);
+  assert.equal(page.includes('source: "Editor + CavAi"'), true);
+  assert.equal(page.includes("Editor text scale for Monaco, diffs, and inline diagnostics."), false);
+  assert.equal(page.includes("Apply Monaco formatting whenever a save is triggered."), false);
   assert.equal(palette.includes("#ECF3FF"), true);
   assert.equal(keyboard.includes("#ECF3FF"), true);
   assert.equal(team.includes("#ECF3FF"), true);
