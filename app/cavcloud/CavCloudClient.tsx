@@ -3213,7 +3213,7 @@ function ek(e) {
     } catch {}
   }, [enteredFromCavSafe, treeCacheKey, upsertTreeNavSnapshot]);
   (0, c.useEffect)(() => {
-    if (!cavcloudSettingsLoaded) return;
+    if (!cavcloudSettingsLoaded || "ANON" === memberRole) return;
     let e = "/";
     try {
       if (folderPathFromQuery) {
@@ -3228,7 +3228,7 @@ function ek(e) {
       }
     } catch {}
     void l7(e);
-  }, [l7, enteredFromCavSafe, treeCacheKey, folderPathFromQuery, cavcloudSettingsLoaded]);
+  }, [l7, enteredFromCavSafe, treeCacheKey, folderPathFromQuery, cavcloudSettingsLoaded, memberRole]);
   (0, c.useEffect)(() => {
     let e = lZ.current;
     e && (e.setAttribute("webkitdirectory", ""), e.setAttribute("directory", ""));
@@ -3252,19 +3252,23 @@ function ek(e) {
     }
   }, [S]);
   (0, c.useEffect)(() => {
+    if ("ANON" === memberRole) return;
     "Synced" === S && void te();
-  }, [S, te]);
+  }, [S, te, memberRole]);
   (0, c.useEffect)(() => {
+    if ("ANON" === memberRole) return;
     "Shared" === S && void l9();
-  }, [S, l9]);
+  }, [S, l9, memberRole]);
   (0, c.useEffect)(() => {
+    if ("ANON" === memberRole) return;
     "Collab" === S && void loadCollabInbox();
-  }, [S, loadCollabInbox]);
+  }, [S, loadCollabInbox, memberRole]);
   (0, c.useEffect)(() => {
+    if ("ANON" === memberRole) return;
     "Gallery" === S && void loadGalleryFiles({
       silent: !0
     });
-  }, [S, loadGalleryFiles]);
+  }, [S, loadGalleryFiles, memberRole]);
   (0, c.useEffect)(() => {
     "Gallery" === S && setGalleryPage(1);
   }, [S, aj, eM]);
@@ -3279,6 +3283,7 @@ function ek(e) {
   }, [refreshTreePostMutation]);
   (0, c.useEffect)(() => {
     let e = () => {
+      if ("ANON" === memberRole) return;
       void Promise.all(["Shared" === S ? l9() : Promise.resolve(), "Collab" === S ? loadCollabInbox({
         silent: !0
       }) : Promise.resolve(), "Gallery" === S ? loadGalleryFiles({
@@ -3290,7 +3295,7 @@ function ek(e) {
     return window.addEventListener("cavcloud:share-access-changed", e), () => {
       window.removeEventListener("cavcloud:share-access-changed", e);
     };
-  }, [S, l9, loadCollabInbox, loadGalleryFiles, ta]);
+  }, [S, l9, loadCollabInbox, loadGalleryFiles, ta, memberRole]);
   (0, c.useEffect)(() => {
     let e = Array.isArray(en?.folders) ? en.folders : [];
     if (!e.length) return;

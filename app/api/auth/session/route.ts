@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import {
   createSystemSession,
   createUserSession,
-  getSession,
+  requireSession,
   requireSystemToken,
   isApiAuthError,
   sessionCookieOptions,
@@ -190,14 +190,9 @@ function makeClientMeta(req: Request) {
  */
 export async function GET(req: Request) {
   try {
-    const sess: CavbotSession | null = await getSession(req);
     const client = makeClientMeta(req);
     const pool = getAuthPool();
-
-
-    // Not logged in -> always 200
-    if (!sess) return json({ ok: true, authed: false, client }, 200);
-
+    const sess: CavbotSession = await requireSession(req);
 
     // System session (ops)
     if (sess.systemRole === "system") {
@@ -238,8 +233,6 @@ export async function GET(req: Request) {
       : null;
     const effectiveMembership = promotedMembership ?? membership;
     const effectivePlan = await getEffectiveAccountPlanContext(effectiveMembership.accountId).catch(() => null);
-
-
     // IMPORTANT:
     // membership.role is the source-of-truth (cookie role can be stale)
     const response = json(

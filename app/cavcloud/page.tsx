@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 
-import { getAppOrigin, getSession } from "@/lib/apiAuth";
+import { getAppOrigin, requireSession } from "@/lib/apiAuth";
 import CavCloudClientShellNoSSR from "./CavCloudClientShellNoSSR";
 
 type CavCloudAccessContext = {
@@ -30,7 +30,7 @@ async function getCavCloudAccessContext(): Promise<CavCloudAccessContext> {
       },
     });
 
-    const sess = await getSession(req);
+    const sess = await requireSession(req);
     const isOwner = !!(sess && sess.systemRole === "user" && sess.memberRole === "OWNER");
     const cacheScopeKey = sanitizeCacheScope(sess?.accountId || sess?.sub || "anon");
     return { isOwner, cacheScopeKey };
