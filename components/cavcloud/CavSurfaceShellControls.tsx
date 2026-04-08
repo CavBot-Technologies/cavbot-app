@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type RefObject, type SetStateAction } from "react";
 
-import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import CavAiCenterLauncher, { type AiCenterSurface } from "@/components/cavai/CavAiCenterLauncher";
 import { normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 
@@ -420,10 +419,18 @@ export function CavSurfaceHeaderGreeting(props: CavSurfaceHeaderGreetingProps) {
 
 export function CavSurfaceHeaderBadge() {
   return (
-    <div className="cavcloud-badgeWrap cavcloud-headerBadgeWrap" aria-hidden="true">
-      <div className="cb-badge cb-badge-inline">
-        <CdnBadgeEyes />
-      </div>
+    <div className="cavcloud-headerBadgeWrap" aria-hidden="true">
+      <span className="cavcloud-headerMarkBadge">
+        <Image
+          src="/logo/cavbot-logomark.svg"
+          alt=""
+          width={28}
+          height={28}
+          className="cavcloud-headerMarkBadgeImg"
+          priority
+          unoptimized
+        />
+      </span>
     </div>
   );
 }

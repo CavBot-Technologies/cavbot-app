@@ -80,12 +80,13 @@ test("cavcloud and cavsafe mobile drawer width and compact header controls match
   const css = read("app/cavcloud/cavcloud.css");
 
   assert.match(globals, /@media \(max-width: 979px\)\{[\s\S]*\.cb-sidebar\{[\s\S]*width: 86vw;[\s\S]*max-width: 340px;/);
-  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-side\{[\s\S]*height: calc\(100dvh - var\(--cb-global-footer-height\) \+ 12px\);[\s\S]*width: min\(82vw, 320px\);[\s\S]*max-width: min\(82vw, 320px\);[\s\S]*padding: 18px 14px 12px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-side\{[\s\S]*height: calc\(100dvh - var\(--cb-global-footer-height\) \+ 12px\);[\s\S]*width: min\(82vw, 320px\);[\s\S]*max-width: min\(82vw, 320px\);[\s\S]*padding: 18px 14px calc\(var\(--safe-bottom\) \+ 18px\);/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-main\{[\s\S]*gap: 18px;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-top\{[\s\S]*width: calc\(100% \+ 36px\);[\s\S]*max-width: none;[\s\S]*margin: 0 -20px 0 -16px;[\s\S]*padding: calc\(10px \+ var\(--safe-top, 0px\)\) 10px 10px 16px;[\s\S]*gap: 10px;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-titleCompactShell\{[\s\S]*flex: 0 0 auto;/);
-  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-headerBadgeWrap\{[\s\S]*width: 46px;[\s\S]*height: 46px;/);
-  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-headerBadgeWrap \.cavbot-dm-avatar\{[\s\S]*transform: scale\(\.82\);/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-sideFoot\{[\s\S]*padding-bottom: 10px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-headerBadgeWrap\{[\s\S]*width: 40px;[\s\S]*height: 40px;/);
+  assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-headerMarkBadge\{[\s\S]*width: 26px;[\s\S]*height: 26px;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-actions\{[\s\S]*justify-content: flex-end;[\s\S]*gap: 6px;[\s\S]*padding-right: 8px;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-btnIconOnly,[\s\S]*width: 34px;[\s\S]*height: 34px;/);
   assert.match(css, /@media \(max-width: 980px\)\{[\s\S]*\.cavcloud-btnIconOnly svg,[\s\S]*width: 15px;[\s\S]*height: 15px;/);
@@ -138,7 +139,9 @@ test("cavcloud and cavsafe direct surfaces persist full profile state and keep t
   assert.match(controls, /export function CavSurfaceHeaderBadge/);
   assert.match(controls, /export function CavSurfacePageIntro/);
   assert.match(controls, /<Link className="cavcloud-brandMenuTrigger" href="\/" aria-label="Go to CavBot home">/);
-  assert.match(controls, /CdnBadgeEyes/);
+  assert.match(controls, /src="\/logo\/cavbot-logomark\.svg"/);
+  assert.match(controls, /className="cavcloud-headerMarkBadgeImg"/);
+  assert.doesNotMatch(controls, /CdnBadgeEyes/);
   assert.doesNotMatch(controls, /Welcome back to your command center!/);
   assert.match(controls, /return "CavBot";/);
   assert.match(controls, /return "Premium";/);
