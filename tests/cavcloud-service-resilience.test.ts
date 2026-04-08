@@ -28,6 +28,7 @@ test("tree, summary, and dashboard degraded helpers do not fail when plan lookup
   assert.match(summary, /getEffectiveAccountPlanContext\(accountId\)\.catch\(\(\) => null\)/);
   assert.match(summary, /withCavCloudDeadline\(/);
   assert.match(summary, /buildStaticDegradedSummaryResponse/);
+  assert.match(summary, /sessionValidated && isCavCloudServiceUnavailableError\(err\)/);
   assert.match(dashboard, /getEffectiveAccountPlanContext\(accountId\)\.catch\(\(\) => null\)/);
   assert.match(plan, /function isSubscriptionLookupSoftFailure/);
   assert.match(plan, /if \(isSubscriptionLookupSoftFailure\(error\)\) return null;/);

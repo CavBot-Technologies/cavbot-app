@@ -1,7 +1,12 @@
 import type { Prisma } from "@prisma/client";
 
 import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
-import { cavcloudErrorResponse, jsonNoStore, withCavCloudDeadline } from "@/lib/cavcloud/http.server";
+import {
+  cavcloudErrorResponse,
+  isCavCloudServiceUnavailableError,
+  jsonNoStore,
+  withCavCloudDeadline,
+} from "@/lib/cavcloud/http.server";
 import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { getPlanLimits, type PlanId } from "@/lib/plans";
@@ -13,6 +18,8 @@ export const revalidate = 0;
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "avif", "gif", "svg", "bmp", "heic", "heif", "tif", "tiff"] as const;
 const VIDEO_EXTENSIONS = ["mp4", "mov", "m4v", "webm", "ogv", "ogg", "avi", "mkv", "wmv", "flv", "3gp"] as const;
+const SUMMARY_TIMEOUT_MS = 8_000;
+const SUMMARY_FALLBACK_PLAN_TIMEOUT_MS = 1_500;
 
 function toSafeNumber(value: bigint): number {
   if (value < BigInt(0)) return 0;
@@ -86,7 +93,10 @@ async function buildDegradedSummaryResponse(req: Request) {
   try {
     const plan = await withCavCloudDeadline(
       getEffectiveAccountPlanContext(accountId).catch(() => null),
-      { message: "Timed out loading degraded CavCloud summary." },
+      {
+        timeoutMs: SUMMARY_FALLBACK_PLAN_TIMEOUT_MS,
+        message: "Timed out loading degraded CavCloud summary.",
+      },
     );
 
     return jsonNoStore(degradedSummaryPayload(plan ? { planId: plan.planId, limitBytes: plan.limitBytes } : null), 200);
@@ -96,10 +106,13 @@ async function buildDegradedSummaryResponse(req: Request) {
 }
 
 export async function GET(req: Request) {
+  let sessionValidated = false;
+
   try {
     const sess = await requireSession(req);
     requireAccountContext(sess);
     requireUser(sess);
+    sessionValidated = true;
 
     const accountId = String(sess.accountId || "").trim();
 
@@ -142,7 +155,10 @@ export async function GET(req: Request) {
           _sum: { bytes: true },
         }),
       ]),
-      { message: "Timed out loading CavCloud summary." },
+      {
+        timeoutMs: SUMMARY_TIMEOUT_MS,
+        message: "Timed out loading CavCloud summary.",
+      },
     );
 
     const usedBig = bytesAgg._sum.bytes ?? BigInt(0);
@@ -171,6 +187,9 @@ export async function GET(req: Request) {
   } catch (err) {
     if (err instanceof ApiAuthError) {
       return cavcloudErrorResponse(err, "Failed to load CavCloud summary.");
+    }
+    if (sessionValidated && isCavCloudServiceUnavailableError(err)) {
+      return buildStaticDegradedSummaryResponse();
     }
     if (
       isMissingCavCloudTablesError(err) ||
