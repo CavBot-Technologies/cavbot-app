@@ -38,6 +38,17 @@ function isCavCloudFolderWriteSchemaMismatch(err: unknown) {
   });
 }
 
+function statusFromUnknown(err: unknown) {
+  const status = (err as { status?: unknown })?.status;
+  if (typeof status === "number" && Number.isFinite(status) && status >= 100 && status <= 599) return status;
+  return 500;
+}
+
+function isRetriableFolderWriteFailure(err: unknown) {
+  if (isCavCloudFolderWriteSchemaMismatch(err) || isCavCloudServiceUnavailableError(err)) return true;
+  return statusFromUnknown(err) >= 500;
+}
+
 export async function POST(req: Request) {
   try {
     const sess = await requireSession(req);
@@ -70,7 +81,7 @@ export async function POST(req: Request) {
 
     return jsonNoStore({ ok: true, folder }, 200);
   } catch (err) {
-    if (isCavCloudFolderWriteSchemaMismatch(err) || isCavCloudServiceUnavailableError(err)) {
+    if (isRetriableFolderWriteFailure(err)) {
       return jsonNoStore(
         { ok: false, error: "SERVICE_UNAVAILABLE", message: "CavCloud is temporarily unavailable." },
         503,

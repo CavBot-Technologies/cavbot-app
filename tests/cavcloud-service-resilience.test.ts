@@ -68,9 +68,11 @@ test("cavcloud storage activity writes fail open when non-critical activity tabl
   assert.match(storage, /await writeActivity\(prisma, \{/);
   assert.doesNotMatch(storage, /prisma\.cavCloudActivity\.create/);
   assert.match(folders, /function isCavCloudFolderWriteSchemaMismatch/);
+  assert.match(folders, /function statusFromUnknown/);
+  assert.match(folders, /function isRetriableFolderWriteFailure/);
   assert.match(folders, /withCavCloudDeadline\(/);
   assert.match(folders, /assertCavCloudActionAllowed/);
   assert.match(folders, /createFolder/);
-  assert.match(folders, /isCavCloudFolderWriteSchemaMismatch\(err\) \|\| isCavCloudServiceUnavailableError\(err\)/);
+  assert.match(folders, /if \(isRetriableFolderWriteFailure\(err\)\)/);
   assert.match(folders, /SERVICE_UNAVAILABLE/);
 });
