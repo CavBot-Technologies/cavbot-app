@@ -1,5 +1,7 @@
 "use client";
 
+import { readBootClientAuthBootstrap, readBootClientPlanState } from "@/lib/clientAuthBootstrap";
+
 export type ClientPlanId = "free" | "premium" | "premium_plus";
 
 export const SHELL_PLAN_SNAPSHOT_KEY = "cb_shell_plan_snapshot_v1";
@@ -50,6 +52,15 @@ export function clientPlanRank(planId: ClientPlanId): number {
 }
 
 function readPlanSnapshot(): ClientPlanBootstrap | null {
+  const snapshotFromBoot = readBootClientPlanState();
+  if (snapshotFromBoot) {
+    const bootAuth = readBootClientAuthBootstrap();
+    return {
+      planId: normalizeClientPlanId(snapshotFromBoot.planId || snapshotFromBoot.planTier),
+      authenticatedHint: bootAuth?.authenticated ?? true,
+    };
+  }
+
   if (typeof window === "undefined" || typeof globalThis.__cbLocalStore === "undefined") return null;
   const snapshot = safeJsonParse<PlanSnapshot>(globalThis.__cbLocalStore.getItem(SHELL_PLAN_SNAPSHOT_KEY));
   if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return null;
@@ -82,6 +93,13 @@ export function readBootClientPlanBootstrap(): ClientPlanBootstrap {
   if (snapshot) return snapshot;
   const legacy = readLegacyPlanContext();
   if (legacy) return legacy;
+  const boot = readBootClientAuthBootstrap();
+  if (boot?.authenticated && boot.plan) {
+    return {
+      planId: normalizeClientPlanId(boot.plan.planId || boot.plan.planTier || boot.plan.planLabel),
+      authenticatedHint: true,
+    };
+  }
   return {
     planId: "free",
     authenticatedHint: false,

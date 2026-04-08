@@ -34,6 +34,7 @@ import { CAV_GUARD_DECISION_EVENT, emitGuardDecisionFromPayload, readGuardDecisi
 import { normalizeGuardReturnPath } from "@/src/lib/cavguard/cavGuard.return";
 import type { CavGuardDecision } from "@/src/lib/cavguard/cavGuard.types";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
+import { readBootClientProfileState } from "@/lib/clientAuthBootstrap";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 import { normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 
@@ -213,6 +214,10 @@ function parseDateMs(v: unknown): number | null {
   } catch {
     return null;
   }
+}
+
+function str(value: unknown) {
+  return String(value ?? "").trim();
 }
 
 function firstInitialChar(input: string): string {
@@ -615,12 +620,15 @@ export default function AppShell({
 
   // ===== Account dropdown =====
   const [accountOpen, setAccountOpen] = useState(false);
-  const [initials, setInitials] = useState<string>("");
-  const [profileFullName, setProfileFullName] = useState<string>("");
-  const [profileUsername, setProfileUsername] = useState<string>("");
-  const [profileAvatar, setProfileAvatar] = useState<string>("");
-  const [profileTone, setProfileTone] = useState<string>("lime");
-  const [profilePublicEnabled, setProfilePublicEnabled] = useState<boolean | null>(null);
+  const [bootProfile] = useState(() => readBootClientProfileState());
+  const [initials, setInitials] = useState<string>(bootProfile?.initials || "");
+  const [profileFullName, setProfileFullName] = useState<string>(bootProfile?.fullName || "");
+  const [profileUsername, setProfileUsername] = useState<string>(bootProfile?.username || "");
+  const [profileAvatar, setProfileAvatar] = useState<string>(bootProfile?.avatarImage || "");
+  const [profileTone, setProfileTone] = useState<string>(bootProfile?.avatarTone || "lime");
+  const [profilePublicEnabled, setProfilePublicEnabled] = useState<boolean | null>(
+    typeof bootProfile?.publicProfileEnabled === "boolean" ? bootProfile.publicProfileEnabled : null,
+  );
 
 
   // ===== Notifications =====
@@ -1412,29 +1420,28 @@ export default function AppShell({
   );
 
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     try {
+      const cachedProfile = readBootClientProfileState();
+      if (!cachedProfile) return;
       const cachedIdentity = normalizeCavbotFounderProfile({
-        fullName: (globalThis.__cbLocalStore.getItem("cb_profile_fullName_v1") || "").trim(),
-        displayName: (globalThis.__cbLocalStore.getItem("cb_profile_fullName_v1") || "").trim(),
-        username: (globalThis.__cbLocalStore.getItem("cb_profile_username_v1") || "").trim().toLowerCase(),
+        fullName: cachedProfile.fullName,
+        displayName: cachedProfile.fullName,
+        username: cachedProfile.username,
       });
       const cachedFullName = String(cachedIdentity.fullName || cachedIdentity.displayName || "").trim();
       const cachedUsername = String(cachedIdentity.username || "").trim().toLowerCase();
-      const cachedInitials = readInitials();
-      const t = (globalThis.__cbLocalStore.getItem("cb_settings_avatar_tone_v2") || "lime").trim();
-      const img = (globalThis.__cbLocalStore.getItem("cb_settings_avatar_image_v2") || "").trim();
-      const publicEnabled = readPublicProfileEnabled();
+      const resolved = deriveAccountInitials(cachedFullName, cachedUsername, cachedProfile.initials || readInitials());
 
       setProfileFullName(cachedFullName);
       setProfileUsername(cachedUsername);
-      const resolved = deriveAccountInitials(cachedFullName, cachedUsername, cachedInitials);
       setInitials(resolved);
       persistAccountInitials(resolved);
-
-      setProfileTone(t || "lime");
-      setProfileAvatar(img || "");
-      if (publicEnabled !== null) setProfilePublicEnabled(publicEnabled);
+      setProfileTone(cachedProfile.avatarTone || "lime");
+      setProfileAvatar(cachedProfile.avatarImage || "");
+      if (cachedProfile.publicProfileEnabled !== null) {
+        setProfilePublicEnabled(cachedProfile.publicProfileEnabled);
+      }
     } catch {}
   }, []);
 
@@ -1471,9 +1478,18 @@ export default function AppShell({
         setProfileUsername(nextUsername);
         setInitials(nextInitials);
         persistAccountInitials(nextInitials);
+        setProfileTone(str(data?.user?.avatarTone).toLowerCase() || "lime");
+        setProfileAvatar(str(data?.user?.avatarImage));
         try {
           globalThis.__cbLocalStore.setItem("cb_profile_fullName_v1", nextFullName);
+          globalThis.__cbLocalStore.setItem("cb_profile_email_v1", str(data?.user?.email || data?.profile?.email));
           globalThis.__cbLocalStore.setItem("cb_profile_username_v1", nextUsername);
+          globalThis.__cbLocalStore.setItem("cb_settings_avatar_tone_v2", str(data?.user?.avatarTone).toLowerCase() || "lime");
+          if (str(data?.user?.avatarImage)) {
+            globalThis.__cbLocalStore.setItem("cb_settings_avatar_image_v2", str(data?.user?.avatarImage));
+          } else {
+            globalThis.__cbLocalStore.removeItem("cb_settings_avatar_image_v2");
+          }
           if (typeof data?.user?.publicProfileEnabled === "boolean") {
             globalThis.__cbLocalStore.setItem(
               "cb_profile_public_enabled_v1",
@@ -1484,11 +1500,18 @@ export default function AppShell({
             new CustomEvent("cb:profile", {
               detail: {
                 fullName: nextFullName,
+                email: str(data?.user?.email || data?.profile?.email),
                 username: nextUsername,
                 initials: nextInitials,
+                tone: str(data?.user?.avatarTone).toLowerCase() || "lime",
+                avatarTone: str(data?.user?.avatarTone).toLowerCase() || "lime",
+                avatarImage: str(data?.user?.avatarImage),
+                publicProfileEnabled:
+                  typeof data?.user?.publicProfileEnabled === "boolean" ? data.user.publicProfileEnabled : null,
               },
             }),
           );
+          window.dispatchEvent(new CustomEvent("cb:profile-sync"));
         } catch {}
         if (typeof data?.user?.publicProfileEnabled === "boolean") {
           setProfilePublicEnabled(data.user.publicProfileEnabled);

@@ -819,7 +819,7 @@ function BillingClientInner() {
     if (!livePlanId || typeof window === "undefined") return;
     publishClientPlan({
       planId: normalizePlanId(livePlanId),
-      preserveStrongerCached: false,
+      preserveStrongerCached: true,
     });
   }, [summary?.computed.currentPlanId]);
 

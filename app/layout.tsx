@@ -12,6 +12,10 @@ import IconWarmup from "./_components/IconWarmup";
 import RouteLifecycle from "./_components/RouteLifecycle";
 import SystemStatusBootstrap from "@/components/status/SystemStatusBootstrap";
 import { resolveCavbotAssetPolicy } from "@/lib/cavbotAssetPolicy";
+import {
+  buildClientAuthBootstrapScript,
+  readClientAuthBootstrapServerState,
+} from "@/lib/authClientBootstrap.server";
 
 const APP_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://app.cavbot.io";
 
@@ -85,11 +89,13 @@ type RootLayoutProps = {
   children: ReactNode;
 };
 
-export default function RootLayout({ children }: RootLayoutProps) {
+export default async function RootLayout({ children }: RootLayoutProps) {
+  const authBootstrapScript = buildClientAuthBootstrapScript(await readClientAuthBootstrapServerState());
   return (
     <html lang="en" data-cavbot-react-app="1" style={{ backgroundColor: "#01030f" }}>
       <head>
         <script id="cb-browser-store-shim" dangerouslySetInnerHTML={{ __html: browserStoreBootstrapScript }} />
+        <script id="cb-auth-bootstrap" dangerouslySetInnerHTML={{ __html: authBootstrapScript }} />
         <link rel="preconnect" href={OFFICIAL_CDN_ASSETS.baseUrl} crossOrigin="" />
       </head>
 

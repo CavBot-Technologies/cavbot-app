@@ -12,6 +12,32 @@ declare global {
     removeItem: (key: string) => void;
     clear: () => void;
   };
+  type CavbotClientAuthBootstrap = {
+    authenticated: boolean;
+    session?: {
+      userId?: string;
+      accountId?: string;
+      memberRole?: string | null;
+    } | null;
+    profile?: {
+      fullName?: string | null;
+      email?: string | null;
+      username?: string | null;
+      initials?: string | null;
+      avatarTone?: string | null;
+      avatarImage?: string | null;
+      publicProfileEnabled?: boolean | null;
+    } | null;
+    plan?: {
+      planId?: string | null;
+      planTier?: string | null;
+      planLabel?: string | null;
+      memberRole?: string | null;
+      trialActive?: boolean;
+      trialDaysLeft?: number;
+    } | null;
+    ts?: number;
+  };
 
   type CavbotAnalyticsClient = {
     track?: (name: string, payload?: CavbotPayload, options?: CavbotPayload) => void | Promise<void>;
@@ -39,11 +65,13 @@ declare global {
   type CavbotConsoleApiRange = "7d" | "30d";
   var __cbLocalStore: CavBrowserStore;
   var __cbSessionStore: CavBrowserStore;
+  var __CB_AUTH_BOOTSTRAP__: CavbotClientAuthBootstrap | null | undefined;
 
   interface Window {
     cavbotAnalytics?: CavbotAnalyticsClient;
     __cbLocalStore?: CavBrowserStore;
     __cbSessionStore?: CavBrowserStore;
+    __CB_AUTH_BOOTSTRAP__?: CavbotClientAuthBootstrap | null;
 
     // Global CavBot SDK config surface (set by your install snippet if you want)
     __CAVBOT__?: {

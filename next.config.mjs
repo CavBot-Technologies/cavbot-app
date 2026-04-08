@@ -1,3 +1,5 @@
+import path from "node:path";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   allowedDevOrigins: ["admin.localhost", "admin.127.0.0.1"],
@@ -14,6 +16,11 @@ const nextConfig = {
     ],
   },
   webpack(config, { dev, isServer }) {
+    config.resolve = config.resolve || {};
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      "@": path.resolve(process.cwd()),
+    };
     // Prevent false-positive ChunkLoadError timeouts during heavy dev recompiles.
     if (dev && !isServer && config.output) {
       config.output.chunkLoadTimeout = 300000; // 5 minutes

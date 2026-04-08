@@ -842,17 +842,22 @@ function persistCavsafeProfileState(eProfile, aInitials, lPublicProfileEnabled) 
 }
 function persistCavsafePlanState(ePlanTier, aTrialState) {
   if ("undefined" == typeof window || "undefined" == typeof globalThis.__cbLocalStore) return;
-  let l = {
-      planTier: ePlanTier,
+  let n = readCachedCavsafePlanState(),
+    r = resolveCavsafePreferredPlanTier(ePlanTier, n.planTier),
+    o = cavsafePlanTierRank(n.planTier) > cavsafePlanTierRank(ePlanTier),
+    i = o ? !!n.trialActive : !!aTrialState?.active,
+    d = i ? o ? Math.max(0, Math.trunc(Number(n.trialDaysLeft || 0)) || 0) : Math.max(0, Math.trunc(Number(aTrialState?.daysLeft || 0)) || 0) : 0,
+    l = {
+      planTier: r,
       memberRole: null,
-      trialActive: !!aTrialState?.active,
-      trialDaysLeft: aTrialState?.active ? Math.max(0, Math.trunc(Number(aTrialState?.daysLeft || 0)) || 0) : 0,
+      trialActive: i,
+      trialDaysLeft: d,
       ts: Date.now()
     },
     t = {
-      planKey: "PREMIUM_PLUS" === ePlanTier ? "premium_plus" : "PREMIUM" === ePlanTier ? "premium" : "free",
-      planLabel: "PREMIUM_PLUS" === ePlanTier ? "PREMIUM+" : "PREMIUM" === ePlanTier ? "PREMIUM" : "FREE",
-      trialActive: !!aTrialState?.active
+      planKey: "PREMIUM_PLUS" === r ? "premium_plus" : "PREMIUM" === r ? "premium" : "free",
+      planLabel: "PREMIUM_PLUS" === r ? "PREMIUM+" : "PREMIUM" === r ? "PREMIUM" : "FREE",
+      trialActive: i
     };
   try {
     globalThis.__cbLocalStore.setItem("cb_shell_plan_snapshot_v1", JSON.stringify(l));

@@ -21,7 +21,7 @@ import { emitGuardDecision, emitGuardDecisionFromPayload } from "@/src/lib/cavgu
 import { buildCavGuardDecision } from "@/src/lib/cavguard/cavGuard.registry";
 import { track } from "@/lib/cavbotAnalytics";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
-import { readBootClientPlanBootstrap, subscribeClientPlan } from "@/lib/clientPlan";
+import { publishClientPlan, readBootClientPlanBootstrap, subscribeClientPlan } from "@/lib/clientPlan";
 import { CAVAI_UPLOAD_FILE_ICON_ASSETS, resolveUploadFileIcon } from "@/lib/cavai/uploadFileIcons";
 import styles from "./CavAiWorkspace.module.css";
 
@@ -2124,6 +2124,10 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       }
       const effectivePlanId = resolveServerPlanId(body.planId, accountPlanId);
       setAccountPlanId(effectivePlanId);
+      publishClientPlan({
+        planId: effectivePlanId,
+        preserveStrongerCached: true,
+      });
       const hasCatalog = Boolean(body.modelCatalog && typeof body.modelCatalog === "object");
       const textOptions = Array.isArray(body.modelCatalog?.text)
         ? body.modelCatalog?.text.map((row) => toModelOption(row)).filter(Boolean) as CavAiModelOption[]
@@ -2376,6 +2380,10 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
         setProfileIdentity(nextIdentity);
         const authPlanId = normalizePlanId(body.account?.tierEffective ?? body.account?.tier);
         setAccountPlanId(authPlanId);
+        publishClientPlan({
+          planId: authPlanId,
+          preserveStrongerCached: true,
+        });
       } catch {
         // Best effort only.
       }

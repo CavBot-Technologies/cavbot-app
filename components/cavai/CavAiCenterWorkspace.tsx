@@ -37,7 +37,7 @@ import { inferCenterActionFromPrompt } from "@/src/lib/ai/ai.center-routing";
 import { emitGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
 import { resolveUploadFileIcon } from "@/lib/cavai/uploadFileIcons";
-import { readBootClientPlanBootstrap, subscribeClientPlan } from "@/lib/clientPlan";
+import { publishClientPlan, readBootClientPlanBootstrap, subscribeClientPlan } from "@/lib/clientPlan";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 import styles from "./CavAiWorkspace.module.css";
 
@@ -3754,6 +3754,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     return subscribeClientPlan((planId) => {
       setAccountPlanId(planId);
       setIsAuthenticated(true);
+      setAuthBootstrapped(true);
     });
   }, []);
 
@@ -4938,6 +4939,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       }
       const effectivePlanId = resolveServerPlanId(body.planId, accountPlanId);
       setAccountPlanId(effectivePlanId);
+      publishClientPlan({
+        planId: effectivePlanId,
+        preserveStrongerCached: true,
+      });
       const hasCatalog = Boolean(body.modelCatalog && typeof body.modelCatalog === "object");
       const textOptions = Array.isArray(body.modelCatalog?.text)
         ? body.modelCatalog?.text.map((row) => toModelOption(row)).filter(Boolean) as CavAiModelOption[]
@@ -5007,7 +5012,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         planId?: unknown;
       };
       if (!res.ok || body.ok !== true || !body.settings || typeof body.settings !== "object") return false;
-      setAccountPlanId(normalizePlanId(body.planId));
+      const effectivePlanId = normalizePlanId(body.planId);
+      setAccountPlanId(effectivePlanId);
+      publishClientPlan({
+        planId: effectivePlanId,
+        preserveStrongerCached: true,
+      });
       const snapshot = normalizeAgentRegistrySnapshot(body.agentRegistry);
       setAgentRegistrySnapshot(snapshot);
       agentRegistrySnapshotRef.current = snapshot;
@@ -5448,6 +5458,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         }
         const authPlanId = normalizePlanId(body.account?.tierEffective ?? body.account?.tier);
         setAccountPlanId(authPlanId);
+        publishClientPlan({
+          planId: authPlanId,
+          preserveStrongerCached: true,
+        });
       } catch {
         // Keep the boot snapshot plan live until auth explicitly says otherwise.
       } finally {
@@ -7590,7 +7604,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       if (!res.ok || !body.ok || !body.settings || typeof body.settings !== "object") {
         throw new Error(s(body.message) || "Failed to update Agent Mode settings.");
       }
-      setAccountPlanId(normalizePlanId(body.planId));
+      const effectivePlanId = normalizePlanId(body.planId);
+      setAccountPlanId(effectivePlanId);
+      publishClientPlan({
+        planId: effectivePlanId,
+        preserveStrongerCached: true,
+      });
       const snapshot = normalizeAgentRegistrySnapshot(body.agentRegistry);
       setAgentRegistrySnapshot(snapshot);
       agentRegistrySnapshotRef.current = snapshot;
@@ -7674,7 +7693,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       if (!res.ok || !body.ok || !body.settings || typeof body.settings !== "object") {
         throw new Error(s(body.message) || "Failed to update custom agents.");
       }
-      setAccountPlanId(normalizePlanId(body.planId));
+      const effectivePlanId = normalizePlanId(body.planId);
+      setAccountPlanId(effectivePlanId);
+      publishClientPlan({
+        planId: effectivePlanId,
+        preserveStrongerCached: true,
+      });
       const snapshot = normalizeAgentRegistrySnapshot(body.agentRegistry);
       setAgentRegistrySnapshot(snapshot);
       agentRegistrySnapshotRef.current = snapshot;

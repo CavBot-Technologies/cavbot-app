@@ -10,6 +10,11 @@ import Image from "next/image";
 import Link from "next/link";
 import CavBotLoadingScreen from "@/components/CavBotLoadingScreen";
 import "@/components/CavBotLoadingScreen.css";
+import {
+  readBootClientAuthBootstrap,
+  readBootClientPlanState,
+  readBootClientProfileState,
+} from "@/lib/clientAuthBootstrap";
 import { normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 import { PLANS, resolvePlanIdFromTier, getPlanLimits, type PlanId } from "@/lib/plans";
 import DashboardToolsModal from "@/components/DashboardToolsModal";
@@ -222,7 +227,19 @@ function readBootWorkspacePlanDetail(): WorkspacePlanDetail | null {
     };
   }
 
-  return safeJsonParse<WorkspacePlanDetail | null>(globalThis.__cbLocalStore.getItem(PLAN_CONTEXT_KEY));
+  const detail = safeJsonParse<WorkspacePlanDetail | null>(globalThis.__cbLocalStore.getItem(PLAN_CONTEXT_KEY));
+  if (detail) return detail;
+
+  const bootPlan = readBootClientPlanState();
+  if (!bootPlan) return null;
+  return {
+    planKey: bootPlan.planId,
+    planLabel: bootPlan.planLabel,
+    planTier: bootPlan.planTier,
+    memberRole: bootPlan.memberRole,
+    trialActive: bootPlan.trialActive,
+    trialDaysLeft: bootPlan.trialDaysLeft,
+  };
 }
 
 function publishWorkspacePlanDetail(
@@ -649,10 +666,15 @@ export default function CommandDeckPage() {
 function CommandDeckPageInner() {
   const pathname = usePathname();
   const router = useRouter();
+  const [bootAuth] = useState(() => readBootClientAuthBootstrap());
 
 
   // AUTH gate (this page is the logged-in welcome page)
-  const [auth, setAuth] = useState<AuthState>({ status: "checking", session: null });
+  const [auth, setAuth] = useState<AuthState>(() => (
+    bootAuth?.authenticated
+      ? { status: "authed", session: bootAuth.session ?? null }
+      : { status: "checking", session: null }
+  ));
   const [minLoadingTimeElapsed, setMinLoadingTimeElapsed] = useState(false);
   const [hardReloadActive, setHardReloadActive] = useState(false);
 
@@ -829,6 +851,7 @@ function CommandDeckPageInner() {
           memberRole: bootPlanDetail?.memberRole ?? null,
           trialActive: summaryPlanId === "premium_plus" ? Boolean(bootPlanDetail?.trialActive) : false,
           trialDaysLeft: summaryPlanId === "premium_plus" ? Number(bootPlanDetail?.trialDaysLeft || 0) : 0,
+          preserveStrongerCached: true,
         });
         if (nextLimitRaw == null || nextLimitRaw === "") {
           setCavcloudLimitBytes(null);
@@ -922,9 +945,10 @@ function CommandDeckPageInner() {
 
 
   // Welcome header (must never clear once known)
-  const [welcomeName, setWelcomeName] = useState<string>("");
-  const [cachedName, setCachedName] = useState<string>(""); // sticky fallback
-  const [welcomeTone, setWelcomeTone] = useState<string>("lime");
+  const [welcomeBootProfile] = useState(() => readBootClientProfileState());
+  const [welcomeName, setWelcomeName] = useState<string>(welcomeBootProfile?.fullName || "");
+  const [cachedName, setCachedName] = useState<string>(welcomeBootProfile?.fullName || ""); // sticky fallback
+  const [welcomeTone, setWelcomeTone] = useState<string>(welcomeBootProfile?.avatarTone || "lime");
   const welcomeAccentColor = useMemo(() => profileToneToAccentColor(welcomeTone), [welcomeTone]);
 
 
@@ -943,14 +967,18 @@ function CommandDeckPageInner() {
   }
 
 
-  // Fast paint from globalThis.__cbLocalStore
-  useEffect(() => {
+  // Fast paint from the bootstrapped shell profile before normal effects run.
+  useLayoutEffect(() => {
     try {
-      const n = (globalThis.__cbLocalStore.getItem("cb_profile_fullName_v1") || "").trim();
-      const t = (globalThis.__cbLocalStore.getItem("cb_settings_avatar_tone_v2") || "lime").trim().toLowerCase();
-      if (n) setCachedName(n);
-      if (n) setWelcomeName((prev) => prev || n);
-      if (t) setWelcomeTone(t);
+      const bootProfile = readBootClientProfileState();
+      if (!bootProfile) return;
+      if (bootProfile.fullName) {
+        setCachedName(bootProfile.fullName);
+        setWelcomeName((prev) => prev || bootProfile.fullName);
+      }
+      if (bootProfile.avatarTone) {
+        setWelcomeTone(bootProfile.avatarTone);
+      }
     } catch {}
   }, []);
 
@@ -1088,12 +1116,19 @@ function CommandDeckPageInner() {
           return;
         }
 
-
+        if (bootAuth?.authenticated) {
+          setAuth({ status: "authed", session: bootAuth.session ?? null });
+          return;
+        }
         setAuth({ status: "guest", session: null });
         const next = encodeURIComponent(pathname || "/");
         router.replace(`${AUTH_LOGIN_PATH}?next=${next}`);
       } catch {
         if (!alive) return;
+        if (bootAuth?.authenticated) {
+          setAuth({ status: "authed", session: bootAuth.session ?? null });
+          return;
+        }
         setAuth({ status: "guest", session: null });
       }
     })();
@@ -1102,7 +1137,7 @@ function CommandDeckPageInner() {
     return () => {
       alive = false;
     };
-  }, [router, pathname]);
+  }, [bootAuth, router, pathname]);
 
 
   // Global redirect if any API call returns 401/403
@@ -2446,9 +2481,10 @@ function ProfileCard(props: {
     const seats = Number(limits?.seats ?? 0);
     return Number.isFinite(seats) && seats > 0 ? Math.trunc(seats) : null;
   }, [props.fallbackPlanId]);
-  const [fullName, setFullName] = useState<string>("—");
-  const [email, setEmail] = useState<string>("—");
-  const [username, setUsername] = useState<string>("—");
+  const [bootProfile] = useState(() => readBootClientProfileState());
+  const [fullName, setFullName] = useState<string>(bootProfile?.fullName || "—");
+  const [email, setEmail] = useState<string>(bootProfile?.email || "—");
+  const [username, setUsername] = useState<string>(bootProfile?.username || "—");
   const [bio, setBio] = useState<string>("No bio yet.");
   const [plan, setPlan] = useState<string>(fallbackPlanLabel);
 
@@ -2458,9 +2494,9 @@ function ProfileCard(props: {
   const [seatLimit, setSeatLimit] = useState<number | null>(fallbackSeatLimit);
 
 
-  const [initials, setInitials] = useState<string>("");
-  const [tone, setTone] = useState<string>("lime");
-  const [avatarImage, setAvatarImage] = useState<string>("");
+  const [initials, setInitials] = useState<string>(bootProfile?.initials || "");
+  const [tone, setTone] = useState<string>(bootProfile?.avatarTone || "lime");
+  const [avatarImage, setAvatarImage] = useState<string>(bootProfile?.avatarImage || "");
   const [companySubcategory, setCompanySubcategory] = useState<string>("");
   const [githubUrl, setGithubUrl] = useState<string>("");
   const [instagramUrl, setInstagramUrl] = useState<string>("");
@@ -2511,11 +2547,9 @@ function ProfileCard(props: {
   }, []);
 
 
-  // Fast paint from globalThis.__cbLocalStore (instant)
-  useEffect(() => {
-    queueMicrotask(() => {
-      syncProfileFromLocalStorage();
-    });
+  // Fast paint from the bootstrapped profile before normal effects run.
+  useLayoutEffect(() => {
+    syncProfileFromLocalStorage();
     try {
       lastProfileRevRef.current = (globalThis.__cbLocalStore.getItem("cb_profile_rev_v1") || "").trim();
     } catch {}
