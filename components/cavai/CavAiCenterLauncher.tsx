@@ -59,6 +59,7 @@ function preloadCenterOverlayAssets(): void {
 
 export default function CavAiCenterLauncher(props: CavAiCenterLauncherProps) {
   const [open, setOpen] = useState(false);
+  const [workspaceMounted, setWorkspaceMounted] = useState(() => Boolean(props.preload));
 
   const triggerClass = useMemo(() => {
     if (props.triggerClassName) return props.triggerClassName;
@@ -67,6 +68,7 @@ export default function CavAiCenterLauncher(props: CavAiCenterLauncherProps) {
 
   const warm = useCallback(() => {
     preloadCenterOverlayAssets();
+    setWorkspaceMounted(true);
   }, []);
 
   const centerHref = useMemo(() => {
@@ -109,7 +111,7 @@ export default function CavAiCenterLauncher(props: CavAiCenterLauncherProps) {
   }, [props.preload, warm]);
 
   const overlay =
-    open && typeof document !== "undefined"
+    workspaceMounted && typeof document !== "undefined"
       ? createPortal(
           <CavAiCenterWorkspace
             surface={props.surface}

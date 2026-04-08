@@ -37,6 +37,7 @@ import { inferCenterActionFromPrompt } from "@/src/lib/ai/ai.center-routing";
 import { emitGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
 import { resolveUploadFileIcon } from "@/lib/cavai/uploadFileIcons";
+import { readBootClientProfileState } from "@/lib/clientAuthBootstrap";
 import { publishClientPlan, readBootClientPlanBootstrap, subscribeClientPlan } from "@/lib/clientPlan";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 import styles from "./CavAiWorkspace.module.css";
@@ -881,6 +882,16 @@ function normalizePlanId(value: unknown): "free" | "premium" | "premium_plus" {
   if (raw === "premium_plus" || raw === "premium+") return "premium_plus";
   if (raw === "premium") return "premium";
   return "free";
+}
+
+function hasBootProfileSignal(value: {
+  fullName?: unknown;
+  email?: unknown;
+  username?: unknown;
+  initials?: unknown;
+} | null | undefined): boolean {
+  if (!value) return false;
+  return Boolean(s(value.fullName) || s(value.email) || s(value.username) || s(value.initials));
 }
 
 function resolveServerPlanId(
@@ -3552,16 +3563,20 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [guestAuthBusy, setGuestAuthBusy] = useState(false);
   const [guestAuthError, setGuestAuthError] = useState("");
   const [guestAuthDismissed, setGuestAuthDismissed] = useState(false);
-  const [accountInitialFallback, setAccountInitialFallback] = useState("");
-  const [accountProfileUsername, setAccountProfileUsername] = useState("");
-  const [accountProfileAvatar, setAccountProfileAvatar] = useState("");
-  const [accountProfileTone, setAccountProfileTone] = useState("lime");
-  const [accountProfilePublicEnabled, setAccountProfilePublicEnabled] = useState<boolean | null>(null);
   const [planBoot] = useState(() => readBootClientPlanBootstrap());
+  const [bootProfile] = useState(() => readBootClientProfileState());
+  const bootAuthenticatedHint = planBoot.authenticatedHint || hasBootProfileSignal(bootProfile);
+  const bootProfileUsername = s(bootProfile?.username).toLowerCase();
+  const [accountInitialFallback, setAccountInitialFallback] = useState(() => s(bootProfile?.initials));
+  const [accountProfileUsername, setAccountProfileUsername] = useState(() => bootProfileUsername);
+  const [accountProfileAvatar, setAccountProfileAvatar] = useState(() => s(bootProfile?.avatarImage));
+  const [accountProfileTone, setAccountProfileTone] = useState(() => s(bootProfile?.avatarTone).toLowerCase() || "lime");
+  const [accountProfilePublicEnabled, setAccountProfilePublicEnabled] = useState<boolean | null>(
+    () => (typeof bootProfile?.publicProfileEnabled === "boolean" ? bootProfile.publicProfileEnabled : null)
+  );
   const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">(() => planBoot.planId);
-  const [isAuthenticated, setIsAuthenticated] = useState(() => planBoot.authenticatedHint);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => bootAuthenticatedHint);
   const [authProbeReady, setAuthProbeReady] = useState(false);
-  const [authBootstrapped, setAuthBootstrapped] = useState(() => planBoot.authenticatedHint);
   const [logoutPending, setLogoutPending] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -3640,7 +3655,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const threadRef = useRef<HTMLElement | null>(null);
   const inlineEditInputRef = useRef<HTMLTextAreaElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
-  const [profileIdentity, setProfileIdentity] = useState<CavAiIdentityInput>({ fullName: "", username: "" });
+  const [profileIdentity, setProfileIdentity] = useState<CavAiIdentityInput>(() => ({
+    fullName: s(bootProfile?.fullName),
+    username: bootProfileUsername,
+  }));
   const [heroLine, setHeroLine] = useState(CAVAI_SAFE_FALLBACK_LINE);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const imageStudioImportInputRef = useRef<HTMLInputElement | null>(null);
@@ -3693,7 +3711,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [savingAgentId, setSavingAgentId] = useState("");
   const [agentModeQuery, setAgentModeQuery] = useState("");
   const [agentModeManageAgentId, setAgentModeManageAgentId] = useState("");
-  const isGuestPreviewMode = authProbeReady ? !isAuthenticated : authBootstrapped ? !isAuthenticated : false;
+  const isGuestPreviewMode = authProbeReady && !isAuthenticated;
 
   const expandHref = useMemo(() => {
     const fallbackHref = buildCavAiSurfaceUrl({
@@ -3743,18 +3761,20 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
   useLayoutEffect(() => {
     const boot = readBootClientPlanBootstrap();
+    const bootProfileState = readBootClientProfileState();
+    const nextAuthenticatedHint = boot.authenticatedHint || hasBootProfileSignal(bootProfileState);
     setAccountPlanId(boot.planId);
     setModelOptions(centerPlanModelOptions(boot.planId));
     setAvailableReasoningLevels(reasoningLevelsForPlan(boot.planId));
-    setIsAuthenticated(boot.authenticatedHint);
-    setAuthBootstrapped(true);
+    if (nextAuthenticatedHint) {
+      setIsAuthenticated(true);
+    }
   }, []);
 
   useEffect(() => {
     return subscribeClientPlan((planId) => {
       setAccountPlanId(planId);
       setIsAuthenticated(true);
-      setAuthBootstrapped(true);
     });
   }, []);
 

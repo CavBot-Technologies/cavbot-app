@@ -49,13 +49,21 @@ test("shell and command center fast-paint from the bootstrapped profile and pres
 });
 
 test("CavAi surfaces publish authenticated plan confirmations into the shared plan channel", () => {
+  const launcher = read("components/cavai/CavAiCenterLauncher.tsx");
   const center = read("components/cavai/CavAiCenterWorkspace.tsx");
   const code = read("components/cavai/CavAiCodeWorkspace.tsx");
 
+  assert.match(launcher, /const \[workspaceMounted, setWorkspaceMounted\] = useState\(\(\) => Boolean\(props\.preload\)\)/);
+  assert.match(launcher, /setWorkspaceMounted\(true\);/);
+  assert.match(launcher, /workspaceMounted && typeof document !== "undefined"/);
   assert.match(center, /import \{ publishClientPlan, readBootClientPlanBootstrap, subscribeClientPlan \} from "@\/lib\/clientPlan";/);
+  assert.match(center, /import \{ readBootClientProfileState \} from "@\/lib\/clientAuthBootstrap";/);
+  assert.match(center, /const \[bootProfile\] = useState\(\(\) => readBootClientProfileState\(\)\)/);
+  assert.match(center, /const bootAuthenticatedHint = planBoot\.authenticatedHint \|\| hasBootProfileSignal\(bootProfile\)/);
+  assert.match(center, /const isGuestPreviewMode = authProbeReady && !isAuthenticated;/);
   assert.match(center, /publishClientPlan\(\{\s*planId: effectivePlanId,\s*preserveStrongerCached: true,/);
   assert.match(center, /publishClientPlan\(\{\s*planId: authPlanId,\s*preserveStrongerCached: true,/);
-  assert.match(center, /setAuthBootstrapped\(true\);/);
+  assert.match(center, /if \(nextAuthenticatedHint\) \{\s*setIsAuthenticated\(true\);/);
 
   assert.match(code, /import \{ publishClientPlan, readBootClientPlanBootstrap, subscribeClientPlan \} from "@\/lib\/clientPlan";/);
   assert.match(code, /publishClientPlan\(\{\s*planId: effectivePlanId,\s*preserveStrongerCached: true,/);
