@@ -5849,6 +5849,8 @@ export default function CavCodePage() {
 
   // Auth context (for System virtual files)
   const [me, setMe] = useState<{ userId: string; username: string; displayName: string } | null>(null);
+  const [sessionAuthenticated, setSessionAuthenticated] = useState(false);
+  const [authProbeReady, setAuthProbeReady] = useState(false);
 
   // terminal (command bus day-1)
   const [termLines, setTermLines] = useState<string[]>([]);
@@ -7214,8 +7216,9 @@ export default function CavCodePage() {
   }, [applyAgentSettingsFromServer, cavenIdeSettings, installedAgentIds, pushToast, savingCavenIdeSettingsKey]);
 
   useEffect(() => {
+    if (!authProbeReady || !sessionAuthenticated) return;
     void refreshInstalledAgentsFromSettings(true);
-  }, [refreshInstalledAgentsFromSettings]);
+  }, [authProbeReady, refreshInstalledAgentsFromSettings, sessionAuthenticated]);
 
   useEffect(() => {
     if (!agentManageMenuId) return;
@@ -8695,7 +8698,11 @@ export default function CavCodePage() {
         const j = (await res.json().catch(() => null)) as unknown;
         if (!alive) return;
         const r = j && typeof j === "object" ? (j as Record<string, unknown>) : null;
-        if (!r || r.ok !== true || r.authenticated !== true) return;
+        if (!r || r.ok !== true || r.authenticated !== true) {
+          setSessionAuthenticated(false);
+          setAuthProbeReady(true);
+          return;
+        }
         const u = r.user && typeof r.user === "object" ? (r.user as Record<string, unknown>) : null;
         const account = r.account && typeof r.account === "object" ? (r.account as Record<string, unknown>) : null;
         const authPlanId = normalizePlanId(account?.tierEffective ?? account?.tier);
@@ -8716,8 +8723,14 @@ export default function CavCodePage() {
         if (typeof u?.publicProfileEnabled === "boolean") {
           setProfilePublicEnabled(u.publicProfileEnabled);
         }
+        setSessionAuthenticated(true);
+        setAuthProbeReady(true);
         setAccountPlanId(authPlanId);
-      } catch {}
+      } catch {
+        if (!alive) return;
+        setSessionAuthenticated(false);
+        setAuthProbeReady(true);
+      }
     })();
     return () => {
       alive = false;

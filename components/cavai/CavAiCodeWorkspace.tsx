@@ -17,7 +17,7 @@ import {
   resolveAiModelLabel,
 } from "@/src/lib/ai/model-catalog";
 import { toReasoningDisplayHelper, toReasoningDisplayLabel } from "@/src/lib/ai/reasoning-display";
-import { emitGuardDecision, emitGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
+import { emitGuardDecision, emitGuardDecisionFromPayload, readGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
 import { buildCavGuardDecision } from "@/src/lib/cavguard/cavGuard.registry";
 import { track } from "@/lib/cavbotAnalytics";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
@@ -1450,6 +1450,15 @@ function toDataUrl(file: File): Promise<string> {
   });
 }
 
+function isAuthRequiredLikeResponse(status: number, payload: unknown) {
+  const decision = readGuardDecisionFromPayload(payload);
+  if (decision?.actionId === "AUTH_REQUIRED") return true;
+  if (status === 401) return true;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const errorCode = String((payload as Record<string, unknown>).error || "").trim().toUpperCase();
+  return errorCode === "AUTH_REQUIRED" || errorCode === "UNAUTHORIZED" || errorCode === "SESSION_REVOKED" || errorCode === "EXPIRED";
+}
+
 function matchesPath(file: CavAiProjectFileRef, hint: string): number {
   const normalizedHint = normalizePathLike(hint).toLowerCase();
   const full = normalizePathLike(file.path).toLowerCase();
@@ -1589,6 +1598,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   const [cavCloudAttachQuery, setCavCloudAttachQuery] = useState("");
 
   const [planBoot] = useState(() => readBootClientPlanBootstrap());
+  const bootAuthenticatedHint = Boolean(planBoot.authenticatedHint);
   const [modelOptions, setModelOptions] = useState<CavAiModelOption[]>(
     () => (planBoot.planId === "free" ? [] : cavCodePlanModelOptions(planBoot.planId))
   );
@@ -1600,6 +1610,8 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     () => reasoningLevelsForPlan(planBoot.planId)
   );
   const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">(() => planBoot.planId);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => bootAuthenticatedHint);
+  const [authProbeReady, setAuthProbeReady] = useState(false);
   const [qwenPopoverState, setQwenPopoverState] = useState<QwenCoderPopoverUiState | null>(null);
   const [qwenPopoverOpen, setQwenPopoverOpen] = useState(false);
   const [qwenPopoverPinned, setQwenPopoverPinned] = useState(false);
@@ -1958,6 +1970,10 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   }, [cavenSettings.showReasoningTimeline, clearReasoningTicker]);
 
   const loadQwenPopoverState = useCallback(async (nextSessionId?: string | null) => {
+    if (!authProbeReady || !isAuthenticated) {
+      setQwenPopoverState(null);
+      return;
+    }
     try {
       const qp = new URLSearchParams();
       const sid = s(nextSessionId || sessionId);
@@ -1968,13 +1984,20 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
         cache: "no-store",
       });
       const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      if (!res.ok || body.ok !== true) return;
+      if (!res.ok || body.ok !== true) {
+        if (isAuthRequiredLikeResponse(res.status, body)) {
+          setIsAuthenticated(false);
+          setAuthProbeReady(true);
+          setQwenPopoverState(null);
+        }
+        return;
+      }
       const next = toQwenPopoverUiState(body);
       if (next) setQwenPopoverState(next);
     } catch {
       // Best effort only.
     }
-  }, [sessionId]);
+  }, [authProbeReady, isAuthenticated, sessionId]);
 
   const trackCavenEvent = useCallback((event: string, payload: Record<string, unknown>) => {
     if (!cavenSettings.telemetryOptIn) return;
@@ -2004,7 +2027,76 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     }
   }, [sessionId]);
 
+  const applyUnauthenticatedCodeState = useCallback(() => {
+    setIsAuthenticated(false);
+    setAccountPlanId("free");
+    publishClientPlan({ planId: "free" });
+    setModelOptions(cavCodePlanModelOptions("free"));
+    setAudioModelOptions([]);
+    setAvailableReasoningLevels(reasoningLevelsForPlan("free"));
+    setQwenPopoverState(null);
+    applyLoadedSettings(CAVEN_DEFAULT_SETTINGS, []);
+    activeSessionIdRef.current = "";
+    setSessions([]);
+    setSessionId("");
+    setMessages([]);
+    setQueuedPrompts([]);
+  }, [applyLoadedSettings]);
+
+  const refreshCodeAuthState = useCallback(async (opts?: { cancelled?: () => boolean }): Promise<boolean> => {
+    const isCancelled = opts?.cancelled;
+    try {
+      const res = await fetch("/api/auth/me", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        authenticated?: boolean;
+        user?: {
+          displayName?: unknown;
+          username?: unknown;
+        };
+        account?: {
+          tier?: unknown;
+          tierEffective?: unknown;
+        };
+      };
+      if (isCancelled?.()) return false;
+      if (!res.ok || body.ok !== true || body.authenticated !== true) {
+        applyUnauthenticatedCodeState();
+        return false;
+      }
+      setIsAuthenticated(true);
+      const nextIdentity = rememberCavAiIdentity({
+        fullName: s(body.user?.displayName),
+        username: s(body.user?.username),
+      });
+      setProfileIdentity(nextIdentity);
+      const authPlanId = normalizePlanId(body.account?.tierEffective ?? body.account?.tier);
+      setAccountPlanId(authPlanId);
+      publishClientPlan({
+        planId: authPlanId,
+        preserveStrongerCached: true,
+      });
+      return true;
+    } catch {
+      if (isCancelled?.()) return false;
+      applyUnauthenticatedCodeState();
+      return false;
+    } finally {
+      if (!isCancelled?.()) {
+        setAuthProbeReady(true);
+      }
+    }
+  }, [applyUnauthenticatedCodeState]);
+
   const loadCavenSettings = useCallback(async () => {
+    if (!authProbeReady || !isAuthenticated) {
+      applyLoadedSettings(CAVEN_DEFAULT_SETTINGS, []);
+      return;
+    }
     try {
       const res = await fetch("/api/cavai/settings", {
         method: "GET",
@@ -2013,7 +2105,10 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       });
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ settings?: unknown; publishedAgents?: unknown }>;
       if (!res.ok || !body.ok) {
-        emitGuardDecisionFromPayload(body);
+        if (isAuthRequiredLikeResponse(res.status, body)) {
+          applyUnauthenticatedCodeState();
+          return;
+        }
         applyLoadedSettings(CAVEN_DEFAULT_SETTINGS, []);
         return;
       }
@@ -2022,7 +2117,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       console.warn("[caven] settings load failed, using defaults", err);
       applyLoadedSettings(CAVEN_DEFAULT_SETTINGS, []);
     }
-  }, [applyLoadedSettings]);
+  }, [applyLoadedSettings, applyUnauthenticatedCodeState, authProbeReady, isAuthenticated]);
 
   const patchCavenSettings = useCallback(
     async (patch: Partial<CavenWorkspaceSettings>, saveKey = "") => {
@@ -2093,6 +2188,12 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   }, []);
 
   const loadProviderModels = useCallback(async () => {
+    if (!authProbeReady || !isAuthenticated) {
+      setModelOptions(cavCodePlanModelOptions("free"));
+      setAudioModelOptions([]);
+      setAvailableReasoningLevels(reasoningLevelsForPlan("free"));
+      return;
+    }
     try {
       const res = await fetch("/api/ai/test?catalog=context&surface=cavcode&action=generate_component", {
         method: "GET",
@@ -2117,6 +2218,10 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
         guardDecision?: unknown;
       };
       if (!res.ok || body.ok !== true) {
+        if (isAuthRequiredLikeResponse(res.status, body)) {
+          applyUnauthenticatedCodeState();
+          return;
+        }
         emitGuardDecisionFromPayload(body);
         setModelOptions(cavCodePlanModelOptions(accountPlanId));
         setAvailableReasoningLevels(reasoningLevelsForPlan(accountPlanId));
@@ -2164,9 +2269,17 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       setModelOptions(cavCodePlanModelOptions(accountPlanId));
       setAvailableReasoningLevels(reasoningLevelsForPlan(accountPlanId));
     }
-  }, [accountPlanId]);
+  }, [accountPlanId, applyUnauthenticatedCodeState, authProbeReady, isAuthenticated]);
 
   const loadSessions = useCallback(async () => {
+    if (!authProbeReady || !isAuthenticated) {
+      setSessions([]);
+      activeSessionIdRef.current = "";
+      setSessionId("");
+      setMessages([]);
+      setQueuedPrompts([]);
+      return;
+    }
     setLoadingSessions(true);
     try {
       const res = await fetch(buildSessionsUrl({ workspaceId, projectId }), {
@@ -2176,6 +2289,10 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       });
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ sessions?: CavAiSessionSummary[] }>;
       if (!res.ok || !body.ok) {
+        if (isAuthRequiredLikeResponse(res.status, body)) {
+          applyUnauthenticatedCodeState();
+          return;
+        }
         emitGuardDecisionFromPayload(body);
         throw new Error(s((body as { message?: unknown }).message) || "Failed to load sessions.");
       }
@@ -2203,9 +2320,13 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     } finally {
       setLoadingSessions(false);
     }
-  }, [projectId, workspaceId]);
+  }, [applyUnauthenticatedCodeState, authProbeReady, isAuthenticated, projectId, workspaceId]);
 
   const loadMessages = useCallback(async (nextSessionId: string) => {
+    if (!authProbeReady || !isAuthenticated) {
+      setMessages([]);
+      return;
+    }
     const normalized = s(nextSessionId);
     if (!normalized) {
       setMessages([]);
@@ -2227,6 +2348,10 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       });
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ messages?: CavAiMessage[] }>;
       if (!res.ok || !body.ok) {
+        if (isAuthRequiredLikeResponse(res.status, body)) {
+          applyUnauthenticatedCodeState();
+          return;
+        }
         emitGuardDecisionFromPayload(body);
         throw new Error(s((body as { message?: unknown }).message) || "Failed to load messages.");
       }
@@ -2243,9 +2368,13 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     } finally {
       setLoadingMessages(false);
     }
-  }, []);
+  }, [applyUnauthenticatedCodeState, authProbeReady, isAuthenticated]);
 
   const loadQueuedPrompts = useCallback(async (nextSessionId: string) => {
+    if (!authProbeReady || !isAuthenticated) {
+      setQueuedPrompts([]);
+      return;
+    }
     const normalized = s(nextSessionId);
     if (!normalized) {
       setQueuedPrompts([]);
@@ -2263,6 +2392,10 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       });
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ queued?: unknown[] }>;
       if (!res.ok || !body.ok) {
+        if (isAuthRequiredLikeResponse(res.status, body)) {
+          applyUnauthenticatedCodeState();
+          return;
+        }
         emitGuardDecisionFromPayload(body);
         throw new Error(s((body as { message?: unknown }).message) || "Failed to load queue.");
       }
@@ -2273,7 +2406,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     } finally {
       setLoadingQueue(false);
     }
-  }, []);
+  }, [applyUnauthenticatedCodeState, authProbeReady, isAuthenticated]);
 
   const claimNextQueuedPrompt = useCallback(async (nextSessionId: string): Promise<CavAiQueuedPrompt | null> => {
     const normalized = s(nextSessionId);
@@ -2300,16 +2433,19 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   }, []);
 
   useEffect(() => {
+    if (!authProbeReady) return;
     void loadProviderModels();
-  }, [loadProviderModels]);
+  }, [authProbeReady, loadProviderModels]);
 
   useEffect(() => {
+    if (!authProbeReady) return;
     void loadCavenSettings();
-  }, [loadCavenSettings]);
+  }, [authProbeReady, loadCavenSettings]);
 
   useEffect(() => {
+    if (!authProbeReady || !isAuthenticated) return;
     void loadQwenPopoverState(sessionId || null);
-  }, [loadQwenPopoverState, sessionId]);
+  }, [authProbeReady, isAuthenticated, loadQwenPopoverState, sessionId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2347,51 +2483,30 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
 
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch("/api/auth/me", {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        });
-        const body = (await res.json().catch(() => ({}))) as {
-          ok?: boolean;
-          authenticated?: boolean;
-          user?: {
-            displayName?: unknown;
-            username?: unknown;
-          };
-          account?: {
-            tier?: unknown;
-            tierEffective?: unknown;
-          };
-        };
-        if (cancelled) return;
-        if (!res.ok || body.ok !== true || body.authenticated !== true) {
-          if (res.status === 401 || body.authenticated === false) {
-            setAccountPlanId("free");
-          }
-          return;
-        }
-        const nextIdentity = rememberCavAiIdentity({
-          fullName: s(body.user?.displayName),
-          username: s(body.user?.username),
-        });
-        setProfileIdentity(nextIdentity);
-        const authPlanId = normalizePlanId(body.account?.tierEffective ?? body.account?.tier);
-        setAccountPlanId(authPlanId);
-        publishClientPlan({
-          planId: authPlanId,
-          preserveStrongerCached: true,
-        });
-      } catch {
-        // Best effort only.
-      }
-    })();
+    void refreshCodeAuthState({ cancelled: () => cancelled });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshCodeAuthState]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const syncAuth = () => {
+      void refreshCodeAuthState();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      syncAuth();
+    };
+    window.addEventListener("pageshow", syncAuth);
+    window.addEventListener("focus", syncAuth);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("pageshow", syncAuth);
+      window.removeEventListener("focus", syncAuth);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [refreshCodeAuthState]);
 
   useEffect(() => {
     const nextLine = pickAndRememberCavAiLine({
@@ -2429,10 +2544,16 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   }, [messages, sessionId]);
 
   useEffect(() => {
+    if (!authProbeReady) return;
     void loadSessions();
-  }, [loadSessions]);
+  }, [authProbeReady, loadSessions]);
 
   useEffect(() => {
+    if (!authProbeReady || !isAuthenticated) {
+      setMessages([]);
+      setQueuedPrompts([]);
+      return;
+    }
     if (!sessionId) {
       setMessages([]);
       setQueuedPrompts([]);
@@ -2440,7 +2561,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     }
     void loadMessages(sessionId);
     void loadQueuedPrompts(sessionId);
-  }, [loadMessages, loadQueuedPrompts, sessionId]);
+  }, [authProbeReady, isAuthenticated, loadMessages, loadQueuedPrompts, sessionId]);
 
   useEffect(() => {
     if (!reasoningPanelMessageId) return;

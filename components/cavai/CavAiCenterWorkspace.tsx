@@ -34,7 +34,7 @@ import {
 } from "@/src/lib/ai/model-catalog";
 import { toReasoningDisplayHelper, toReasoningDisplayLabel } from "@/src/lib/ai/reasoning-display";
 import { inferCenterActionFromPrompt } from "@/src/lib/ai/ai.center-routing";
-import { emitGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
+import { emitGuardDecisionFromPayload, readGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
 import { resolveUploadFileIcon } from "@/lib/cavai/uploadFileIcons";
 import { readBootClientProfileState } from "@/lib/clientAuthBootstrap";
@@ -3500,6 +3500,15 @@ function toHeroLineSurface(surface: AiCenterSurface): CavAiSurface {
   return surface;
 }
 
+function isAuthRequiredLikeResponse(status: number, payload: unknown) {
+  const decision = readGuardDecisionFromPayload(payload);
+  if (decision?.actionId === "AUTH_REQUIRED") return true;
+  if (status === 401) return true;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const errorCode = String((payload as Record<string, unknown>).error || "").trim().toUpperCase();
+  return errorCode === "AUTH_REQUIRED" || errorCode === "UNAUTHORIZED" || errorCode === "SESSION_REVOKED" || errorCode === "EXPIRED";
+}
+
 export type CavAiCenterWorkspaceProps = {
   surface: AiCenterSurface;
   contextLabel?: string;
@@ -3712,6 +3721,60 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [agentModeQuery, setAgentModeQuery] = useState("");
   const [agentModeManageAgentId, setAgentModeManageAgentId] = useState("");
   const isGuestPreviewMode = authProbeReady && !isAuthenticated;
+  const guestPreviewModelOptions = useMemo(
+    () => CAVAI_GUEST_PREVIEW_MODELS.map((row) => ({ id: row.id, label: row.label })),
+    [],
+  );
+  const guestPreviewReasoningLevels = useMemo(
+    () => REASONING_LEVEL_OPTIONS.map((row) => row.value),
+    [],
+  );
+
+  const resetCenterAgentRegistryState = useCallback(() => {
+    setAgentRegistrySnapshot({ ...EMPTY_AGENT_REGISTRY_SNAPSHOT });
+    agentRegistrySnapshotRef.current = { ...EMPTY_AGENT_REGISTRY_SNAPSHOT };
+    setInstalledAgentIds([]);
+    installedAgentIdsRef.current = [];
+    setCustomAgents([]);
+    setPublishedAgents([]);
+  }, []);
+
+  const resetImageStudioBootstrapState = useCallback(() => {
+    setImageStudioPresets([]);
+    setImageStudioRecent([]);
+    setImageStudioSaved([]);
+    setImageStudioHistory([]);
+    setSelectedImagePresetId("");
+    setImageStudioGalleryCloud([]);
+    setImageStudioGallerySafe([]);
+  }, []);
+
+  const applyUnauthenticatedCenterState = useCallback(() => {
+    setIsAuthenticated(false);
+    setAccountProfilePublicEnabled(null);
+    setAccountProfileAvatar("");
+    setAccountProfileUsername("");
+    setAccountInitialFallback("");
+    setAccountProfileTone("lime");
+    setAccountPlanId("free");
+    publishClientPlan({ planId: "free" });
+    setModelOptions(guestPreviewModelOptions);
+    setAudioModelOptions([]);
+    setAvailableReasoningLevels(guestPreviewReasoningLevels);
+    setSessions([]);
+    activeSessionIdRef.current = "";
+    setSessionId("");
+    setMessages([]);
+    setError("");
+    setCavCloudAttachItems([]);
+    resetCenterAgentRegistryState();
+    resetImageStudioBootstrapState();
+  }, [
+    guestPreviewModelOptions,
+    guestPreviewReasoningLevels,
+    resetCenterAgentRegistryState,
+    resetImageStudioBootstrapState,
+  ]);
 
   const expandHref = useMemo(() => {
     const fallbackHref = buildCavAiSurfaceUrl({
@@ -4716,6 +4779,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [props.initialSessionId, scheduleSessionCachePersist]);
 
   const loadSessions = useCallback(async (): Promise<boolean> => {
+    if (!authProbeReady) return false;
     if (isGuestPreviewMode) return true;
     try {
       const res = await fetch(buildSessionsUrl({ limit: 60 }), {
@@ -4725,6 +4789,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       });
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ sessions?: CavAiSessionSummary[] }>;
       if (!res.ok || !body.ok) {
+        if (isAuthRequiredLikeResponse(res.status, body)) {
+          applyUnauthenticatedCenterState();
+          return true;
+        }
         emitGuardDecisionFromPayload(body);
         throw new Error(s((body as { message?: unknown }).message) || CENTER_LOAD_SESSIONS_FAILED_MESSAGE);
       }
@@ -4752,7 +4820,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       }
       return false;
     }
-  }, [isGuestPreviewMode]);
+  }, [applyUnauthenticatedCenterState, authProbeReady, isGuestPreviewMode]);
 
   const syncGuestSessionCacheToAccount = useCallback(async (): Promise<boolean> => {
     if (typeof window === "undefined") return false;
@@ -4804,6 +4872,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const fetchSessionMessages = useCallback(async (nextSessionId: string): Promise<CavAiMessage[]> => {
     const normalized = s(nextSessionId);
     if (!normalized) return [];
+    if (!authProbeReady) return [];
     if (isGuestPreviewMode) {
       const cached = sessionMessageCacheRef.current.get(normalized);
       if (cached) return cached;
@@ -4821,6 +4890,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       });
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ messages?: CavAiMessage[] }>;
       if (!res.ok || !body.ok) {
+        if (isAuthRequiredLikeResponse(res.status, body)) {
+          applyUnauthenticatedCenterState();
+          return [];
+        }
         emitGuardDecisionFromPayload(body);
         throw new Error(s((body as { message?: unknown }).message) || CENTER_LOAD_MESSAGES_FAILED_MESSAGE);
       }
@@ -4846,7 +4919,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         sessionMessageRequestRef.current.delete(normalized);
       }
     }
-  }, [isGuestPreviewMode, scheduleSessionCachePersist, sessions]);
+  }, [applyUnauthenticatedCenterState, authProbeReady, isGuestPreviewMode, scheduleSessionCachePersist, sessions]);
 
   const loadMessages = useCallback(async (nextSessionId: string) => {
     const normalized = s(nextSessionId);
@@ -4923,11 +4996,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [fetchSessionMessages, isGuestPreviewMode, sessions]);
 
   const loadProviderModels = useCallback(async (): Promise<boolean> => {
+    if (!authProbeReady) return false;
     if (isGuestPreviewMode) {
       setAccountPlanId("free");
-      setModelOptions(CAVAI_GUEST_PREVIEW_MODELS.map((row) => ({ id: row.id, label: row.label })));
+      setModelOptions(guestPreviewModelOptions);
       setAudioModelOptions([]);
-      setAvailableReasoningLevels(REASONING_LEVEL_OPTIONS.map((row) => row.value));
+      setAvailableReasoningLevels(guestPreviewReasoningLevels);
       return true;
     }
     try {
@@ -4952,6 +5026,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         guardDecision?: unknown;
       };
       if (!res.ok || body.ok !== true) {
+        if (isAuthRequiredLikeResponse(res.status, body)) {
+          applyUnauthenticatedCenterState();
+          return true;
+        }
         emitGuardDecisionFromPayload(body);
         setModelOptions(centerPlanModelOptions(accountPlanId));
         setAvailableReasoningLevels(reasoningLevelsForPlan(accountPlanId));
@@ -5006,16 +5084,20 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       setAvailableReasoningLevels(reasoningLevelsForPlan(accountPlanId));
       return false;
     }
-  }, [accountPlanId, isGuestPreviewMode]);
+  }, [
+    accountPlanId,
+    applyUnauthenticatedCenterState,
+    authProbeReady,
+    guestPreviewModelOptions,
+    guestPreviewReasoningLevels,
+    isGuestPreviewMode,
+  ]);
 
   const loadCavenAgentRegistry = useCallback(async (): Promise<boolean> => {
+    if (!authProbeReady) return false;
     if (isGuestPreviewMode) {
       setAccountPlanId("free");
-      setAgentRegistrySnapshot({ ...EMPTY_AGENT_REGISTRY_SNAPSHOT });
-      agentRegistrySnapshotRef.current = { ...EMPTY_AGENT_REGISTRY_SNAPSHOT };
-      setInstalledAgentIds([]);
-      setCustomAgents([]);
-      setPublishedAgents([]);
+      resetCenterAgentRegistryState();
       return true;
     }
     try {
@@ -5031,7 +5113,13 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         publishedAgents?: unknown;
         planId?: unknown;
       };
-      if (!res.ok || body.ok !== true || !body.settings || typeof body.settings !== "object") return false;
+      if (!res.ok || body.ok !== true || !body.settings || typeof body.settings !== "object") {
+        if (isAuthRequiredLikeResponse(res.status, body)) {
+          applyUnauthenticatedCenterState();
+          return true;
+        }
+        return false;
+      }
       const effectivePlanId = normalizePlanId(body.planId);
       setAccountPlanId(effectivePlanId);
       publishClientPlan({
@@ -5064,15 +5152,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     } catch {
       return false;
     }
-  }, [isGuestPreviewMode]);
+  }, [applyUnauthenticatedCenterState, authProbeReady, isGuestPreviewMode, resetCenterAgentRegistryState]);
 
   const loadImageStudioBootstrap = useCallback(async (): Promise<boolean> => {
+    if (!authProbeReady) return false;
     if (isGuestPreviewMode) {
-      setImageStudioPresets([]);
-      setImageStudioRecent([]);
-      setImageStudioSaved([]);
-      setImageStudioHistory([]);
-      setSelectedImagePresetId("");
+      resetImageStudioBootstrapState();
       return true;
     }
     try {
@@ -5088,7 +5173,13 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         saved?: unknown[];
         history?: unknown[];
       };
-      if (!res.ok || body.ok !== true) return false;
+      if (!res.ok || body.ok !== true) {
+        if (isAuthRequiredLikeResponse(res.status, body)) {
+          applyUnauthenticatedCenterState();
+          return true;
+        }
+        return false;
+      }
       const presets = Array.isArray(body.presets)
         ? body.presets.map((row) => parseImageStudioPreset(row)).filter(Boolean) as ImageStudioPreset[]
         : [];
@@ -5113,9 +5204,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     } catch {
       return false;
     }
-  }, [isGuestPreviewMode]);
+  }, [applyUnauthenticatedCenterState, authProbeReady, isGuestPreviewMode, resetImageStudioBootstrapState]);
 
   const loadImageStudioHistoryView = useCallback(async (view: "recent" | "saved" | "history") => {
+    if (!authProbeReady) return false;
     if (isGuestPreviewMode) {
       if (view === "saved") setImageStudioSaved([]);
       else if (view === "history") setImageStudioHistory([]);
@@ -5132,7 +5224,13 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         ok?: boolean;
         rows?: unknown[];
       };
-      if (!res.ok || body.ok !== true) return false;
+      if (!res.ok || body.ok !== true) {
+        if (isAuthRequiredLikeResponse(res.status, body)) {
+          applyUnauthenticatedCenterState();
+          return true;
+        }
+        return false;
+      }
       const rows = Array.isArray(body.rows)
         ? body.rows.map((row) => parseImageStudioHistoryRow(row)).filter(Boolean) as ImageStudioHistoryRow[]
         : [];
@@ -5147,7 +5245,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     } catch {
       return false;
     }
-  }, [isGuestPreviewMode]);
+  }, [applyUnauthenticatedCenterState, authProbeReady, isGuestPreviewMode]);
 
   const loadImageStudioSourceGallery = useCallback(async (source: "cavcloud" | "cavsafe") => {
     if (isGuestPreviewMode) {
@@ -5231,7 +5329,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, []);
 
   useEffect(() => {
-    if (!shouldWarm) return;
+    if (!shouldWarm || !authProbeReady) return;
     if (isOpen) {
       warmSessionsKeyRef.current = sessionScopeKey;
       void loadSessions();
@@ -5245,10 +5343,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         warmSessionsKeyRef.current = "";
       }
     })();
-  }, [isOpen, loadSessions, sessionScopeKey, shouldWarm]);
+  }, [authProbeReady, isOpen, loadSessions, sessionScopeKey, shouldWarm]);
 
   useEffect(() => {
-    if (!shouldWarm) return;
+    if (!shouldWarm || !authProbeReady) return;
     if (isOpen) {
       void loadProviderModels();
       warmedModelsRef.current = true;
@@ -5260,17 +5358,17 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       const ok = await loadProviderModels();
       if (!ok) warmedModelsRef.current = false;
     })();
-  }, [isOpen, loadProviderModels, shouldWarm]);
+  }, [authProbeReady, isOpen, loadProviderModels, shouldWarm]);
 
   useEffect(() => {
-    if (!shouldWarm) return;
+    if (!shouldWarm || !authProbeReady) return;
     void loadCavenAgentRegistry();
-  }, [loadCavenAgentRegistry, shouldWarm]);
+  }, [authProbeReady, loadCavenAgentRegistry, shouldWarm]);
 
   useEffect(() => {
-    if (!shouldWarm) return;
+    if (!shouldWarm || !authProbeReady) return;
     void loadImageStudioBootstrap();
-  }, [loadImageStudioBootstrap, shouldWarm]);
+  }, [authProbeReady, loadImageStudioBootstrap, shouldWarm]);
 
   useEffect(() => {
     if (!shouldWarm) return;
@@ -5291,9 +5389,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [centerAgentBankCatalog, preloadIconSources, shouldWarm]);
 
   useEffect(() => {
+    if (!authProbeReady) return;
     if (openComposerMenu !== "agent_mode") return;
     void loadCavenAgentRegistry();
-  }, [loadCavenAgentRegistry, openComposerMenu]);
+  }, [authProbeReady, loadCavenAgentRegistry, openComposerMenu]);
 
   useEffect(() => {
     if (!imageStudioImportModalOpen) return;
@@ -5318,42 +5417,23 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [cavCloudAttachItems.length, cavCloudAttachModalOpen, loadCavCloudAttachItems]);
 
   useEffect(() => {
-    if (!shouldWarm || typeof window === "undefined") return;
-    const onFocus = () => {
-      void loadCavenAgentRegistry();
-      void loadImageStudioHistoryView(imageStudioHistoryView);
-    };
-    const onVisibilityChange = () => {
-      if (document.visibilityState !== "visible") return;
-      void loadCavenAgentRegistry();
-      void loadImageStudioHistoryView(imageStudioHistoryView);
-    };
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [imageStudioHistoryView, loadCavenAgentRegistry, loadImageStudioHistoryView, shouldWarm]);
-
-  useEffect(() => {
     setClientHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (!shouldWarm) return;
+    if (!shouldWarm || !authProbeReady) return;
     if (!sessionId) {
       setMessages([]);
       return;
     }
     void loadMessages(sessionId);
-  }, [isOpen, loadMessages, sessionId, shouldWarm]);
+  }, [authProbeReady, isOpen, loadMessages, sessionId, shouldWarm]);
 
   useEffect(() => {
-    if (!shouldWarm) return;
+    if (!shouldWarm || !authProbeReady) return;
     if (!sessions.length) return;
     prefetchSessionMessages(sessionId);
-  }, [prefetchSessionMessages, sessionId, sessions.length, shouldWarm]);
+  }, [authProbeReady, prefetchSessionMessages, sessionId, sessions.length, shouldWarm]);
 
   useEffect(() => {
     scheduleSessionCachePersist({
@@ -5422,78 +5502,111 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     };
   }, [shouldWarm]);
 
+  const refreshAuthProfile = useCallback(async (opts?: { cancelled?: () => boolean }): Promise<boolean> => {
+    const isCancelled = opts?.cancelled;
+    try {
+      const res = await fetch("/api/auth/me", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        authenticated?: boolean;
+        user?: {
+          displayName?: unknown;
+          username?: unknown;
+          initials?: unknown;
+          avatarTone?: unknown;
+          avatarImage?: unknown;
+          publicProfileEnabled?: unknown;
+        };
+        account?: {
+          tier?: unknown;
+          tierEffective?: unknown;
+        };
+      };
+      if (isCancelled?.()) return false;
+      if (!res.ok || body.ok !== true || body.authenticated !== true) {
+        applyUnauthenticatedCenterState();
+        return false;
+      }
+      setIsAuthenticated(true);
+      setAccountProfileUsername(s(body.user?.username).toLowerCase());
+      setAccountInitialFallback(s(body.user?.initials));
+      setAccountProfileTone(s(body.user?.avatarTone).toLowerCase() || "lime");
+      setAccountProfileAvatar(s(body.user?.avatarImage));
+      const nextIdentity = rememberCavAiIdentity({
+        fullName: s(body.user?.displayName),
+        username: s(body.user?.username),
+      });
+      setProfileIdentity(nextIdentity);
+      if (typeof body.user?.publicProfileEnabled === "boolean") {
+        setAccountProfilePublicEnabled(body.user.publicProfileEnabled);
+      }
+      const authPlanId = normalizePlanId(body.account?.tierEffective ?? body.account?.tier);
+      setAccountPlanId(authPlanId);
+      publishClientPlan({
+        planId: authPlanId,
+        preserveStrongerCached: true,
+      });
+      return true;
+    } catch {
+      if (isCancelled?.()) return false;
+      applyUnauthenticatedCenterState();
+      return false;
+    } finally {
+      if (!isCancelled?.()) {
+        setAuthProbeReady(true);
+      }
+    }
+  }, [applyUnauthenticatedCenterState]);
+
   useEffect(() => {
     if (!shouldWarm) return;
     if (!isOpen && warmedAuthProfileRef.current) return;
     warmedAuthProfileRef.current = true;
     let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch("/api/auth/me", {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        });
-        const body = (await res.json().catch(() => ({}))) as {
-          ok?: boolean;
-          authenticated?: boolean;
-          user?: {
-            displayName?: unknown;
-            username?: unknown;
-            initials?: unknown;
-            avatarTone?: unknown;
-            avatarImage?: unknown;
-            publicProfileEnabled?: unknown;
-          };
-          account?: {
-            tier?: unknown;
-            tierEffective?: unknown;
-          };
-        };
-        if (cancelled) return;
-        if (!res.ok || body.ok !== true || body.authenticated !== true) {
-          if (res.status === 401 || body.authenticated === false) {
-            setIsAuthenticated(false);
-            setAccountProfilePublicEnabled(null);
-            setAccountProfileAvatar("");
-            setAccountProfileUsername("");
-            setAccountInitialFallback("");
-            setAccountProfileTone("lime");
-            setAccountPlanId("free");
-          }
-          return;
-        }
-        setIsAuthenticated(true);
-        setAccountProfileUsername(s(body.user?.username).toLowerCase());
-        setAccountInitialFallback(s(body.user?.initials));
-        setAccountProfileTone(s(body.user?.avatarTone).toLowerCase() || "lime");
-        setAccountProfileAvatar(s(body.user?.avatarImage));
-        const nextIdentity = rememberCavAiIdentity({
-          fullName: s(body.user?.displayName),
-          username: s(body.user?.username),
-        });
-        setProfileIdentity(nextIdentity);
-        if (typeof body.user?.publicProfileEnabled === "boolean") {
-          setAccountProfilePublicEnabled(body.user.publicProfileEnabled);
-        }
-        const authPlanId = normalizePlanId(body.account?.tierEffective ?? body.account?.tier);
-        setAccountPlanId(authPlanId);
-        publishClientPlan({
-          planId: authPlanId,
-          preserveStrongerCached: true,
-        });
-      } catch {
-        // Keep the boot snapshot plan live until auth explicitly says otherwise.
-      } finally {
-        if (!cancelled) {
-          setAuthProbeReady(true);
-        }
-      }
-    })();
+    void refreshAuthProfile({ cancelled: () => cancelled });
     return () => {
       cancelled = true;
     };
-  }, [isOpen, shouldWarm]);
+  }, [isOpen, refreshAuthProfile, shouldWarm]);
+
+  useEffect(() => {
+    if (!shouldWarm || typeof window === "undefined") return;
+    const refreshProtectedState = async () => {
+      const authenticated = await refreshAuthProfile();
+      if (!authenticated) return;
+      void loadSessions();
+      void loadProviderModels();
+      void loadCavenAgentRegistry();
+      void loadImageStudioHistoryView(imageStudioHistoryView);
+    };
+    const onFocus = () => {
+      void refreshProtectedState();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      void refreshProtectedState();
+    };
+    window.addEventListener("pageshow", onFocus);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("pageshow", onFocus);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [
+    imageStudioHistoryView,
+    loadCavenAgentRegistry,
+    loadImageStudioHistoryView,
+    loadProviderModels,
+    loadSessions,
+    refreshAuthProfile,
+    shouldWarm,
+  ]);
 
   useEffect(() => {
     if (isAuthenticated) return;
