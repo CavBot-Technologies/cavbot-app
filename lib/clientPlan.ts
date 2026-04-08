@@ -88,6 +88,90 @@ export function readBootClientPlanBootstrap(): ClientPlanBootstrap {
   };
 }
 
+function strongerClientPlanId(a: ClientPlanId, b: ClientPlanId): ClientPlanId {
+  return clientPlanRank(a) >= clientPlanRank(b) ? a : b;
+}
+
+function toPlanTier(planId: ClientPlanId): "FREE" | "PREMIUM" | "PREMIUM_PLUS" {
+  if (planId === "premium_plus") return "PREMIUM_PLUS";
+  if (planId === "premium") return "PREMIUM";
+  return "FREE";
+}
+
+function toPlanLabel(planId: ClientPlanId): "FREE" | "PREMIUM" | "PREMIUM+" {
+  if (planId === "premium_plus") return "PREMIUM+";
+  if (planId === "premium") return "PREMIUM";
+  return "FREE";
+}
+
+export function publishClientPlan(args: {
+  planId: ClientPlanId;
+  memberRole?: string | null;
+  trialActive?: boolean;
+  trialDaysLeft?: number;
+  preserveStrongerCached?: boolean;
+}) {
+  const cachedSnapshot =
+    typeof window === "undefined" || typeof globalThis.__cbLocalStore === "undefined"
+      ? null
+      : safeJsonParse<{
+          planTier?: unknown;
+          memberRole?: unknown;
+          trialActive?: unknown;
+          trialDaysLeft?: unknown;
+        }>(globalThis.__cbLocalStore.getItem(SHELL_PLAN_SNAPSHOT_KEY));
+  const cachedPlanId = cachedSnapshot ? normalizeClientPlanId(cachedSnapshot.planTier) : null;
+  const planId =
+    args.preserveStrongerCached && cachedPlanId
+      ? strongerClientPlanId(args.planId, cachedPlanId)
+      : args.planId;
+  const planTier = toPlanTier(planId);
+  const memberRole =
+    typeof args.memberRole === "string"
+      ? args.memberRole
+      : typeof cachedSnapshot?.memberRole === "string"
+        ? cachedSnapshot.memberRole
+        : null;
+  const trialActive =
+    typeof args.trialActive === "boolean"
+      ? args.trialActive
+      : Boolean(cachedSnapshot?.trialActive);
+  const trialDaysLeftRaw =
+    typeof args.trialDaysLeft !== "undefined"
+      ? Number(args.trialDaysLeft)
+      : Number(cachedSnapshot?.trialDaysLeft || 0);
+  const trialDaysLeft =
+    trialActive && Number.isFinite(trialDaysLeftRaw) && trialDaysLeftRaw > 0
+      ? Math.trunc(trialDaysLeftRaw)
+      : 0;
+  const snapshot = {
+    planTier,
+    memberRole,
+    trialActive,
+    trialDaysLeft,
+    ts: Date.now(),
+  };
+  const detail = {
+    planKey: planId,
+    planLabel: toPlanLabel(planId),
+    planTier,
+    memberRole,
+    trialActive,
+    trialDaysLeft,
+  };
+
+  if (typeof window !== "undefined" && typeof globalThis.__cbLocalStore !== "undefined") {
+    try {
+      globalThis.__cbLocalStore.setItem(SHELL_PLAN_SNAPSHOT_KEY, JSON.stringify(snapshot));
+      globalThis.__cbLocalStore.setItem(PLAN_CONTEXT_KEY, JSON.stringify(detail));
+      window.dispatchEvent(new CustomEvent(SHELL_PLAN_EVENT, { detail: snapshot }));
+      window.dispatchEvent(new CustomEvent(PLAN_EVENT, { detail }));
+    } catch {}
+  }
+
+  return { snapshot, detail };
+}
+
 export function subscribeClientPlan(handler: (planId: ClientPlanId) => void): () => void {
   if (typeof window === "undefined") return () => {};
 

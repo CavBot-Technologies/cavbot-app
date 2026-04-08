@@ -19,11 +19,18 @@ import {
 
 
 import { COUNTRY_NAME_BY_CODE } from "@/geo/countries";
+import {
+  normalizeClientPlanId as normalizePlanId,
+  publishClientPlan,
+  readBootClientPlanBootstrap,
+  subscribeClientPlan,
+  type ClientPlanId,
+} from "@/lib/clientPlan";
 import { PLANS } from "@/lib/plans";
 
 
 type Tone = "good" | "watch" | "bad";
-type PlanId = "free" | "premium" | "premium_plus";
+type PlanId = ClientPlanId;
 type BillingCycle = "monthly" | "annual";
 
 
@@ -134,44 +141,6 @@ type PaymentMethodSummary = {
 
 type ApiErrorPayload = Record<string, unknown> & { ok?: boolean; message?: string; error?: string };
 type SetupIntentResponse = { ok: true; clientSecret: string };
-
-const SHELL_PLAN_SNAPSHOT_KEY = "cb_shell_plan_snapshot_v1";
-const PLAN_CONTEXT_KEY = "cb_plan_context_v1";
-
-function normalizePlanId(input: unknown): PlanId | null {
-  const value = String(input || "").trim().toLowerCase();
-  if (!value) return null;
-  if (value === "premium_plus" || value === "premium+" || value === "plus" || value === "enterprise") {
-    return "premium_plus";
-  }
-  if (value === "premium" || value === "pro" || value === "paid") return "premium";
-  if (value === "free") return "free";
-  return null;
-}
-
-function readBootPlanId(): PlanId {
-  if (typeof window === "undefined") return "free";
-
-  try {
-    const raw = globalThis.__cbLocalStore.getItem(SHELL_PLAN_SNAPSHOT_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as { planTier?: unknown } | null;
-      const fromSnapshot = normalizePlanId(parsed?.planTier);
-      if (fromSnapshot) return fromSnapshot;
-    }
-  } catch {}
-
-  try {
-    const raw = globalThis.__cbLocalStore.getItem(PLAN_CONTEXT_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as { planKey?: unknown; planLabel?: unknown } | null;
-      const fromLegacy = normalizePlanId(parsed?.planKey || parsed?.planLabel);
-      if (fromLegacy) return fromLegacy;
-    }
-  } catch {}
-
-  return "free";
-}
 
 
 async function apiJSON<T>(url: string, init?: RequestInit): Promise<T> {
@@ -754,7 +723,7 @@ function FlipIcon() {
 function BillingClientInner() {
   const [err, setErr] = React.useState("");
   const [summary, setSummary] = React.useState<BillingSummary | null>(null);
-  const [bootPlanId, setBootPlanId] = React.useState<PlanId>("free");
+  const [bootPlanId, setBootPlanId] = React.useState<PlanId>(() => readBootClientPlanBootstrap().planId);
 
 
   const [pm, setPm] = React.useState<PaymentMethodSummary | null>(null);
@@ -785,7 +754,9 @@ function BillingClientInner() {
   const [planDot, setPlanDot] = React.useState(0);
 
   React.useEffect(() => {
-    setBootPlanId(readBootPlanId());
+    return subscribeClientPlan((planId) => {
+      setBootPlanId(planId);
+    });
   }, []);
 
 
@@ -846,21 +817,10 @@ function BillingClientInner() {
   React.useEffect(() => {
     const livePlanId = summary?.computed.currentPlanId;
     if (!livePlanId || typeof window === "undefined") return;
-
-    const planTier = livePlanId === "premium_plus" ? "PREMIUM_PLUS" : livePlanId === "premium" ? "PREMIUM" : "FREE";
-
-    try {
-      const raw = globalThis.__cbLocalStore.getItem(SHELL_PLAN_SNAPSHOT_KEY);
-      const previous = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-      globalThis.__cbLocalStore.setItem(
-        SHELL_PLAN_SNAPSHOT_KEY,
-        JSON.stringify({
-          ...previous,
-          planTier,
-          ts: Date.now(),
-        })
-      );
-    } catch {}
+    publishClientPlan({
+      planId: normalizePlanId(livePlanId),
+      preserveStrongerCached: false,
+    });
   }, [summary?.computed.currentPlanId]);
 
 

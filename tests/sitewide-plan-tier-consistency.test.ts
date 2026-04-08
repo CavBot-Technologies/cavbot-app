@@ -39,10 +39,12 @@ test("CavAi and CavCode clients clamp models and reasoning to the resolved plan"
   const center = read("components/cavai/CavAiCenterWorkspace.tsx");
   const code = read("components/cavai/CavAiCodeWorkspace.tsx");
   const cavcode = read("app/cavcode/page.tsx");
+  const billing = read("app/settings/sections/BillingClient.tsx");
 
   assert.equal(helper.includes('export const SHELL_PLAN_SNAPSHOT_KEY = "cb_shell_plan_snapshot_v1";'), true);
   assert.equal(helper.includes('export const PLAN_EVENT = "cb:plan";'), true);
   assert.equal(helper.includes("readBootClientPlanBootstrap"), true);
+  assert.equal(helper.includes("publishClientPlan"), true);
   assert.equal(helper.includes("subscribeClientPlan"), true);
 
   assert.equal(center.includes("clampCenterModelOptionsToPlan"), true);
@@ -76,4 +78,10 @@ test("CavAi and CavCode clients clamp models and reasoning to the resolved plan"
   assert.equal(cavcode.includes("setChangesCommitAiModelOptions(agentBuilderPlanModelOptions(boot.planId));"), true);
   assert.equal(cavcode.includes("return subscribeClientPlan((planId) => {"), true);
   assert.equal(cavcode.includes("mergeAgentBuilderModelOptionsWithPlan"), false);
+
+  assert.equal(billing.includes('const [bootPlanId, setBootPlanId] = React.useState<PlanId>(() => readBootClientPlanBootstrap().planId);'), true);
+  assert.equal(billing.includes("return subscribeClientPlan((planId) => {"), true);
+  assert.equal(billing.includes("publishClientPlan({"), true);
+  assert.equal(billing.includes('const [bootPlanId, setBootPlanId] = React.useState<PlanId>("free");'), false);
+  assert.equal(billing.includes("setBootPlanId(readBootPlanId());"), false);
 });
