@@ -5735,7 +5735,8 @@ export default function CavCodePage() {
   const [keyboardShortcutsQuery, setKeyboardShortcutsQuery] = useState("");
   const [skillsPageView, setSkillsPageView] = useState<SkillsPageView>("agents");
   const [cavenIdeSettings, setCavenIdeSettings] = useState<CavenIdeSettings>(DEFAULT_CAVEN_IDE_SETTINGS);
-  const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">("free");
+  const [planBoot] = useState(() => readBootClientPlanBootstrap());
+  const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">(() => planBoot.planId);
   const [savingCavenIdeSettingsKey, setSavingCavenIdeSettingsKey] = useState<keyof CavenIdeSettings | "">("");
   const settingsBootstrappedRef = useRef(false);
   const settingsPersistTimerRef = useRef<number | null>(null);
@@ -5787,11 +5788,11 @@ export default function CavCodePage() {
   const [createAgentAiWorkingMode, setCreateAgentAiWorkingMode] = useState<AgentBuilderAiMode | null>(null);
   const [createAgentAiControlMenu, setCreateAgentAiControlMenu] = useState<AgentBuilderControlMenu>(null);
   const [createAgentAiModelOptions, setCreateAgentAiModelOptions] = useState<AgentBuilderModelOption[]>(
-    () => agentBuilderPlanModelOptions("free")
+    () => agentBuilderPlanModelOptions(planBoot.planId)
   );
   const [createAgentAiModelId, setCreateAgentAiModelId] = useState(DEEPSEEK_CHAT_MODEL_ID);
   const [createAgentAiReasoningOptions, setCreateAgentAiReasoningOptions] = useState<AgentBuilderReasoningLevel[]>(
-    DEFAULT_AGENT_BUILDER_REASONING_LEVELS
+    () => reasoningLevelsForPlan(planBoot.planId)
   );
   const [createAgentAiReasoningLevel, setCreateAgentAiReasoningLevel] =
     useState<AgentBuilderReasoningLevel>("medium");
@@ -5957,11 +5958,11 @@ export default function CavCodePage() {
   const [changesCommitAiPromptHintCycle, setChangesCommitAiPromptHintCycle] = useState(0);
   const [changesCommitAiWorkingMode, setChangesCommitAiWorkingMode] = useState<CommitMessageAiMode | null>(null);
   const [changesCommitAiModelOptions, setChangesCommitAiModelOptions] = useState<AgentBuilderModelOption[]>(
-    () => agentBuilderPlanModelOptions("free")
+    () => agentBuilderPlanModelOptions(planBoot.planId)
   );
   const [changesCommitAiModelId, setChangesCommitAiModelId] = useState(DEEPSEEK_CHAT_MODEL_ID);
   const [changesCommitAiReasoningOptions, setChangesCommitAiReasoningOptions] = useState<AgentBuilderReasoningLevel[]>(
-    DEFAULT_AGENT_BUILDER_REASONING_LEVELS
+    () => reasoningLevelsForPlan(planBoot.planId)
   );
   const [changesCommitAiReasoningLevel, setChangesCommitAiReasoningLevel] =
     useState<AgentBuilderReasoningLevel>("medium");

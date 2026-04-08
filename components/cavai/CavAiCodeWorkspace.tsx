@@ -1588,13 +1588,18 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   const [cavCloudAttachItems, setCavCloudAttachItems] = useState<CavCloudAttachFileItem[]>([]);
   const [cavCloudAttachQuery, setCavCloudAttachQuery] = useState("");
 
-  const [modelOptions, setModelOptions] = useState<CavAiModelOption[]>([]);
+  const [planBoot] = useState(() => readBootClientPlanBootstrap());
+  const [modelOptions, setModelOptions] = useState<CavAiModelOption[]>(
+    () => (planBoot.planId === "free" ? [] : cavCodePlanModelOptions(planBoot.planId))
+  );
   const [audioModelOptions, setAudioModelOptions] = useState<CavAiModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState(ALIBABA_QWEN_CODER_MODEL_ID);
   const [selectedAudioModel, setSelectedAudioModel] = useState("auto");
   const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>("medium");
-  const [availableReasoningLevels, setAvailableReasoningLevels] = useState<ReasoningLevel[]>(DEFAULT_REASONING_LEVELS);
-  const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">("free");
+  const [availableReasoningLevels, setAvailableReasoningLevels] = useState<ReasoningLevel[]>(
+    () => reasoningLevelsForPlan(planBoot.planId)
+  );
+  const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">(() => planBoot.planId);
   const [qwenPopoverState, setQwenPopoverState] = useState<QwenCoderPopoverUiState | null>(null);
   const [qwenPopoverOpen, setQwenPopoverOpen] = useState(false);
   const [qwenPopoverPinned, setQwenPopoverPinned] = useState(false);

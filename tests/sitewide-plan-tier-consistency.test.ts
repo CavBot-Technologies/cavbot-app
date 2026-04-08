@@ -40,6 +40,7 @@ test("CavAi and CavCode clients clamp models and reasoning to the resolved plan"
   const code = read("components/cavai/CavAiCodeWorkspace.tsx");
   const cavcode = read("app/cavcode/page.tsx");
   const billing = read("app/settings/sections/BillingClient.tsx");
+  const tierHook = read("lib/hooks/useAccountTier.ts");
 
   assert.equal(helper.includes('export const SHELL_PLAN_SNAPSHOT_KEY = "cb_shell_plan_snapshot_v1";'), true);
   assert.equal(helper.includes('export const PLAN_EVENT = "cb:plan";'), true);
@@ -49,6 +50,11 @@ test("CavAi and CavCode clients clamp models and reasoning to the resolved plan"
 
   assert.equal(center.includes("clampCenterModelOptionsToPlan"), true);
   assert.equal(center.includes("clampCenterReasoningLevelsToPlan"), true);
+  assert.equal(center.includes("const [planBoot] = useState(() => readBootClientPlanBootstrap());"), true);
+  assert.equal(center.includes('const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">(() => planBoot.planId);'), true);
+  assert.equal(center.includes("const [modelOptions, setModelOptions] = useState<CavAiModelOption[]>(() => centerPlanModelOptions(planBoot.planId));"), true);
+  assert.equal(center.includes("() => reasoningLevelsForPlan(planBoot.planId)"), true);
+  assert.equal(center.includes('useState<"free" | "premium" | "premium_plus">("free")'), false);
   assert.equal(center.includes("setAccountPlanId(authPlanId);"), true);
   assert.equal(center.includes("const boot = readBootClientPlanBootstrap();"), true);
   assert.equal(center.includes("setModelOptions(centerPlanModelOptions(boot.planId));"), true);
@@ -61,6 +67,10 @@ test("CavAi and CavCode clients clamp models and reasoning to the resolved plan"
 
   assert.equal(code.includes("if (!coder) return [];"), true);
   assert.equal(code.includes('accountPlanId === "free" || s(qwenPopoverState?.entitlement?.state).toLowerCase() === "locked_free"'), true);
+  assert.equal(code.includes("const [planBoot] = useState(() => readBootClientPlanBootstrap());"), true);
+  assert.equal(code.includes('const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">(() => planBoot.planId);'), true);
+  assert.equal(code.includes('() => (planBoot.planId === "free" ? [] : cavCodePlanModelOptions(planBoot.planId))'), true);
+  assert.equal(code.includes('useState<"free" | "premium" | "premium_plus">("free")'), false);
   assert.equal(code.includes("cavCodePlanModelOptions(accountPlanId)"), true);
   assert.equal(code.includes("const boot = readBootClientPlanBootstrap();"), true);
   assert.equal(code.includes('setModelOptions(boot.planId === "free" ? [] : cavCodePlanModelOptions(boot.planId));'), true);
@@ -73,6 +83,11 @@ test("CavAi and CavCode clients clamp models and reasoning to the resolved plan"
   assert.equal(cavcode.includes("resolveServerPlanId(body.planId, accountPlanId)"), true);
   assert.equal(cavcode.includes("clampAgentBuilderModelOptionsToPlan"), true);
   assert.equal(cavcode.includes("clampAgentBuilderReasoningOptionsToPlan"), true);
+  assert.equal(cavcode.includes("const [planBoot] = useState(() => readBootClientPlanBootstrap());"), true);
+  assert.equal(cavcode.includes('const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">(() => planBoot.planId);'), true);
+  assert.equal(cavcode.includes('() => agentBuilderPlanModelOptions(planBoot.planId)'), true);
+  assert.equal(cavcode.includes('() => reasoningLevelsForPlan(planBoot.planId)'), true);
+  assert.equal(cavcode.includes('useState<"free" | "premium" | "premium_plus">("free")'), false);
   assert.equal(cavcode.includes("const boot = readBootClientPlanBootstrap();"), true);
   assert.equal(cavcode.includes("setCreateAgentAiModelOptions(agentBuilderPlanModelOptions(boot.planId));"), true);
   assert.equal(cavcode.includes("setChangesCommitAiModelOptions(agentBuilderPlanModelOptions(boot.planId));"), true);
@@ -84,4 +99,10 @@ test("CavAi and CavCode clients clamp models and reasoning to the resolved plan"
   assert.equal(billing.includes("publishClientPlan({"), true);
   assert.equal(billing.includes('const [bootPlanId, setBootPlanId] = React.useState<PlanId>("free");'), false);
   assert.equal(billing.includes("setBootPlanId(readBootPlanId());"), false);
+
+  assert.equal(tierHook.includes("readBootClientPlanBootstrap"), true);
+  assert.equal(tierHook.includes("subscribeClientPlan"), true);
+  assert.equal(tierHook.includes("const bootTier = readBootTier();"), true);
+  assert.equal(tierHook.includes('return cachedTier ?? "free";'), true);
+  assert.equal(tierHook.includes('const [tier, setTier] = useState<Tier>(cachedTier ?? "free");'), false);
 });

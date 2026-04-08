@@ -3557,10 +3557,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [accountProfileAvatar, setAccountProfileAvatar] = useState("");
   const [accountProfileTone, setAccountProfileTone] = useState("lime");
   const [accountProfilePublicEnabled, setAccountProfilePublicEnabled] = useState<boolean | null>(null);
-  const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">("free");
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [planBoot] = useState(() => readBootClientPlanBootstrap());
+  const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">(() => planBoot.planId);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => planBoot.authenticatedHint);
   const [authProbeReady, setAuthProbeReady] = useState(false);
-  const [authBootstrapped, setAuthBootstrapped] = useState(false);
+  const [authBootstrapped, setAuthBootstrapped] = useState(() => planBoot.authenticatedHint);
   const [logoutPending, setLogoutPending] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -3568,7 +3569,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [chatsExpanded, setChatsExpanded] = useState(true);
   const [images, setImages] = useState<CavAiImageAttachment[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<CavAiUploadedFileAttachment[]>([]);
-  const [modelOptions, setModelOptions] = useState<CavAiModelOption[]>([]);
+  const [modelOptions, setModelOptions] = useState<CavAiModelOption[]>(() => centerPlanModelOptions(planBoot.planId));
   const [audioModelOptions, setAudioModelOptions] = useState<CavAiModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState(CAVAI_AUTO_MODEL_ID);
   const [researchMode, setResearchMode] = useState(false);
@@ -3604,7 +3605,9 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [cavCloudAttachQuery, setCavCloudAttachQuery] = useState("");
   const [selectedAudioModel, setSelectedAudioModel] = useState("auto");
   const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>("high");
-  const [availableReasoningLevels, setAvailableReasoningLevels] = useState<ReasoningLevel[]>(DEFAULT_REASONING_LEVELS);
+  const [availableReasoningLevels, setAvailableReasoningLevels] = useState<ReasoningLevel[]>(
+    () => reasoningLevelsForPlan(planBoot.planId)
+  );
   const [openHeaderModelMenu, setOpenHeaderModelMenu] = useState(false);
   const [openComposerMenu, setOpenComposerMenu] = useState<ComposerMenu>(null);
   const [transcribingAudio, setTranscribingAudio] = useState(false);
