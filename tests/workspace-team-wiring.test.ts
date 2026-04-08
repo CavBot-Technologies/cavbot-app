@@ -77,10 +77,11 @@ test("request access entry resolves workspace target before submit", () => {
 test("Notifications modal action parser supports invite/request action keys", () => {
   const source = read("components/AppShell.tsx");
 
-  assert.equal(source.includes("key === \"accept\""), true);
-  assert.equal(source.includes("key === \"approve\""), true);
+  assert.equal(source.includes("normalizeNotificationActions(meta)"), true);
+  assert.equal(source.includes("isWorkspaceJoinApprovalAction(action)"), true);
   assert.equal(source.includes("key === \"deny\""), true);
-  assert.equal(source.includes("key === \"requestAccess\""), true);
+  assert.equal(source.includes("Accept as"), true);
+  assert.equal(source.includes("Select role for accepted request"), true);
 });
 
 test("notification APIs include global workspace notifications in account-scoped reads", () => {

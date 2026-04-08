@@ -1,6 +1,6 @@
 // app/api/auth/me/route.ts
 import { NextResponse } from "next/server";
-import { createUserSession, getSession, isApiAuthError, sessionCookieOptions } from "@/lib/apiAuth";
+import { createUserSession, requireSession, isApiAuthError, sessionCookieOptions } from "@/lib/apiAuth";
 import type { CavbotSession } from "@/lib/apiAuth";
 import {
   compareMembershipPriority,
@@ -199,11 +199,17 @@ function buildFallbackAccountFromMembership(args: {
 export async function GET(req: Request) {
   try {
     const pool = getAuthPool();
-    const sess: CavbotSession | null = await getSession(req);
     let degraded = false;
+    let sess: CavbotSession;
 
-    // Not logged in -> always 200
-    if (!sess) return json({ ok: true, authenticated: false }, 200);
+    try {
+      sess = await requireSession(req);
+    } catch (error) {
+      if (isApiAuthError(error) && (error.status === 401 || error.status === 403)) {
+        return json({ ok: true, authenticated: false, error: error.code }, 200);
+      }
+      throw error;
+    }
 
     // System sessions (internal tooling)
     if (sess.systemRole === "system") {
