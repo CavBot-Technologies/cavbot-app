@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import {
   createSystemSession,
   createUserSession,
-  getSession,
+  requireSession,
   requireSystemToken,
   isApiAuthError,
   sessionCookieOptions,
@@ -19,8 +19,8 @@ import {
   getAuthPool,
   pickPrimaryMembership,
 } from "@/lib/authDb";
-import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
 import { getAccountDisciplineState } from "@/lib/admin/accountDiscipline.server";
+import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
 
 
 export const runtime = "nodejs";
@@ -171,12 +171,8 @@ function makeClientMeta(req: Request) {
  */
 export async function GET(req: Request) {
   try {
-    const sess: CavbotSession | null = await getSession(req);
     const client = makeClientMeta(req);
-
-
-    // Not logged in -> always 200
-    if (!sess) return json({ ok: true, authed: false, client }, 200);
+    const sess: CavbotSession = await requireSession(req);
 
 
     // System session (ops)
@@ -203,14 +199,6 @@ export async function GET(req: Request) {
       const res = json({ ok: true, authed: false, reason: "no_membership", client }, 200);
       return clearSessionCookie(req, res);
     }
-
-    const discipline = await getAccountDisciplineState(membership.accountId);
-    if (discipline?.status === "REVOKED" || discipline?.status === "SUSPENDED") {
-      const reason = discipline.status === "REVOKED" ? "account_revoked" : "account_suspended";
-      const res = json({ ok: true, authed: false, reason, client }, 200);
-      return clearSessionCookie(req, res);
-    }
-
 
     // IMPORTANT:
     // membership.role is the source-of-truth (cookie role can be stale)
