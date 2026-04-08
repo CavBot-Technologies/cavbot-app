@@ -43,6 +43,7 @@ function isCavCloudCollabSchemaMismatch(err: unknown) {
       "targetType",
       "targetId",
     ],
+    fields: ["file", "folder", "grantedByUser"],
   });
 }
 

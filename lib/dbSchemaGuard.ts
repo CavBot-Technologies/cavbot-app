@@ -70,9 +70,26 @@ export function isMissingColumnError(err: unknown, hints: string[] = []) {
   return mentionsColumnShape && hints.some((hint) => messageIncludesHint(message, hint));
 }
 
+export function isMissingFieldError(err: unknown, hints: string[] = []) {
+  const message = messageFor(err);
+
+  const mentionsFieldShape =
+    message.includes("unknown argument") ||
+    message.includes("unknown field") ||
+    message.includes("field") ||
+    message.includes("select") ||
+    message.includes("include");
+
+  return mentionsFieldShape && hints.some((hint) => messageIncludesHint(message, hint));
+}
+
 export function isSchemaMismatchError(
   err: unknown,
-  opts: { tables?: string[]; columns?: string[] } = {}
+  opts: { tables?: string[]; columns?: string[]; fields?: string[] } = {}
 ) {
-  return isMissingTableError(err, opts.tables || []) || isMissingColumnError(err, opts.columns || []);
+  return (
+    isMissingTableError(err, opts.tables || []) ||
+    isMissingColumnError(err, opts.columns || []) ||
+    isMissingFieldError(err, opts.fields || [])
+  );
 }

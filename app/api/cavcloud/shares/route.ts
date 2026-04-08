@@ -148,6 +148,7 @@ function isCavCloudShareSchemaMismatch(err: unknown) {
       "type",
       "sizeBytes",
     ],
+    fields: ["artifact"],
   });
 }
 
