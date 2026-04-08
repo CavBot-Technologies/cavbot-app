@@ -5848,11 +5848,13 @@ export default function CavCodePage() {
   const [changesHeaderMenuOpen, setChangesHeaderMenuOpen] = useState(false);
   const [explorerHeaderMenuOpen, setExplorerHeaderMenuOpen] = useState(false);
   const [runHeaderMenuOpen, setRunHeaderMenuOpen] = useState(false);
+  const [settingsHeaderMenuOpen, setSettingsHeaderMenuOpen] = useState(false);
   const panelViewMenuRef = useRef<HTMLDivElement | null>(null);
   const scmHeaderMenuRef = useRef<HTMLDivElement | null>(null);
   const changesHeaderMenuRef = useRef<HTMLDivElement | null>(null);
   const explorerHeaderMenuRef = useRef<HTMLDivElement | null>(null);
   const runHeaderMenuRef = useRef<HTMLDivElement | null>(null);
+  const settingsHeaderMenuRef = useRef<HTMLDivElement | null>(null);
   const [runDebugExpanded, setRunDebugExpanded] = useState(false);
 
   // problems
@@ -8604,6 +8606,7 @@ export default function CavCodePage() {
     setActivePane("primary");
   }, [cavenConfigToml, sysProfileReadme.loaded, sysProfileReadme.markdown]);
   const openKeyboardShortcutsTab = useCallback(() => {
+    setSettingsHeaderMenuOpen(false);
     setTabs((prev) => {
       if (prev.some((tab) => tab.id === CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID)) return prev;
       return [...prev, toKeyboardShortcutsTab()];
@@ -8616,7 +8619,12 @@ export default function CavCodePage() {
   const scrollSettingsSection = useCallback((section: "editor" | "theme" | "collaborators") => {
     setSettingsSection(section);
   }, []);
+  const openSettingsSection = useCallback((section: "editor" | "theme" | "collaborators") => {
+    setSettingsHeaderMenuOpen(false);
+    setSettingsSection(section);
+  }, []);
   const openSettingsSidebar = useCallback(() => {
+    setSettingsHeaderMenuOpen(false);
     setSidebarOpen(true);
     setActivity("settings");
     scrollSettingsSection("editor");
@@ -9580,6 +9588,30 @@ export default function CavCodePage() {
   }, [runHeaderMenuOpen]);
 
   useEffect(() => {
+    if (!settingsHeaderMenuOpen) return;
+    const onDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        setSettingsHeaderMenuOpen(false);
+        return;
+      }
+      const root = settingsHeaderMenuRef.current;
+      if (root && root.contains(target)) return;
+      setSettingsHeaderMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setSettingsHeaderMenuOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [settingsHeaderMenuOpen]);
+
+  useEffect(() => {
     if (!panelOpen) setPanelViewMenuOpen(false);
   }, [panelOpen]);
 
@@ -9603,6 +9635,10 @@ export default function CavCodePage() {
 
   useEffect(() => {
     if (activity !== "run") setRunHeaderMenuOpen(false);
+  }, [activity]);
+
+  useEffect(() => {
+    if (activity !== "settings") setSettingsHeaderMenuOpen(false);
   }, [activity]);
 
   useEffect(() => {
@@ -14655,7 +14691,7 @@ export default function CavCodePage() {
             ) : null}
             {activity === "explorer" ? (
               <>
-                <div className="cc-sidebar-head">
+                <div className={`cc-sidebar-head ${explorerHeaderMenuOpen ? "is-menu-open" : ""}`}>
                   <div className="cc-side-title">EXPLORER</div>
                   <br />
                   <div className="cc-side-actions" aria-label="Explorer Actions">
@@ -14671,7 +14707,7 @@ export default function CavCodePage() {
                     <button className="cc-side-icbtn" onClick={collapseAll} title="Collapse All">
                       <IconCollapseAll />
                     </button>
-                    <div className="cc-side-menuShell" ref={explorerHeaderMenuRef}>
+                    <div className={`cc-side-menuShell ${explorerHeaderMenuOpen ? "is-open" : ""}`} ref={explorerHeaderMenuRef}>
                       <button
                         className={`cc-side-icbtn ${explorerHeaderMenuOpen ? "is-on" : ""}`}
                         type="button"
@@ -14797,10 +14833,10 @@ export default function CavCodePage() {
 	              </>
 	            ) : activity === "scm" ? (
 	              <>
-	                <div className="cc-sidebar-head">
+	                <div className={`cc-sidebar-head ${scmHeaderMenuOpen ? "is-menu-open" : ""}`}>
 	                  <div className="cc-side-title">SOURCE CONTROL</div>
                     <div className="cc-side-actions">
-                      <div className="cc-side-menuShell" ref={scmHeaderMenuRef}>
+                      <div className={`cc-side-menuShell ${scmHeaderMenuOpen ? "is-open" : ""}`} ref={scmHeaderMenuRef}>
                         <button
                           className={`cc-side-menuBtn ${scmHeaderMenuOpen ? "is-on" : ""}`}
                           type="button"
@@ -14880,10 +14916,10 @@ export default function CavCodePage() {
 	              </>
 	            ) : activity === "changes" ? (
               <>
-                <div className="cc-sidebar-head">
+                <div className={`cc-sidebar-head ${changesHeaderMenuOpen ? "is-menu-open" : ""}`}>
                   <div className="cc-side-title">CHANGES</div>
                   <div className="cc-side-actions">
-                    <div className="cc-side-menuShell" ref={changesHeaderMenuRef}>
+                    <div className={`cc-side-menuShell ${changesHeaderMenuOpen ? "is-open" : ""}`} ref={changesHeaderMenuRef}>
                       <button
                         className={`cc-side-menuBtn ${changesHeaderMenuOpen ? "is-on" : ""}`}
                         type="button"
@@ -15232,70 +15268,66 @@ export default function CavCodePage() {
               />
             ) : activity === "settings" ? (
               <>
-                <div className="cc-sidebar-head">
+                <div className={`cc-sidebar-head ${settingsHeaderMenuOpen ? "is-menu-open" : ""}`}>
                   <div className="cc-side-title">SETTINGS</div>
+                  <div className="cc-side-actions">
+                    <div className={`cc-side-menuShell ${settingsHeaderMenuOpen ? "is-open" : ""}`} ref={settingsHeaderMenuRef}>
+                      <button
+                        className={`cc-side-menuBtn ${settingsHeaderMenuOpen ? "is-on" : ""}`}
+                        type="button"
+                        aria-haspopup="menu"
+                        aria-expanded={settingsHeaderMenuOpen}
+                        aria-label="Settings actions"
+                        onClick={() => setSettingsHeaderMenuOpen((prev) => !prev)}
+                      >
+                        <IconMenuDots />
+                      </button>
+                      {settingsHeaderMenuOpen ? (
+                        <div className="cc-side-menu" role="menu" aria-label="Settings menu">
+                          <button
+                            className="cc-side-menuItem cc-side-menuItemWithIcon"
+                            role="menuitem"
+                            type="button"
+                            onClick={() => openSettingsSection("editor")}
+                          >
+                            <IconGearGlyph className="cc-act-svg" size={14} />
+                            <span className="cc-side-menuItemLabel">Editor</span>
+                          </button>
+                          <button
+                            className="cc-side-menuItem cc-side-menuItemWithIcon"
+                            role="menuitem"
+                            type="button"
+                            onClick={() => openSettingsSection("theme")}
+                          >
+                            <IconThemeGlyph className="cc-act-svg" size={14} />
+                            <span className="cc-side-menuItemLabel">Theme</span>
+                          </button>
+                          <button
+                            className="cc-side-menuItem cc-side-menuItemWithIcon"
+                            role="menuitem"
+                            type="button"
+                            onClick={openKeyboardShortcutsTab}
+                          >
+                            <IconKeyboardGlyph className="cc-act-svg" size={14} />
+                            <span className="cc-side-menuItemLabel">Keyboard Shortcuts</span>
+                            <span className="cc-side-menuItemKey">{isMacPlatform ? "⌘K ⌘S" : "Ctrl+K Ctrl+S"}</span>
+                          </button>
+                          <button
+                            className="cc-side-menuItem cc-side-menuItemWithIcon"
+                            role="menuitem"
+                            type="button"
+                            onClick={() => openSettingsSection("collaborators")}
+                          >
+                            <IconCollaboratorsGlyph className="cc-act-svg" size={14} />
+                            <span className="cc-side-menuItemLabel">Project Collaborators</span>
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="cc-settings">
-                  <div className="cc-settingsNav">
-                    <button
-                      type="button"
-                      className={`cc-settingsNavItem ${settingsSection === "editor" ? "is-on" : ""}`}
-                      onClick={() => scrollSettingsSection("editor")}
-                    >
-                      <span className="cc-settingsNavIcon" aria-hidden="true">
-                        <IconGearGlyph size={15} />
-                      </span>
-                      <span className="cc-settingsNavCopy">
-                        <span className="cc-settingsNavLabel">Editor</span>
-                        <span className="cc-settingsNavHint">Typography, save flow, and sync.</span>
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className={`cc-settingsNavItem ${settingsSection === "theme" ? "is-on" : ""}`}
-                      onClick={() => scrollSettingsSection("theme")}
-                    >
-                      <span className="cc-settingsNavIcon" aria-hidden="true">
-                        <IconThemeGlyph size={15} />
-                      </span>
-                      <span className="cc-settingsNavCopy">
-                        <span className="cc-settingsNavLabel">Theme</span>
-                        <span className="cc-settingsNavHint">Appearance only. Keep editor controls separate.</span>
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className={`cc-settingsNavItem ${activeKeyboardShortcutsTab ? "is-on" : ""}`}
-                      onClick={openKeyboardShortcutsTab}
-                    >
-                      <span className="cc-settingsNavIcon" aria-hidden="true">
-                        <IconKeyboardGlyph size={15} />
-                      </span>
-                      <span className="cc-settingsNavCopy">
-                        <span className="cc-settingsNavLabel">Keyboard Shortcuts</span>
-                        <span className="cc-settingsNavHint">Open the CavCode keybinding editor tab.</span>
-                      </span>
-                      <span className="cc-settingsNavKey">{isMacPlatform ? "⌘K ⌘S" : "Ctrl+K Ctrl+S"}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className={`cc-settingsNavItem ${settingsSection === "collaborators" ? "is-on" : ""}`}
-                      onClick={() => scrollSettingsSection("collaborators")}
-                    >
-                      <span className="cc-settingsNavIcon" aria-hidden="true">
-                        <IconCollaboratorsGlyph size={15} />
-                      </span>
-                      <span className="cc-settingsNavCopy">
-                        <span className="cc-settingsNavLabel">Project Collaborators</span>
-                        <span className="cc-settingsNavHint">Manage who can view, edit, or administer a project.</span>
-                      </span>
-                    </button>
-                  </div>
-
                   {settingsSection === "editor" ? (
                     <div className="cc-set-card cc-set-cardSettings">
                       <div className="cc-set-head">
@@ -15640,10 +15672,10 @@ export default function CavCodePage() {
               </>
             ) : activity === "run" ? (
               <>
-                <div className="cc-sidebar-head">
+                <div className={`cc-sidebar-head ${runHeaderMenuOpen ? "is-menu-open" : ""}`}>
                   <div className="cc-side-title">RUN &amp; DEBUG</div>
                   <div className="cc-side-actions">
-                    <div className="cc-side-menuShell" ref={runHeaderMenuRef}>
+                    <div className={`cc-side-menuShell ${runHeaderMenuOpen ? "is-open" : ""}`} ref={runHeaderMenuRef}>
                       <button
                         className={`cc-side-menuBtn ${runHeaderMenuOpen ? "is-on" : ""}`}
                         type="button"
