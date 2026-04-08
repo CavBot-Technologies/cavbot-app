@@ -1132,6 +1132,23 @@ function shouldRetryCavcloudTreeLoad(e, a) {
   if (l >= 500) return !0;
   return "RATE_LIMITED" === t || "TX_TIMEOUT" === t || "SERVICE_UNAVAILABLE" === t;
 }
+function isCavcloudServiceUnavailablePayload(e, a) {
+  let l = Math.max(0, Math.trunc(Number(e) || 0)),
+    t = String(a?.error || "").trim().toUpperCase();
+  return 502 === l || 503 === l || 504 === l || "SERVICE_UNAVAILABLE" === t;
+}
+function isCavcloudReadDegraded(e, a) {
+  return !!a?.degraded || isCavcloudServiceUnavailablePayload(e, a);
+}
+function cavcloudWriteUnavailableMessage(e = "") {
+  let a = String(e || "").trim();
+  return a || "CavCloud is temporarily unavailable. Retry shortly.";
+}
+function isResolvedTreeFolderPayload(e, a) {
+  let l = T(String(e?.folder?.path || "/")),
+    t = T(String(a || "/"));
+  return !!e?.folder && l === t;
+}
 async function folderPathExistsLite(e) {
   let a = normalizeUploadFolderPath(e);
   if (!a) return !1;
@@ -1141,7 +1158,7 @@ async function folderPathExistsLite(e) {
         cache: "no-store"
       }),
       l = await ev(e);
-    return !!(e.ok && l?.ok && l.folder);
+    return !!(e.ok && l?.ok && l.folder && isResolvedTreeFolderPayload(l, a));
   } catch {
     return !1;
   }
@@ -1798,6 +1815,9 @@ function ek(e) {
     [profilePublicEnabled, setProfilePublicEnabled] = (0, c.useState)(() => cachedProfileState.publicProfileEnabled || "unknown"),
     [eK, eJ] = (0, c.useState)(() => resolveCavcloudDisplayPlanTier(cachedPlanState.planTier, cachedProfileState.name, cachedProfileState.username)),
     [memberRole, setMemberRole] = (0, c.useState)(isOwner ? "OWNER" : "ANON"),
+    [memberRoleResolved, setMemberRoleResolved] = (0, c.useState)(isOwner),
+    [cavcloudWritesBlocked, setCavcloudWritesBlocked] = (0, c.useState)(!1),
+    [cavcloudWritesBlockedReason, setCavcloudWritesBlockedReason] = (0, c.useState)(""),
     [eV, eZ] = (0, c.useState)(() => !!cachedPlanState.trialActive),
     [ez, eq] = (0, c.useState)(() => Math.max(0, Math.trunc(Number(cachedPlanState.trialDaysLeft || 0)) || 0)),
     [isCompactShell, setIsCompactShell] = (0, c.useState)(() => "undefined" != typeof window && !!window.matchMedia && window.matchMedia("(max-width: 980px)").matches),
@@ -2133,6 +2153,15 @@ function ek(e) {
         atISO: new Date().toISOString()
       });
     }, []),
+    syncCavcloudReadHealth = (0, c.useCallback)((eStatus, aPayload) => {
+      let l = Math.max(0, Math.trunc(Number(eStatus) || 0));
+      if (isCavcloudReadDegraded(l, aPayload)) {
+        setCavcloudWritesBlocked(!0), setCavcloudWritesBlockedReason(cavcloudWriteUnavailableMessage(String(aPayload?.message || aPayload?.error || "")));
+        return;
+      }
+      l >= 200 && l < 300 && aPayload?.ok && !aPayload?.degraded && (setCavcloudWritesBlocked(!1), setCavcloudWritesBlockedReason(""));
+    }, []),
+    getCavcloudWriteBlockMessage = (0, c.useCallback)(eFallback => cavcloudWriteUnavailableMessage(cavcloudWritesBlockedReason || eFallback), [cavcloudWritesBlockedReason]),
     logDriveDebug = (0, c.useCallback)((event, payload) => {
       debugDriveLog("cloud", driveDebugEnabled, event, payload);
     }, [driveDebugEnabled]),
@@ -2578,11 +2607,13 @@ function ek(e) {
             t = await ev(a);
           if (d.signal.aborted) return;
           if (s !== treeLoadRequestRef.current) return;
-          if (a.ok && t?.ok && t.folder && t.usage) {
+          syncCavcloudReadHealth(a.status, t);
+          if (a.ok && t?.ok && t.folder && t.usage && isResolvedTreeFolderPayload(t, l)) {
             payload = t;
             break;
           }
-          if (lastStatus = a.status, lastMessage = String(t?.message || "").trim(), e < r - 1 && shouldRetryCavcloudTreeLoad(a.status, t)) {
+          lastStatus = a.status, lastMessage = String(t?.message || "").trim(), lastMessage || !isCavcloudReadDegraded(a.status, t) || (lastMessage = cavcloudWriteUnavailableMessage());
+          if (e < r - 1 && shouldRetryCavcloudTreeLoad(a.status, t)) {
             await new Promise(e => window.setTimeout(e, o));
             if (d.signal.aborted) return;
             continue;
@@ -2685,7 +2716,7 @@ function ek(e) {
         folderLoadAbortRef.current === d && (folderLoadAbortRef.current = null);
         s === treeLoadRequestRef.current && ek(!1);
       }
-    }, [l3, logDriveDebug, activityCacheKey, storageHistoryCacheKey, storageHistoryCacheLegacyKey, treeCacheKey, upsertTreeNavSnapshot]),
+    }, [l3, logDriveDebug, activityCacheKey, storageHistoryCacheKey, storageHistoryCacheLegacyKey, treeCacheKey, upsertTreeNavSnapshot, syncCavcloudReadHealth]),
     loadGalleryFiles = (0, c.useCallback)(async (e = {}) => {
       let a = e && "object" == typeof e ? e : {},
         l = galleryLoadRequestRef.current + 1;
@@ -2825,6 +2856,11 @@ function ek(e) {
     te = (0, c.useCallback)(async () => {
       ah(!0), av("");
       try {
+        if (cavcloudWritesBlocked) {
+          let e = getCavcloudWriteBlockMessage();
+          av(e), l3("bad", e);
+          return;
+        }
         let ensureFolder = async (name, parentPath) => {
             let s = await fetch("/api/cavcloud/folders", {
                 method: "POST",
@@ -2846,7 +2882,7 @@ function ek(e) {
                   cache: "no-store"
                 }),
                 o = await ev(n);
-              if (n.ok && o?.ok && o.folder) return;
+              if (n.ok && o?.ok && o.folder && isResolvedTreeFolderPayload(o, c)) return;
             }
             throw Error(String(i?.message || `Failed to ensure synced folder ${name}.`));
           };
@@ -2870,7 +2906,7 @@ function ek(e) {
                   cache: "no-store"
                 }),
                 i = await ev(s);
-              if (!s.ok || !i?.ok || !i.folder) {
+              if (!s.ok || !i?.ok || !i.folder || !isResolvedTreeFolderPayload(i, a)) {
                 let e = String(i?.error || "").toUpperCase();
                 if (404 === s.status || "FOLDER_NOT_FOUND" === e) continue;
                 throw Error(String(i?.message || `Failed to load synced files (${s.status}).`));
@@ -2898,7 +2934,7 @@ function ek(e) {
       } finally {
         ah(!1);
       }
-    }, [l3]),
+    }, [cavcloudWritesBlocked, getCavcloudWriteBlockMessage, l3]),
     ta = (0, c.useCallback)(async (e = {}) => {
       let a = {
         ...e
@@ -3120,7 +3156,9 @@ function ek(e) {
         eJ(tTier), eZ(sTrial.active), eq(sTrial.daysLeft), persistCavcloudPlanState(tTier, sTrial);
         let roleRaw = String(aPayload?.membership?.role || "").trim().toUpperCase();
         setMemberRole("OWNER" === roleRaw || "ADMIN" === roleRaw || "MEMBER" === roleRaw ? roleRaw : isOwner ? "OWNER" : "ANON");
-      } catch {}
+      } catch {} finally {
+        eCanceled || setMemberRoleResolved(!0);
+      }
     };
     void eLoadProfile();
     let eOnFocus = () => {
@@ -3213,7 +3251,7 @@ function ek(e) {
     } catch {}
   }, [enteredFromCavSafe, treeCacheKey, upsertTreeNavSnapshot]);
   (0, c.useEffect)(() => {
-    if (!cavcloudSettingsLoaded || "ANON" === memberRole) return;
+    if (!cavcloudSettingsLoaded || !memberRoleResolved || "ANON" === memberRole) return;
     let e = "/";
     try {
       if (folderPathFromQuery) {
@@ -3228,7 +3266,7 @@ function ek(e) {
       }
     } catch {}
     void l7(e);
-  }, [l7, enteredFromCavSafe, treeCacheKey, folderPathFromQuery, cavcloudSettingsLoaded, memberRole]);
+  }, [l7, enteredFromCavSafe, treeCacheKey, folderPathFromQuery, cavcloudSettingsLoaded, memberRole, memberRoleResolved]);
   (0, c.useEffect)(() => {
     let e = lZ.current;
     e && (e.setAttribute("webkitdirectory", ""), e.setAttribute("directory", ""));
@@ -3252,23 +3290,23 @@ function ek(e) {
     }
   }, [S]);
   (0, c.useEffect)(() => {
-    if ("ANON" === memberRole) return;
+    if (!memberRoleResolved || "ANON" === memberRole) return;
     "Synced" === S && void te();
-  }, [S, te, memberRole]);
+  }, [S, te, memberRole, memberRoleResolved]);
   (0, c.useEffect)(() => {
-    if ("ANON" === memberRole) return;
+    if (!memberRoleResolved || "ANON" === memberRole) return;
     "Shared" === S && void l9();
-  }, [S, l9, memberRole]);
+  }, [S, l9, memberRole, memberRoleResolved]);
   (0, c.useEffect)(() => {
-    if ("ANON" === memberRole) return;
+    if (!memberRoleResolved || "ANON" === memberRole) return;
     "Collab" === S && void loadCollabInbox();
-  }, [S, loadCollabInbox, memberRole]);
+  }, [S, loadCollabInbox, memberRole, memberRoleResolved]);
   (0, c.useEffect)(() => {
-    if ("ANON" === memberRole) return;
+    if (!memberRoleResolved || "ANON" === memberRole) return;
     "Gallery" === S && void loadGalleryFiles({
       silent: !0
     });
-  }, [S, loadGalleryFiles, memberRole]);
+  }, [S, loadGalleryFiles, memberRole, memberRoleResolved]);
   (0, c.useEffect)(() => {
     "Gallery" === S && setGalleryPage(1);
   }, [S, aj, eM]);
@@ -3283,7 +3321,7 @@ function ek(e) {
   }, [refreshTreePostMutation]);
   (0, c.useEffect)(() => {
     let e = () => {
-      if ("ANON" === memberRole) return;
+      if (!memberRoleResolved || "ANON" === memberRole) return;
       void Promise.all(["Shared" === S ? l9() : Promise.resolve(), "Collab" === S ? loadCollabInbox({
         silent: !0
       }) : Promise.resolve(), "Gallery" === S ? loadGalleryFiles({
@@ -3295,10 +3333,10 @@ function ek(e) {
     return window.addEventListener("cavcloud:share-access-changed", e), () => {
       window.removeEventListener("cavcloud:share-access-changed", e);
     };
-  }, [S, l9, loadCollabInbox, loadGalleryFiles, ta, memberRole]);
+  }, [S, l9, loadCollabInbox, loadGalleryFiles, ta, memberRole, memberRoleResolved]);
   (0, c.useEffect)(() => {
     let e = Array.isArray(en?.folders) ? en.folders : [];
-    if (!e.length) return;
+    if (!memberRoleResolved || "ANON" === memberRole || !e.length) return;
     let a = T(String(en?.folder?.path || "/")),
       l = Array.from(new Set(e.map(e => T(String(e?.path || ""))).filter(Boolean))).filter(e => e && e !== a);
     if (!l.length) return;
@@ -3313,7 +3351,9 @@ function ek(e) {
             cache: "no-store"
           }).then(async eRes => {
             let a = await ev(eRes);
-            if (t || !eRes.ok || !a?.ok || !a?.folder) return;
+            if (t) return;
+            syncCavcloudReadHealth(eRes.status, a);
+            if (!eRes.ok || !a?.ok || !a?.folder || !isResolvedTreeFolderPayload(a, ePath)) return;
             upsertTreeNavSnapshot(ePath, {
               folder: a.folder,
               breadcrumbs: Array.isArray(a.breadcrumbs) ? a.breadcrumbs : [],
@@ -3333,7 +3373,7 @@ function ek(e) {
     return () => {
       t = !0;
     };
-  }, [en?.folder?.path, en?.folders, en?.trash, en?.usage, en?.activity, en?.storageHistory, upsertTreeNavSnapshot]);
+  }, [en?.folder?.path, en?.folders, en?.trash, en?.usage, en?.activity, en?.storageHistory, upsertTreeNavSnapshot, memberRole, memberRoleResolved, syncCavcloudReadHealth]);
   let driveChildren = useDriveChildren({
       namespace: "cloud",
       folderPath: z,
@@ -5084,6 +5124,7 @@ function ek(e) {
     sG = (0, c.useCallback)(async e => {
       let a = String(e || "").trim();
       if (!a) return l3("watch", "Folder name is required."), !1;
+      if (cavcloudWritesBlocked) return l3("bad", getCavcloudWriteBlockMessage()), !1;
       eS(!0);
       try {
         let e = await fetch("/api/cavcloud/folders", {
@@ -5104,7 +5145,7 @@ function ek(e) {
       } finally {
         eS(!1);
       }
-    }, [z, l3, ta]),
+    }, [z, l3, ta, cavcloudWritesBlocked, getCavcloudWriteBlockMessage]),
     sK = (0, c.useCallback)(async e => {
       let a = String(e || "").trim();
       if (!a) return l3("watch", "Document name is required."), !1;
@@ -5554,7 +5595,7 @@ function ek(e) {
         }),
         t = await ev(l),
         s = String(t?.folder?.id || "").trim();
-      if (!l.ok || !t?.ok || !s) throw Error("Could not resolve the selected folder.");
+      if (!l.ok || !t?.ok || !s || !isResolvedTreeFolderPayload(t, a)) throw Error("Could not resolve the selected folder.");
       return {
         id: s,
         path: a
@@ -5694,6 +5735,7 @@ function ek(e) {
       let l = normalizeUploadFolderPath(e);
       if (!l) throw Error(`Invalid folder path: ${String(e || "")}`);
       if ("/" === l) return;
+      if (cavcloudWritesBlocked) throw Error(getCavcloudWriteBlockMessage());
       let t = a || new Map(),
         s = t.get(l);
       if (s) return await s;
@@ -5723,7 +5765,7 @@ function ek(e) {
                 cache: "no-store"
               }),
               s = await ev(t);
-            if (t.ok && s?.ok && s.folder) return;
+            if (t.ok && s?.ok && s.folder && isResolvedTreeFolderPayload(s, l)) return;
           }
           if (("TX_CONFLICT" === a || "TX_TIMEOUT" === a) && n < 3) {
             await new Promise(e => window.setTimeout(e, 140 * (n + 1)));
@@ -5740,7 +5782,7 @@ function ek(e) {
         t.delete(l);
         throw e;
       }
-    }, []),
+    }, [cavcloudWritesBlocked, getCavcloudWriteBlockMessage]),
     is = (0, c.useCallback)(async (e, a, lName) => {
       let tName = String(lName || e.name || "").trim() || e.name,
         l = ei(e, tName),
@@ -7780,7 +7822,7 @@ function ek(e) {
     };
   }, [S, ti, tx, tz, th, a1, tE, snippetByFileId]);
   (0, c.useEffect)(() => {
-    if (eC || "ANON" === memberRole || collabLaunchGlobalIndexed || collabLaunchGlobalIndexBusy || collabLaunchGlobalIndexError || collabLaunchGlobalIndexInFlightRef.current) return;
+    if (eC || !memberRoleResolved || "ANON" === memberRole || collabLaunchGlobalIndexed || collabLaunchGlobalIndexBusy || collabLaunchGlobalIndexError || collabLaunchGlobalIndexInFlightRef.current) return;
     let eCanceled = !1;
     collabLaunchGlobalIndexInFlightRef.current = !0, setCollabLaunchGlobalIndexBusy(!0), setCollabLaunchGlobalIndexError("");
     void async function () {
@@ -7798,6 +7840,7 @@ function ek(e) {
             }),
             lRootPayload = await ev(aRootRes);
           if (401 === aRootRes.status || 403 === aRootRes.status) return;
+          syncCavcloudReadHealth(aRootRes.status, lRootPayload);
           if (aRootRes.ok && lRootPayload?.ok) {
             eRootId = String(lRootPayload.rootFolderId || lRootPayload.defaultFolderId || lRootPayload.root?.id || lRootPayload.defaultFolder?.id || "").trim();
           }
@@ -7809,6 +7852,7 @@ function ek(e) {
             }),
             lRootPayload = await ev(aRootRes);
           if (401 === aRootRes.status || 403 === aRootRes.status) return;
+          syncCavcloudReadHealth(aRootRes.status, lRootPayload);
           if (!aRootRes.ok || !lRootPayload?.ok || !lRootPayload?.folder?.id) throw Error(String(lRootPayload?.message || "Failed to load root folder."));
           eRootId = String(lRootPayload.folder.id || "").trim();
         }
@@ -7869,7 +7913,7 @@ function ek(e) {
     return () => {
       eCanceled = !0;
     };
-  }, [eC, memberRole, collabLaunchGlobalIndexed, collabLaunchGlobalIndexBusy, collabLaunchGlobalIndexError, en?.breadcrumbs, en?.folder?.id, l3]);
+  }, [eC, memberRole, memberRoleResolved, collabLaunchGlobalIndexed, collabLaunchGlobalIndexBusy, collabLaunchGlobalIndexError, en?.breadcrumbs, en?.folder?.id, l3, syncCavcloudReadHealth]);
   (0, c.useEffect)(() => {
     let eCanceled = !1,
       aFolderIds = Array.from(new Set(collabLaunchItems.filter(e => "folder" === e.kind).map(e => String(e?.id || "").trim()).filter(Boolean))).slice(0, 64),

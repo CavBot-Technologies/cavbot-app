@@ -19,12 +19,19 @@ test("cavcloud HTTP helpers preserve service-unavailable responses", () => {
 });
 
 test("tree, summary, and dashboard degraded helpers do not fail when plan lookups fail", () => {
+  const root = read("app/api/cavcloud/root/route.ts");
   const tree = read("app/api/cavcloud/tree/route.ts");
   const summary = read("app/api/cavcloud/summary/route.ts");
   const dashboard = read("app/api/cavcloud/dashboard/route.ts");
   const plan = read("lib/accountPlan.server.ts");
 
+  assert.match(root, /withCavCloudDeadline\(/);
+  assert.match(root, /buildStaticDegradedRootResponse/);
+  assert.match(root, /if \(sessionValidated\) \{\s*return buildStaticDegradedRootResponse\(\);\s*\}/);
   assert.match(tree, /getEffectiveAccountPlanContext\(accountId\)\.catch\(\(\) => null\)/);
+  assert.match(tree, /withCavCloudDeadline\(/);
+  assert.match(tree, /buildStaticDegradedTreeResponse/);
+  assert.match(tree, /sessionValidated && \(isCavCloudServiceUnavailableError\(err\) \|\| isMissingCavCloudTablesError\(err\) \|\| isCavCloudTreeSchemaMismatch\(err\)\)/);
   assert.match(summary, /getEffectiveAccountPlanContext\(accountId\)\.catch\(\(\) => null\)/);
   assert.match(summary, /withCavCloudDeadline\(/);
   assert.match(summary, /buildStaticDegradedSummaryResponse/);
@@ -61,5 +68,9 @@ test("cavcloud storage activity writes fail open when non-critical activity tabl
   assert.match(storage, /await writeActivity\(prisma, \{/);
   assert.doesNotMatch(storage, /prisma\.cavCloudActivity\.create/);
   assert.match(folders, /function isCavCloudFolderWriteSchemaMismatch/);
+  assert.match(folders, /withCavCloudDeadline\(/);
+  assert.match(folders, /assertCavCloudActionAllowed/);
+  assert.match(folders, /createFolder/);
+  assert.match(folders, /isCavCloudFolderWriteSchemaMismatch\(err\) \|\| isCavCloudServiceUnavailableError\(err\)/);
   assert.match(folders, /SERVICE_UNAVAILABLE/);
 });

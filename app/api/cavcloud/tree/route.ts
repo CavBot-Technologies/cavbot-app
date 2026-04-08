@@ -1,5 +1,10 @@
 import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
-import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
+import {
+  cavcloudErrorResponse,
+  isCavCloudServiceUnavailableError,
+  jsonNoStore,
+  withCavCloudDeadline,
+} from "@/lib/cavcloud/http.server";
 import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { getCavCloudSettings, toCavCloudListingPreferences } from "@/lib/cavcloud/settings.server";
 import { getTree, getTreeLite } from "@/lib/cavcloud/storage.server";
@@ -9,6 +14,9 @@ import { getPlanLimits, type PlanId } from "@/lib/plans";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+const TREE_REQUEST_TIMEOUT_MS = 8_000;
+const TREE_FALLBACK_PLAN_TIMEOUT_MS = 1_500;
 
 function normalizePath(raw: string): string {
   const value = String(raw || "").trim();
@@ -101,8 +109,11 @@ function isCavCloudTreeSchemaMismatch(err: unknown) {
   });
 }
 
-async function fallbackTreeForMissingTables(accountId: string) {
-  const plan = await getEffectiveAccountPlanContext(accountId).catch(() => null);
+function degradedTreePayload(plan: {
+  planId: PlanId;
+  limitBytes: number | null;
+  perFileMaxBytes: number;
+} | null = null) {
   const planId: PlanId = plan?.planId ?? "free";
   const limitBytes = plan?.limitBytes ?? storageLimitBytesForPlan(planId);
   const perFileMaxBytes = plan?.perFileMaxBytes ?? perFileMaxBytesForPlan(planId);
@@ -132,47 +143,88 @@ async function fallbackTreeForMissingTables(accountId: string) {
   };
 }
 
+function buildStaticDegradedTreeResponse() {
+  return jsonNoStore(degradedTreePayload(), 200);
+}
+
+async function fallbackTreeForMissingTables(accountId: string) {
+  try {
+    const plan = await withCavCloudDeadline(
+      getEffectiveAccountPlanContext(accountId).catch(() => null),
+      { timeoutMs: TREE_FALLBACK_PLAN_TIMEOUT_MS, message: "Timed out loading degraded CavCloud tree." },
+    );
+
+    return degradedTreePayload(plan ? {
+      planId: plan.planId,
+      limitBytes: plan.limitBytes,
+      perFileMaxBytes: plan.perFileMaxBytes,
+    } : null);
+  } catch {
+    return degradedTreePayload();
+  }
+}
+
+async function buildDegradedTreeResponseForAccount(accountId: string) {
+  const fallback = await fallbackTreeForMissingTables(accountId);
+  return jsonNoStore(fallback, 200);
+}
+
 async function buildDegradedTreeResponse(req: Request) {
   const sess = await requireSession(req);
   requireAccountContext(sess);
   requireUser(sess);
-  const fallback = await fallbackTreeForMissingTables(String(sess.accountId || ""));
-  return jsonNoStore(fallback, 200);
+  return buildDegradedTreeResponseForAccount(String(sess.accountId || ""));
 }
 
 export async function GET(req: Request) {
+  let sessionValidated = false;
+  let accountId = "";
+  let userId = "";
+
   try {
     const sess = await requireSession(req);
     requireAccountContext(sess);
     requireUser(sess);
+    sessionValidated = true;
+    accountId = String(sess.accountId || "");
+    userId = String(sess.sub || "");
 
     const url = new URL(req.url);
     const folderInput = String(url.searchParams.get("folder") || "/").trim() || "/";
     const folder = isReservedSystemPath(folderInput) ? "/" : folderInput;
     const liteRaw = String(url.searchParams.get("lite") || "").trim().toLowerCase();
     const lite = liteRaw === "1" || liteRaw === "true" || liteRaw === "yes";
-    const settings = await getCavCloudSettings({
-      accountId: String(sess.accountId || ""),
-      userId: String(sess.sub || ""),
-    });
+    const settings = await withCavCloudDeadline(
+      getCavCloudSettings({
+        accountId,
+        userId,
+      }),
+      { timeoutMs: TREE_REQUEST_TIMEOUT_MS, message: "Timed out loading CavCloud tree settings." },
+    );
     const listing = toCavCloudListingPreferences(settings);
 
     if (lite) {
-      const tree = await getTreeLite({
-        accountId: sess.accountId,
-        folderPath: folder,
-        listing,
-      });
+      const tree = await withCavCloudDeadline(
+        getTreeLite({
+          accountId: sess.accountId,
+          folderPath: folder,
+          listing,
+        }),
+        { timeoutMs: TREE_REQUEST_TIMEOUT_MS, message: "Timed out loading CavCloud tree." },
+      );
       const filtered = normalizePath(folder) === "/" ? stripReservedSystemEntriesAtRoot(tree) : tree;
       return jsonNoStore({ ok: true, ...filtered }, 200);
     }
 
-    const tree = await getTree({
-      accountId: sess.accountId,
-      folderPath: folder,
-      operatorUserId: sess.sub,
-      listing,
-    });
+    const tree = await withCavCloudDeadline(
+      getTree({
+        accountId: sess.accountId,
+        folderPath: folder,
+        operatorUserId: sess.sub,
+        listing,
+      }),
+      { timeoutMs: TREE_REQUEST_TIMEOUT_MS, message: "Timed out loading CavCloud tree." },
+    );
 
     const filtered = normalizePath(folder) === "/" ? stripReservedSystemEntriesAtRoot(tree) : tree;
     return jsonNoStore({ ok: true, ...filtered }, 200);
@@ -180,16 +232,24 @@ export async function GET(req: Request) {
     if (err instanceof ApiAuthError) {
       return cavcloudErrorResponse(err, "Failed to load CavCloud tree.");
     }
-    if (isMissingCavCloudTablesError(err) || isCavCloudTreeSchemaMismatch(err)) {
+    if (sessionValidated && (isCavCloudServiceUnavailableError(err) || isMissingCavCloudTablesError(err) || isCavCloudTreeSchemaMismatch(err))) {
       try {
-        return await buildDegradedTreeResponse(req);
-      } catch (fallbackError) {
-        return cavcloudErrorResponse(fallbackError, "Failed to load CavCloud tree.");
+        return await buildDegradedTreeResponseForAccount(accountId);
+      } catch {
+        return buildStaticDegradedTreeResponse();
       }
     }
     try {
+      if (sessionValidated && accountId) {
+        return await buildDegradedTreeResponseForAccount(accountId);
+      }
       return await buildDegradedTreeResponse(req);
-    } catch {}
+    } catch (fallbackError) {
+      if (fallbackError instanceof ApiAuthError) {
+        return cavcloudErrorResponse(fallbackError, "Failed to load CavCloud tree.");
+      }
+      return buildStaticDegradedTreeResponse();
+    }
     return cavcloudErrorResponse(err, "Failed to load CavCloud tree.");
   }
 }

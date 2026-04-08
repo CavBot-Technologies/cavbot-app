@@ -31,8 +31,19 @@ test("cavcloud folder children resolution accepts the synthetic root alias", () 
 test("cavcloud global share index waits for an authenticated real root folder id", () => {
   const client = read("app/cavcloud/CavCloudClient.tsx");
 
-  assert.match(client, /if \(eC \|\| "ANON" === memberRole \|\| collabLaunchGlobalIndexed/);
+  assert.match(client, /if \(eC \|\| !memberRoleResolved \|\| "ANON" === memberRole \|\| collabLaunchGlobalIndexed/);
   assert.match(client, /fetch\("\/api\/cavcloud\/root"/);
   assert.match(client, /if \(401 === aRootRes\.status \|\| 403 === aRootRes\.status\) return;/);
+  assert.match(client, /syncCavcloudReadHealth\(aRootRes\.status, lRootPayload\)/);
   assert.match(client, /if \(401 === aRes\.status \|\| 403 === aRes\.status\) return;/);
+});
+
+test("cavcloud blocks folder writes when degraded read health is detected", () => {
+  const client = read("app/cavcloud/CavCloudClient.tsx");
+
+  assert.match(client, /\[cavcloudWritesBlocked,\s*setCavcloudWritesBlocked\]\s*=\s*\(0,\s*c\.useState\)\(!1\)/);
+  assert.match(client, /setCavcloudWritesBlocked\(!0\), setCavcloudWritesBlockedReason\(cavcloudWriteUnavailableMessage/);
+  assert.match(client, /if \(cavcloudWritesBlocked\) \{\s*let e = getCavcloudWriteBlockMessage\(\);\s*av\(e\), l3\("bad", e\);\s*return;\s*\}/);
+  assert.match(client, /if \(cavcloudWritesBlocked\) return l3\("bad", getCavcloudWriteBlockMessage\(\)\), !1;/);
+  assert.match(client, /if \(cavcloudWritesBlocked\) throw Error\(getCavcloudWriteBlockMessage\(\)\);/);
 });

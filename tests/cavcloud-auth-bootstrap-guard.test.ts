@@ -20,8 +20,10 @@ test("cavcloud page derives owner access from validated sessions", () => {
 test("cavcloud client waits for membership before protected bootstrap fetches", () => {
   const source = read("app/cavcloud/CavCloudClient.tsx");
 
-  assert.match(source, /if \(!cavcloudSettingsLoaded \|\| "ANON" === memberRole\) return;/);
-  assert.match(source, /\(0, c\.useEffect\)\(\(\) => \{\s*if \("ANON" === memberRole\) return;\s*"Synced" === S && void te\(\);\s*\}, \[S, te, memberRole\]\);/);
-  assert.match(source, /\(0, c\.useEffect\)\(\(\) => \{\s*if \("ANON" === memberRole\) return;\s*"Shared" === S && void l9\(\);\s*\}, \[S, l9, memberRole\]\);/);
-  assert.match(source, /\(0, c\.useEffect\)\(\(\) => \{\s*if \("ANON" === memberRole\) return;\s*"Collab" === S && void loadCollabInbox\(\);\s*\}, \[S, loadCollabInbox, memberRole\]\);/);
+  assert.match(source, /\[memberRoleResolved,\s*setMemberRoleResolved\]\s*=\s*\(0,\s*c\.useState\)\(isOwner\)/);
+  assert.match(source, /if \(!cavcloudSettingsLoaded \|\| !memberRoleResolved \|\| "ANON" === memberRole\) return;/);
+  assert.match(source, /\(0, c\.useEffect\)\(\(\) => \{\s*if \(!memberRoleResolved \|\| "ANON" === memberRole\) return;\s*"Synced" === S && void te\(\);\s*\}, \[S, te, memberRole, memberRoleResolved\]\);/);
+  assert.match(source, /\(0, c\.useEffect\)\(\(\) => \{\s*if \(!memberRoleResolved \|\| "ANON" === memberRole\) return;\s*"Shared" === S && void l9\(\);\s*\}, \[S, l9, memberRole, memberRoleResolved\]\);/);
+  assert.match(source, /\(0, c\.useEffect\)\(\(\) => \{\s*if \(!memberRoleResolved \|\| "ANON" === memberRole\) return;\s*"Collab" === S && void loadCollabInbox\(\);\s*\}, \[S, loadCollabInbox, memberRole, memberRoleResolved\]\);/);
+  assert.match(source, /\(0, c\.useEffect\)\(\(\) => \{\s*let e = Array\.isArray\(en\?\.folders\) \? en\.folders : \[\];\s*if \(!memberRoleResolved \|\| "ANON" === memberRole \|\| !e\.length\) return;/);
 });
