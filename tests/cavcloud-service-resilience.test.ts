@@ -34,9 +34,13 @@ test("collab and shares GET routes degrade to empty payloads on backend outages"
   const collab = read("app/api/cavcloud/collab/route.ts");
   const shares = read("app/api/cavcloud/shares/route.ts");
 
+  assert.match(collab, /async function buildDegradedCollabResponse/);
   assert.match(collab, /isCavCloudServiceUnavailableError\(err\) \|\| isCavCloudCollabSchemaMismatch\(err\)/);
+  assert.match(collab, /return await buildDegradedCollabResponse\(req, filter\)/);
   assert.match(collab, /degraded:\s*true/);
+  assert.match(shares, /async function buildDegradedSharesResponse/);
   assert.match(shares, /isCavCloudServiceUnavailableError\(e\) \|\| isCavCloudShareSchemaMismatch\(e\)/);
+  assert.match(shares, /return await buildDegradedSharesResponse\(req\)/);
   assert.match(shares, /degraded:\s*true/);
 });
 
