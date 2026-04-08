@@ -106,18 +106,8 @@ async function buildDegradedSummaryResponse(req: Request) {
         where: { id: accountId },
         select: { tier: true, trialSeatActive: true, trialEndsAt: true },
       })
-      .catch((error) => {
-        if (
-          isSchemaMismatchError(error, {
-            tables: ["Account"],
-            columns: ["trialSeatActive", "trialEndsAt", "tier"],
-          })
-        ) {
-          return null;
-        }
-        return null;
-      }),
-    findLatestEntitledSubscription(accountId),
+      .catch(() => null),
+    findLatestEntitledSubscription(accountId).catch(() => null),
   ]);
 
   return jsonNoStore(degradedSummaryPayload(account, entitledSubscription), 200);

@@ -8,6 +8,7 @@ import { pipeline } from "stream/promises";
 import { Prisma } from "@prisma/client";
 
 import { findLatestEntitledSubscription, resolveEffectivePlanId as resolveEffectiveAccountPlanId } from "@/lib/accountPlan.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import type { PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { buildZipBuffer } from "@/lib/cavcloud/zip.server";
@@ -434,6 +435,24 @@ function isMissingOperationLogTableError(err: unknown): boolean {
   if (prismaCode === "P2021") return true;
   if (dbCode === "42P01") return true;
   return msg.includes("cavcloudoperationlog") && (msg.includes("does not exist") || msg.includes("relation"));
+}
+
+function isMissingActivityTableError(err: unknown): boolean {
+  const e = err as { code?: unknown; message?: unknown; meta?: { code?: unknown; message?: unknown } };
+  const prismaCode = String(e?.code || "");
+  const dbCode = String(e?.meta?.code || "");
+  const msg = String(e?.meta?.message || e?.message || "").toLowerCase();
+
+  if (prismaCode === "P2021") return true;
+  if (dbCode === "42P01") return true;
+  return msg.includes("cavcloudactivity") && (msg.includes("does not exist") || msg.includes("relation"));
+}
+
+function isActivitySchemaMismatchError(err: unknown) {
+  return isSchemaMismatchError(err, {
+    tables: ["CavCloudActivity"],
+    columns: ["accountId", "operatorUserId", "action", "targetType", "targetId", "targetPath", "metaJson", "createdAt"],
+  });
 }
 
 function isMissingFilePathIndexTableError(err: unknown): boolean {
@@ -1576,17 +1595,21 @@ async function writeActivity(
     metaJson?: Prisma.InputJsonValue | undefined;
   }
 ) {
-  await tx.cavCloudActivity.create({
-    data: {
-      accountId: options.accountId,
-      operatorUserId: options.operatorUserId || null,
-      action: String(options.action || "").slice(0, 64),
-      targetType: String(options.targetType || "").slice(0, 32),
-      targetId: options.targetId || null,
-      targetPath: options.targetPath || null,
-      metaJson: options.metaJson,
-    },
-  });
+  try {
+    await tx.cavCloudActivity.create({
+      data: {
+        accountId: options.accountId,
+        operatorUserId: options.operatorUserId || null,
+        action: String(options.action || "").slice(0, 64),
+        targetType: String(options.targetType || "").slice(0, 32),
+        targetId: options.targetId || null,
+        targetPath: options.targetPath || null,
+        metaJson: options.metaJson,
+      },
+    });
+  } catch (err) {
+    if (!isMissingActivityTableError(err) && !isActivitySchemaMismatchError(err)) throw err;
+  }
 
   await syncPathIndexFromActivity(tx, {
     accountId: options.accountId,
@@ -1680,37 +1703,42 @@ async function loadRecentActivity(accountId: string, tx: DbClient = prisma, limi
     }
   }
 
-  const rows = await tx.cavCloudActivity.findMany({
-    where: {
-      accountId,
-      action: {
-        in: [...FEED_ACTIVITY_ACTIONS],
+  try {
+    const rows = await tx.cavCloudActivity.findMany({
+      where: {
+        accountId,
+        action: {
+          in: [...FEED_ACTIVITY_ACTIONS],
+        },
       },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-    take: safeLimit,
-    select: {
-      id: true,
-      action: true,
-      targetType: true,
-      targetId: true,
-      targetPath: true,
-      createdAt: true,
-      metaJson: true,
-    },
-  });
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: safeLimit,
+      select: {
+        id: true,
+        action: true,
+        targetType: true,
+        targetId: true,
+        targetPath: true,
+        createdAt: true,
+        metaJson: true,
+      },
+    });
 
-  return rows.map((row) => ({
-    id: row.id,
-    action: row.action,
-    targetType: row.targetType,
-    targetId: row.targetId,
-    targetPath: row.targetPath,
-    createdAtISO: toISO(row.createdAt),
-    metaJson: normalizeActivityMeta(row.metaJson),
-  }));
+    return rows.map((row) => ({
+      id: row.id,
+      action: row.action,
+      targetType: row.targetType,
+      targetId: row.targetId,
+      targetPath: row.targetPath,
+      createdAtISO: toISO(row.createdAt),
+      metaJson: normalizeActivityMeta(row.metaJson),
+    }));
+  } catch (err) {
+    if (isMissingActivityTableError(err) || isActivitySchemaMismatchError(err)) return [];
+    throw err;
+  }
 }
 
 async function resolveCollabBadges(args: {

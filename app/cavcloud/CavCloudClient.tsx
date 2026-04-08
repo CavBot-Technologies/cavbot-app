@@ -1013,6 +1013,14 @@ async function ev(e) {
   emitGuardDecisionFromPayload(a);
   return a;
 }
+function shouldRetryCavcloudTreeLoad(e, a) {
+  let l = Math.max(0, Math.trunc(Number(e) || 0)),
+    t = String(a?.error || "").trim().toUpperCase();
+  if (401 === l || 403 === l || 404 === l) return !1;
+  if (408 === l || 429 === l) return !0;
+  if (l >= 500) return !0;
+  return "RATE_LIMITED" === t || "TX_TIMEOUT" === t || "SERVICE_UNAVAILABLE" === t;
+}
 async function folderPathExistsLite(e) {
   let a = normalizeUploadFolderPath(e);
   if (!a) return !1;
@@ -1776,6 +1784,7 @@ function ek(e) {
     [collabLaunchFolderCounts, setCollabLaunchFolderCounts] = (0, c.useState)({}),
     [collabLaunchGlobalItems, setCollabLaunchGlobalItems] = (0, c.useState)([]),
     [collabLaunchGlobalIndexBusy, setCollabLaunchGlobalIndexBusy] = (0, c.useState)(!1),
+    [collabLaunchGlobalIndexError, setCollabLaunchGlobalIndexError] = (0, c.useState)(""),
     [collabLaunchGlobalIndexed, setCollabLaunchGlobalIndexed] = (0, c.useState)(!1),
     [collabModalTarget, setCollabModalTarget] = (0, c.useState)(null),
     [deletingVisualKeys, setDeletingVisualKeys] = (0, c.useState)({}),
@@ -1977,6 +1986,9 @@ function ek(e) {
     }, []),
     closeCopyLinkModal = (0, c.useCallback)(() => {
       setCopyLinkModalOpen(!1), setCopyLinkModalCopying(!1);
+    }, []),
+    retryCollabLaunchGlobalIndex = (0, c.useCallback)(() => {
+      setCollabLaunchGlobalIndexError(""), setCollabLaunchGlobalIndexed(!1), setCollabLaunchGlobalItems([]);
     }, []),
     openCollabLaunchModal = (0, c.useCallback)(() => {
       setCollabLaunchQuery(""), setCollabLaunchSelectionKey(""), setCollabLaunchModalOpen(!0), lB("");
@@ -2465,7 +2477,7 @@ function ek(e) {
             payload = t;
             break;
           }
-          if (lastStatus = a.status, lastMessage = String(t?.message || "").trim(), e < r - 1) {
+          if (lastStatus = a.status, lastMessage = String(t?.message || "").trim(), e < r - 1 && shouldRetryCavcloudTreeLoad(a.status, t)) {
             await new Promise(e => window.setTimeout(e, o));
             if (d.signal.aborted) return;
             continue;
@@ -7624,9 +7636,9 @@ function ek(e) {
     };
   }, [S, ti, tx, tz, th, a1, tE, snippetByFileId]);
   (0, c.useEffect)(() => {
-    if (eC || "ANON" === memberRole || collabLaunchGlobalIndexed || collabLaunchGlobalIndexBusy || collabLaunchGlobalIndexInFlightRef.current) return;
+    if (eC || "ANON" === memberRole || collabLaunchGlobalIndexed || collabLaunchGlobalIndexBusy || collabLaunchGlobalIndexError || collabLaunchGlobalIndexInFlightRef.current) return;
     let eCanceled = !1;
-    collabLaunchGlobalIndexInFlightRef.current = !0, setCollabLaunchGlobalIndexBusy(!0);
+    collabLaunchGlobalIndexInFlightRef.current = !0, setCollabLaunchGlobalIndexBusy(!0), setCollabLaunchGlobalIndexError("");
     void async function () {
       try {
         let eRootId = "";
@@ -7702,7 +7714,10 @@ function ek(e) {
         }
         eCanceled || (setCollabLaunchGlobalItems(Array.from(tItems.values())), setCollabLaunchGlobalIndexed(!0));
       } catch (eErr) {
-        eCanceled || l3("bad", eErr instanceof Error ? eErr.message : "Failed to load files and folders for sharing.");
+        if (!eCanceled) {
+          let e = eErr instanceof Error ? eErr.message : "Failed to load files and folders for sharing.";
+          setCollabLaunchGlobalIndexError(e), l3("bad", e);
+        }
       } finally {
         collabLaunchGlobalIndexInFlightRef.current = !1, setCollabLaunchGlobalIndexBusy(!1);
       }
@@ -7710,7 +7725,7 @@ function ek(e) {
     return () => {
       eCanceled = !0;
     };
-  }, [eC, memberRole, collabLaunchGlobalIndexed, collabLaunchGlobalIndexBusy, en?.breadcrumbs, en?.folder?.id, l3]);
+  }, [eC, memberRole, collabLaunchGlobalIndexed, collabLaunchGlobalIndexBusy, collabLaunchGlobalIndexError, en?.breadcrumbs, en?.folder?.id, l3]);
   (0, c.useEffect)(() => {
     let eCanceled = !1,
       aFolderIds = Array.from(new Set(collabLaunchItems.filter(e => "folder" === e.kind).map(e => String(e?.id || "").trim()).filter(Boolean))).slice(0, 64),
@@ -12537,7 +12552,16 @@ function ek(e) {
                 onChange: e => setCollabLaunchQuery(e.currentTarget.value),
                 placeholder: "Search by name or path"
               })]
-            }), collabLaunchGlobalIndexBusy ? t.jsx("div", {
+            }), collabLaunchGlobalIndexError ? (0, t.jsxs)("div", {
+              className: "cavcloud-modalText",
+              children: [collabLaunchGlobalIndexError, " ", t.jsx("button", {
+                className: "cavcloud-rowAction",
+                type: "button",
+                onClick: retryCollabLaunchGlobalIndex,
+                disabled: collabLaunchGlobalIndexBusy,
+                children: "Retry"
+              })]
+            }) : null, collabLaunchGlobalIndexBusy ? t.jsx("div", {
               className: "cavcloud-modalText",
               children: "Indexing all CavCloud folders and files..."
             }) : null, t.jsx("div", {
@@ -12571,7 +12595,7 @@ function ek(e) {
                 }, e.key);
               }) : t.jsx("div", {
                 className: "cavcloud-modalText",
-                children: collabLaunchGlobalIndexBusy ? "Indexing all CavCloud files and folders..." : "No files or folders available to share right now."
+                children: collabLaunchGlobalIndexBusy ? "Indexing all CavCloud files and folders..." : collabLaunchGlobalIndexError ? "Indexing stopped after a server error. Retry to continue." : "No files or folders available to share right now."
               })
             })]
           }), (0, t.jsxs)("div", {

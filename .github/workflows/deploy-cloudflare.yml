@@ -19,6 +19,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CF_PREBUNDLE_WORKER: "1"
       # Build-only placeholders so prisma generate can run in CI without DB credentials.
+      # The migration step below overrides these with production secrets.
       DATABASE_URL: postgresql://cavbot:placeholder@127.0.0.1:5432/cavbot
       DIRECT_URL: postgresql://cavbot:placeholder@127.0.0.1:5432/cavbot
       # Official production app origin used for URL generation during build.
@@ -40,6 +41,17 @@ jobs:
 
       - name: Install Dependencies
         run: npm ci
+
+      - name: Apply Prisma Migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: |
+          export DATABASE_URL="${DATABASE_URL:-$DIRECT_URL}"
+          export DIRECT_URL="${DIRECT_URL:-$DATABASE_URL}"
+          test -n "$DATABASE_URL"
+          test -n "$DIRECT_URL"
+          npx prisma migrate deploy
 
       - name: Verify Cloudflare Auth
         run: npx -y wrangler@3.114.0 whoami

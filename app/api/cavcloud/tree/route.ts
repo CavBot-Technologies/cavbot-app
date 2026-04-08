@@ -102,28 +102,37 @@ function isCavCloudTreeSchemaMismatch(err: unknown) {
   });
 }
 
+function resolveFallbackTreePlanId(args: {
+  account: {
+    tier: unknown;
+    trialSeatActive: boolean | null;
+    trialEndsAt: Date | null;
+  } | null;
+  entitledSubscription: { tier?: unknown; status?: unknown; currentPeriodEnd?: Date | null } | null;
+}): PlanId {
+  try {
+    const planId: PlanId = resolveEffectiveAccountPlanId({
+      account: args.account,
+      subscription: args.entitledSubscription,
+    });
+    return planId;
+  } catch {
+    return "free";
+  }
+}
+
 async function fallbackTreeForMissingTables(accountId: string) {
   const [account, entitledSubscription] = await Promise.all([
     prisma.account.findUnique({
       where: { id: accountId },
       select: { tier: true, trialSeatActive: true, trialEndsAt: true },
-    }).catch((error) => {
-      if (
-        isSchemaMismatchError(error, {
-          tables: ["Account"],
-          columns: ["tier", "trialSeatActive", "trialEndsAt"],
-        })
-      ) {
-        return null;
-      }
-      throw error;
-    }),
-    findLatestEntitledSubscription(accountId),
+    }).catch(() => null),
+    findLatestEntitledSubscription(accountId).catch(() => null),
   ]);
 
-  const planId: PlanId = resolveEffectiveAccountPlanId({
+  const planId = resolveFallbackTreePlanId({
     account,
-    subscription: entitledSubscription,
+    entitledSubscription,
   });
 
   const limitBytes = storageLimitBytesForPlan(planId);

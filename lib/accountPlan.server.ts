@@ -1,5 +1,6 @@
 import "server-only";
 
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
 import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
 
@@ -28,6 +29,8 @@ const PLAN_RANK: Record<PlanId, number> = {
 };
 
 const ENTITLED_SUBSCRIPTION_STATUSES = new Set(["ACTIVE", "TRIALING", "PAST_DUE"]);
+const SUBSCRIPTION_SOFT_FAIL_PRISMA_CODES = new Set(["P1001", "P1002", "P1008", "P1017", "P2024", "P2028", "P2037"]);
+const SUBSCRIPTION_SOFT_FAIL_DB_CODES = new Set(["08000", "08001", "08003", "08004", "08006", "08007", "53300", "57P01", "57P02", "57P03"]);
 
 function parseDateMs(value: Date | string | null | undefined): number | null {
   if (!value) return null;
@@ -37,6 +40,57 @@ function parseDateMs(value: Date | string | null | undefined): number | null {
   }
   const ms = new Date(String(value)).getTime();
   return Number.isFinite(ms) ? ms : null;
+}
+
+function collectErrorMessages(err: unknown, depth = 0): string[] {
+  if (!err || depth > 3) return [];
+  if (typeof err === "string") return [err.toLowerCase()];
+  if (typeof err !== "object") return [];
+
+  const typed = err as {
+    message?: unknown;
+    meta?: { message?: unknown };
+    cause?: unknown;
+  };
+
+  return [
+    String(typed?.meta?.message || "").toLowerCase(),
+    String(typed?.message || "").toLowerCase(),
+    ...collectErrorMessages(typed?.cause, depth + 1),
+  ].filter(Boolean);
+}
+
+function isSubscriptionLookupSoftFailure(err: unknown) {
+  const prismaCode = String((err as { code?: unknown })?.code || "").toUpperCase();
+  const dbCode = String((err as { meta?: { code?: unknown } })?.meta?.code || "").toUpperCase();
+
+  if (SUBSCRIPTION_SOFT_FAIL_PRISMA_CODES.has(prismaCode)) return true;
+  if (SUBSCRIPTION_SOFT_FAIL_DB_CODES.has(dbCode)) return true;
+  if (
+    isSchemaMismatchError(err, {
+      tables: ["Subscription"],
+      columns: ["accountId", "status", "currentPeriodEnd", "updatedAt", "createdAt", "tier"],
+    })
+  ) {
+    return true;
+  }
+
+  const messages = collectErrorMessages(err);
+  return messages.some((message) =>
+    message.includes("service unavailable")
+    || message.includes("timed out")
+    || message.includes("timeout")
+    || message.includes("connection terminated")
+    || message.includes("connection reset")
+    || message.includes("connection refused")
+    || message.includes("too many clients")
+    || message.includes("remaining connection slots")
+    || message.includes("can not reach database server")
+    || message.includes("can't reach database server")
+    || message.includes("server closed the connection unexpectedly")
+    || message.includes("admin shutdown")
+    || message.includes("query engine exited")
+  );
 }
 
 export function isTrialSeatEntitled(account: AccountPlanRecord | null | undefined, now = Date.now()) {
@@ -83,22 +137,27 @@ export async function findLatestEntitledSubscription(
   const accountId = String(accountIdRaw || "").trim();
   if (!accountId) return null;
 
-  return tx.subscription.findFirst({
-    where: {
-      accountId,
-      status: {
-        in: ["ACTIVE", "TRIALING", "PAST_DUE"],
+  try {
+    return await tx.subscription.findFirst({
+      where: {
+        accountId,
+        status: {
+          in: ["ACTIVE", "TRIALING", "PAST_DUE"],
+        },
       },
-    },
-    orderBy: [
-      { currentPeriodEnd: "desc" },
-      { updatedAt: "desc" },
-      { createdAt: "desc" },
-    ],
-    select: {
-      tier: true,
-      status: true,
-      currentPeriodEnd: true,
-    },
-  });
+      orderBy: [
+        { currentPeriodEnd: "desc" },
+        { updatedAt: "desc" },
+        { createdAt: "desc" },
+      ],
+      select: {
+        tier: true,
+        status: true,
+        currentPeriodEnd: true,
+      },
+    });
+  } catch (error) {
+    if (isSubscriptionLookupSoftFailure(error)) return null;
+    throw error;
+  }
 }

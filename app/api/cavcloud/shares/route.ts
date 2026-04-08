@@ -7,9 +7,11 @@ import type { CavCloudShareMode, Prisma, PublicArtifactVisibility } from "@prism
 import { prisma } from "@/lib/prisma";
 import { requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
 import { getCavCloudSettings } from "@/lib/cavcloud/settings.server";
+import { isCavCloudServiceUnavailableError } from "@/lib/cavcloud/http.server";
 import { putCavcloudObject } from "@/lib/cavcloud/r2.server";
 import { writeCavCloudOperationLog } from "@/lib/cavcloud/operationLog.server";
 import { assertCavCloudActionAllowed } from "@/lib/cavcloud/permissions.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -131,6 +133,24 @@ function missingCavcloudR2EnvVars(): string[] {
   return missing;
 }
 
+function isCavCloudShareSchemaMismatch(err: unknown) {
+  return isSchemaMismatchError(err, {
+    tables: ["CavCloudShare", "PublicArtifact", "User"],
+    columns: [
+      "artifactId",
+      "createdByUserId",
+      "accessPolicy",
+      "expiresAt",
+      "revokedAt",
+      "displayTitle",
+      "sourcePath",
+      "mimeType",
+      "type",
+      "sizeBytes",
+    ],
+  });
+}
+
 export async function GET(req: Request) {
   try {
     const sess = await requireSession(req);
@@ -192,9 +212,15 @@ export async function GET(req: Request) {
       { status: 200 }
     );
   } catch (e: unknown) {
+    if (isCavCloudServiceUnavailableError(e) || isCavCloudShareSchemaMismatch(e)) {
+      return jsonNoStore({ ok: true, degraded: true, items: [] }, { status: 200 });
+    }
     const err = e as { status?: unknown };
     const status = typeof err?.status === "number" ? err.status : 500;
     if (status === 401 || status === 403) return jsonNoStore({ ok: false, message: "Unauthorized" }, { status });
+    if (status === 502 || status === 503 || status === 504) {
+      return jsonNoStore({ ok: false, message: "Service temporarily unavailable." }, { status: 503 });
+    }
     return jsonNoStore({ ok: false, message: "Failed to load shares." }, { status: 500 });
   }
 }

@@ -278,18 +278,8 @@ async function buildDegradedDashboardResponse(req: Request) {
         where: { id: accountId },
         select: { tier: true, trialSeatActive: true, trialEndsAt: true },
       })
-      .catch((error) => {
-        if (
-          isSchemaMismatchError(error, {
-            tables: ["Account"],
-            columns: ["tier", "trialSeatActive", "trialEndsAt"],
-          })
-        ) {
-          return null;
-        }
-        throw error;
-      }),
-    findLatestEntitledSubscription(accountId),
+      .catch(() => null),
+    findLatestEntitledSubscription(accountId).catch(() => null),
   ]);
 
   const degradedAccount = account
@@ -494,7 +484,7 @@ export async function GET(req: Request) {
         }
         throw error;
       }),
-      findLatestEntitledSubscription(accountId),
+      findLatestEntitledSubscription(accountId).catch(() => null),
       prisma.cavCloudFile.aggregate({
         where: {
           accountId,
