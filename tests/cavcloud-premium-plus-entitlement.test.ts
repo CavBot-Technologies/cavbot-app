@@ -35,7 +35,7 @@ test("cavcloud quota and shell routes use the shared effective plan resolver", (
   const collab = read("lib/cavcloud/collab.server.ts");
   const sync = read("app/api/cavcloud/sync/upsert/route.ts");
 
-  assert.equal(authMe.includes("findLatestEntitledSubscription(effectiveMembershipRecord.accountId)"), true);
+  assert.equal(authMe.includes("findLatestEntitledSubscription(effectiveAccountId)"), true);
   assert.equal(authMe.includes("planTierTokenFromPlanId(effectivePlanId)"), true);
   assert.equal(planServer.includes("resolveRequestScopedFounderUser"), false);
   assert.equal(planServer.includes("getSession(req)"), false);

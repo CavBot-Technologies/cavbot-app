@@ -44,7 +44,7 @@ test("findLatestEntitledSubscription falls back when subscription ordering colum
   });
 });
 
-test("findLatestEntitledSubscription rethrows non-schema failures", async () => {
+test("findLatestEntitledSubscription fails open for transient database outages", async () => {
   const tx = {
     subscription: {
       async findFirst() {
@@ -55,5 +55,8 @@ test("findLatestEntitledSubscription rethrows non-schema failures", async () => 
     },
   } as Parameters<typeof findLatestEntitledSubscription>[1];
 
-  await assert.rejects(() => findLatestEntitledSubscription("acct_live", tx), /database offline/);
+  await assert.doesNotReject(async () => {
+    const row = await findLatestEntitledSubscription("acct_live", tx);
+    assert.equal(row, null);
+  });
 });

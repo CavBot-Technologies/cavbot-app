@@ -2,6 +2,7 @@ import { requireAccountContext, requireSession, requireUser } from "@/lib/apiAut
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import { assertCavCloudActionAllowed } from "@/lib/cavcloud/permissions.server";
 import { createFolder } from "@/lib/cavcloud/storage.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -13,6 +14,26 @@ type CreateFolderBody = {
   parentId?: unknown;
   parentPath?: unknown;
 };
+
+function isCavCloudFolderWriteSchemaMismatch(err: unknown) {
+  return isSchemaMismatchError(err, {
+    tables: ["CavCloudFolder", "CavCloudFile", "CavCloudActivity"],
+    columns: [
+      "accountId",
+      "parentId",
+      "name",
+      "path",
+      "deletedAt",
+      "folderId",
+      "relPath",
+      "action",
+      "targetType",
+      "targetId",
+      "targetPath",
+      "metaJson",
+    ],
+  });
+}
 
 export async function POST(req: Request) {
   try {
@@ -40,6 +61,12 @@ export async function POST(req: Request) {
 
     return jsonNoStore({ ok: true, folder }, 200);
   } catch (err) {
+    if (isCavCloudFolderWriteSchemaMismatch(err)) {
+      return jsonNoStore(
+        { ok: false, error: "SERVICE_UNAVAILABLE", message: "CavCloud is temporarily unavailable." },
+        503,
+      );
+    }
     return cavcloudErrorResponse(err, "Failed to create folder.");
   }
 }

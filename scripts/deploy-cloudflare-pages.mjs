@@ -6,10 +6,17 @@ import { fileURLToPath } from "node:url";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const shouldSkipBuild = process.env.CF_DEPLOY_SKIP_BUILD === "1";
+const shouldSkipMigrations = process.env.CF_DEPLOY_SKIP_MIGRATIONS === "1";
 const env = {
   ...process.env,
   CF_PREBUNDLE_WORKER: "1"
 };
+
+function hasRealDatabaseUrl(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return false;
+  return !trimmed.includes("placeholder@127.0.0.1:5432/cavbot");
+}
 
 function run(command, args) {
   const result = spawnSync(command, args, {
@@ -29,6 +36,10 @@ const guardOutput = execFileSync("node", ["scripts/cloudflare-deploy-guard.mjs",
 }).trim();
 
 const metadata = JSON.parse(guardOutput);
+
+if (!shouldSkipMigrations && (hasRealDatabaseUrl(env.DIRECT_URL) || hasRealDatabaseUrl(env.DATABASE_URL))) {
+  run("npm", ["run", "db:migrate"]);
+}
 
 if (!shouldSkipBuild) {
   run("npm", ["run", "build:cloudflare"]);

@@ -54,8 +54,12 @@ GitHub Actions is the authoritative production deployment path.
 1. In GitHub repo secrets, set:
    - `CLOUDFLARE_API_TOKEN`
    - `CLOUDFLARE_ACCOUNT_ID`
+   - `DATABASE_URL`
+   - `DIRECT_URL`
 2. Push to `main` (or run `Deploy Cloudflare` from the Actions tab).
 3. Workflow path: `.github/workflows/deploy-cloudflare.yml`
+
+Production deploys now run `prisma migrate deploy` before building so schema-dependent CavCloud and auth changes do not ship ahead of the database.
 
 Local deploy commands:
 

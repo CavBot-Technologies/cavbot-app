@@ -68,13 +68,7 @@ const QUOTA_WRITE_BASE_DELAY_MS = 40;
 const INTERACTIVE_TX_MAX_WAIT_MS = 60 * 1000;
 const INTERACTIVE_TX_TIMEOUT_MS = 60 * 1000;
 const QUOTA_LOCK_NAMESPACE = "cavcloud_quota_v1";
-const GIB = BigInt(1024) * BigInt(1024) * BigInt(1024);
 const DEFAULT_MAX_ARCHIVE_SOURCE_BYTES = 512 * 1024 * 1024;
-const CAVCLOUD_PLAN_STORAGE_LIMITS: Record<PlanId, bigint> = {
-  free: BigInt(5) * GIB,
-  premium: BigInt(50) * GIB,
-  premium_plus: BigInt(500) * GIB,
-};
 const OFFICIAL_SYNC_ROOT_PATH = "/Synced";
 const OFFICIAL_SYNC_CAVCODE_PATH = "/Synced/CavCode";
 const OFFICIAL_SYNC_CAVPAD_PATH = "/Synced/CavPad";
@@ -461,6 +455,24 @@ function isOptionalTreeMetadataSchemaMismatch(err: unknown) {
   });
 }
 
+function isMissingActivityTableError(err: unknown): boolean {
+  const e = err as { code?: unknown; message?: unknown; meta?: { code?: unknown; message?: unknown } };
+  const prismaCode = String(e?.code || "");
+  const dbCode = String(e?.meta?.code || "");
+  const msg = String(e?.meta?.message || e?.message || "").toLowerCase();
+
+  if (prismaCode === "P2021") return true;
+  if (dbCode === "42P01") return true;
+  return msg.includes("cavcloudactivity") && (msg.includes("does not exist") || msg.includes("relation"));
+}
+
+function isActivitySchemaMismatchError(err: unknown) {
+  return isSchemaMismatchError(err, {
+    tables: ["CavCloudActivity"],
+    columns: ["accountId", "operatorUserId", "action", "targetType", "targetId", "targetPath", "metaJson", "createdAt"],
+  });
+}
+
 function isMissingFilePathIndexTableError(err: unknown): boolean {
   const e = err as { code?: unknown; message?: unknown; meta?: { code?: unknown; message?: unknown } };
   const prismaCode = String(e?.code || "");
@@ -658,20 +670,6 @@ function envInt(name: string): number | null {
   const n = Number(raw);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return null;
   return n;
-}
-
-function perFileLimitBytesForPlan(planId: PlanId): bigint {
-  const free = envInt("CAVCLOUD_MAX_FILE_BYTES_FREE") ?? 64 * 1024 * 1024;
-  const premium = envInt("CAVCLOUD_MAX_FILE_BYTES_PREMIUM") ?? 1024 * 1024 * 1024;
-  const premiumPlus = envInt("CAVCLOUD_MAX_FILE_BYTES_PREMIUM_PLUS") ?? 5 * 1024 * 1024 * 1024;
-
-  if (planId === "premium_plus") return BigInt(premiumPlus);
-  if (planId === "premium") return BigInt(premium);
-  return BigInt(free);
-}
-
-function storageLimitBytesForPlan(planId: PlanId): bigint {
-  return CAVCLOUD_PLAN_STORAGE_LIMITS[planId] ?? CAVCLOUD_PLAN_STORAGE_LIMITS.free;
 }
 
 function normalizePath(raw: string): string {
@@ -1623,17 +1621,21 @@ async function writeActivity(
     metaJson?: Prisma.InputJsonValue | undefined;
   }
 ) {
-  await tx.cavCloudActivity.create({
-    data: {
-      accountId: options.accountId,
-      operatorUserId: options.operatorUserId || null,
-      action: String(options.action || "").slice(0, 64),
-      targetType: String(options.targetType || "").slice(0, 32),
-      targetId: options.targetId || null,
-      targetPath: options.targetPath || null,
-      metaJson: options.metaJson,
-    },
-  });
+  try {
+    await tx.cavCloudActivity.create({
+      data: {
+        accountId: options.accountId,
+        operatorUserId: options.operatorUserId || null,
+        action: String(options.action || "").slice(0, 64),
+        targetType: String(options.targetType || "").slice(0, 32),
+        targetId: options.targetId || null,
+        targetPath: options.targetPath || null,
+        metaJson: options.metaJson,
+      },
+    });
+  } catch (err) {
+    if (!isMissingActivityTableError(err) && !isActivitySchemaMismatchError(err)) throw err;
+  }
 
   await syncPathIndexFromActivity(tx, {
     accountId: options.accountId,
@@ -1727,37 +1729,42 @@ async function loadRecentActivity(accountId: string, tx: DbClient = prisma, limi
     }
   }
 
-  const rows = await tx.cavCloudActivity.findMany({
-    where: {
-      accountId,
-      action: {
-        in: [...FEED_ACTIVITY_ACTIONS],
+  try {
+    const rows = await tx.cavCloudActivity.findMany({
+      where: {
+        accountId,
+        action: {
+          in: [...FEED_ACTIVITY_ACTIONS],
+        },
       },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-    take: safeLimit,
-    select: {
-      id: true,
-      action: true,
-      targetType: true,
-      targetId: true,
-      targetPath: true,
-      createdAt: true,
-      metaJson: true,
-    },
-  });
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: safeLimit,
+      select: {
+        id: true,
+        action: true,
+        targetType: true,
+        targetId: true,
+        targetPath: true,
+        createdAt: true,
+        metaJson: true,
+      },
+    });
 
-  return rows.map((row) => ({
-    id: row.id,
-    action: row.action,
-    targetType: row.targetType,
-    targetId: row.targetId,
-    targetPath: row.targetPath,
-    createdAtISO: toISO(row.createdAt),
-    metaJson: normalizeActivityMeta(row.metaJson),
-  }));
+    return rows.map((row) => ({
+      id: row.id,
+      action: row.action,
+      targetType: row.targetType,
+      targetId: row.targetId,
+      targetPath: row.targetPath,
+      createdAtISO: toISO(row.createdAt),
+      metaJson: normalizeActivityMeta(row.metaJson),
+    }));
+  } catch (err) {
+    if (isMissingActivityTableError(err) || isActivitySchemaMismatchError(err)) return [];
+    throw err;
+  }
 }
 
 async function resolveCollabBadges(args: {
@@ -5420,18 +5427,16 @@ export async function createMultipartSession(args: {
     },
   });
 
-  await prisma.cavCloudActivity.create({
-    data: {
-      accountId,
-      operatorUserId: args.operatorUserId,
-      action: "file.upload.multipart.create",
-      targetType: "upload",
-      targetId: session.id,
-      targetPath: session.filePath,
-      metaJson: {
-        partSizeBytes,
-        expectedBytes: session.expectedBytes?.toString() || null,
-      },
+  await writeActivity(prisma, {
+    accountId,
+    operatorUserId: args.operatorUserId,
+    action: "file.upload.multipart.create",
+    targetType: "upload",
+    targetId: session.id,
+    targetPath: session.filePath,
+    metaJson: {
+      partSizeBytes,
+      expectedBytes: session.expectedBytes?.toString() || null,
     },
   });
 
@@ -5519,17 +5524,15 @@ export async function uploadMultipartSessionPart(args: {
     },
   });
 
-  await prisma.cavCloudActivity.create({
-    data: {
-      accountId,
-      operatorUserId: args.operatorUserId,
-      action: "file.upload.multipart.part",
-      targetType: "upload",
-      targetId: upload.id,
-      metaJson: {
-        partNumber,
-        bytes: args.body.length,
-      },
+  await writeActivity(prisma, {
+    accountId,
+    operatorUserId: args.operatorUserId,
+    action: "file.upload.multipart.part",
+    targetType: "upload",
+    targetId: upload.id,
+    metaJson: {
+      partNumber,
+      bytes: args.body.length,
     },
   });
 
