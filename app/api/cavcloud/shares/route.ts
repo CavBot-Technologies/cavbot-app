@@ -7,7 +7,7 @@ import type { CavCloudShareMode, Prisma, PublicArtifactVisibility } from "@prism
 import { prisma } from "@/lib/prisma";
 import { requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
 import { getCavCloudSettings } from "@/lib/cavcloud/settings.server";
-import { isCavCloudServiceUnavailableError } from "@/lib/cavcloud/http.server";
+import { isCavCloudServiceUnavailableError, withCavCloudDeadline } from "@/lib/cavcloud/http.server";
 import { putCavcloudObject } from "@/lib/cavcloud/r2.server";
 import { writeCavCloudOperationLog } from "@/lib/cavcloud/operationLog.server";
 import { assertCavCloudActionAllowed } from "@/lib/cavcloud/permissions.server";
@@ -167,29 +167,32 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const artifactId = String(url.searchParams.get("artifactId") || "").trim();
     const where = artifactId ? { artifactId, createdByUserId: userId } : { createdByUserId: userId };
-    const items = await prisma.cavCloudShare.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        mode: true,
-        accessPolicy: true,
-        expiresAt: true,
-        revokedAt: true,
-        createdAt: true,
-        artifact: {
-          select: {
-            id: true,
-            displayTitle: true,
-            sourcePath: true,
-            mimeType: true,
-            type: true,
-            sizeBytes: true,
+    const items = await withCavCloudDeadline(
+      prisma.cavCloudShare.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          mode: true,
+          accessPolicy: true,
+          expiresAt: true,
+          revokedAt: true,
+          createdAt: true,
+          artifact: {
+            select: {
+              id: true,
+              displayTitle: true,
+              sourcePath: true,
+              mimeType: true,
+              type: true,
+              sizeBytes: true,
+            },
           },
         },
-      },
-      take: artifactId ? 50 : 200,
-    });
+        take: artifactId ? 50 : 200,
+      }),
+      { message: "Timed out loading CavCloud shares." },
+    );
 
     return jsonNoStore(
       {

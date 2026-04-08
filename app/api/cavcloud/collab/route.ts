@@ -1,5 +1,5 @@
 import { requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
-import { cavcloudErrorResponse, isCavCloudServiceUnavailableError, jsonNoStore } from "@/lib/cavcloud/http.server";
+import { cavcloudErrorResponse, isCavCloudServiceUnavailableError, jsonNoStore, withCavCloudDeadline } from "@/lib/cavcloud/http.server";
 import { listCollabInbox } from "@/lib/cavcloud/userShares.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 
@@ -73,11 +73,14 @@ export async function GET(req: Request) {
     requireUser(sess);
     requireAccountContext(sess);
 
-    const collab = await listCollabInbox({
-      accountId: String(sess.accountId || ""),
-      operatorUserId: String(sess.sub || ""),
-      filter,
-    });
+    const collab = await withCavCloudDeadline(
+      listCollabInbox({
+        accountId: String(sess.accountId || ""),
+        operatorUserId: String(sess.sub || ""),
+        filter,
+      }),
+      { message: "Timed out loading CavCloud collaboration inbox." },
+    );
 
     return jsonNoStore(
       {
@@ -89,18 +92,7 @@ export async function GET(req: Request) {
     );
   } catch (err) {
     if (isCavCloudServiceUnavailableError(err) || isCavCloudCollabSchemaMismatch(err)) {
-      return jsonNoStore({
-        ok: true,
-        degraded: true,
-        filter,
-        items: [],
-        summary: {
-          total: 0,
-          readonly: 0,
-          canEdit: 0,
-          expiringSoon: 0,
-        },
-      }, 200);
+      return await buildDegradedCollabResponse(req, filter);
     }
     try {
       return await buildDegradedCollabResponse(req, filter);

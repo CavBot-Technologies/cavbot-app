@@ -6,7 +6,7 @@ import {
   isTrialSeatEntitled,
   resolveEffectivePlanId as resolveEffectiveAccountPlanId,
 } from "@/lib/accountPlan.server";
-import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
+import { cavcloudErrorResponse, jsonNoStore, withCavCloudDeadline } from "@/lib/cavcloud/http.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { getPlanLimits, type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
@@ -94,23 +94,34 @@ function degradedSummaryPayload(
   };
 }
 
+function buildStaticDegradedSummaryResponse() {
+  return jsonNoStore(degradedSummaryPayload(), 200);
+}
+
 async function buildDegradedSummaryResponse(req: Request) {
   const sess = await requireSession(req);
   requireAccountContext(sess);
   requireUser(sess);
 
   const accountId = String(sess.accountId || "");
-  const [account, entitledSubscription] = await Promise.all([
-    prisma.account
-      .findUnique({
-        where: { id: accountId },
-        select: { tier: true, trialSeatActive: true, trialEndsAt: true },
-      })
-      .catch(() => null),
-    findLatestEntitledSubscription(accountId).catch(() => null),
-  ]);
+  try {
+    const [account, entitledSubscription] = await withCavCloudDeadline(
+      Promise.all([
+        prisma.account
+          .findUnique({
+            where: { id: accountId },
+            select: { tier: true, trialSeatActive: true, trialEndsAt: true },
+          })
+          .catch(() => null),
+        findLatestEntitledSubscription(accountId).catch(() => null),
+      ]),
+      { message: "Timed out loading degraded CavCloud summary." },
+    );
 
-  return jsonNoStore(degradedSummaryPayload(account, entitledSubscription), 200);
+    return jsonNoStore(degradedSummaryPayload(account, entitledSubscription), 200);
+  } catch {
+    return buildStaticDegradedSummaryResponse();
+  }
 }
 
 export async function GET(req: Request) {
@@ -160,26 +171,29 @@ export async function GET(req: Request) {
       });
     const entitledSubscriptionPromise = findLatestEntitledSubscription(accountId);
 
-    const [account, entitledSubscription, folderCount, fileCount, imageCount, videoCount, bytesAgg] = await Promise.all([
-      accountPromise,
-      entitledSubscriptionPromise,
-      prisma.cavCloudFolder.count({
-        where: { accountId, deletedAt: null, path: { not: "/" } },
-      }),
-      prisma.cavCloudFile.count({
-        where: { accountId, deletedAt: null },
-      }),
-      prisma.cavCloudFile.count({
-        where: imageWhere,
-      }),
-      prisma.cavCloudFile.count({
-        where: videoWhere,
-      }),
-      prisma.cavCloudFile.aggregate({
-        where: { accountId, deletedAt: null },
-        _sum: { bytes: true },
-      }),
-    ]);
+    const [account, entitledSubscription, folderCount, fileCount, imageCount, videoCount, bytesAgg] = await withCavCloudDeadline(
+      Promise.all([
+        accountPromise,
+        entitledSubscriptionPromise,
+        prisma.cavCloudFolder.count({
+          where: { accountId, deletedAt: null, path: { not: "/" } },
+        }),
+        prisma.cavCloudFile.count({
+          where: { accountId, deletedAt: null },
+        }),
+        prisma.cavCloudFile.count({
+          where: imageWhere,
+        }),
+        prisma.cavCloudFile.count({
+          where: videoWhere,
+        }),
+        prisma.cavCloudFile.aggregate({
+          where: { accountId, deletedAt: null },
+          _sum: { bytes: true },
+        }),
+      ]),
+      { message: "Timed out loading CavCloud summary." },
+    );
 
     const usedBig = bytesAgg._sum.bytes ?? BigInt(0);
     const usedBytes = toSafeNumber(usedBig);
@@ -227,7 +241,10 @@ export async function GET(req: Request) {
     try {
       return await buildDegradedSummaryResponse(req);
     } catch (fallbackError) {
-      return cavcloudErrorResponse(fallbackError, "Failed to load CavCloud summary.");
+      if (fallbackError instanceof ApiAuthError) {
+        return cavcloudErrorResponse(fallbackError, "Failed to load CavCloud summary.");
+      }
+      return buildStaticDegradedSummaryResponse();
     }
   }
 }
