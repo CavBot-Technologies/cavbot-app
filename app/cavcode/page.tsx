@@ -5408,63 +5408,45 @@ function IconGearGlyph({ className, size }: { className?: string; size?: number 
 function IconThemeGlyph({ className, size }: { className?: string; size?: number }) {
   const iconSize = Number.isFinite(size) ? Math.max(8, Math.round(size as number)) : 18;
   return (
-    <svg
+    <Image
       className={className}
+      src="/icons/app/cavcode/palette-svgrepo-com.svg"
+      alt=""
       width={iconSize}
       height={iconSize}
-      viewBox="0 0 24 24"
-      fill="none"
       aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        d="M12 3.2a8.8 8.8 0 1 0 8.8 8.8c0-.5-.41-.9-.91-.86a3.9 3.9 0 0 1-4.13-4.13.9.9 0 0 0-.86-.91H12Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-      />
-      <circle cx="8.2" cy="8.3" r="1" fill="currentColor" />
-      <circle cx="7" cy="12.4" r="1" fill="currentColor" />
-      <circle cx="9.6" cy="15.8" r="1" fill="currentColor" />
-    </svg>
+      unoptimized
+    />
   );
 }
 
 function IconKeyboardGlyph({ className, size }: { className?: string; size?: number }) {
   const iconSize = Number.isFinite(size) ? Math.max(8, Math.round(size as number)) : 18;
   return (
-    <svg
+    <Image
       className={className}
+      src="/icons/app/cavcode/keyboard-svgrepo-com.svg"
+      alt=""
       width={iconSize}
       height={iconSize}
-      viewBox="0 0 24 24"
-      fill="none"
       aria-hidden="true"
-      focusable="false"
-    >
-      <rect x="2.5" y="5" width="19" height="14" rx="3.2" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M6.5 10.2h1.4M9.6 10.2H11m2.1 0h1.4m2.1 0H18m-11.5 3.3h1.4m2.1 0H11m2.1 0h4.9m-11.5 3.3H18" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
+      unoptimized
+    />
   );
 }
 
 function IconCollaboratorsGlyph({ className, size }: { className?: string; size?: number }) {
   const iconSize = Number.isFinite(size) ? Math.max(8, Math.round(size as number)) : 18;
   return (
-    <svg
+    <Image
       className={className}
+      src="/icons/app/cavcode/team-svgrepo-com.svg"
+      alt=""
       width={iconSize}
       height={iconSize}
-      viewBox="0 0 24 24"
-      fill="none"
       aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        d="M8 11.2a2.9 2.9 0 1 0 0-5.8 2.9 2.9 0 0 0 0 5.8Zm8 0a2.55 2.55 0 1 0 0-5.1 2.55 2.55 0 0 0 0 5.1ZM4.5 18.2c0-2.2 2.1-4 4.7-4s4.8 1.8 4.8 4v.3H4.5v-.3Zm10.4.3c.2-1.15-.1-2.24-.73-3.14 1.97.18 3.43 1.54 3.43 3.14v.02H14.9v-.02Z"
-        fill="currentColor"
-      />
-    </svg>
+      unoptimized
+    />
   );
 }
 
