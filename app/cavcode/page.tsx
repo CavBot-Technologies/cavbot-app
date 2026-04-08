@@ -5405,6 +5405,31 @@ function IconGearGlyph({ className, size }: { className?: string; size?: number 
   );
 }
 
+function IconThemeGlyph({ className, size }: { className?: string; size?: number }) {
+  const iconSize = Number.isFinite(size) ? Math.max(8, Math.round(size as number)) : 18;
+  return (
+    <svg
+      className={className}
+      width={iconSize}
+      height={iconSize}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M12 3.2a8.8 8.8 0 1 0 8.8 8.8c0-.5-.41-.9-.91-.86a3.9 3.9 0 0 1-4.13-4.13.9.9 0 0 0-.86-.91H12Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <circle cx="8.2" cy="8.3" r="1" fill="currentColor" />
+      <circle cx="7" cy="12.4" r="1" fill="currentColor" />
+      <circle cx="9.6" cy="15.8" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+
 function IconKeyboardGlyph({ className, size }: { className?: string; size?: number }) {
   const iconSize = Number.isFinite(size) ? Math.max(8, Math.round(size as number)) : 18;
   return (
@@ -5726,7 +5751,7 @@ export default function CavCodePage() {
 
   // settings
   const [settings, setSettings] = useState<EditorSettings>(DEFAULT_SETTINGS);
-  const [settingsSection, setSettingsSection] = useState<"editor" | "collaborators">("editor");
+  const [settingsSection, setSettingsSection] = useState<"editor" | "theme" | "collaborators">("editor");
   const [keyboardShortcutsQuery, setKeyboardShortcutsQuery] = useState("");
   const [skillsPageView, setSkillsPageView] = useState<SkillsPageView>("agents");
   const [cavenIdeSettings, setCavenIdeSettings] = useState<CavenIdeSettings>(DEFAULT_CAVEN_IDE_SETTINGS);
@@ -8588,7 +8613,7 @@ export default function CavCodePage() {
     setSidebarOpen(true);
     setActivity("settings");
   }, []);
-  const scrollSettingsSection = useCallback((section: "editor" | "collaborators") => {
+  const scrollSettingsSection = useCallback((section: "editor" | "theme" | "collaborators") => {
     setSettingsSection(section);
   }, []);
   const openSettingsSidebar = useCallback(() => {
@@ -14616,16 +14641,18 @@ export default function CavCodePage() {
         {/* Primary Sidebar */}
         {sidebarOpen ? (
           <aside className="cc-sidebar" aria-label="Primary Sidebar">
-            <div className="cc-sidebar-brandMark" aria-hidden="true">
-              <Image
-                src="/icons/app/cavcode/atom-svgrepo-com.svg"
-                alt=""
-                width={88}
-                height={88}
-                className="cc-sidebar-brandMarkImg"
-                unoptimized
-              />
-            </div>
+            {activity === "ai" ? (
+              <div className="cc-sidebar-brandMark" aria-hidden="true">
+                <Image
+                  src="/icons/app/cavcode/atom-svgrepo-com.svg"
+                  alt=""
+                  width={72}
+                  height={72}
+                  className="cc-sidebar-brandMarkImg"
+                  unoptimized
+                />
+              </div>
+            ) : null}
             {activity === "explorer" ? (
               <>
                 <div className="cc-sidebar-head">
@@ -15221,7 +15248,21 @@ export default function CavCodePage() {
                       </span>
                       <span className="cc-settingsNavCopy">
                         <span className="cc-settingsNavLabel">Editor</span>
-                        <span className="cc-settingsNavHint">Typography, save flow, theme, and sync.</span>
+                        <span className="cc-settingsNavHint">Typography, save flow, and sync.</span>
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`cc-settingsNavItem ${settingsSection === "theme" ? "is-on" : ""}`}
+                      onClick={() => scrollSettingsSection("theme")}
+                    >
+                      <span className="cc-settingsNavIcon" aria-hidden="true">
+                        <IconThemeGlyph size={15} />
+                      </span>
+                      <span className="cc-settingsNavCopy">
+                        <span className="cc-settingsNavLabel">Theme</span>
+                        <span className="cc-settingsNavHint">Appearance only. Keep editor controls separate.</span>
                       </span>
                     </button>
 
@@ -15386,57 +15427,6 @@ export default function CavCodePage() {
                         />
                       </label>
 
-                      <div className="cc-set-row cc-set-rowTheme">
-                        <div className="cc-set-copy">
-                          <span className="cc-set-label">Theme</span>
-                          <span className="cc-set-note">12 professional CavCode themes. Monaco rendering stays on the same theme pipeline.</span>
-                        </div>
-                        <div className="cc-themeList" role="list" aria-label="CavCode themes">
-                          {THEME_OPTIONS.map((option) => (
-                            <button
-                              key={option.value}
-                              type="button"
-                              className={`cc-themeCard ${settings.theme === option.value ? "is-on" : ""}`}
-                              data-theme-value={option.value}
-                              onClick={() => setSettings((s) => ({ ...s, theme: option.value }))}
-                              style={{
-                                "--cc-theme-card-bg": option.previewBackground,
-                                "--cc-theme-card-border": option.previewBorder,
-                                "--cc-theme-card-fg": option.previewText,
-                                "--cc-theme-card-line": option.previewLine,
-                                "--cc-theme-card-accent": option.accent,
-                                "--cc-theme-card-keyword": option.tokens.keyword,
-                                "--cc-theme-card-string": option.tokens.string,
-                                "--cc-theme-card-number": option.tokens.number,
-                                "--cc-theme-card-type": option.tokens.type,
-                                "--cc-theme-card-comment": option.tokens.comment,
-                              } as React.CSSProperties}
-                            >
-                              <span className="cc-themeCardMeta">
-                                <span className="cc-themeCardTitleWrap">
-                                  <span className="cc-themeCardName">{option.label}</span>
-                                  <span className="cc-themeCardHint">{option.hint}</span>
-                                </span>
-                                <span className="cc-themeCardDot" aria-hidden="true" />
-                              </span>
-                              <span className="cc-themeCardCode" aria-hidden="true">
-                                <span className="cc-themeCardCodeLine is-comment">{`// ${option.value}`}</span>
-                                <span className="cc-themeCardCodeLine">
-                                  <span className="tok-keyword">const</span>{" "}
-                                  <span className="tok-type">accent</span>{" "}
-                                  ={" "}
-                                  <span className="tok-string">{JSON.stringify(option.label)}</span>
-                                </span>
-                                <span className="cc-themeCardCodeLine">
-                                  <span className="tok-keyword">return</span>{" "}
-                                  <span className="tok-number">12</span>
-                                </span>
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
                       <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
                         <span className="cc-set-copy">
                           <span className="cc-set-label">Telemetry</span>
@@ -15449,6 +15439,66 @@ export default function CavCodePage() {
                           onChange={(e) => setSettings((s) => ({ ...s, telemetry: e.target.checked }))}
                         />
                       </label>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {settingsSection === "theme" ? (
+                    <div className="cc-set-card cc-set-cardSettings">
+                      <div className="cc-set-head">
+                        <div>
+                          <div className="cc-set-title">Theme</div>
+                          <div className="cc-set-note">12 professional CavCode themes. Monaco rendering stays on the same theme pipeline.</div>
+                        </div>
+                      </div>
+
+                      <div className="cc-set-stack">
+                        <div className="cc-set-row cc-set-rowTheme">
+                          <div className="cc-themeList" role="list" aria-label="CavCode themes">
+                            {THEME_OPTIONS.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={`cc-themeCard ${settings.theme === option.value ? "is-on" : ""}`}
+                                data-theme-value={option.value}
+                                onClick={() => setSettings((s) => ({ ...s, theme: option.value }))}
+                                style={{
+                                  "--cc-theme-card-bg": option.previewBackground,
+                                  "--cc-theme-card-border": option.previewBorder,
+                                  "--cc-theme-card-fg": option.previewText,
+                                  "--cc-theme-card-line": option.previewLine,
+                                  "--cc-theme-card-accent": option.accent,
+                                  "--cc-theme-card-keyword": option.tokens.keyword,
+                                  "--cc-theme-card-string": option.tokens.string,
+                                  "--cc-theme-card-number": option.tokens.number,
+                                  "--cc-theme-card-type": option.tokens.type,
+                                  "--cc-theme-card-comment": option.tokens.comment,
+                                } as React.CSSProperties}
+                              >
+                                <span className="cc-themeCardMeta">
+                                  <span className="cc-themeCardTitleWrap">
+                                    <span className="cc-themeCardName">{option.label}</span>
+                                    <span className="cc-themeCardHint">{option.hint}</span>
+                                  </span>
+                                  <span className="cc-themeCardDot" aria-hidden="true" />
+                                </span>
+                                <span className="cc-themeCardCode" aria-hidden="true">
+                                  <span className="cc-themeCardCodeLine is-comment">{`// ${option.value}`}</span>
+                                  <span className="cc-themeCardCodeLine">
+                                    <span className="tok-keyword">const</span>{" "}
+                                    <span className="tok-type">accent</span>{" "}
+                                    ={" "}
+                                    <span className="tok-string">{JSON.stringify(option.label)}</span>
+                                  </span>
+                                  <span className="cc-themeCardCodeLine">
+                                    <span className="tok-keyword">return</span>{" "}
+                                    <span className="tok-number">12</span>
+                                  </span>
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ) : null}

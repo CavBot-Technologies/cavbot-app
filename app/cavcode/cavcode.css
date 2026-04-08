@@ -581,8 +581,8 @@ body[data-cb-footer-hidden="1"] .cc-ide{
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 88px;
-  height: 88px;
+  width: 72px;
+  height: 72px;
   transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
