@@ -1,9 +1,11 @@
 import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
 import { cavcloudErrorResponse, jsonNoStore, withCavCloudDeadline } from "@/lib/cavcloud/http.server";
+import {
+  ensureCavCloudRootFolderRuntime,
+  findCavCloudFolderByIdRuntime,
+} from "@/lib/cavcloud/runtimeStorage.server";
 import { getCavCloudSettings } from "@/lib/cavcloud/settings.server";
-import { getRootFolder } from "@/lib/cavcloud/storage.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
-import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -105,9 +107,7 @@ export async function GET(req: Request) {
 
     const [root, settings] = await withCavCloudDeadline(
       Promise.all([
-        getRootFolder({
-          accountId: sess.accountId,
-        }),
+        ensureCavCloudRootFolderRuntime(sess.accountId),
         getCavCloudSettings({
           accountId,
           userId,
@@ -119,65 +119,19 @@ export async function GET(req: Request) {
     let defaultFolder = root;
     if (settings.startLocation === "lastFolder" && settings.lastFolderId) {
       const row = await withCavCloudDeadline(
-        prisma.cavCloudFolder.findFirst({
-          where: {
-            id: settings.lastFolderId,
-            accountId,
-            deletedAt: null,
-          },
-          select: {
-            id: true,
-            name: true,
-            path: true,
-            parentId: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        }),
+        findCavCloudFolderByIdRuntime(accountId, settings.lastFolderId),
         { timeoutMs: ROOT_START_FOLDER_TIMEOUT_MS, message: "Timed out loading CavCloud start folder." },
       );
       if (row?.path && !isReservedSystemPath(row.path)) {
-        defaultFolder = {
-          id: row.id,
-          name: row.name,
-          path: row.path,
-          parentId: row.parentId || null,
-          createdAtISO: new Date(row.createdAt).toISOString(),
-          updatedAtISO: new Date(row.updatedAt).toISOString(),
-          sharedUserCount: 0,
-          collaborationEnabled: false,
-        };
+        defaultFolder = row;
       }
     } else if (settings.startLocation === "pinnedFolder" && settings.pinnedFolderId) {
       const row = await withCavCloudDeadline(
-        prisma.cavCloudFolder.findFirst({
-          where: {
-            id: settings.pinnedFolderId,
-            accountId,
-            deletedAt: null,
-          },
-          select: {
-            id: true,
-            name: true,
-            path: true,
-            parentId: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        }),
+        findCavCloudFolderByIdRuntime(accountId, settings.pinnedFolderId),
         { timeoutMs: ROOT_START_FOLDER_TIMEOUT_MS, message: "Timed out loading CavCloud start folder." },
       );
       if (row?.path && !isReservedSystemPath(row.path)) {
-        defaultFolder = {
-          id: row.id,
-          name: row.name,
-          path: row.path,
-          parentId: row.parentId || null,
-          createdAtISO: new Date(row.createdAt).toISOString(),
-          updatedAtISO: new Date(row.updatedAt).toISOString(),
-          sharedUserCount: 0,
-          collaborationEnabled: false,
-        };
+        defaultFolder = row;
       }
     }
 

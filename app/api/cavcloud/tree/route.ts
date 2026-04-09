@@ -6,8 +6,11 @@ import {
   withCavCloudDeadline,
 } from "@/lib/cavcloud/http.server";
 import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
+import {
+  loadCavCloudTreeLiteRuntime,
+  loadCavCloudTreeRuntime,
+} from "@/lib/cavcloud/runtimeStorage.server";
 import { getCavCloudSettings, toCavCloudListingPreferences } from "@/lib/cavcloud/settings.server";
-import { getTree, getTreeLite } from "@/lib/cavcloud/storage.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { getPlanLimits, type PlanId } from "@/lib/plans";
 
@@ -205,7 +208,7 @@ export async function GET(req: Request) {
 
     if (lite) {
       const tree = await withCavCloudDeadline(
-        getTreeLite({
+        loadCavCloudTreeLiteRuntime({
           accountId: sess.accountId,
           folderPath: folder,
           listing,
@@ -217,10 +220,9 @@ export async function GET(req: Request) {
     }
 
     const tree = await withCavCloudDeadline(
-      getTree({
+      loadCavCloudTreeRuntime({
         accountId: sess.accountId,
         folderPath: folder,
-        operatorUserId: sess.sub,
         listing,
       }),
       { timeoutMs: TREE_REQUEST_TIMEOUT_MS, message: "Timed out loading CavCloud tree." },

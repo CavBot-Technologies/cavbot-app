@@ -72,7 +72,7 @@ test("cavcloud storage activity writes fail open when non-critical activity tabl
   assert.match(folders, /function isRetriableFolderWriteFailure/);
   assert.match(folders, /withCavCloudDeadline\(/);
   assert.match(folders, /assertCavCloudActionAllowed/);
-  assert.match(folders, /createFolder/);
+  assert.match(folders, /createCavCloudFolderRuntime/);
   assert.match(folders, /if \(isRetriableFolderWriteFailure\(err\)\)/);
   assert.match(folders, /SERVICE_UNAVAILABLE/);
 });

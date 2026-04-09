@@ -52,6 +52,10 @@ test("cavcloud settings and collab policy reads stay on read-only account-db que
 
 test("cavcloud read surfaces do not bootstrap synced folders or root writes", () => {
   const storage = read("lib/cavcloud/storage.server.ts");
+  const runtimeStorage = read("lib/cavcloud/runtimeStorage.server.ts");
+  const rootRoute = read("app/api/cavcloud/root/route.ts");
+  const treeRoute = read("app/api/cavcloud/tree/route.ts");
+  const foldersRoute = read("app/api/cavcloud/folders/route.ts");
 
   const loadFolderChildrenPayload = section(
     storage,
@@ -92,4 +96,18 @@ test("cavcloud read surfaces do not bootstrap synced folders or root writes", ()
   assert.doesNotMatch(getTree, /ensureOfficialSyncedFolders\(/);
   assert.doesNotMatch(getTree, /ensureRootFolder\(/);
   assert.match(storage, /await ensureOfficialSyncedFolders\(accountId, tx\);/);
+
+  assert.match(runtimeStorage, /export async function ensureCavCloudRootFolderRuntime/);
+  assert.match(runtimeStorage, /export async function loadCavCloudTreeLiteRuntime/);
+  assert.match(runtimeStorage, /export async function loadCavCloudTreeRuntime/);
+  assert.match(runtimeStorage, /export async function createCavCloudFolderRuntime/);
+  assert.match(rootRoute, /ensureCavCloudRootFolderRuntime/);
+  assert.match(rootRoute, /findCavCloudFolderByIdRuntime/);
+  assert.doesNotMatch(rootRoute, /getRootFolder\(/);
+  assert.match(treeRoute, /loadCavCloudTreeLiteRuntime/);
+  assert.match(treeRoute, /loadCavCloudTreeRuntime/);
+  assert.doesNotMatch(treeRoute, /getTreeLite\(/);
+  assert.doesNotMatch(treeRoute, /getTree\(/);
+  assert.match(foldersRoute, /createCavCloudFolderRuntime/);
+  assert.doesNotMatch(foldersRoute, /createFolder\(/);
 });

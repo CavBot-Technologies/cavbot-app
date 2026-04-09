@@ -1,7 +1,7 @@
 import { requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
 import { cavcloudErrorResponse, isCavCloudServiceUnavailableError, jsonNoStore, withCavCloudDeadline } from "@/lib/cavcloud/http.server";
 import { assertCavCloudActionAllowed } from "@/lib/cavcloud/permissions.server";
-import { createFolder } from "@/lib/cavcloud/storage.server";
+import { createCavCloudFolderRuntime } from "@/lib/cavcloud/runtimeStorage.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
     );
 
     const folder = await withCavCloudDeadline(
-      createFolder({
+      createCavCloudFolderRuntime({
         accountId: sess.accountId,
         operatorUserId: sess.sub,
         name: String(body.name || "").trim(),
