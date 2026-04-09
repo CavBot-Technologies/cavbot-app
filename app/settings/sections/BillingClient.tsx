@@ -65,6 +65,8 @@ type BillingSummary = {
 
   computed: {
     currentPlanId: PlanId;
+    planSource: "account" | "subscription" | "trial" | "fallback";
+    authoritative: boolean;
     seatLimit: number | null;
     websiteLimit: number | null;
     seatsUsed: number;
@@ -768,7 +770,8 @@ function FlipIcon() {
 function BillingClientInner() {
   const [err, setErr] = React.useState("");
   const [summary, setSummary] = React.useState<BillingSummary | null>(null);
-  const [bootPlanId, setBootPlanId] = React.useState<PlanId>("free");
+  const [bootPlanId, setBootPlanId] = React.useState<PlanId | null>(null);
+  const [billingSummaryResolved, setBillingSummaryResolved] = React.useState(false);
 
 
   const [pm, setPm] = React.useState<PaymentMethodSummary | null>(null);
@@ -814,6 +817,11 @@ function BillingClientInner() {
     setErr("");
     try {
       const s = await apiJSON<BillingSummary>("/api/billing/summary");
+      if (!s?.computed?.authoritative || !s?.account?.id) {
+        setSummary(null);
+        setErr("");
+        return;
+      }
       setSummary(s);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -824,6 +832,8 @@ function BillingClientInner() {
         return;
       }
       setErr("Billing details are temporarily unavailable.");
+    } finally {
+      setBillingSummaryResolved(true);
     }
   }, []);
 
@@ -856,27 +866,6 @@ function BillingClientInner() {
       if (toastTimer.current) window.clearTimeout(toastTimer.current);
     };
   }, [refresh, refreshInvoices, refreshPaymentMethod]);
-
-  React.useEffect(() => {
-    const livePlanId = summary?.computed.currentPlanId;
-    if (!livePlanId || typeof window === "undefined") return;
-
-    const planTier = livePlanId === "premium_plus" ? "PREMIUM_PLUS" : livePlanId === "premium" ? "PREMIUM" : "FREE";
-
-    try {
-      const raw = globalThis.__cbLocalStore.getItem(SHELL_PLAN_SNAPSHOT_KEY);
-      const previous = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-      globalThis.__cbLocalStore.setItem(
-        SHELL_PLAN_SNAPSHOT_KEY,
-        JSON.stringify({
-          ...previous,
-          planTier,
-          ts: Date.now(),
-        })
-      );
-    } catch {}
-  }, [summary?.computed.currentPlanId]);
-
 
   React.useEffect(() => {
     const el = plansRef.current;
@@ -915,14 +904,17 @@ function BillingClientInner() {
   }, []);
 
 
-  const currentPlanId = summary?.computed.currentPlanId ?? bootPlanId;
+  const currentPlanId =
+    summary?.computed.currentPlanId ??
+    (!billingSummaryResolved ? bootPlanId : null);
+  const planDetailPlanId = currentPlanId ?? bootPlanId ?? "free";
   const hasBillingContext = Boolean(summary?.account?.id);
   const seatLimitValue = hasBillingContext
     ? (summary?.computed?.seatLimit ?? null)
-    : safePlanLimit(currentPlanId, "seats");
+    : safePlanLimit(planDetailPlanId, "seats");
   const websiteLimitValue = hasBillingContext
     ? (summary?.computed?.websiteLimit ?? null)
-    : safePlanLimit(currentPlanId, "websites");
+    : safePlanLimit(planDetailPlanId, "websites");
   const pending = summary?.account?.pendingDowngradePlanId
     ? {
         toPlan: summary.account.pendingDowngradePlanId,
@@ -931,12 +923,17 @@ function BillingClientInner() {
       }
     : null;
 
+  const billingEmailLabel = buildBillingEmailLabel(planDetailPlanId, summary?.account?.billingEmail || null);
+  const periodEndLabel = buildPeriodEndLabel(planDetailPlanId, summary?.subscription?.currentPeriodEnd || null);
 
-  const billingEmailLabel = buildBillingEmailLabel(currentPlanId, summary?.account?.billingEmail || null);
-  const periodEndLabel = buildPeriodEndLabel(currentPlanId, summary?.subscription?.currentPeriodEnd || null);
 
-
-  function actionForPlan(pid: PlanId): { kind: "current" | "upgrade" | "downgrade"; href?: string } {
+  function actionForPlan(pid: PlanId): { kind: "current" | "upgrade" | "downgrade" | "disabled"; href?: string; label?: string } {
+    if (!currentPlanId) {
+      return {
+        kind: "disabled",
+        label: billingSummaryResolved ? "Plan unavailable" : "Loading...",
+      };
+    }
     if (pid === currentPlanId) return { kind: "current" };
     const rank = (p: PlanId) => (p === "free" ? 1 : p === "premium" ? 2 : 3);
     const rCur = rank(currentPlanId);
@@ -978,7 +975,7 @@ function BillingClientInner() {
 
         <div className="sx-billPlans sx-billPlansSlider" aria-label="Plans" ref={plansRef}>
           {(["free", "premium", "premium_plus"] as PlanId[]).map((pid) => {
-            const isCurrent = pid === currentPlanId;
+            const isCurrent = currentPlanId !== null && pid === currentPlanId;
             const action = actionForPlan(pid);
 
 
@@ -1019,6 +1016,10 @@ function BillingClientInner() {
                   {action.kind === "current" ? (
                     <button className="sx-btn sx-btnMuted" type="button" disabled aria-disabled="true">
                       Current plan
+                    </button>
+                  ) : action.kind === "disabled" ? (
+                    <button className="sx-btn sx-btnMuted" type="button" disabled aria-disabled="true">
+                      {action.label}
                     </button>
                   ) : action.kind === "upgrade" ? (
                     <a className="sx-btn sx-btnPrimary sx-btnToneLinked" href={action.href}>
@@ -1258,7 +1259,7 @@ function BillingClientInner() {
               <article className="sx-billDetailCard">
                 <div className="sx-billDetailLabel">Billing cycle</div>
                 <div className="sx-billDetailValue">
-                  {currentPlanId === "free" ? "None" : summary?.computed?.billingCycle || "monthly"}
+                  {planDetailPlanId === "free" ? "None" : summary?.computed?.billingCycle || "monthly"}
                 </div>
                 <p className="sx-billDetailMeta">Rolling on the plan you selected.</p>
               </article>
