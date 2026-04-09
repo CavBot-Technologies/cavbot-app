@@ -14,7 +14,7 @@ export type ApiKeyRecord = {
   last4: string;
   keyHash?: string | null;
   value: string | null;
-  scopes: string[] | null;
+  scopes: string[];
   siteId: string | null;
   rotatedFromId?: string | null;
   rotatedAt?: Date | string | null;
