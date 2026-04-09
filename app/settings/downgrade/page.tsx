@@ -9,6 +9,7 @@ import AppShell from "@/components/AppShell";
 import { getAppOrigin } from "@/lib/apiAuth";
 import { readWorkspace } from "@/lib/workspaceStore.server";
 import { PLANS, resolvePlanIdFromTier, parseBillingCycle } from "@/lib/plans";
+import { resolveBillingPlanResolution } from "@/lib/billingPlan.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,8 +23,8 @@ type BillingCycle = "monthly" | "annual";
 type DowngradeTarget = "free" | "premium";
 
 type DowngradeWorkspaceData = {
-  account?: { tier?: string; billing?: { currentPeriodEnd?: string | number } };
-  workspace?: { account?: { tier?: string } };
+  account?: { id?: string; tier?: string; billing?: { currentPeriodEnd?: string | number } };
+  workspace?: { account?: { id?: string; tier?: string } };
   tier?: string;
   subscription?: { currentPeriodEnd?: string | number };
   billing?: { renewalAt?: string | number };
@@ -229,7 +230,14 @@ export default async function DowngradePage({ searchParams }: PageProps) {
   const ws = typeof rawWs === "object" && rawWs !== null ? (rawWs as DowngradeWorkspaceData) : null;
 
   const rawTier = ws?.account?.tier || ws?.workspace?.account?.tier || ws?.tier || "FREE";
-  const currentPlanId = (resolvePlanIdFromTier(rawTier) as PlanId) || "free";
+  const workspaceAccountId = String(ws?.account?.id || ws?.workspace?.account?.id || "").trim();
+  const resolvedPlan = workspaceAccountId
+    ? await resolveBillingPlanResolution({
+        accountId: workspaceAccountId,
+        repair: true,
+      })
+    : null;
+  const currentPlanId = resolvedPlan?.currentPlanId ?? ((resolvePlanIdFromTier(rawTier) as PlanId) || "free");
 
   const billing: BillingCycle = normalizeBillingCycle(sp?.billing);
   const isAnnual = billing === "annual";

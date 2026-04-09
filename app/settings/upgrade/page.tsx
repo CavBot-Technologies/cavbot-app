@@ -9,6 +9,7 @@ import AppShell from "@/components/AppShell";
 import { getAppOrigin } from "@/lib/apiAuth";
 import { readWorkspace } from "@/lib/workspaceStore.server";
 import { PLANS, resolvePlanIdFromTier, parseBillingCycle } from "@/lib/plans";
+import { resolveBillingPlanResolution } from "@/lib/billingPlan.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -180,8 +181,8 @@ export default async function UpgradeCheckoutPage({ searchParams }: PageProps) {
   }
 
   type WorkspaceData = {
-    account?: { tier?: string };
-    workspace?: { account?: { tier?: string } };
+    account?: { id?: string; tier?: string };
+    workspace?: { account?: { id?: string; tier?: string } };
     tier?: string;
   };
   const wsObj = typeof ws === "object" && ws !== null ? (ws as WorkspaceData) : null;
@@ -190,7 +191,14 @@ export default async function UpgradeCheckoutPage({ searchParams }: PageProps) {
     wsObj?.workspace?.account?.tier ||
     wsObj?.tier ||
     "FREE";
-  const currentPlanId = (resolvePlanIdFromTier(rawTier) as PlanId) || "free";
+  const workspaceAccountId = String(wsObj?.account?.id || wsObj?.workspace?.account?.id || "").trim();
+  const resolvedPlan = workspaceAccountId
+    ? await resolveBillingPlanResolution({
+        accountId: workspaceAccountId,
+        repair: true,
+      })
+    : null;
+  const currentPlanId = resolvedPlan?.currentPlanId ?? ((resolvePlanIdFromTier(rawTier) as PlanId) || "free");
 
   const billing: BillingCycle = normalizeBillingCycle(sp?.billing);
   const isAnnual = billing === "annual";
