@@ -11,6 +11,7 @@ function read(relPath: string) {
 
 test("billing ancillary routes avoid Prisma runtime imports on request paths", () => {
   const routePaths = [
+    "app/api/billing/summary/route.ts",
     "app/api/billing/payment-method/route.ts",
     "app/api/billing/invoices/route.ts",
     "app/api/billing/invoices/[invoiceId]/download/route.ts",
@@ -45,15 +46,34 @@ test("billing account resolution uses auth-db membership and account lookup only
   assert.equal(source.includes("findSessionMembership"), true);
 });
 
-test("billing runtime store reads account state and invoice audit events through the auth pool", () => {
+test("billing runtime store reads account state, subscriptions, usage counts, and invoice audit events through the auth pool", () => {
   const source = read("lib/billingRuntime.server.ts");
 
   assert.equal(source.includes("getAuthPool"), true);
   assert.equal(source.includes('FROM "Account"'), true);
   assert.equal(source.includes('UPDATE "Account"'), true);
+  assert.equal(source.includes('FROM "Subscription"'), true);
+  assert.equal(source.includes('FROM "Membership"'), true);
+  assert.equal(source.includes('FROM "Invite"'), true);
+  assert.equal(source.includes('FROM "Site" AS s'), true);
   assert.equal(source.includes('FROM "AuditLog"'), true);
   assert.equal(source.includes("isBillingRuntimeUnavailableError"), true);
   assert.equal(source.includes('COALESCE("metaJson"->>\'billing_event\', \'\') <> \'\'') || source.includes('COALESCE("metaJson"->>\'billing_event\','), true);
+});
+
+test("billing summary source-of-truth path avoids Prisma runtime reads and uses runtime-safe helpers", () => {
+  const routeSource = read("app/api/billing/summary/route.ts");
+  const planSource = read("lib/billingPlan.server.ts");
+
+  assert.equal(routeSource.includes('from "@/lib/prisma"'), false);
+  assert.equal(routeSource.includes("readBillingAccount"), true);
+  assert.equal(routeSource.includes("readLatestBillingSubscription"), true);
+  assert.equal(routeSource.includes("readBillingUsageMetrics"), true);
+
+  assert.equal(planSource.includes('from "@/lib/prisma"'), false);
+  assert.equal(planSource.includes("getAuthPool"), true);
+  assert.equal(planSource.includes('FROM "Account"'), true);
+  assert.equal(planSource.includes('UPDATE "Account"'), true);
 });
 
 test("stripe client is lazy-loaded so billing route modules do not initialize the Stripe SDK at import time", () => {

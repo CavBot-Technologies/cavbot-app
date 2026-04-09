@@ -1,6 +1,8 @@
 import "server-only";
 
-import { prisma } from "@/lib/prisma";
+import type pg from "pg";
+
+import { getAuthPool } from "@/lib/authDb";
 import {
   findLatestEntitledSubscription,
   isSubscriptionEntitled,
@@ -22,14 +24,45 @@ export type BillingPlanAccountRecord = {
 
 type EntitledSubscriptionRecord = Awaited<ReturnType<typeof findLatestEntitledSubscription>>;
 
-type BillingPlanDbClient = {
+type Queryable = {
+  query: <T extends pg.QueryResultRow = pg.QueryResultRow>(
+    text: string,
+    values?: unknown[],
+  ) => Promise<pg.QueryResult<T>>;
+};
+
+type PrismaBillingPlanDbClient = {
   account: {
-    findUnique: typeof prisma.account.findUnique;
-    update: typeof prisma.account.update;
+    findUnique: (query: {
+      where?: Record<string, unknown>;
+      select?: Record<string, boolean>;
+    }) => Promise<{
+      id: string;
+      tier: unknown;
+      trialSeatActive: boolean | null;
+      trialEndsAt: Date | string | null;
+    } | null>;
+    update: (query: {
+      where?: Record<string, unknown>;
+      data?: Record<string, unknown>;
+    }) => Promise<unknown>;
   };
   subscription: {
-    findFirst: typeof prisma.subscription.findFirst;
+    findFirst: (query: {
+      where?: Record<string, unknown>;
+      orderBy?: Record<string, unknown> | Array<Record<string, unknown>>;
+      select?: Record<string, boolean>;
+    }) => Promise<EntitledSubscriptionRecord | null>;
   };
+};
+
+type BillingPlanDbClient = Queryable | PrismaBillingPlanDbClient;
+
+type RawBillingPlanAccountRow = {
+  id: string;
+  tier: string | null;
+  trialSeatActive: boolean | null;
+  trialEndsAt: Date | string | null;
 };
 
 export type BillingPlanResolution = {
@@ -50,20 +83,34 @@ function persistedTierFromPlanId(planId: PlanId): StoredAccountTier {
 
 async function loadBillingPlanAccount(
   accountIdRaw: string,
-  tx: BillingPlanDbClient = prisma,
+  tx: BillingPlanDbClient = getAuthPool(),
 ): Promise<BillingPlanAccountRecord | null> {
   const accountId = String(accountIdRaw || "").trim();
   if (!accountId) return null;
 
-  const row = await tx.account.findUnique({
-    where: { id: accountId },
-    select: {
-      id: true,
-      tier: true,
-      trialSeatActive: true,
-      trialEndsAt: true,
-    },
-  });
+  const row = typeof (tx as Queryable | null)?.query === "function"
+    ? (
+        await (tx as Queryable).query<RawBillingPlanAccountRow>(
+          `SELECT
+             "id",
+             "tier",
+             "trialSeatActive",
+             "trialEndsAt"
+           FROM "Account"
+           WHERE "id" = $1
+           LIMIT 1`,
+          [accountId],
+        )
+      ).rows[0] ?? null
+    : await (tx as PrismaBillingPlanDbClient).account.findUnique({
+        where: { id: accountId },
+        select: {
+          id: true,
+          tier: true,
+          trialSeatActive: true,
+          trialEndsAt: true,
+        },
+      });
 
   if (!row?.id) return null;
 
@@ -124,7 +171,7 @@ export async function resolveBillingPlanResolution(args: {
   tx?: BillingPlanDbClient;
   repair?: boolean;
 }): Promise<BillingPlanResolution> {
-  const tx = args.tx ?? prisma;
+  const tx = args.tx ?? getAuthPool();
   const accountId = String(args.accountId || "").trim();
   const account = args.account ?? (await loadBillingPlanAccount(accountId, tx));
 
@@ -161,10 +208,20 @@ export async function resolveBillingPlanResolution(args: {
   }
 
   try {
-    await tx.account.update({
-      where: { id: account.id },
-      data: { tier: repairedStoredTier },
-    });
+    if (typeof (tx as Queryable | null)?.query === "function") {
+      await (tx as Queryable).query(
+        `UPDATE "Account"
+         SET "tier" = $2,
+             "updatedAt" = NOW()
+         WHERE "id" = $1`,
+        [account.id, repairedStoredTier],
+      );
+    } else {
+      await (tx as PrismaBillingPlanDbClient).account.update({
+        where: { id: account.id },
+        data: { tier: repairedStoredTier },
+      });
+    }
 
     console.warn(
       "[billing/plan] repaired account tier drift",

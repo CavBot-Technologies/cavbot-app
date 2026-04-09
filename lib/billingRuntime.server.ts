@@ -41,6 +41,22 @@ type RawBillingAuditRow = {
   metaJson: unknown;
 };
 
+type RawBillingSubscriptionRow = {
+  status: string | null;
+  tier: string | null;
+  currentPeriodStart: Date | string | null;
+  currentPeriodEnd: Date | string | null;
+  provider: string | null;
+  customerId: string | null;
+  billingCycle: string | null;
+  stripePriceId: string | null;
+  stripeSubscriptionId: string | null;
+};
+
+type RawCountRow = {
+  total: number | string | null;
+};
+
 export type BillingRuntimeAccount = {
   id: string;
   name: string;
@@ -69,6 +85,23 @@ export type BillingAuditEventRow = {
   id: string;
   createdAt: Date;
   metaJson: unknown;
+};
+
+export type BillingRuntimeSubscription = {
+  status: string | null;
+  tier: string | null;
+  currentPeriodStart: Date | null;
+  currentPeriodEnd: Date | null;
+  provider: string | null;
+  customerId: string | null;
+  billingCycle: string | null;
+  stripePriceId: string | null;
+  stripeSubscriptionId: string | null;
+};
+
+export type BillingUsageMetrics = {
+  seatsUsed: number;
+  websitesUsed: number;
 };
 
 const BILLING_RUNTIME_SOFT_FAIL_DB_CODES = new Set([
@@ -130,6 +163,11 @@ function asDate(value: Date | string | null | undefined) {
   return value instanceof Date ? value : new Date(value);
 }
 
+function asNumber(value: number | string | null | undefined) {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
 function mapBillingAccount(row: RawBillingAccountRow): BillingRuntimeAccount {
   return {
     id: row.id,
@@ -153,6 +191,20 @@ function mapBillingAccount(row: RawBillingAccountRow): BillingRuntimeAccount {
     lastUpgradeProrated: Boolean(row.lastUpgradeProrated),
     createdAt: asDate(row.createdAt) || new Date(0),
     updatedAt: asDate(row.updatedAt) || new Date(0),
+  };
+}
+
+function mapBillingSubscription(row: RawBillingSubscriptionRow): BillingRuntimeSubscription {
+  return {
+    status: row.status ?? null,
+    tier: row.tier ?? null,
+    currentPeriodStart: asDate(row.currentPeriodStart),
+    currentPeriodEnd: asDate(row.currentPeriodEnd),
+    provider: row.provider ?? null,
+    customerId: row.customerId ?? null,
+    billingCycle: row.billingCycle ?? null,
+    stripePriceId: row.stripePriceId ?? null,
+    stripeSubscriptionId: row.stripeSubscriptionId ?? null,
   };
 }
 
@@ -255,4 +307,80 @@ export async function listBillingInvoiceAuditRows(
     createdAt: asDate(row.createdAt) || new Date(0),
     metaJson: row.metaJson,
   }));
+}
+
+export async function readLatestBillingSubscription(
+  accountId: string,
+  options?: {
+    provider?: string;
+    queryable?: Queryable;
+  },
+): Promise<BillingRuntimeSubscription | null> {
+  const queryable = options?.queryable ?? getAuthPool();
+  const provider = String(options?.provider || "").trim();
+  const values: unknown[] = [accountId];
+  const providerClause = provider
+    ? (() => {
+        values.push(provider);
+        return `AND "provider" = $2`;
+      })()
+    : "";
+
+  const result = await queryable.query<RawBillingSubscriptionRow>(
+    `SELECT
+       "status",
+       "tier",
+       "currentPeriodStart",
+       "currentPeriodEnd",
+       "provider",
+       "customerId",
+       "billingCycle",
+       "stripePriceId",
+       "stripeSubscriptionId"
+     FROM "Subscription"
+     WHERE "accountId" = $1
+       ${providerClause}
+     ORDER BY "createdAt" DESC NULLS LAST
+     LIMIT 1`,
+    values,
+  );
+
+  return result.rows[0] ? mapBillingSubscription(result.rows[0]) : null;
+}
+
+export async function readBillingUsageMetrics(
+  accountId: string,
+  queryable: Queryable = getAuthPool(),
+): Promise<BillingUsageMetrics> {
+  const [members, invites, sites] = await Promise.all([
+    queryable.query<RawCountRow>(
+      `SELECT COUNT(*)::int AS total
+       FROM "Membership"
+       WHERE "accountId" = $1`,
+      [accountId],
+    ),
+    queryable.query<RawCountRow>(
+      `SELECT COUNT(*)::int AS total
+       FROM "Invite"
+       WHERE "accountId" = $1
+         AND UPPER(COALESCE("status", '')) = 'PENDING'
+         AND ("expiresAt" IS NULL OR "expiresAt" > NOW())`,
+      [accountId],
+    ),
+    queryable.query<RawCountRow>(
+      `SELECT COUNT(*)::int AS total
+       FROM "Site" AS s
+       INNER JOIN "Project" AS p
+         ON p."id" = s."projectId"
+       WHERE p."accountId" = $1
+         AND COALESCE(p."isActive", false) = true
+         AND COALESCE(s."isActive", false) = true`,
+      [accountId],
+    ),
+  ]);
+
+  return {
+    seatsUsed: asNumber(members.rows[0]?.total) + asNumber(invites.rows[0]?.total),
+    websitesUsed: asNumber(sites.rows[0]?.total),
+  };
 }

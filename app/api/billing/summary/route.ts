@@ -2,12 +2,17 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireSession, isApiAuthError } from "@/lib/apiAuth";
 import { PLANS } from "@/lib/plans";
 import { getQwenCoderPopoverState } from "@/src/lib/ai/qwen-coder-credits.server";
 import { resolveBillingAccountContext } from "@/lib/billingAccount.server";
 import { resolveBillingPlanResolution, type BillingPlanSource } from "@/lib/billingPlan.server";
+import {
+  isBillingRuntimeUnavailableError,
+  readBillingAccount,
+  readBillingUsageMetrics,
+  readLatestBillingSubscription,
+} from "@/lib/billingRuntime.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -78,7 +83,7 @@ function buildEmptyBillingSummary() {
 type SummaryAccountRecord = {
   id: string;
   slug: string;
-  tier: "FREE" | "PREMIUM" | "ENTERPRISE";
+  tier: string;
   billingEmail: string | null;
   trialSeatActive: boolean | null;
   trialStartedAt: Date | null;
@@ -92,18 +97,6 @@ type SummaryAccountRecord = {
   lastUpgradeAt: Date | null;
   lastUpgradeProrated: boolean | null;
   stripeCustomerId: string | null;
-};
-
-type SummarySubscriptionRecord = {
-  status: string;
-  tier: string;
-  currentPeriodStart: Date | null;
-  currentPeriodEnd: Date | null;
-  provider: string | null;
-  customerId: string | null;
-  billingCycle: string | null;
-  stripePriceId: string | null;
-  stripeSubscriptionId: string | null;
 };
 
 type SummaryComputedRecord = {
@@ -120,124 +113,6 @@ type SummaryComputedRecord = {
   portalReady: boolean;
 };
 
-async function findBillingAccount(accountId: string): Promise<SummaryAccountRecord | null> {
-  try {
-    return await prisma.account.findUnique({
-      where: { id: accountId },
-      select: {
-        id: true,
-        slug: true,
-        tier: true,
-        billingEmail: true,
-        trialSeatActive: true,
-        trialStartedAt: true,
-        trialEndsAt: true,
-        pendingDowngradePlanId: true,
-        pendingDowngradeBilling: true,
-        pendingDowngradeAt: true,
-        pendingDowngradeEffectiveAt: true,
-        lastUpgradePlanId: true,
-        lastUpgradeBilling: true,
-        lastUpgradeAt: true,
-        lastUpgradeProrated: true,
-        stripeCustomerId: true,
-      },
-    });
-  } catch (error) {
-    console.error("[billing/summary] account full select failed", error);
-  }
-
-  try {
-    const fallback = await prisma.account.findUnique({
-      where: { id: accountId },
-      select: {
-        id: true,
-        slug: true,
-        tier: true,
-        billingEmail: true,
-        trialSeatActive: true,
-        trialStartedAt: true,
-        trialEndsAt: true,
-        stripeCustomerId: true,
-      },
-    });
-
-    if (!fallback) return null;
-
-    return {
-      ...fallback,
-      pendingDowngradePlanId: null,
-      pendingDowngradeBilling: null,
-      pendingDowngradeAt: null,
-      pendingDowngradeEffectiveAt: null,
-      lastUpgradePlanId: null,
-      lastUpgradeBilling: null,
-      lastUpgradeAt: null,
-      lastUpgradeProrated: false,
-    };
-  } catch (error) {
-    console.error("[billing/summary] account fallback select failed", error);
-    return null;
-  }
-}
-
-async function findLatestSubscription(
-  accountId: string,
-  provider?: "stripe"
-): Promise<SummarySubscriptionRecord | null> {
-  try {
-    return await prisma.subscription.findFirst({
-      where: provider ? { accountId, provider } : { accountId },
-      orderBy: { createdAt: "desc" },
-      select: {
-        status: true,
-        tier: true,
-        currentPeriodStart: true,
-        currentPeriodEnd: true,
-        provider: true,
-        customerId: true,
-        billingCycle: true,
-        stripePriceId: true,
-        stripeSubscriptionId: true,
-      },
-    });
-  } catch (error) {
-    console.error(
-      provider
-        ? "[billing/summary] latest stripe subscription select failed"
-        : "[billing/summary] latest subscription select failed",
-      error
-    );
-  }
-
-  try {
-    const fallback = await prisma.subscription.findFirst({
-      where: { accountId },
-      orderBy: { createdAt: "desc" },
-      select: {
-        status: true,
-        tier: true,
-        currentPeriodStart: true,
-        currentPeriodEnd: true,
-      },
-    });
-
-    if (!fallback) return null;
-
-    return {
-      ...fallback,
-      provider: null,
-      customerId: null,
-      billingCycle: null,
-      stripePriceId: null,
-      stripeSubscriptionId: null,
-    };
-  } catch (error) {
-    console.error("[billing/summary] subscription fallback select failed", error);
-    return null;
-  }
-}
-
 export async function GET(req: NextRequest) {
   try {
     const sess = await requireSession(req);
@@ -245,7 +120,7 @@ export async function GET(req: NextRequest) {
     const accountId = billingCtx.accountId;
     const userId = billingCtx.userId;
 
-    const account = await findBillingAccount(accountId);
+    const account = (await readBillingAccount(accountId)) as SummaryAccountRecord | null;
 
     if (!account) return json(buildEmptyBillingSummary(), 200);
 
@@ -257,44 +132,22 @@ export async function GET(req: NextRequest) {
     const currentPlanId = planResolution.currentPlanId;
     const planDef = PLANS[currentPlanId];
 
-    const [membersCount, invitesCount] = await Promise.all([
-      prisma.membership.count({ where: { accountId } }).catch((error) => {
-        console.error("[billing/summary] membership count failed", error);
-        return 0;
-      }),
-      prisma.invite
-        .count({
-          where: {
-            accountId,
-            status: "PENDING",
-            expiresAt: { gt: new Date() },
-          },
-        })
-        .catch((error) => {
-          console.error("[billing/summary] invite count failed", error);
-          return 0;
-        }),
-    ]);
-
-    const projects = await prisma.project.findMany({
-      where: { accountId, isActive: true },
-      select: { id: true },
-    }).catch((error) => {
-      console.error("[billing/summary] project lookup failed", error);
-      return [];
+    const usageMetrics = await readBillingUsageMetrics(accountId).catch((error) => {
+      console.error("[billing/summary] usage metrics lookup failed", error);
+      return { seatsUsed: 0, websitesUsed: 0 };
     });
-    const projectIds = projects.map((p) => p.id);
 
-    const sitesUsed = projectIds.length
-      ? await prisma.site.count({ where: { projectId: { in: projectIds }, isActive: true } }).catch((error) => {
-          console.error("[billing/summary] site count failed", error);
-          return 0;
+    const latestStripeSub = await readLatestBillingSubscription(accountId, { provider: "stripe" }).catch((error) => {
+      console.error("[billing/summary] latest stripe subscription select failed", error);
+      return null;
+    });
+
+    const latestAnySub = !latestStripeSub
+      ? await readLatestBillingSubscription(accountId).catch((error) => {
+          console.error("[billing/summary] latest subscription select failed", error);
+          return null;
         })
-      : 0;
-
-    const latestStripeSub = await findLatestSubscription(accountId, "stripe");
-
-    const latestAnySub = !latestStripeSub ? await findLatestSubscription(accountId) : null;
+      : null;
 
     const subRow = latestStripeSub || latestAnySub;
 
@@ -370,8 +223,8 @@ export async function GET(req: NextRequest) {
           authoritative: planResolution.authoritative,
           seatLimit,
           websiteLimit,
-          seatsUsed: membersCount + invitesCount,
-          websitesUsed: sitesUsed,
+          seatsUsed: usageMetrics.seatsUsed,
+          websitesUsed: usageMetrics.websitesUsed,
           billingCycle,
           providerConnected,
           stripeConnected,
@@ -386,6 +239,12 @@ export async function GET(req: NextRequest) {
       return json(buildEmptyBillingSummary(), 200);
     }
     if (isApiAuthError(error)) return json({ ok: false, error: error.code, message: error.message }, error.status);
+    if (isBillingRuntimeUnavailableError(error)) {
+      return json(
+        { ok: false, error: "SERVICE_UNAVAILABLE", message: "Billing summary is temporarily unavailable." },
+        503,
+      );
+    }
     return json({ ok: false, error: "BILLING_SUMMARY_FAILED", message: "Failed to load billing summary." }, 500);
   }
 }
