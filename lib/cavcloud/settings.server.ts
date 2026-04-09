@@ -1,7 +1,9 @@
 import "server-only";
 
+import type pg from "pg";
 import type { PublicArtifactVisibility } from "@prisma/client";
 
+import { getAuthPool } from "@/lib/authDb";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
 
@@ -252,7 +254,21 @@ function isMissingSettingsTableError(err: unknown): boolean {
       || (err as { message?: unknown })?.message
       || "",
   ).toLowerCase();
-  return code === "P2021" || (message.includes("cavcloudsettings") && message.includes("does not exist"));
+  return code === "P2021"
+    || code === "42P01"
+    || (message.includes("cavcloudsettings") && message.includes("does not exist"));
+}
+
+function isMissingMembershipShapeError(err: unknown): boolean {
+  const code = String((err as { code?: unknown })?.code || "");
+  const message = String(
+    (err as { message?: unknown })?.message || "",
+  ).toLowerCase();
+  return code === "P2021"
+    || code === "P2022"
+    || code === "42P01"
+    || code === "42703"
+    || (message.includes("membership") && (message.includes("does not exist") || message.includes("column")));
 }
 
 function isSettingsForeignKeyViolationError(err: unknown): boolean {
@@ -271,23 +287,20 @@ function isSettingsForeignKeyViolationError(err: unknown): boolean {
 async function hasSettingsMembership(accountId: string, userId: string): Promise<boolean> {
   if (!accountId || !userId) return false;
   try {
-    const membership = await prisma.membership.findUnique({
-      where: {
-        accountId_userId: {
-          accountId,
-          userId,
-        },
-      },
-      select: { id: true },
-    });
-    return Boolean(membership?.id);
+    const result = await getAuthPool().query<{ id: string }>(
+      `SELECT "id"
+       FROM "Membership"
+       WHERE "accountId" = $1
+         AND "userId" = $2
+       LIMIT 1`,
+      [accountId, userId],
+    );
+    return Boolean(result.rows[0]?.id);
   } catch (err) {
-    if (
-      isSchemaMismatchError(err, {
-        tables: ["Membership"],
-        columns: ["accountId", "userId"],
-      })
-    ) {
+    if (isMissingMembershipShapeError(err) || isSchemaMismatchError(err, {
+      tables: ["Membership"],
+      columns: ["accountId", "userId"],
+    })) {
       return false;
     }
     throw err;
@@ -297,17 +310,17 @@ async function hasSettingsMembership(accountId: string, userId: string): Promise
 async function resolveFolderPathById(accountId: string, folderId: string | null): Promise<string | null> {
   if (!folderId) return null;
   try {
-    const folder = await prisma.cavCloudFolder.findFirst({
-      where: {
-        id: folderId,
-        accountId,
-        deletedAt: null,
-      },
-      select: {
-        path: true,
-      },
-    });
-    return folder?.path ? String(folder.path) : null;
+    const result = await getAuthPool().query<{ path: string | null }>(
+      `SELECT "path"
+       FROM "CavCloudFolder"
+       WHERE "id" = $1
+         AND "accountId" = $2
+         AND "deletedAt" IS NULL
+       LIMIT 1`,
+      [folderId, accountId],
+    );
+    const path = String(result.rows[0]?.path || "").trim();
+    return path || null;
   } catch (err) {
     if (
       isSchemaMismatchError(err, {
@@ -317,6 +330,23 @@ async function resolveFolderPathById(accountId: string, folderId: string | null)
     ) {
       return null;
     }
+    throw err;
+  }
+}
+
+async function readSettingsRow(accountId: string, userId: string): Promise<Partial<Record<string, unknown>> | null> {
+  try {
+    const result = await getAuthPool().query<pg.QueryResultRow>(
+      `SELECT *
+       FROM "CavCloudSettings"
+       WHERE "accountId" = $1
+         AND "userId" = $2
+       LIMIT 1`,
+      [accountId, userId],
+    );
+    return (result.rows[0] as Partial<Record<string, unknown>> | undefined) || null;
+  } catch (err) {
+    if (isMissingSettingsTableError(err)) return null;
     throw err;
   }
 }
@@ -465,7 +495,10 @@ export async function getCavCloudSettings(args: {
   const userId = String(args.userId || "").trim();
   if (!accountId || !userId) return { ...DEFAULT_CAVCLOUD_SETTINGS };
 
-  const row = await ensureSettingsRow(accountId, userId);
+  const canPersist = await hasSettingsMembership(accountId, userId);
+  if (!canPersist) return { ...DEFAULT_CAVCLOUD_SETTINGS };
+
+  const row = await readSettingsRow(accountId, userId);
   const settings = normalizeSettingsRow(row as Partial<Record<string, unknown>> | null);
 
   const [lastFolderPath, pinnedFolderPath] = await Promise.all([

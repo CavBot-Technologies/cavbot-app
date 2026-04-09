@@ -1,5 +1,8 @@
 import "server-only";
 
+import type pg from "pg";
+
+import { getAuthPool } from "@/lib/authDb";
 import { prisma } from "@/lib/prisma";
 
 export type CavCloudCollabPolicy = {
@@ -31,7 +34,9 @@ function isMissingPolicyTableError(err: unknown): boolean {
       || (err as { message?: unknown })?.message
       || "",
   ).toLowerCase();
-  return code === "P2021" || (message.includes("cavcloudcollabpolicy") && message.includes("does not exist"));
+  return code === "P2021"
+    || code === "42P01"
+    || (message.includes("cavcloudcollabpolicy") && message.includes("does not exist"));
 }
 
 function isMissingPolicyColumnError(err: unknown): boolean {
@@ -41,7 +46,9 @@ function isMissingPolicyColumnError(err: unknown): boolean {
       || (err as { message?: unknown })?.message
       || "",
   ).toLowerCase();
-  return code === "P2022" || (message.includes("allowteamaiaccess") && message.includes("column"));
+  return code === "P2022"
+    || code === "42703"
+    || (message.includes("allowteamaiaccess") && message.includes("column"));
 }
 
 function isPolicyAccountUniqueError(err: unknown): boolean {
@@ -66,21 +73,6 @@ async function ensureAiPolicyColumn() {
   } catch (err) {
     if (isMissingPolicyTableError(err)) return;
     if (isMissingPolicyColumnError(err)) return;
-    throw err;
-  }
-}
-
-async function readAllowTeamAiAccess(accountId: string): Promise<boolean> {
-  await ensureAiPolicyColumn();
-  try {
-    const rows = await prisma.$queryRawUnsafe<Array<{ allowTeamAiAccess?: unknown }>>(
-      'SELECT "allowTeamAiAccess" FROM "CavCloudCollabPolicy" WHERE "accountId" = $1 LIMIT 1',
-      accountId
-    );
-    const value = rows?.[0]?.allowTeamAiAccess;
-    return value === true;
-  } catch (err) {
-    if (isMissingPolicyTableError(err) || isMissingPolicyColumnError(err)) return false;
     throw err;
   }
 }
@@ -159,6 +151,22 @@ async function ensurePolicyRow(accountId: string) {
   }
 }
 
+async function readPolicyRow(accountId: string): Promise<Partial<Record<string, unknown>> | null> {
+  try {
+    const result = await getAuthPool().query<pg.QueryResultRow>(
+      `SELECT *
+       FROM "CavCloudCollabPolicy"
+       WHERE "accountId" = $1
+       LIMIT 1`,
+      [accountId],
+    );
+    return (result.rows[0] as Partial<Record<string, unknown>> | undefined) || null;
+  } catch (err) {
+    if (isMissingPolicyTableError(err) || isMissingPolicyColumnError(err)) return null;
+    throw err;
+  }
+}
+
 export function parseCavCloudCollabPolicyPatch(input: unknown):
   | { ok: true; patch: CollabPolicyPatch }
   | { ok: false; error: string } {
@@ -194,13 +202,8 @@ export async function getCavCloudCollabPolicy(accountIdRaw: string): Promise<Cav
   const accountId = String(accountIdRaw || "").trim();
   if (!accountId) return { ...DEFAULT_CAVCLOUD_COLLAB_POLICY };
 
-  const row = await ensurePolicyRow(accountId);
-  const allowTeamAiAccess = await readAllowTeamAiAccess(accountId);
-  const rowRecord = (row as Partial<Record<string, unknown>> | null) || {};
-  return normalizePolicyRow({
-    ...rowRecord,
-    allowTeamAiAccess,
-  });
+  const row = await readPolicyRow(accountId);
+  return normalizePolicyRow(row);
 }
 
 export async function updateCavCloudCollabPolicy(args: {

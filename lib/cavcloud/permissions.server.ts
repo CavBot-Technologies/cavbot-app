@@ -6,6 +6,7 @@ import type {
   CavCloudFolderAccessRole,
 } from "@prisma/client";
 
+import { getAuthPool } from "@/lib/authDb";
 import { ApiAuthError, type MemberRole } from "@/lib/apiAuth";
 import { prisma } from "@/lib/prisma";
 import {
@@ -95,19 +96,15 @@ function isGrantActive(expiresAt: Date | null | undefined): boolean {
 }
 
 async function resolveMembershipRole(accountId: string, userId: string): Promise<MemberRole | null> {
-  const membership = await prisma.membership.findUnique({
-    where: {
-      accountId_userId: {
-        accountId,
-        userId,
-      },
-    },
-    select: {
-      role: true,
-    },
-  });
-
-  const normalized = String(membership?.role || "").toUpperCase();
+  const result = await getAuthPool().query<{ role: string | null }>(
+    `SELECT "role"
+     FROM "Membership"
+     WHERE "accountId" = $1
+       AND "userId" = $2
+     LIMIT 1`,
+    [accountId, userId],
+  );
+  const normalized = String(result.rows[0]?.role || "").toUpperCase();
   if (normalized === "OWNER") return "OWNER";
   if (normalized === "ADMIN") return "ADMIN";
   if (normalized === "MEMBER") return "MEMBER";

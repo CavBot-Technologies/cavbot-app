@@ -1112,6 +1112,16 @@ async function ensureRootFolder(accountId: string, tx: DbClient = prisma) {
   return root;
 }
 
+async function findRootFolder(accountId: string, tx: DbClient = prisma) {
+  return tx.cavCloudFolder.findFirst({
+    where: {
+      accountId,
+      path: "/",
+      deletedAt: null,
+    },
+  });
+}
+
 async function ensureFolderPathForWrite(accountId: string, folderPath: string, tx: DbClient = prisma) {
   const normalized = normalizePathNoTrailingSlash(folderPath);
   const root = await ensureRootFolder(accountId, tx);
@@ -2290,7 +2300,6 @@ async function loadFolderChildrenPayload(args: {
   const accountId = String(args.accountId || "").trim();
   if (!accountId) throw new CavCloudError("ACCOUNT_REQUIRED", 400);
   const listing = normalizeListingPrefs(args.listing);
-  await ensureOfficialSyncedFolders(accountId);
 
   const folder = await prisma.cavCloudFolder.findFirst({
     where: args.folderWhere,
@@ -2406,8 +2415,8 @@ async function loadFolderChildrenPayload(args: {
 export async function getRootFolder(args: { accountId: string }) {
   const accountId = String(args.accountId || "").trim();
   if (!accountId) throw new CavCloudError("ACCOUNT_REQUIRED", 400);
-  const root = await ensureRootFolder(accountId);
-  await ensureOfficialSyncedFolders(accountId);
+  const root = await findRootFolder(accountId);
+  if (!root) throw new CavCloudError("FOLDER_NOT_FOUND", 404, "folder not found");
   return mapFolder(root);
 }
 
@@ -2415,8 +2424,8 @@ async function resolveFolderIdWithRootAlias(accountId: string, folderId: string)
   const normalizedFolderId = String(folderId || "").trim();
   if (!normalizedFolderId) throw new CavCloudError("FOLDER_ID_REQUIRED", 400);
   if (normalizedFolderId.toLowerCase() !== "root") return normalizedFolderId;
-  const root = await ensureRootFolder(accountId);
-  await ensureOfficialSyncedFolders(accountId);
+  const root = await findRootFolder(accountId);
+  if (!root) throw new CavCloudError("FOLDER_NOT_FOUND", 404, "folder not found");
   return String(root.id || "").trim();
 }
 
@@ -2467,8 +2476,6 @@ export async function getTreeLite(args: {
 }): Promise<CavCloudFolderChildrenPayload> {
   const accountId = String(args.accountId || "").trim();
   if (!accountId) throw new CavCloudError("ACCOUNT_REQUIRED", 400);
-  await ensureRootFolder(accountId);
-  await ensureOfficialSyncedFolders(accountId);
   const path = normalizePathNoTrailingSlash(args.folderPath || "/");
   return loadFolderChildrenPayload({
     accountId,
@@ -2494,8 +2501,6 @@ export async function getTree(args: {
   void maybePurgeExpiredTrash(accountId, args.operatorUserId || undefined);
 
   const path = normalizePathNoTrailingSlash(args.folderPath || "/");
-  await ensureRootFolder(accountId);
-  await ensureOfficialSyncedFolders(accountId);
 
   const folder = await prisma.cavCloudFolder.findFirst({
     where: {
