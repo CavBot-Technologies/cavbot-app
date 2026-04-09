@@ -92,7 +92,7 @@ async function ensureStripeCustomer(args: { accountId: string; operatorEmail: st
     metadata,
   };
 
-  const customer = await getStripe().customers.create(customerParams);
+  const customer = await (await getStripe()).customers.create(customerParams);
   const stripeCustomerId = customer.id;
 
   await prisma.account.update({ where: { id: args.accountId }, data: { stripeCustomerId } });
@@ -166,7 +166,7 @@ export async function POST(req: NextRequest) {
 
     // Update existing subscription in place
     if (latestStripeSub?.stripeSubscriptionId) {
-      const sub = (await getStripe().subscriptions.retrieve(String(latestStripeSub.stripeSubscriptionId), {
+      const sub = (await (await getStripe()).subscriptions.retrieve(String(latestStripeSub.stripeSubscriptionId), {
         expand: ["items.data.price"],
       })) as Stripe.Subscription;
 
@@ -178,7 +178,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      await getStripe().subscriptions.update(sub.id, {
+      await (await getStripe()).subscriptions.update(sub.id, {
         proration_behavior: "create_prorations",
         items: [{ id: item.id, price: priceId }],
         metadata: {
@@ -196,7 +196,7 @@ export async function POST(req: NextRequest) {
     const successUrl = `${appUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${appUrl}/billing/cancel`;
 
-    const session = await getStripe().checkout.sessions.create({
+    const session = await (await getStripe()).checkout.sessions.create({
       mode: "subscription",
       customer: stripeCustomerId,
       line_items: [{ price: priceId, quantity: 1 }],

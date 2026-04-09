@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
 
 
     if (!customerId) {
-      const customer = await getStripe().customers.create(
+      const customer = await (await getStripe()).customers.create(
         {
           email: s(account.billingEmail) || undefined,
           name: s(body?.name) || s(account.name) || undefined,
@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
 
 
       if (name || addr) {
-        await getStripe().customers.update(customerId, {
+        await (await getStripe()).customers.update(customerId, {
           name: name || undefined,
           address: addr
             ? {
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
     }
 
 
-    const setupIntent = await getStripe().setupIntents.create(
+    const setupIntent = await (await getStripe()).setupIntents.create(
       {
         customer: customerId,
         usage: "off_session",

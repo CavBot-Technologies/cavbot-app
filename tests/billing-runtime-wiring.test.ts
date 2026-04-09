@@ -56,6 +56,15 @@ test("billing runtime store reads account state and invoice audit events through
   assert.equal(source.includes('COALESCE("metaJson"->>\'billing_event\', \'\') <> \'\'') || source.includes('COALESCE("metaJson"->>\'billing_event\','), true);
 });
 
+test("stripe client is lazy-loaded so billing route modules do not initialize the Stripe SDK at import time", () => {
+  const source = read("lib/stripeClient.ts");
+
+  assert.equal(source.includes('import Stripe from "stripe";'), false);
+  assert.equal(source.includes('import type Stripe from "stripe";'), true);
+  assert.equal(source.includes('await import("stripe")'), true);
+  assert.equal(source.includes("stripeInstancePromise"), true);
+});
+
 test("billing read routes degrade ancillary data instead of surfacing 500s on runtime failures", () => {
   const paymentMethodSource = read("app/api/billing/payment-method/route.ts");
   const invoicesSource = read("app/api/billing/invoices/route.ts");

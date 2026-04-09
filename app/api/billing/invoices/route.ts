@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
 
     if (stripeCustomerId && hasStripeSecret()) {
       try {
-        const invoices = (await getStripe().invoices.list({
+        const invoices = (await (await getStripe()).invoices.list({
           customer: stripeCustomerId,
           limit: 20,
         })) as Stripe.ApiList<Stripe.Invoice>;

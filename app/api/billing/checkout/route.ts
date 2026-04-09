@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
       };
 
 
-      const customer = await getStripe().customers.create(customerParams, {
+      const customer = await (await getStripe()).customers.create(customerParams, {
         idempotencyKey: `cavbot_customer_${accountId}`,
       });
 
@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
     const idem = readIdempotencyKey(req);
 
 
-    const session = await getStripe().checkout.sessions.create(
+    const session = await (await getStripe()).checkout.sessions.create(
       {
         mode: "subscription",
         customer: stripeCustomerId,

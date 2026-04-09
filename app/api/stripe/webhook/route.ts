@@ -333,7 +333,7 @@ export async function POST(req: NextRequest) {
 
   let event: Stripe.Event;
   try {
-    event = getStripe().webhooks.constructEvent(rawBody, sig, env("STRIPE_WEBHOOK_SECRET"));
+    event = (await getStripe()).webhooks.constructEvent(rawBody, sig, env("STRIPE_WEBHOOK_SECRET"));
   } catch {
     return fail(400, "Webhook signature verification failed");
   }

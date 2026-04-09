@@ -47,7 +47,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<DownloadParam
     if (!stripeCustomerId) return json({ ok: false, error: "NO_STRIPE_CUSTOMER" }, 409);
 
     // Retrieve invoice from Stripe (authoritative)
-    const inv = (await getStripe().invoices.retrieve(invoiceId)) as Stripe.Invoice;
+    const inv = (await (await getStripe()).invoices.retrieve(invoiceId)) as Stripe.Invoice;
 
     // Ownership check: invoice.customer must match this account's Stripe customer
     const invCustomerId = typeof inv?.customer === "string" ? inv.customer : inv?.customer?.id || "";

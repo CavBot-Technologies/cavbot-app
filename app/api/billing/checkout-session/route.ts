@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
     const sessionId = s(searchParams.get("session_id"));
     if (!sessionId) return json({ ok: false, error: "MISSING_SESSION" }, 400);
 
-    const checkout = await getStripe().checkout.sessions.retrieve(sessionId, {
+    const checkout = await (await getStripe()).checkout.sessions.retrieve(sessionId, {
       expand: ["invoice", "payment_intent"],
     });
 
@@ -133,7 +133,7 @@ export async function GET(req: NextRequest) {
     try {
       const latestChargeId = typeof paymentIntent?.latest_charge === "string" ? paymentIntent.latest_charge : "";
       if (latestChargeId) {
-        charge = await getStripe().charges.retrieve(latestChargeId, {
+        charge = await (await getStripe()).charges.retrieve(latestChargeId, {
           expand: ["payment_method"],
         });
       }

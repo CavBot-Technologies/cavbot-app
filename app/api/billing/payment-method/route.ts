@@ -102,7 +102,7 @@ async function ensureStripeCustomer(args: {
  
  
   if (!customerId) {
-    const customer = await getStripe().customers.create(
+    const customer = await (await getStripe()).customers.create(
       {
         email,
         name,
@@ -128,7 +128,7 @@ async function ensureStripeCustomer(args: {
  
   // Keep Stripe customer profile current (invoice appearance + risk checks)
   if (email || name || args.address) {
-    await getStripe().customers.update(customerId, {
+    await (await getStripe()).customers.update(customerId, {
       email,
       name,
       address: args.address || undefined,
@@ -155,7 +155,7 @@ export async function GET(req: NextRequest) {
 
     let customer: Stripe.Customer | Stripe.DeletedCustomer;
     try {
-      customer = await getStripe().customers.retrieve(customerId, {
+      customer = await (await getStripe()).customers.retrieve(customerId, {
         expand: ["invoice_settings.default_payment_method"],
       });
     } catch (error) {
@@ -233,7 +233,7 @@ export async function POST(req: NextRequest) {
     // -----------------------
     const setupIntentId = s(body?.setupIntentId);
     if (setupIntentId) {
-      const si = await getStripe().setupIntents.retrieve(setupIntentId, {
+      const si = await (await getStripe()).setupIntents.retrieve(setupIntentId, {
         expand: ["payment_method", "customer"],
       });
 
@@ -262,7 +262,7 @@ export async function POST(req: NextRequest) {
  
  
       // Extra safety: ensure PM belongs to this customer (wallet/card correctness)
-      const pm = await getStripe().paymentMethods.retrieve(pmId);
+      const pm = await (await getStripe()).paymentMethods.retrieve(pmId);
       const pmCustomer =
         typeof pm.customer === "string" ? pm.customer : (pm.customer as Stripe.Customer)?.id || "";
       if (pmCustomer && pmCustomer !== customerId) {
@@ -270,7 +270,7 @@ export async function POST(req: NextRequest) {
       }
  
  
-      await getStripe().customers.update(customerId, {
+      await (await getStripe()).customers.update(customerId, {
         invoice_settings: { default_payment_method: pmId },
       });
  
@@ -335,7 +335,7 @@ export async function POST(req: NextRequest) {
     const idem = readIdem(req, `cavbot_setup_intent_${accountId}`);
  
  
-    const setupIntent = await getStripe().setupIntents.create(
+    const setupIntent = await (await getStripe()).setupIntents.create(
       {
         customer: customerId,
         usage: "off_session",

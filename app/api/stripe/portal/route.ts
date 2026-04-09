@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
       return json({ ok: false, error: "NO_STRIPE_CUSTOMER", message: "No billing profile found yet." }, 409);
     }
 
-    const portal = await getStripe().billingPortal.sessions.create({
+    const portal = await (await getStripe()).billingPortal.sessions.create({
       customer,
       return_url: `${appUrl}/settings?tab=billing`,
     });

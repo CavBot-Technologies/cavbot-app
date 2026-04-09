@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
           },
         };
 
-      const customer = await getStripe().customers.create(customerParams);
+      const customer = await (await getStripe()).customers.create(customerParams);
       stripeCustomerId = customer.id;
 
         await ensureBillingStripeCustomerBinding(accountId, stripeCustomerId);
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
 
     const priceId = priceIdFor(planId, billing);
 
-    const session = await getStripe().checkout.sessions.create({
+    const session = await (await getStripe()).checkout.sessions.create({
       mode: "subscription",
       customer: stripeCustomerId,
       line_items: [{ price: priceId, quantity: 1 }],

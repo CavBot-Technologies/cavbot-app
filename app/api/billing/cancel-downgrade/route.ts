@@ -42,18 +42,18 @@ export async function POST(req: NextRequest) {
     });
 
     if (latestStripeSub?.stripeSubscriptionId) {
-      const sub = await getStripe().subscriptions.retrieve(String(latestStripeSub.stripeSubscriptionId));
+      const sub = await (await getStripe()).subscriptions.retrieve(String(latestStripeSub.stripeSubscriptionId));
 
       // Undo cancel_at_period_end if it was set
       if (sub.cancel_at_period_end) {
-        await getStripe().subscriptions.update(sub.id, { cancel_at_period_end: false });
+        await (await getStripe()).subscriptions.update(sub.id, { cancel_at_period_end: false });
       }
 
       // If a schedule exists, release it
       const scheduleId = sub.schedule || null;
       if (scheduleId) {
         try {
-          await getStripe().subscriptionSchedules.release(String(scheduleId));
+          await (await getStripe()).subscriptionSchedules.release(String(scheduleId));
         } catch {
           // If already released/canceled, ignore
         }
