@@ -38,6 +38,8 @@ function degradedMembersPayload(planId: PlanId = resolvePlanIdFromTier("FREE")) 
     planId,
     seatLimit: Number(limits?.seats ?? 0),
     seatsUsed: 0,
+    currentMemberRole: null,
+    canManageAccessRequests: false,
     members: [],
     invites: [],
   };
@@ -69,6 +71,8 @@ export async function GET(req: NextRequest) {
     degradedPlanId = planId;
     const limits = getPlanLimits(planId);
     const seatLimit = Number(limits?.seats ?? 0);
+    const currentMemberRole = sess.memberRole;
+    const canManageAccessRequests = currentMemberRole === "OWNER" || currentMemberRole === "ADMIN";
 
     const [members, invites] = await Promise.all([
       prisma.membership.findMany({
@@ -127,6 +131,8 @@ export async function GET(req: NextRequest) {
         planId,
         seatLimit,
         seatsUsed: members.length + invites.length,
+        currentMemberRole,
+        canManageAccessRequests,
         members: members.map((m) => ({
           id: m.id,
           role: m.role,

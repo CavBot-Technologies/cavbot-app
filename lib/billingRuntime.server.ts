@@ -71,6 +71,60 @@ export type BillingAuditEventRow = {
   metaJson: unknown;
 };
 
+const BILLING_RUNTIME_SOFT_FAIL_DB_CODES = new Set([
+  "08000",
+  "08001",
+  "08003",
+  "08004",
+  "08006",
+  "08007",
+  "53300",
+  "57P01",
+  "57P02",
+  "57P03",
+]);
+
+function collectErrorMessages(err: unknown, depth = 0): string[] {
+  if (!err || depth > 3) return [];
+  if (typeof err === "string") return [err.toLowerCase()];
+  if (typeof err !== "object") return [];
+
+  const typed = err as {
+    message?: unknown;
+    detail?: unknown;
+    cause?: unknown;
+  };
+
+  return [
+    String(typed.message || "").toLowerCase(),
+    String(typed.detail || "").toLowerCase(),
+    ...collectErrorMessages(typed.cause, depth + 1),
+  ].filter(Boolean);
+}
+
+export function isBillingRuntimeUnavailableError(err: unknown) {
+  const dbCode = String((err as { code?: unknown })?.code || "").toUpperCase();
+  if (BILLING_RUNTIME_SOFT_FAIL_DB_CODES.has(dbCode)) return true;
+
+  const messages = collectErrorMessages(err);
+  return messages.some((message) =>
+    message.includes("service unavailable")
+    || message.includes("timed out")
+    || message.includes("timeout")
+    || message.includes("connection terminated")
+    || message.includes("connection reset")
+    || message.includes("connection refused")
+    || message.includes("too many clients")
+    || message.includes("remaining connection slots")
+    || message.includes("can not reach database server")
+    || message.includes("can't reach database server")
+    || message.includes("getaddrinfo")
+    || message.includes("server closed the connection unexpectedly")
+    || message.includes("admin shutdown")
+    || message.includes("pool")
+  );
+}
+
 function asDate(value: Date | string | null | undefined) {
   if (!value) return null;
   return value instanceof Date ? value : new Date(value);

@@ -56,12 +56,16 @@ test("idempotency guards exist for invite and access-request state transitions",
 
 test("Team UI wiring includes username invite, resolve, and request approvals", () => {
   const source = read("app/settings/sections/TeamClient.tsx");
+  const membersRoute = read("app/api/members/route.ts");
 
   assert.equal(source.includes("Invite by username"), true);
   assert.equal(source.includes("/api/users/resolve"), true);
   assert.equal(source.includes("/api/workspaces/invites"), true);
   assert.equal(source.includes("Access requests"), true);
   assert.equal(source.includes("/api/workspaces/access-requests"), true);
+  assert.equal(source.includes("canManageAccessRequests"), true);
+  assert.equal(membersRoute.includes("canManageAccessRequests"), true);
+  assert.equal(membersRoute.includes("currentMemberRole"), true);
   assert.equal(source.includes("Approve"), true);
   assert.equal(source.includes("Deny"), true);
 });

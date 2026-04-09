@@ -7,7 +7,11 @@ import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripeClient";
 import { requireSession, isApiAuthError } from "@/lib/apiAuth";
 import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
-import { listBillingInvoiceAuditRows, readBillingAccount } from "@/lib/billingRuntime.server";
+import {
+  isBillingRuntimeUnavailableError,
+  listBillingInvoiceAuditRows,
+  readBillingAccount,
+} from "@/lib/billingRuntime.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -268,6 +272,10 @@ export async function GET(req: NextRequest) {
       return json({ ok: true, invoices: [] }, 200);
     }
     if (isApiAuthError(error)) return json({ ok: false, error: error.code, message: error.message }, error.status);
+    if (isBillingRuntimeUnavailableError(error)) {
+      console.error("[billing/invoices] runtime unavailable", error);
+      return json({ ok: true, degraded: true, invoices: [] }, 200);
+    }
     return json({ ok: false, error: "BILLING_INVOICES_FAILED", message: "Failed to load invoices." }, 500);
   }
 }

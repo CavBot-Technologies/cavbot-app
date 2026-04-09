@@ -52,5 +52,17 @@ test("billing runtime store reads account state and invoice audit events through
   assert.equal(source.includes('FROM "Account"'), true);
   assert.equal(source.includes('UPDATE "Account"'), true);
   assert.equal(source.includes('FROM "AuditLog"'), true);
+  assert.equal(source.includes("isBillingRuntimeUnavailableError"), true);
   assert.equal(source.includes('COALESCE("metaJson"->>\'billing_event\', \'\') <> \'\'') || source.includes('COALESCE("metaJson"->>\'billing_event\','), true);
+});
+
+test("billing read routes degrade ancillary data instead of surfacing 500s on runtime failures", () => {
+  const paymentMethodSource = read("app/api/billing/payment-method/route.ts");
+  const invoicesSource = read("app/api/billing/invoices/route.ts");
+  const downloadSource = read("app/api/billing/invoices/[invoiceId]/download/route.ts");
+
+  assert.equal(paymentMethodSource.includes("isBillingRuntimeUnavailableError"), true);
+  assert.equal(paymentMethodSource.includes("return json(pmEmpty(), 200);"), true);
+  assert.equal(invoicesSource.includes("degraded: true"), true);
+  assert.equal(downloadSource.includes('error: "SERVICE_UNAVAILABLE"'), true);
 });

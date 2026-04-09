@@ -13,7 +13,11 @@ import { getStripe } from "@/lib/stripeClient";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
-import { ensureBillingStripeCustomerBinding, readBillingAccount } from "@/lib/billingRuntime.server";
+import {
+  ensureBillingStripeCustomerBinding,
+  isBillingRuntimeUnavailableError,
+  readBillingAccount,
+} from "@/lib/billingRuntime.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -172,6 +176,10 @@ export async function GET(req: NextRequest) {
   } catch (error: unknown) {
     if (isApiAuthError(error) && error.code === "ACCOUNT_CONTEXT_REQUIRED") return json(pmEmpty(), 200);
     if (isApiAuthError(error)) return json({ ok: false, error: error.code, message: error.message }, error.status);
+    if (isBillingRuntimeUnavailableError(error)) {
+      console.error("[billing/payment-method] runtime unavailable", error);
+      return json(pmEmpty(), 200);
+    }
     return json({ ok: false, error: "PAYMENT_METHOD_FETCH_FAILED", message: "Failed to load payment method." }, 500);
   }
 }
@@ -347,6 +355,13 @@ export async function POST(req: NextRequest) {
     return json({ ok: true, clientSecret }, 200);
   } catch (error: unknown) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code, message: error.message }, error.status);
+    if (isBillingRuntimeUnavailableError(error)) {
+      console.error("[billing/payment-method] runtime unavailable during mutation", error);
+      return json(
+        { ok: false, error: "SERVICE_UNAVAILABLE", message: "Billing payment methods are temporarily unavailable." },
+        503,
+      );
+    }
     return json({ ok: false, error: "PAYMENT_METHOD_FAILED", message: "Payment method request failed." }, 500);
   }
 }

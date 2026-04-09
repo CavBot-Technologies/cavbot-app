@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripeClient";
 import { requireSession, isApiAuthError } from "@/lib/apiAuth";
 import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
-import { readBillingAccount } from "@/lib/billingRuntime.server";
+import { isBillingRuntimeUnavailableError, readBillingAccount } from "@/lib/billingRuntime.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,6 +65,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<DownloadParam
     return NextResponse.redirect(target, { status: 303, headers: { ...NO_STORE_HEADERS } });
   } catch (error: unknown) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code, message: error.message }, error.status);
+    if (isBillingRuntimeUnavailableError(error)) {
+      console.error("[billing/invoices/download] runtime unavailable", error);
+      return json(
+        { ok: false, error: "SERVICE_UNAVAILABLE", message: "Billing invoices are temporarily unavailable." },
+        503,
+      );
+    }
     return json({ ok: false, error: "INVOICE_DOWNLOAD_FAILED" }, 500);
   }
 }

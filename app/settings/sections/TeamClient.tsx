@@ -44,6 +44,9 @@ type MembersPayload = {
   planId?: string | null;
   seatLimit?: number | null; // 0/undefined => unlimited
   seatsUsed?: number | null;
+  currentMemberRole?: MemberRole | null;
+  canManageAccessRequests?: boolean;
+  degraded?: boolean;
   members: MemberRow[];
   invites: InviteRow[];
 };
@@ -369,14 +372,19 @@ export default function TeamClient() {
     setErr("");
 
     try {
-      const [membersData, requestsData] = await Promise.all([
-        api<MembersPayload>("/api/members"),
-        api<AccessRequestsPayload>("/api/workspaces/access-requests?status=PENDING").catch(() => ({
-          ok: false,
-          degraded: true,
-          requests: [],
-        })),
-      ]);
+      const membersData = await api<MembersPayload>("/api/members");
+      const canManageAccessRequests = Boolean(
+        membersData?.canManageAccessRequests &&
+        !membersData?.degraded &&
+        (membersData?.currentMemberRole === "OWNER" || membersData?.currentMemberRole === "ADMIN"),
+      );
+      const requestsData = canManageAccessRequests
+        ? await api<AccessRequestsPayload>("/api/workspaces/access-requests?status=PENDING").catch(() => ({
+            ok: false,
+            degraded: true,
+            requests: [],
+          }))
+        : { ok: true, degraded: false, requests: [] };
 
       const prev = lastCountsRef.current;
       const next = {
