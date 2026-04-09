@@ -671,6 +671,37 @@ export async function loadCavCloudTreeLiteRuntime(args: {
   };
 }
 
+export async function loadCavCloudFolderChildrenByIdRuntime(args: {
+  accountId: string;
+  folderId: string;
+  listing?: CavCloudListingPreferences;
+  query?: string;
+}): Promise<CavCloudFolderChildrenPayload> {
+  const accountId = String(args.accountId || "").trim();
+  const folderId = String(args.folderId || "").trim();
+  if (!accountId) throw cavErr("ACCOUNT_REQUIRED", 400, "account is required");
+  if (!folderId) throw cavErr("FOLDER_ID_REQUIRED", 400, "folder id is required");
+
+  if (folderId.toLowerCase() === "root") {
+    return loadCavCloudTreeLiteRuntime({
+      accountId,
+      folderPath: ROOT_PATH,
+      listing: args.listing,
+      query: args.query,
+    });
+  }
+
+  const folder = await queryFolderById(getAuthPool(), accountId, folderId);
+  if (!folder) throw cavErr("FOLDER_NOT_FOUND", 404, "folder not found");
+
+  return loadCavCloudTreeLiteRuntime({
+    accountId,
+    folderPath: folder.path,
+    listing: args.listing,
+    query: args.query,
+  });
+}
+
 export async function loadCavCloudTreeRuntime(args: {
   accountId: string;
   folderPath?: string;

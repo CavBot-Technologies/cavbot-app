@@ -1,7 +1,7 @@
 import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
+import { loadCavCloudFolderChildrenByIdRuntime, loadCavCloudTreeLiteRuntime } from "@/lib/cavcloud/runtimeStorage.server";
 import { getCavCloudSettings, toCavCloudListingPreferences } from "@/lib/cavcloud/settings.server";
-import { getFolderChildrenById, getTreeLite } from "@/lib/cavcloud/storage.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,12 +54,12 @@ export async function GET(req: Request, ctx: { params: { id?: string } }) {
     );
 
     const data = folderId.toLowerCase() === "root"
-      ? await getTreeLite({
+      ? await loadCavCloudTreeLiteRuntime({
         accountId: sess.accountId,
         folderPath: "/",
         listing,
       })
-      : await getFolderChildrenById({
+      : await loadCavCloudFolderChildrenByIdRuntime({
         accountId: sess.accountId,
         folderId,
         listing,
