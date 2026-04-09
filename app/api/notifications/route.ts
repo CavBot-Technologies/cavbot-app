@@ -70,6 +70,16 @@ function degradedNotificationsMutation() {
   return { ok: true, degraded: true };
 }
 
+function passiveAuthRequiredNotifications(errorCode: string) {
+  return {
+    ok: false,
+    authRequired: true,
+    error: errorCode,
+    notifications: [],
+    nextCursor: null,
+  } as const;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const sess = await requireSession(req);
@@ -173,7 +183,7 @@ export async function GET(req: NextRequest) {
       const guardPayload = buildGuardDecisionPayload({
         actionId: "AUTH_REQUIRED",
       });
-      return json({ ok: false, error: error.code, ...(guardPayload || {}) }, error.status);
+      return json({ ...passiveAuthRequiredNotifications(error.code), ...(guardPayload || {}) }, 200);
     }
     if (
       isSchemaMismatchError(error, {

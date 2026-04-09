@@ -77,6 +77,15 @@ test("settings account PATCH keeps server-side URL normalization for profile ide
   assert.equal(routeSource.includes("Profile links must use valid http:// or https:// URLs."), true);
 });
 
+test("settings account route uses authenticated self-session instead of owner-only auth for profile reads and saves", () => {
+  const routeSource = read("app/api/settings/account/route.ts");
+
+  assert.equal(routeSource.includes("requireSettingsOwnerSession"), false);
+  assert.equal(routeSource.includes("requireAuthenticatedProfileSession"), true);
+  assert.equal(routeSource.includes("requireUser(session);"), true);
+  assert.equal(routeSource.includes("authRequired: true"), true);
+});
+
 test("cavsafe collaboration keeps paid-plan and owner-only server gates", () => {
   const collab = read("app/api/public/profile/collab/route.ts");
 

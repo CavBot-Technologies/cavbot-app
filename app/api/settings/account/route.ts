@@ -6,8 +6,7 @@ import type { AuditAction, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isBasicUsername, isReservedUsername, isValidUsername, normalizeUsername } from "@/lib/username";
 import { findUserById, getAuthPool } from "@/lib/authDb";
-import { requireSession } from "@/lib/apiAuth";
-import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
+import { isApiAuthError, requireSession, requireUser } from "@/lib/apiAuth";
 import {
   buildAutoWorkspaceSlugCandidates,
   buildPersonalWorkspaceName,
@@ -333,35 +332,37 @@ function normalizePublicProfileSettings(profile: Record<string, unknown>) {
   };
 }
 
-/** IMPORTANT: never let requireSession crash the route */
-async function getSessionInfoSafe(
-  req: Request
-): Promise<{ session: Awaited<ReturnType<typeof requireSession>>; userId: string } | null> {
-  try {
-    const session = await requireSettingsOwnerSession(req);
+function authRequiredProfilePayload(errorCode = "UNAUTHORIZED") {
+  return {
+    ok: false,
+    authRequired: true,
+    error: errorCode,
+    message: "Unauthorized",
+  } as const;
+}
 
-
-    const userId =
-      String(session?.sub || "").trim(); // Subject is the userId for user sessions
-
-
-    if (!userId) return null;
-    return { session, userId };
-  } catch {
-    return null;
+async function requireAuthenticatedProfileSession(req: Request): Promise<{
+  session: Awaited<ReturnType<typeof requireSession>>;
+  userId: string;
+}> {
+  const session = await requireSession(req);
+  requireUser(session);
+  const userId = String(session.sub || "").trim();
+  if (!userId) {
+    throw new Error("Missing user session subject.");
   }
+  return { session, userId };
 }
 
 
 
 export async function GET(req: Request) {
   noStore();
+  let userId = "";
 
   try {
-    const info = await getSessionInfoSafe(req);
-    if (!info) {
-      return jsonNoStore({ ok: false, message: "Unauthorized" }, { status: 401 });
-    }
+    const info = await requireAuthenticatedProfileSession(req);
+    userId = info.userId;
 
     const user = await prisma.user.findUnique({
       where: { id: info.userId },
@@ -417,11 +418,13 @@ export async function GET(req: Request) {
       { status: 200 }
     );
   } catch (e: unknown) {
+    if (isApiAuthError(e)) {
+      return jsonNoStore(authRequiredProfilePayload(e.code), { status: 200 });
+    }
     console.error("GET /api/settings/account failed:", e);
-    const info = await getSessionInfoSafe(req);
-    if (info?.userId) {
+    if (userId) {
       try {
-        const fallbackUser = await findUserById(getAuthPool(), info.userId);
+        const fallbackUser = await findUserById(getAuthPool(), userId);
         if (fallbackUser) {
           return jsonNoStore(
             {
@@ -453,10 +456,7 @@ export async function PATCH(req: Request) {
   noStore();
 
   try {
-    const info = await getSessionInfoSafe(req);
-    if (!info) {
-      return jsonNoStore({ ok: false, message: "Unauthorized" }, { status: 401 });
-    }
+    const info = await requireAuthenticatedProfileSession(req);
 
     const { userId, session } = info;
 
@@ -880,6 +880,9 @@ export async function PATCH(req: Request) {
 
     return jsonNoStore({ ok: true, profile: updatedForResponse }, { status: 200 });
   } catch (e: unknown) {
+    if (isApiAuthError(e)) {
+      return jsonNoStore({ ok: false, error: e.code, message: "Unauthorized" }, { status: e.status });
+    }
     console.error("PATCH /api/settings/account failed:", e);
     return jsonNoStore({ ok: false, message: "Save failed." }, { status: 500 });
   }

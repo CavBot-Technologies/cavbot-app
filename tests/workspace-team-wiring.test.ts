@@ -98,6 +98,16 @@ test("notification APIs include global workspace notifications in account-scoped
   assert.equal(readAllSource.includes("{ accountId }, { accountId: null }"), true);
 });
 
+test("passive notification GET routes degrade auth loss to 200 authRequired payloads instead of surfacing 401s", () => {
+  const listSource = read("app/api/notifications/route.ts");
+  const countSource = read("app/api/notifications/unread-count/route.ts");
+
+  assert.equal(listSource.includes("authRequired: true"), true);
+  assert.equal(listSource.includes("return json({ ...passiveAuthRequiredNotifications(error.code), ...(guardPayload || {}) }, 200);"), true);
+  assert.equal(countSource.includes("authRequired: true"), true);
+  assert.equal(countSource.includes("return json({ ...passiveAuthRequiredCount(error.code), ...(guardPayload || {}) }, 200);"), true);
+});
+
 test("email invite regression guard: legacy email invite path remains wired", () => {
   const source = read("app/api/members/invite/route.ts");
 

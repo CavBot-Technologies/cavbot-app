@@ -203,6 +203,7 @@ function isAuthRequiredLikeResponse(status: number, payload: unknown) {
   if (decision?.actionId === "AUTH_REQUIRED") return true;
   if (status === 401) return true;
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  if ((payload as Record<string, unknown>).authRequired === true) return true;
   const errorCode = String((payload as Record<string, unknown>).error || "").trim().toUpperCase();
   return errorCode === "AUTH_REQUIRED" || errorCode === "UNAUTHORIZED" || errorCode === "SESSION_REVOKED" || errorCode === "EXPIRED";
 }

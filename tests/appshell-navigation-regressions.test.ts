@@ -35,6 +35,7 @@ test("AppShell treats notification auth loss as passive recovery instead of emit
 
   assert.equal(source.includes("const handlePassiveAuthLoss = useCallback(() => {"), true);
   assert.equal(source.includes("if (isAuthRequiredLikeResponse(res.status, data)) {"), true);
+  assert.equal(source.includes("(payload as Record<string, unknown>).authRequired === true"), true);
   assert.equal(source.includes("guardMode: \"passive\""), true);
   assert.equal(source.includes("setSessionAuthenticated(false);"), true);
 });

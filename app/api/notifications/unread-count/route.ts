@@ -24,6 +24,15 @@ function s(v: unknown) {
   return String(v ?? "").trim();
 }
 
+function passiveAuthRequiredCount(errorCode: string) {
+  return {
+    ok: false,
+    authRequired: true,
+    error: errorCode,
+    count: 0,
+  } as const;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const sess = await requireSession(req);
@@ -54,7 +63,7 @@ export async function GET(req: NextRequest) {
       const guardPayload = buildGuardDecisionPayload({
         actionId: "AUTH_REQUIRED",
       });
-      return json({ ok: false, error: error.code, ...(guardPayload || {}) }, error.status);
+      return json({ ...passiveAuthRequiredCount(error.code), ...(guardPayload || {}) }, 200);
     }
     return json({ ok: true, count: 0 }, 200);
   }
