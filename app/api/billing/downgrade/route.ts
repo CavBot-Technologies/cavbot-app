@@ -7,10 +7,11 @@ import { prisma } from "@/lib/prisma";
 import { requireSession, isApiAuthError } from "@/lib/apiAuth";
 import { getStripe } from "@/lib/stripeClient";
 import { priceIdFor, type StripePlanId, type StripeBilling } from "@/lib/stripe";
-import { resolvePlanIdFromTier, parseBillingCycle } from "@/lib/plans";
+import { parseBillingCycle } from "@/lib/plans";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
+import { resolveBillingPlanResolution } from "@/lib/billingPlan.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -78,11 +79,17 @@ export async function POST(req: NextRequest) {
 
     const account = await prisma.account.findUnique({
       where: { id: accountId },
-      select: { id: true, tier: true },
+      select: { id: true, tier: true, trialSeatActive: true, trialEndsAt: true },
     });
     if (!account) return json({ ok: false, error: "ACCOUNT_NOT_FOUND", message: "Account not found." }, 404);
 
-    const currentPlanId = (resolvePlanIdFromTier(account.tier) as PlanId) || "free";
+    const currentPlanId = (
+      await resolveBillingPlanResolution({
+        accountId,
+        account,
+        repair: true,
+      })
+    ).currentPlanId;
     const allowed = allowedDowngradeTarget(currentPlanId, requestedTarget);
     if (!allowed) {
       return json(

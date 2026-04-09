@@ -4,9 +4,10 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, isApiAuthError } from "@/lib/apiAuth";
-import { resolvePlanIdFromTier, PLANS } from "@/lib/plans";
+import { PLANS } from "@/lib/plans";
 import { getQwenCoderPopoverState } from "@/src/lib/ai/qwen-coder-credits.server";
 import { resolveBillingAccountContext } from "@/lib/billingAccount.server";
+import { resolveBillingPlanResolution, type BillingPlanSource } from "@/lib/billingPlan.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,6 +60,8 @@ function buildEmptyBillingSummary() {
     subscription: null,
     computed: {
       currentPlanId: fallbackPlanId,
+      planSource: "fallback" as const,
+      authoritative: false,
       seatLimit: limitToNullable(planDef.limits.seats),
       websiteLimit: limitToNullable(planDef.limits.websites),
       seatsUsed: 0,
@@ -101,6 +104,20 @@ type SummarySubscriptionRecord = {
   billingCycle: string | null;
   stripePriceId: string | null;
   stripeSubscriptionId: string | null;
+};
+
+type SummaryComputedRecord = {
+  currentPlanId: "free" | "premium" | "premium_plus";
+  planSource: BillingPlanSource;
+  authoritative: boolean;
+  seatLimit: number | null;
+  websiteLimit: number | null;
+  seatsUsed: number;
+  websitesUsed: number;
+  billingCycle: "monthly" | "annual";
+  providerConnected: boolean;
+  stripeConnected: boolean;
+  portalReady: boolean;
 };
 
 async function findBillingAccount(accountId: string): Promise<SummaryAccountRecord | null> {
@@ -232,7 +249,12 @@ export async function GET(req: NextRequest) {
 
     if (!account) return json(buildEmptyBillingSummary(), 200);
 
-    const currentPlanId = resolvePlanIdFromTier(account.tier);
+    const planResolution = await resolveBillingPlanResolution({
+      accountId,
+      account,
+      repair: true,
+    });
+    const currentPlanId = planResolution.currentPlanId;
     const planDef = PLANS[currentPlanId];
 
     const [membersCount, invitesCount] = await Promise.all([
@@ -279,8 +301,9 @@ export async function GET(req: NextRequest) {
     const seatLimit = limitToNullable(planDef.limits.seats);
     const websiteLimit = limitToNullable(planDef.limits.websites);
 
-    const billingCycle =
+    const billingCycleRaw =
       subRow?.billingCycle || account.pendingDowngradeBilling || account.lastUpgradeBilling || "monthly";
+    const billingCycle = billingCycleRaw === "annual" ? "annual" : "monthly";
 
     let subscription = null;
 
@@ -333,6 +356,7 @@ export async function GET(req: NextRequest) {
         ok: true,
         account: {
           ...account,
+          tier: planResolution.repairedStoredTier ?? account.tier,
           pendingDowngradeAt: toIsoOrNull(account.pendingDowngradeAt),
           pendingDowngradeEffectiveAt: toIsoOrNull(account.pendingDowngradeEffectiveAt),
           lastUpgradeAt: toIsoOrNull(account.lastUpgradeAt),
@@ -342,6 +366,8 @@ export async function GET(req: NextRequest) {
         subscription,
         computed: {
           currentPlanId,
+          planSource: planResolution.planSource,
+          authoritative: planResolution.authoritative,
           seatLimit,
           websiteLimit,
           seatsUsed: membersCount + invitesCount,
@@ -350,7 +376,7 @@ export async function GET(req: NextRequest) {
           providerConnected,
           stripeConnected,
           portalReady,
-        },
+        } satisfies SummaryComputedRecord,
         qwenCoderUsage,
       },
       200
