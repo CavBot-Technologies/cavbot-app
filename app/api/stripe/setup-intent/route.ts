@@ -6,11 +6,11 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 
 
-import { prisma } from "@/lib/prisma";
 import {
   requireSession,
   isApiAuthError,
 } from "@/lib/apiAuth";
+import { ensureBillingStripeCustomerBinding, readBillingAccount } from "@/lib/billingRuntime.server";
 import { getStripe } from "@/lib/stripeClient";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
@@ -71,16 +71,7 @@ export async function POST(req: NextRequest) {
       };
 
 
-    const account = await prisma.account.findUnique({
-      where: { id: accountId },
-      select: {
-        id: true,
-        billingEmail: true,
-        stripeCustomerId: true,
-        name: true,
-        slug: true,
-      },
-    });
+    const account = await readBillingAccount(accountId);
 
 
     if (!account) return json({ ok: false, error: "ACCOUNT_NOT_FOUND", message: "Account not found." }, 404);
@@ -119,10 +110,7 @@ export async function POST(req: NextRequest) {
       customerId = customer.id;
 
 
-      await prisma.account.update({
-        where: { id: accountId },
-        data: { stripeCustomerId: customerId },
-      });
+      await ensureBillingStripeCustomerBinding(accountId, customerId);
     } else {
       // keep Stripe customer info up to date (optional but enterprise-grade)
       const name = s(body?.name);

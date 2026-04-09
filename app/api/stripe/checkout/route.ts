@@ -2,8 +2,9 @@ import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { prisma } from "@/lib/prisma";
 import { requireSession, isApiAuthError } from "@/lib/apiAuth";
+import { findUserById, getAuthPool } from "@/lib/authDb";
+import { ensureBillingStripeCustomerBinding, readBillingAccount } from "@/lib/billingRuntime.server";
 import { getStripe } from "@/lib/stripeClient";
 import { getAppUrl, priceIdFor, type StripePlanId, type StripeBilling } from "@/lib/stripe";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -62,14 +63,8 @@ export async function POST(req: NextRequest) {
     const cancelUrl = `${appUrl}/billing/cancel`;
 
       const [account, user] = await Promise.all([
-        prisma.account.findUnique({
-          where: { id: accountId },
-          select: { id: true, name: true, slug: true, stripeCustomerId: true, billingEmail: true },
-        }),
-        prisma.user.findUnique({
-          where: { id: operatorUserId },
-          select: { id: true, email: true, displayName: true },
-        }),
+        readBillingAccount(accountId),
+        findUserById(getAuthPool(), operatorUserId),
       ]);
 
     if (!account) return json({ ok: false, error: "ACCOUNT_NOT_FOUND", message: "Account not found." }, 404);
@@ -90,10 +85,7 @@ export async function POST(req: NextRequest) {
       const customer = await getStripe().customers.create(customerParams);
       stripeCustomerId = customer.id;
 
-        await prisma.account.update({
-          where: { id: accountId },
-          data: { stripeCustomerId },
-        });
+        await ensureBillingStripeCustomerBinding(accountId, stripeCustomerId);
     }
 
     const priceId = priceIdFor(planId, billing);

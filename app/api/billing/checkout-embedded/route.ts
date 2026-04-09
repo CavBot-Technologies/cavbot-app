@@ -3,8 +3,9 @@ import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { prisma } from "@/lib/prisma";
 import { requireSession, isApiAuthError } from "@/lib/apiAuth";
+import { findUserById, getAuthPool } from "@/lib/authDb";
+import { ensureBillingStripeCustomerBinding, readBillingAccount } from "@/lib/billingRuntime.server";
 import { getStripe } from "@/lib/stripeClient";
 import { getAppUrl, priceIdFor, type StripePlanId, type StripeBilling } from "@/lib/stripe";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -43,10 +44,7 @@ function normalizeBilling(raw: unknown): StripeBilling {
 }
 
 async function ensureStripeCustomer(args: { accountId: string; operatorEmail: string }) {
-  const account = await prisma.account.findUnique({
-    where: { id: args.accountId },
-    select: { id: true, name: true, slug: true, stripeCustomerId: true, billingEmail: true },
-  });
+  const account = await readBillingAccount(args.accountId);
 
   if (!account) {
     const err = new Error("Account not found.");
@@ -73,7 +71,7 @@ async function ensureStripeCustomer(args: { accountId: string; operatorEmail: st
   const customer = await getStripe().customers.create(customerParams);
   const stripeCustomerId = customer.id;
 
-  await prisma.account.update({ where: { id: args.accountId }, data: { stripeCustomerId } });
+  await ensureBillingStripeCustomerBinding(args.accountId, stripeCustomerId);
 
   return stripeCustomerId;
 }
@@ -94,10 +92,7 @@ export async function POST(req: NextRequest) {
 
     const billing = normalizeBilling(body?.billing);
 
-    const operator = await prisma.user.findUnique({
-      where: { id: operatorUserId },
-      select: { id: true, email: true },
-    });
+    const operator = await findUserById(getAuthPool(), operatorUserId);
     const operatorEmail = typeof operator?.email === "string" ? operator.email : "";
     if (!operatorEmail) return json({ ok: false, error: "USER_NOT_FOUND", message: "User not found." }, 404);
 

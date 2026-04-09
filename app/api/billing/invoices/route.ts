@@ -3,12 +3,11 @@ import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { Prisma } from "@prisma/client";
 
-import { prisma } from "@/lib/prisma";
 import { getStripe } from "@/lib/stripeClient";
 import { requireSession, isApiAuthError } from "@/lib/apiAuth";
 import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
+import { listBillingInvoiceAuditRows, readBillingAccount } from "@/lib/billingRuntime.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,10 +86,7 @@ export async function GET(req: NextRequest) {
 
     const accountId = billingCtx.accountId;
 
-    const account = await prisma.account.findUnique({
-      where: { id: accountId },
-      select: { id: true, stripeCustomerId: true },
-    });
+    const account = await readBillingAccount(accountId);
 
     // ----------------------------
     // A) PRIMARY: Stripe invoices
@@ -145,19 +141,7 @@ export async function GET(req: NextRequest) {
     // -----------------------------------------
     // B) FALLBACK: AuditLog “billing events”
     // -----------------------------------------
-    const logs = await prisma.auditLog
-      .findMany({
-        where: {
-          accountId,
-          metaJson: {
-            path: ["billing_event"],
-            not: Prisma.JsonNull,
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 50,
-        select: { id: true, createdAt: true, metaJson: true },
-      })
+    const logs = await listBillingInvoiceAuditRows(accountId, 50)
       .catch((error) => {
         console.error("[billing/invoices] audit billing-event lookup failed", error);
         return [];
@@ -171,7 +155,7 @@ export async function GET(req: NextRequest) {
       if (!evt) continue;
 
       // Helpers for audit rows
-        const stripeInvoiceId = s(meta?.stripeInvoiceId || "");
+      const stripeInvoiceId = s(meta?.stripeInvoiceId || "");
       const downloadUrl = stripeInvoiceId ? downloadRouteForInvoiceId(stripeInvoiceId) : null;
 
       if (evt === "upgrade_applied") {

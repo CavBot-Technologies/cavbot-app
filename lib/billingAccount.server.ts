@@ -1,8 +1,13 @@
 import "server-only";
 
-import { getAuthPool, findMembershipsForUser, findSessionMembership, pickPrimaryMembership } from "@/lib/authDb";
+import {
+  getAuthPool,
+  findAccountById,
+  findMembershipsForUser,
+  findSessionMembership,
+  pickPrimaryMembership,
+} from "@/lib/authDb";
 import type { MemberRole, AuthMembership } from "@/lib/authDb";
-import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireUser, type CavbotSession } from "@/lib/apiAuth";
 
 export type BillingAccountContext = {
@@ -38,60 +43,20 @@ function roleFromPrisma(value: string | MemberRole | null | undefined): MemberRo
   return "MEMBER";
 }
 
-async function findPrismaMembershipCandidates(userId: string, currentAccountId: string) {
-  const rows = await prisma.membership.findMany({
-    where: { userId },
-    orderBy: { createdAt: "asc" },
-    select: {
-      id: true,
-      accountId: true,
-      userId: true,
-      role: true,
-      createdAt: true,
-      account: {
-        select: {
-          id: true,
-        },
-      },
-    },
-  }).catch(() => []);
-
-  const memberships: AuthMembership[] = rows
-    .filter((row) => row.account?.id)
-    .map((row) => ({
-      id: row.id,
-      accountId: row.accountId,
-      userId: row.userId,
-      role: roleFromPrisma(row.role),
-      createdAt: row.createdAt,
-    }));
-
-  const current = currentAccountId
-    ? memberships.find((row) => row.accountId === currentAccountId) ?? null
-    : null;
-
-  return orderedMembershipCandidates(current, memberships);
-}
-
 export async function resolveBillingAccountContext(sess: CavbotSession): Promise<BillingAccountContext> {
   requireUser(sess);
 
   const userId = String(sess.sub || "").trim();
   const currentAccountId = String(sess.accountId || "").trim();
   const currentMemberRole = roleFromPrisma(sess.memberRole);
+  const pool = getAuthPool();
 
   const tryResolve = async (candidates: AuthMembership[]) => {
     for (const candidate of candidates) {
       const accountId = String(candidate.accountId || "").trim();
       if (!accountId) continue;
 
-      const account = await prisma.account
-        .findUnique({
-          where: { id: accountId },
-          select: { id: true },
-        })
-        .catch(() => null);
-
+      const account = await findAccountById(pool, accountId);
       if (!account?.id) continue;
 
       sess.accountId = account.id;
@@ -107,40 +72,26 @@ export async function resolveBillingAccountContext(sess: CavbotSession): Promise
     return null;
   };
 
-  try {
-    const pool = getAuthPool();
-
-    let currentMembership: AuthMembership | null = null;
-    if (currentAccountId) {
-      const current = await findSessionMembership(pool, userId, currentAccountId);
-      currentMembership = current
-        ? {
-            id: current.id,
-            accountId: current.accountId,
-            userId: current.userId,
-            role: current.role,
-            createdAt: current.createdAt,
-          }
-        : null;
-    }
-
-    const memberships = await findMembershipsForUser(pool, userId);
-    const authResolved = await tryResolve(orderedMembershipCandidates(currentMembership, memberships));
-    if (authResolved) return authResolved;
-  } catch (error) {
-    console.error("[billing/account] auth membership resolution failed", error);
+  let currentMembership: AuthMembership | null = null;
+  if (currentAccountId) {
+    const current = await findSessionMembership(pool, userId, currentAccountId);
+    currentMembership = current
+      ? {
+          id: current.id,
+          accountId: current.accountId,
+          userId: current.userId,
+          role: current.role,
+          createdAt: current.createdAt,
+        }
+      : null;
   }
 
-  const prismaResolved = await tryResolve(await findPrismaMembershipCandidates(userId, currentAccountId));
-  if (prismaResolved) return prismaResolved;
+  const memberships = await findMembershipsForUser(pool, userId);
+  const authResolved = await tryResolve(orderedMembershipCandidates(currentMembership, memberships));
+  if (authResolved) return authResolved;
 
   if (currentAccountId) {
-    const signedSessionAccount = await prisma.account
-      .findUnique({
-        where: { id: currentAccountId },
-        select: { id: true },
-      })
-      .catch(() => null);
+    const signedSessionAccount = await findAccountById(pool, currentAccountId);
 
     if (signedSessionAccount?.id) {
       sess.accountId = signedSessionAccount.id;

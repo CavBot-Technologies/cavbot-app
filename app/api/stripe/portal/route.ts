@@ -1,11 +1,11 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireSession, isApiAuthError } from "@/lib/apiAuth";
 import { getStripe } from "@/lib/stripeClient";
 import { getAppUrl } from "@/lib/stripe";
 import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
+import { readBillingAccount } from "@/lib/billingRuntime.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,10 +36,7 @@ export async function POST(req: NextRequest) {
     const accountId = billingCtx.accountId;
     const appUrl = getAppUrl();
 
-    const account = await prisma.account.findUnique({
-      where: { id: accountId },
-      select: { stripeCustomerId: true },
-    });
+    const account = await readBillingAccount(accountId);
 
     const customer = s(account?.stripeCustomerId);
     if (!customer) {

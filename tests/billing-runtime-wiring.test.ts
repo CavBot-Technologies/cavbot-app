@@ -1,0 +1,56 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import test from "node:test";
+
+const repoRoot = process.cwd();
+
+function read(relPath: string) {
+  return fs.readFileSync(path.join(repoRoot, relPath), "utf8");
+}
+
+test("billing ancillary routes avoid Prisma runtime imports on request paths", () => {
+  const routePaths = [
+    "app/api/billing/payment-method/route.ts",
+    "app/api/billing/invoices/route.ts",
+    "app/api/billing/invoices/[invoiceId]/download/route.ts",
+    "app/api/billing/checkout/route.ts",
+    "app/api/billing/checkout-embedded/route.ts",
+    "app/api/stripe/checkout/route.ts",
+    "app/api/stripe/portal/route.ts",
+    "app/api/stripe/setup-intent/route.ts",
+  ];
+
+  for (const relPath of routePaths) {
+    const source = read(relPath);
+    assert.equal(
+      source.includes('from "@/lib/prisma"'),
+      false,
+      `${relPath} should not import the Prisma runtime client`,
+    );
+    assert.equal(
+      source.includes('from "@/lib/billingRuntime.server"') || source.includes('from "@/lib/authDb"'),
+      true,
+      `${relPath} should use runtime-safe billing/auth helpers`,
+    );
+  }
+});
+
+test("billing account resolution uses auth-db membership and account lookup only", () => {
+  const source = read("lib/billingAccount.server.ts");
+
+  assert.equal(source.includes('from "@/lib/prisma"'), false);
+  assert.equal(source.includes("findAccountById"), true);
+  assert.equal(source.includes("findMembershipsForUser"), true);
+  assert.equal(source.includes("findSessionMembership"), true);
+});
+
+test("billing runtime store reads account state and invoice audit events through the auth pool", () => {
+  const source = read("lib/billingRuntime.server.ts");
+
+  assert.equal(source.includes("getAuthPool"), true);
+  assert.equal(source.includes('FROM "Account"'), true);
+  assert.equal(source.includes('UPDATE "Account"'), true);
+  assert.equal(source.includes('FROM "AuditLog"'), true);
+  assert.equal(source.includes('COALESCE("metaJson"->>\'billing_event\', \'\') <> \'\'') || source.includes('COALESCE("metaJson"->>\'billing_event\','), true);
+});

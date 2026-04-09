@@ -7,11 +7,12 @@ import type Stripe from "stripe";
 import crypto from "crypto";
 
 
-import { prisma } from "@/lib/prisma";
 import {
   requireSession,
   isApiAuthError,
 } from "@/lib/apiAuth";
+import { findUserById, getAuthPool } from "@/lib/authDb";
+import { ensureBillingStripeCustomerBinding, readBillingAccount } from "@/lib/billingRuntime.server";
 import { getStripe } from "@/lib/stripeClient";
 import { getAppUrl, priceIdFor, type StripePlanId, type StripeBilling } from "@/lib/stripe";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -99,14 +100,8 @@ export async function POST(req: NextRequest) {
 
 
     const [account, user] = await Promise.all([
-      prisma.account.findUnique({
-        where: { id: accountId },
-        select: { id: true, name: true, slug: true, stripeCustomerId: true, billingEmail: true },
-      }),
-      prisma.user.findUnique({
-        where: { id: operatorUserId },
-        select: { id: true, email: true, displayName: true },
-      }),
+      readBillingAccount(accountId),
+      findUserById(getAuthPool(), operatorUserId),
     ]);
 
 
@@ -143,10 +138,7 @@ export async function POST(req: NextRequest) {
       stripeCustomerId = customer.id;
 
 
-      await prisma.account.update({
-        where: { id: accountId },
-        data: { stripeCustomerId },
-      });
+      await ensureBillingStripeCustomerBinding(accountId, stripeCustomerId);
     }
 
 

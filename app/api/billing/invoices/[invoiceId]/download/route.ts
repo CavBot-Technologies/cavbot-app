@@ -3,10 +3,10 @@ import "server-only";
 
 import type Stripe from "stripe";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getStripe } from "@/lib/stripeClient";
 import { requireSession, isApiAuthError } from "@/lib/apiAuth";
 import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
+import { readBillingAccount } from "@/lib/billingRuntime.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,10 +41,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<DownloadParam
 
     if (!invoiceId) return json({ ok: false, error: "MISSING_INVOICE_ID" }, 400);
 
-    const acct = await prisma.account.findUnique({
-      where: { id: accountId },
-      select: { stripeCustomerId: true },
-    });
+    const acct = await readBillingAccount(accountId);
 
     const stripeCustomerId = s(acct?.stripeCustomerId);
     if (!stripeCustomerId) return json({ ok: false, error: "NO_STRIPE_CUSTOMER" }, 409);

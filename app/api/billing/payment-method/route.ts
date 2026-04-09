@@ -5,7 +5,6 @@ import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import crypto from "crypto";
 
-import { prisma } from "@/lib/prisma";
 import {
   requireSession,
   isApiAuthError,
@@ -14,6 +13,7 @@ import { getStripe } from "@/lib/stripeClient";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { requireBillingManageRole, resolveBillingAccountContext } from "@/lib/billingAccount.server";
+import { ensureBillingStripeCustomerBinding, readBillingAccount } from "@/lib/billingRuntime.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -89,16 +89,7 @@ async function ensureStripeCustomer(args: {
   name?: string | null;
   address?: Stripe.AddressParam | null;
 }) {
-  const account = await prisma.account.findUnique({
-    where: { id: args.accountId },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      stripeCustomerId: true,
-      billingEmail: true,
-    },
-  });
+  const account = await readBillingAccount(args.accountId);
   if (!account) throw Object.assign(new Error("Account not found."), { status: 404 });
 
   let customerId = s(account.stripeCustomerId);
@@ -124,10 +115,7 @@ async function ensureStripeCustomer(args: {
     customerId = customer.id;
  
  
-    await prisma.account.update({
-      where: { id: args.accountId },
-      data: { stripeCustomerId: customerId },
-    });
+    await ensureBillingStripeCustomerBinding(args.accountId, customerId);
  
  
     return customerId;
@@ -156,10 +144,7 @@ export async function GET(req: NextRequest) {
     if (!hasStripeSecret()) return json(pmEmpty(), 200);
 
     const accountId = billingCtx.accountId;
-    const account = await prisma.account.findUnique({
-      where: { id: accountId },
-      select: { stripeCustomerId: true },
-    });
+    const account = await readBillingAccount(accountId);
 
     const customerId = s(account?.stripeCustomerId);
     if (!customerId) return json(pmEmpty(), 200);
@@ -258,23 +243,13 @@ export async function POST(req: NextRequest) {
  
       // Safety: ensure this customer belongs to this CavBot account.
       // If the account has no stripeCustomerId yet, bind it now.
-      const acc = await prisma.account.findUnique({
-        where: { id: accountId },
-        select: { stripeCustomerId: true },
-      });
- 
- 
+      const acc = await ensureBillingStripeCustomerBinding(accountId, customerId);
+      if (!acc?.id) {
+        return json({ ok: false, error: "ACCOUNT_NOT_FOUND", message: "Account not found." }, 404);
+      }
       const expectedCustomerId = s(acc?.stripeCustomerId);
       if (expectedCustomerId && expectedCustomerId !== customerId) {
         return json({ ok: false, error: "FORBIDDEN", message: "Client billing profile mismatch." }, 403);
-      }
- 
- 
-      if (!expectedCustomerId) {
-        await prisma.account.update({
-          where: { id: accountId },
-          data: { stripeCustomerId: customerId },
-        });
       }
  
  
@@ -338,10 +313,7 @@ export async function POST(req: NextRequest) {
       : null;
  
  
-    const account = await prisma.account.findUnique({
-      where: { id: accountId },
-      select: { billingEmail: true, name: true },
-    });
+    const account = await readBillingAccount(accountId);
  
  
     const customerId = await ensureStripeCustomer({
