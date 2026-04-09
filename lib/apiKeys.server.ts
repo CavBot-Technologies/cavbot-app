@@ -1,5 +1,27 @@
 import { randomBytes, createHash } from "crypto";
-import type { ApiKey, ApiKeyType } from "@prisma/client";
+
+export type ApiKeyType = "PUBLISHABLE" | "SECRET" | "ADMIN";
+export type ApiKeyStatus = "ACTIVE" | "ROTATED" | "REVOKED";
+
+export type ApiKeyRecord = {
+  id: string;
+  accountId: string | null;
+  projectId: number | null;
+  type: ApiKeyType;
+  status: ApiKeyStatus | string;
+  name: string | null;
+  prefix: string;
+  last4: string;
+  keyHash?: string | null;
+  value: string | null;
+  scopes: string[] | null;
+  siteId: string | null;
+  rotatedFromId?: string | null;
+  rotatedAt?: Date | string | null;
+  createdAt: Date | string;
+  updatedAt?: Date | string;
+  lastUsedAt: Date | string | null;
+};
 
 type ApiKeyInsertParams = {
   type: ApiKeyType;
@@ -9,6 +31,21 @@ type ApiKeyInsertParams = {
   name?: string | null;
   scopes?: string[];
   rotatedFromId?: string | null;
+};
+
+export type ApiKeyInsertRecord = {
+  accountId: string;
+  projectId: number;
+  type: ApiKeyType;
+  status: "ACTIVE";
+  name: string | null;
+  prefix: string;
+  last4: string;
+  keyHash: string;
+  value: string | null;
+  scopes: string[];
+  siteId: string | null;
+  rotatedFromId: string | null;
 };
 
 export type ApiKeyPayload = {
@@ -59,6 +96,11 @@ function randomSegment(length = 24) {
   return randomBytes(length).toString("hex");
 }
 
+function asDate(value: Date | string | null | undefined) {
+  if (!value) return null;
+  return value instanceof Date ? value : new Date(value);
+}
+
 function buildKeyParts(type: ApiKeyType) {
   const prefix = KEY_PREFIXES[type];
   const randomPart = randomSegment();
@@ -77,7 +119,7 @@ export function buildApiKeyInsertData(params: ApiKeyInsertParams) {
   const effectiveScopes = scopes.length > 0 ? scopes : DEFAULT_SCOPES[params.type];
   const { prefix, last4, value, hash } = buildKeyParts(params.type);
 
-  const data = {
+  const data: ApiKeyInsertRecord = {
     accountId: params.accountId,
     projectId: params.projectId,
     type: params.type,
@@ -95,14 +137,16 @@ export function buildApiKeyInsertData(params: ApiKeyInsertParams) {
   return { data, plaintextKey: value };
 }
 
-export function serializeApiKey(key: ApiKey, options?: { includeValue?: boolean }): ApiKeyPayload {
+export function serializeApiKey(key: ApiKeyRecord, options?: { includeValue?: boolean }): ApiKeyPayload {
+  const createdAt = asDate(key.createdAt);
+  const lastUsedAt = asDate(key.lastUsedAt);
   return {
     id: key.id,
     type: key.type,
     prefix: key.prefix,
     last4: key.last4,
-    createdAt: key.createdAt?.toISOString?.() ?? new Date().toISOString(),
-    lastUsedAt: key.lastUsedAt ? key.lastUsedAt.toISOString() : null,
+    createdAt: createdAt?.toISOString() ?? new Date().toISOString(),
+    lastUsedAt: lastUsedAt ? lastUsedAt.toISOString() : null,
     status: key.status,
     name: key.name ?? null,
     scopes: key.scopes ?? [],

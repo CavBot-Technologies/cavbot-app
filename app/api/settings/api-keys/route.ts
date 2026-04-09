@@ -1,15 +1,22 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { ApiKeyType } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
 import { resolveApiKeyWorkspace } from "@/lib/settings/apiKeyWorkspace.server";
-import { buildApiKeyInsertData, serializeApiKey } from "@/lib/apiKeys.server";
+import {
+  buildApiKeyInsertData,
+  serializeApiKey,
+  type ApiKeyType,
+} from "@/lib/apiKeys.server";
 import { DEFAULT_RATE_LIMIT_LABEL, KeyUsagePayload, fetchUsageForWorkspace } from "@/lib/apiKeyUsage.server";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import {
+  createApiKeyRecord,
+  findSiteForProject,
+  listApiKeysForProject,
+} from "@/lib/settings/apiKeysRuntime.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,10 +79,7 @@ export async function GET(req: NextRequest) {
       return json(emptyPayload, 200);
     }
 
-    const keys = await prisma.apiKey.findMany({
-      where: { projectId: workspace.projectId },
-      orderBy: { createdAt: "desc" },
-    });
+    const keys = await listApiKeysForProject(workspace.projectId);
 
     const publishableKeys = keys
       .filter((key) => key.type === "PUBLISHABLE")
@@ -130,12 +134,9 @@ export async function POST(req: NextRequest) {
     let siteId: string | null = null;
     const bodySiteId = String(body?.siteId ?? "").trim();
     if (bodySiteId) {
-      const site = await prisma.site.findFirst({
-        where: {
-          id: bodySiteId,
-          projectId: workspace.projectId,
-          isActive: true,
-        },
+      const site = await findSiteForProject({
+        siteId: bodySiteId,
+        projectId: workspace.projectId,
       });
       if (!site) return json({ ok: false, error: "SITE_NOT_FOUND" }, 404);
       siteId = site.id;
@@ -152,7 +153,10 @@ export async function POST(req: NextRequest) {
       scopes: Array.isArray(body?.scopes) ? body.scopes : undefined,
     });
 
-    const created = await prisma.apiKey.create({ data: insert.data });
+    const created = await createApiKeyRecord(insert.data);
+    if (!created) {
+      return json({ ok: false, error: "CREATE_KEY_FAILED", message: "Failed to create API key." }, 500);
+    }
 
     if (session.accountId) {
       await auditLogWrite({

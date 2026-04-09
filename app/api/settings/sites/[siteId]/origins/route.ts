@@ -1,13 +1,16 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
-import { readWorkspace } from "@/lib/workspaceStore.server";
 import { canonicalizeAllowlistOrigin, AllowedOriginRow } from "@/originMatch";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import {
+  findSiteForAccount,
+  listSiteAllowedOrigins,
+  replaceSiteAllowedOrigins,
+} from "@/lib/settings/apiKeysRuntime.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,19 +43,12 @@ export async function PATCH(req: NextRequest, ctx: unknown) {
     const { siteId } = await getParams(ctx);
     if (!siteId) return json({ ok: false, error: "SITE_ID_REQUIRED" }, 400);
 
-    const workspace = await readWorkspace({ accountId: session.accountId });
-    const projectId = workspace.projectId;
-
-    const site = await prisma.site.findFirst({
-      where: { id: siteId, projectId, isActive: true },
+    const site = await findSiteForAccount({
+      siteId,
+      accountId: session.accountId,
     });
     if (!site) return json({ ok: false, error: "SITE_NOT_FOUND" }, 404);
-
-    const existingOrigins = await prisma.siteAllowedOrigin.findMany({
-      where: { siteId: site.id },
-      select: { origin: true },
-    });
-    const previousOrigins = existingOrigins.map((row) => row.origin);
+    const previousOrigins = await listSiteAllowedOrigins(site.id);
 
     const payload = (await readSanitizedJson(req, null)) as Record<string, unknown> | null;
     const rawOrigins = Array.isArray(payload?.allowedOrigins) ? payload.allowedOrigins : [];
@@ -77,18 +73,7 @@ export async function PATCH(req: NextRequest, ctx: unknown) {
     const originsAdded = normalizedOrigins.filter((origin) => !previousSet.has(origin));
     const originsRemoved = previousOrigins.filter((origin) => !newSet.has(origin));
 
-    await prisma.$transaction(async (tx) => {
-      await tx.siteAllowedOrigin.deleteMany({ where: { siteId: site.id } });
-      if (entries.length) {
-        await tx.siteAllowedOrigin.createMany({
-          data: entries.map((entry) => ({
-            siteId: site.id,
-            origin: entry.origin,
-            matchType: entry.matchType,
-          })),
-        });
-      }
-    });
+    await replaceSiteAllowedOrigins({ siteId: site.id, entries });
 
     if (session.accountId) {
       await auditLogWrite({

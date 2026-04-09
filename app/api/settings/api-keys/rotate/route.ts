@@ -1,13 +1,16 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
 import { resolveApiKeyWorkspace } from "@/lib/settings/apiKeyWorkspace.server";
 import { buildApiKeyInsertData, serializeApiKey } from "@/lib/apiKeys.server";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import {
+  findApiKeyForAccount,
+  rotateApiKeyRecord,
+} from "@/lib/settings/apiKeysRuntime.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,8 +40,9 @@ export async function POST(req: NextRequest) {
     const keyId = String(body?.keyId || "").trim();
     if (!keyId) return json({ ok: false, error: "KEY_ID_REQUIRED" }, 400);
 
-    const existing = await prisma.apiKey.findFirst({
-      where: { id: keyId, accountId: session.accountId },
+    const existing = await findApiKeyForAccount({
+      keyId,
+      accountId: session.accountId,
     });
 
     if (!existing) return json({ ok: false, error: "KEY_NOT_FOUND" }, 404);
@@ -65,13 +69,14 @@ export async function POST(req: NextRequest) {
 
     const now = new Date();
 
-    const nextKey = await prisma.$transaction(async (tx) => {
-      await tx.apiKey.update({
-        where: { id: existing.id },
-        data: { status: "ROTATED", rotatedAt: now, value: null },
-      });
-      return tx.apiKey.create({ data: insert.data });
+    const nextKey = await rotateApiKeyRecord({
+      existingKeyId: existing.id,
+      insertData: insert.data,
+      rotatedAt: now,
     });
+    if (!nextKey) {
+      return json({ ok: false, error: "ROTATE_FAILED", message: "Failed to rotate key." }, 500);
+    }
 
     if (session.accountId) {
       await auditLogWrite({

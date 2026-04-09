@@ -1,11 +1,14 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import {
+  findApiKeyForAccount,
+  revokeApiKeyRecord,
+} from "@/lib/settings/apiKeysRuntime.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,16 +38,17 @@ export async function POST(req: NextRequest) {
     const keyId = String(body?.keyId || "").trim();
     if (!keyId) return json({ ok: false, error: "KEY_ID_REQUIRED" }, 400);
 
-    const key = await prisma.apiKey.findFirst({
-      where: { id: keyId, accountId: session.accountId },
+    const key = await findApiKeyForAccount({
+      keyId,
+      accountId: session.accountId,
     });
 
     if (!key) return json({ ok: false, error: "KEY_NOT_FOUND" }, 404);
     if (key.status === "REVOKED") return json({ ok: true }, 200);
 
-    await prisma.apiKey.update({
-      where: { id: key.id },
-      data: { status: "REVOKED", rotatedAt: new Date(), value: null },
+    await revokeApiKeyRecord({
+      keyId: key.id,
+      revokedAt: new Date(),
     });
 
     if (session.accountId) {
