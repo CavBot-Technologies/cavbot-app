@@ -1,13 +1,26 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 import { findLatestEntitledSubscription } from "../lib/accountPlan.server";
+
+const repoRoot = process.cwd();
 
 function schemaMismatch(message: string) {
   const error = new Error(message) as Error & { code?: string };
   error.code = "P2022";
   return error;
 }
+
+test("account plan lookup defaults to account-db queries instead of Prisma runtime", () => {
+  const source = readFileSync(path.join(repoRoot, "lib/accountPlan.server.ts"), "utf8");
+
+  assert.match(source, /import \{ getAuthPool \} from "@\/lib\/authDb";/);
+  assert.doesNotMatch(source, /import \{ prisma \} from "@\/lib\/prisma";/);
+  assert.match(source, /tx: PlanResolverDbClient = getAuthPool\(\)/);
+  assert.match(source, /if \(isRawQueryClient\(tx\)\)/);
+});
 
 test("findLatestEntitledSubscription falls back when subscription ordering columns drift", async () => {
   const calls: Array<Record<string, unknown>> = [];

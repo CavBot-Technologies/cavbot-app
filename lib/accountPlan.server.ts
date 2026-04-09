@@ -1,7 +1,9 @@
 import "server-only";
 
+import type pg from "pg";
+
+import { getAuthPool } from "@/lib/authDb";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
-import { prisma } from "@/lib/prisma";
 import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
 
 type AccountPlanRecord = {
@@ -16,7 +18,14 @@ type SubscriptionPlanRecord = {
   currentPeriodEnd?: Date | string | null;
 };
 
-type PlanResolverDbClient = {
+type Queryable = {
+  query: <T extends pg.QueryResultRow = pg.QueryResultRow>(
+    text: string,
+    values?: unknown[],
+  ) => Promise<pg.QueryResult<T>>;
+};
+
+type PrismaPlanResolverDbClient = {
   subscription: {
     findFirst: (query: {
       where?: Record<string, unknown>;
@@ -24,6 +33,14 @@ type PlanResolverDbClient = {
       select?: Record<string, boolean>;
     }) => Promise<SubscriptionPlanRecord | null>;
   };
+};
+
+type PlanResolverDbClient = Queryable | PrismaPlanResolverDbClient;
+
+type RawSubscriptionPlanRow = {
+  tier?: string | null;
+  status?: string | null;
+  currentPeriodEnd?: Date | string | null;
 };
 
 const PLAN_RANK: Record<PlanId, number> = {
@@ -137,13 +154,127 @@ function isSubscriptionPlanSchemaMismatchError(error: unknown) {
   return isSchemaMismatchError(error, SUBSCRIPTION_SCHEMA_HINTS);
 }
 
-export async function findLatestEntitledSubscription(
-  accountIdRaw: string,
-  tx: PlanResolverDbClient = prisma,
-) {
-  const accountId = String(accountIdRaw || "").trim();
-  if (!accountId) return null;
+function isRawQueryClient(tx: PlanResolverDbClient): tx is Queryable {
+  return typeof (tx as Queryable | null)?.query === "function";
+}
 
+async function queryLatestSubscription<T extends SubscriptionPlanRecord>(
+  tx: Queryable,
+  text: string,
+  values: unknown[],
+  mapRow: (row: RawSubscriptionPlanRow) => T,
+) {
+  const result = await tx.query<RawSubscriptionPlanRow>(text, values);
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
+}
+
+async function findLatestEntitledSubscriptionViaQuery(accountId: string, tx: Queryable) {
+  const entitledStatuses = [...ENTITLED_SUBSCRIPTION_STATUS_LIST];
+
+  const queries: Array<() => Promise<SubscriptionPlanRecord | null>> = [
+    () =>
+      queryLatestSubscription(
+        tx,
+        `SELECT "tier", "status", "currentPeriodEnd"
+         FROM "Subscription"
+         WHERE "accountId" = $1
+           AND UPPER(COALESCE("status", '')) = ANY($2::text[])
+         ORDER BY "currentPeriodEnd" DESC NULLS LAST, "updatedAt" DESC NULLS LAST, "createdAt" DESC NULLS LAST
+         LIMIT 1`,
+        [accountId, entitledStatuses],
+        (row) => ({
+          tier: row.tier ?? null,
+          status: row.status ?? null,
+          currentPeriodEnd: row.currentPeriodEnd ?? null,
+        }),
+      ),
+    () =>
+      queryLatestSubscription(
+        tx,
+        `SELECT "tier", "status"
+         FROM "Subscription"
+         WHERE "accountId" = $1
+           AND UPPER(COALESCE("status", '')) = ANY($2::text[])
+         ORDER BY "updatedAt" DESC NULLS LAST, "createdAt" DESC NULLS LAST
+         LIMIT 1`,
+        [accountId, entitledStatuses],
+        (row) => ({
+          tier: row.tier ?? null,
+          status: row.status ?? null,
+        }),
+      ),
+    () =>
+      queryLatestSubscription(
+        tx,
+        `SELECT "tier", "status"
+         FROM "Subscription"
+         WHERE "accountId" = $1
+           AND UPPER(COALESCE("status", '')) = ANY($2::text[])
+         ORDER BY "createdAt" DESC NULLS LAST
+         LIMIT 1`,
+        [accountId, entitledStatuses],
+        (row) => ({
+          tier: row.tier ?? null,
+          status: row.status ?? null,
+        }),
+      ),
+    () =>
+      queryLatestSubscription(
+        tx,
+        `SELECT "tier", "status"
+         FROM "Subscription"
+         WHERE "accountId" = $1
+           AND UPPER(COALESCE("status", '')) = ANY($2::text[])
+         LIMIT 1`,
+        [accountId, entitledStatuses],
+        (row) => ({
+          tier: row.tier ?? null,
+          status: row.status ?? null,
+        }),
+      ),
+    () =>
+      queryLatestSubscription(
+        tx,
+        `SELECT "tier", "status"
+         FROM "Subscription"
+         WHERE "accountId" = $1
+         ORDER BY "updatedAt" DESC NULLS LAST, "createdAt" DESC NULLS LAST
+         LIMIT 1`,
+        [accountId],
+        (row) => ({
+          tier: row.tier ?? null,
+          status: row.status ?? null,
+        }),
+      ),
+    () =>
+      queryLatestSubscription(
+        tx,
+        `SELECT "tier", "status"
+         FROM "Subscription"
+         WHERE "accountId" = $1
+         ORDER BY "createdAt" DESC NULLS LAST
+         LIMIT 1`,
+        [accountId],
+        (row) => ({
+          tier: row.tier ?? null,
+          status: row.status ?? null,
+        }),
+      ),
+  ];
+
+  for (const query of queries) {
+    try {
+      return await query();
+    } catch (error) {
+      if (isSubscriptionLookupSoftFailure(error)) return null;
+      if (!isSubscriptionPlanSchemaMismatchError(error)) throw error;
+    }
+  }
+
+  return null;
+}
+
+async function findLatestEntitledSubscriptionViaPrisma(accountId: string, tx: PrismaPlanResolverDbClient) {
   try {
     return await tx.subscription.findFirst({
       where: {
@@ -258,4 +389,18 @@ export async function findLatestEntitledSubscription(
     if (!isSubscriptionPlanSchemaMismatchError(error)) throw error;
     return null;
   }
+}
+
+export async function findLatestEntitledSubscription(
+  accountIdRaw: string,
+  tx: PlanResolverDbClient = getAuthPool(),
+) {
+  const accountId = String(accountIdRaw || "").trim();
+  if (!accountId) return null;
+
+  if (isRawQueryClient(tx)) {
+    return findLatestEntitledSubscriptionViaQuery(accountId, tx);
+  }
+
+  return findLatestEntitledSubscriptionViaPrisma(accountId, tx);
 }
