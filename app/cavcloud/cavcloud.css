@@ -6319,6 +6319,14 @@ body{ margin:0; }
     flex-direction: column;
     align-items: stretch;
   }
+  .cavcloud-paneHead{
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .cavcloud-paneTitle{
+    flex: 1 1 auto;
+    min-width: 0;
+  }
   .cavcloud-opQueueHead{
     flex-direction: column;
     align-items: flex-start;
@@ -6340,7 +6348,13 @@ body{ margin:0; }
   }
   .cavcloud-galleryHeadControls{
     width: 100%;
-    flex-wrap: wrap;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    gap: 8px;
+    min-width: 0;
+  }
+  .cavcloud-galleryHeadControls .cavcloud-folderBackBtn{
+    margin-right: auto;
   }
   .cavcloud-sharedGrid.is-list .cavcloud-galleryFrame{
     width: 108px;
@@ -6352,13 +6366,72 @@ body{ margin:0; }
   }
   .cavcloud-trashHeadControls{
     width: 100%;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    gap: 8px;
+    min-width: 0;
   }
   .cavcloud-trashRestorationFilters{
-    width: 100%;
-  }
-  .cavcloud-paneTitleSelect{
+    width: auto;
+    max-width: 100%;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    gap: 8px;
     min-width: 0;
-    flex: 1 1 168px;
+  }
+  .cavcloud-galleryHeadControls .cavcloud-paneTitleSelect,
+  .cavcloud-trashHeadControls .cavcloud-paneTitleSelect,
+  .cavcloud-trashRestorationFilters .cavcloud-paneTitleSelect{
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    padding: 0;
+    border-radius: 8px;
+    border-color: rgba(255,255,255,.16);
+    background-color: rgba(0,0,0,.22);
+    background-image: url("/icons/app/filter-svgrepo-com.svg");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 16px 16px;
+    appearance: none;
+    -webkit-appearance: none;
+    text-indent: 180%;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .cavcloud-galleryHeadControls .cavcloud-paneTitleSelect:hover,
+  .cavcloud-trashHeadControls .cavcloud-paneTitleSelect:hover,
+  .cavcloud-trashRestorationFilters .cavcloud-paneTitleSelect:hover{
+    border-color: rgba(255,255,255,.26);
+    background-color: rgba(0,0,0,.32);
+  }
+  .cavcloud-galleryHeadControls .cavcloud-paneTitleSelect:focus-visible,
+  .cavcloud-trashHeadControls .cavcloud-paneTitleSelect:focus-visible,
+  .cavcloud-trashRestorationFilters .cavcloud-paneTitleSelect:focus-visible{
+    outline-offset: 1px;
+  }
+  .cavcloud-galleryHeadControls .cavcloud-paneTitleSelect:disabled,
+  .cavcloud-trashHeadControls .cavcloud-paneTitleSelect:disabled,
+  .cavcloud-trashRestorationFilters .cavcloud-paneTitleSelect:disabled{
+    opacity: .56;
+  }
+  .cavcloud-galleryHeadControls .cavcloud-paneTitleSelect option,
+  .cavcloud-trashHeadControls .cavcloud-paneTitleSelect option,
+  .cavcloud-trashRestorationFilters .cavcloud-paneTitleSelect option{
+    text-indent: 0;
+    color: rgba(247,251,255,.92);
+    background: #0a1022;
+  }
+  .cavcloud-recentsHeadControls .cavcloud-paneTitleSelect:nth-of-type(2),
+  .cavcloud-syncedHeadControls .cavcloud-paneTitleSelect:nth-of-type(2),
+  .cavcloud-trashHeadControls .cavcloud-paneTitleSelect.is-trashTimeline,
+  .cavcloud-trashRestorationFilters .cavcloud-paneTitleSelect.is-trashTimeline{
+    background-image: url("/icons/app/clock-three-svgrepo-com.svg");
+  }
+  .cavcloud-trashLayoutControls{
+    flex-wrap: nowrap;
+    gap: 8px;
   }
   .cavcloud-paneSubTrash{
     flex-wrap: wrap;
