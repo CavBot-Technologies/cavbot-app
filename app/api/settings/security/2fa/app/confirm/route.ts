@@ -3,9 +3,9 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac } from "crypto";
 
-import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
+import { confirmPendingTotpSecret, readSecurityUserAuth } from "@/lib/settings/securityRuntime.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -99,10 +99,7 @@ export async function POST(req: NextRequest) {
       return json({ ok: false, error: "BAD_CODE", message: "Enter the 6-digit code." }, 400);
     }
 
-    const auth = await prisma.userAuth.findUnique({
-      where: { userId },
-      select: { totpSecretPending: true, twoFactorAppEnabled: true, sessionVersion: true },
-    });
+    const auth = await readSecurityUserAuth(userId);
 
     if (!auth) return json({ ok: false, error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
 
@@ -116,15 +113,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Commit + enable + rotate sessions (recommended)
-    await prisma.userAuth.update({
-      where: { userId },
-      data: {
-        totpSecret: pending,
-        totpSecretPending: null,
-        twoFactorAppEnabled: true,
-        sessionVersion: Number(auth.sessionVersion || 1) + 1,
-      },
+    const committed = await confirmPendingTotpSecret({
+      userId,
+      pendingSecret: pending,
+      nextSessionVersion: Number(auth.sessionVersion || 1) + 1,
     });
+    if (!committed) {
+      return json({ ok: false, error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
+    }
 
     return json({ ok: true }, 200);
   } catch (e: unknown) {

@@ -1,13 +1,17 @@
 // app/api/settings/security/username/route.ts
 import "server-only";
 
-import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
+import { findUserById, getAuthPool } from "@/lib/authDb";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
+import {
+  applyUsernameChange,
+  isSecuritySettingsStoreError,
+  usernameInUse,
+  usernameTombstoneExists,
+} from "@/lib/settings/securityRuntime.server";
 import { auditLogWrite } from "@/lib/audit";
-import { withUsernameHistoryUserIdField } from "@/lib/auditModelCompat";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { readCoarseRequestGeo } from "@/lib/requestGeo";
 import {
@@ -70,10 +74,7 @@ export async function PATCH(req: NextRequest) {
 
     const geo = readCoarseRequestGeo(req);
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { username: true, usernameChangeCount: true, lastUsernameChangeAt: true },
-    });
+    const user = await findUserById(getAuthPool(), userId);
 
     if (!user) {
       return json({ error: "AUTH_NOT_FOUND", message: "User record not found." }, 404);
@@ -84,12 +85,12 @@ export async function PATCH(req: NextRequest) {
       return json({ error: "NO_CHANGE", message: "That is already your username." }, 400);
     }
 
-    const taken = await prisma.user.findFirst({ where: { username: candidate }, select: { id: true } });
+    const taken = await usernameInUse(candidate);
     if (taken) {
       return json({ error: "USERNAME_TAKEN", message: "Username already in use." }, 409);
     }
 
-    const tombstoned = await prisma.usernameTombstone.findUnique({ where: { usernameLower: candidate } });
+    const tombstoned = await usernameTombstoneExists(candidate);
     if (tombstoned) {
       return json({ error: "USERNAME_TAKEN", message: "Username is unavailable." }, 409);
     }
@@ -123,44 +124,12 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    const result = await prisma.$transaction(async (tx) => {
-      const updated = await tx.user.update({
-        where: { id: userId },
-        data: {
-          username: candidate,
-          usernameChangeCount: { increment: 1 },
-          lastUsernameChangeAt: now,
-        },
-        select: { usernameChangeCount: true, lastUsernameChangeAt: true },
-      });
-
-      const usernameHistoryData = withUsernameHistoryUserIdField(
-        {
-          userId,
-          accountId,
-          oldUsername: current || null,
-          newUsername: candidate,
-          changedAt: now,
-        },
-        userId
-      );
-
-      await tx.usernameHistory.create({
-        data: usernameHistoryData as Prisma.UsernameHistoryUncheckedCreateInput,
-      });
-
-      if (current) {
-        await tx.usernameTombstone.create({
-          data: {
-            usernameLower: current,
-            userId,
-            burnedAt: now,
-            reason: "username_change",
-          },
-        });
-      }
-
-      return updated;
+    const result = await applyUsernameChange({
+      userId,
+      accountId,
+      currentUsername: current,
+      nextUsername: candidate,
+      changedAt: now,
     });
 
     await auditLogWrite({
@@ -200,8 +169,8 @@ export async function PATCH(req: NextRequest) {
       return json({ error: e.code, message: e.message }, e.status);
     }
 
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      return json({ error: "USERNAME_TAKEN", message: "Username already in use." }, 409);
+    if (isSecuritySettingsStoreError(e)) {
+      return json({ error: e.code, message: e.message }, e.status);
     }
 
     return json({ error: "USERNAME_UPDATE_FAILED", message: "Unable to update username." }, 500);

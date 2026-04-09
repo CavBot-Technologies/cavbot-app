@@ -1,9 +1,9 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { isApiAuthError, verifyPassword } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
+import { disableTotpForUser, readSecurityUserAuth } from "@/lib/settings/securityRuntime.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -32,31 +32,22 @@ export async function POST(req: NextRequest) {
     const password = String(body?.password || "");
     if (!password) return json({ ok: false, error: "BAD_INPUT", message: "Password is required." }, 400);
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { auth: true },
-    });
+    const auth = await readSecurityUserAuth(userId);
+    if (!auth) return json({ ok: false, error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
 
-    if (!user?.auth) return json({ ok: false, error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
-
-    const salt = String(user.auth.passwordSalt || "");
-    const hash = String(user.auth.passwordHash || "");
-    const iters = Number(user.auth.passwordIters ?? 210000);
+    const salt = String(auth.passwordSalt || "");
+    const hash = String(auth.passwordHash || "");
+    const iters = Number(auth.passwordIters ?? 210000);
 
     const ok = await verifyPassword(password, salt, iters, hash);
     if (!ok) return json({ ok: false, error: "INVALID_PASSWORD", message: "Password is incorrect." }, 403);
 
-    const sv = Number(user.auth.sessionVersion ?? 1);
-
-    await prisma.userAuth.update({
-      where: { userId },
-      data: {
-        twoFactorAppEnabled: false,
-        totpSecret: null,
-        totpSecretPending: null,
-        sessionVersion: sv + 1, // revoke existing sessions
-      },
+    const sv = Number(auth.sessionVersion ?? 1);
+    const disabled = await disableTotpForUser({
+      userId,
+      nextSessionVersion: sv + 1,
     });
+    if (!disabled) return json({ ok: false, error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
 
     return json({ ok: true }, 200);
   } catch (e: unknown) {

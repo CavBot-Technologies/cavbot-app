@@ -2,12 +2,14 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
 import { detectBrowser } from "@/lib/browser";
-import { withAuditLogUserIdField } from "@/lib/auditModelCompat";
+import {
+  deleteSecuritySessionHistoryEntry,
+  listSecuritySessionHistory,
+  readSecuritySessionMeta,
+} from "@/lib/settings/securityRuntime.server";
 import { composeLocationLabel, pickClientIp, readGeoFromMeta, readRequestGeo } from "@/lib/requestGeo";
 
 export const runtime = "nodejs";
@@ -89,18 +91,7 @@ export async function GET(req: NextRequest) {
     const ipNow = pickClientIp(req);
     const geoNow = readRequestGeo(req);
 
-    const events = await prisma.auditLog.findMany({
-      where: withAuditLogUserIdField({ accountId }, userId) as Prisma.AuditLogWhereInput,
-      orderBy: { createdAt: "desc" },
-      take: 20,
-      select: {
-        id: true,
-        createdAt: true,
-        ip: true,
-        userAgent: true,
-        metaJson: true,
-      },
-    });
+    const events = await listSecuritySessionHistory({ accountId, userId, limit: 20 });
 
     type SessionRow = {
       id: string;
@@ -134,9 +125,10 @@ export async function GET(req: NextRequest) {
       const eua = String(e.userAgent || "");
       const b = detectBrowser(eua);
       const dv = deviceLabel(eua);
+      const createdAtIso = new Date(e.createdAt).toISOString();
 
       const ip = String(e.ip || "").trim();
-      const metaGeo = readGeoFromMeta(e.metaJson);
+      const metaGeo = readGeoFromMeta(readSecuritySessionMeta(e.metaJson));
       const locFromMeta = metaGeo.label || composeLocationLabel({ ip: ip || null });
 
       out.push({
@@ -146,8 +138,8 @@ export async function GET(req: NextRequest) {
         device: dv,
         userAgent: eua || null,
         location: locFromMeta,
-        statusText: timeAgo(e.createdAt.toISOString()),
-        createdAt: e.createdAt.toISOString(),
+        statusText: timeAgo(createdAtIso),
+        createdAt: createdAtIso,
         isCurrent: false,
         ip: ip || null,
       });
@@ -171,14 +163,8 @@ export async function DELETE(req: NextRequest) {
     if (!id) return json({ error: "MISSING_ID", message: "Missing session id." }, 400);
     if (id === "current") return json({ error: "CANNOT_DELETE_CURRENT", message: "Cannot delete current session." }, 400);
 
-    const row = await prisma.auditLog.findFirst({
-      where: withAuditLogUserIdField({ id, accountId }, userId) as Prisma.AuditLogWhereInput,
-      select: { id: true },
-    });
-
-    if (!row) return json({ error: "NOT_FOUND", message: "Session record not found." }, 404);
-
-    await prisma.auditLog.delete({ where: { id } });
+    const deleted = await deleteSecuritySessionHistoryEntry({ id, accountId, userId });
+    if (!deleted) return json({ error: "NOT_FOUND", message: "Session record not found." }, 404);
 
     return json({ ok: true }, 200);
   } catch (error: unknown) {

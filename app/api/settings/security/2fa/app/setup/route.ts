@@ -1,9 +1,9 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
+import { readSecurityUserAuth, storePendingTotpSecret } from "@/lib/settings/securityRuntime.server";
 import { randomBytes } from "crypto";
 
 export const runtime = "nodejs";
@@ -71,10 +71,7 @@ export async function POST(req: NextRequest) {
     const userId = sess.sub;
 
     // Ensure auth row exists
-    const auth = await prisma.userAuth.findUnique({
-      where: { userId },
-      select: { twoFactorAppEnabled: true, totpSecretPending: true, totpSecret: true },
-    });
+    const auth = await readSecurityUserAuth(userId);
 
     if (!auth) return json({ ok: false, error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
 
@@ -101,14 +98,8 @@ export async function POST(req: NextRequest) {
     )}&digits=6&period=30`;
 
     // Store pending only (safer)
-    await prisma.userAuth.update({
-      where: { userId },
-      data: {
-        totpSecretPending: secretB32,
-        // Keep disabled until confirm
-        twoFactorAppEnabled: false,
-      },
-    });
+    const updated = await storePendingTotpSecret(userId, secretB32);
+    if (!updated) return json({ ok: false, error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
 
     const qrSvg = await makeQrSvg(otpauthUrl);
 
