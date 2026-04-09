@@ -1,10 +1,11 @@
 import "server-only";
 
+import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
-import { randomBytes } from "crypto";
+import { readSecurityUserAuth, storePendingTotpSecret } from "@/lib/settings/securityRuntime.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,9 +27,6 @@ function safeStr(x: unknown) {
   return typeof x === "string" ? x : x == null ? "" : String(x);
 }
 
-/**
- * Base32 (RFC 4648) – for TOTP secrets
- */
 function base32Encode(buf: Buffer) {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
   let bits = 0;
@@ -56,8 +54,9 @@ function maskSecret(secretB32: string) {
 async function makeQrSvg(otpauthUrl: string): Promise<string | null> {
   try {
     const mod = await import("qrcode");
-    // The qrcode package is a CommonJS export; dynamic import typing can vary across TS configs.
-    const QRCode = mod as unknown as { toString: (text: string, opts: { type: "svg"; margin: number; width: number }) => Promise<string> };
+    const QRCode = mod as unknown as {
+      toString: (text: string, opts: { type: "svg"; margin: number; width: number }) => Promise<string>;
+    };
     return await QRCode.toString(otpauthUrl, { type: "svg", margin: 1, width: 180 });
   } catch {
     return null;
@@ -67,26 +66,11 @@ async function makeQrSvg(otpauthUrl: string): Promise<string | null> {
 export async function POST(req: NextRequest) {
   try {
     const sess = await requireSettingsOwnerSession(req);
-
     const userId = sess.sub;
 
-    // Ensure auth row exists
-    const auth = await prisma.userAuth.findUnique({
-      where: { userId },
-      select: { twoFactorAppEnabled: true, totpSecretPending: true, totpSecret: true },
-    }).catch((error) => {
-      console.error("[settings/security/2fa/setup] auth lookup failed", error);
-      return null;
-    });
+    const auth = await readSecurityUserAuth(userId);
+    if (!auth) return json({ ok: false, error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
 
-    if (!auth) {
-      return json(
-        { ok: false, error: "TOTP_UNAVAILABLE", message: "Authenticator setup is temporarily unavailable." },
-        409
-      );
-    }
-
-    // If already enabled, do not rotate silently
     if (auth.twoFactorAppEnabled && auth.totpSecret) {
       return json(
         {
@@ -94,39 +78,21 @@ export async function POST(req: NextRequest) {
           alreadyEnabled: true,
           secretMasked: maskSecret(String(auth.totpSecret)),
         },
-        200
+        200,
       );
     }
 
-    // Generate a fresh secret (20 bytes is common)
     const secretRaw = randomBytes(20);
     const secretB32 = base32Encode(secretRaw);
 
     const issuer = "CavBot";
     const label = encodeURIComponent(`CavBot:${safeStr(sess.accountId) || "account"}`);
     const otpauthUrl = `otpauth://totp/${label}?secret=${encodeURIComponent(secretB32)}&issuer=${encodeURIComponent(
-      issuer
+      issuer,
     )}&digits=6&period=30`;
 
-    // Store pending only (safer)
-    const persisted = await prisma.userAuth.update({
-      where: { userId },
-      data: {
-        totpSecretPending: secretB32,
-        // Keep disabled until confirm
-        twoFactorAppEnabled: false,
-      },
-    }).catch((error) => {
-      console.error("[settings/security/2fa/setup] pending secret save failed", error);
-      return null;
-    });
-
-    if (!persisted) {
-      return json(
-        { ok: false, error: "TOTP_UNAVAILABLE", message: "Authenticator setup is temporarily unavailable." },
-        409
-      );
-    }
+    const updated = await storePendingTotpSecret(userId, secretB32);
+    if (!updated) return json({ ok: false, error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
 
     const qrSvg = await makeQrSvg(otpauthUrl);
 
@@ -134,12 +100,11 @@ export async function POST(req: NextRequest) {
       {
         ok: true,
         otpauthUrl,
-        // Show ONCE (your requirement)
         secretOnce: secretB32,
         secretMasked: maskSecret(secretB32),
-        qrSvg, // may be null if qrcode isn't installed
+        qrSvg,
       },
-      200
+      200,
     );
   } catch (error: unknown) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code, message: error.message }, error.status);

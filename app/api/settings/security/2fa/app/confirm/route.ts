@@ -3,9 +3,9 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac } from "crypto";
 
-import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
+import { confirmPendingTotpSecret, readSecurityUserAuth } from "@/lib/settings/securityRuntime.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -23,10 +23,6 @@ function json<T>(data: T, init?: number | ResponseInit) {
   const resInit: ResponseInit = typeof init === "number" ? { status: init } : init ?? {};
   return NextResponse.json(data, { ...resInit, headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS } });
 }
-
-/* =========================
-  TOTP helpers
-  ========================= */
 
 function base32ToBytes(b32: string): Buffer {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -75,7 +71,6 @@ function verifyTotp(code: string, secretB32: string): boolean {
   const c = String(code || "").trim();
   if (!/^\d{6}$/.test(c)) return false;
 
-  // small drift window
   const now = Date.now();
   const candidates = [
     totpNow(secretB32, 30, 6, now - 30_000),
@@ -89,7 +84,6 @@ function verifyTotp(code: string, secretB32: string): boolean {
 export async function POST(req: NextRequest) {
   try {
     const sess = await requireSettingsOwnerSession(req);
-
     const userId = sess.sub;
 
     const body = (await readSanitizedJson(req, null)) as null | { code?: string };
@@ -99,20 +93,8 @@ export async function POST(req: NextRequest) {
       return json({ ok: false, error: "BAD_CODE", message: "Enter the 6-digit code." }, 400);
     }
 
-    const auth = await prisma.userAuth.findUnique({
-      where: { userId },
-      select: { totpSecretPending: true, twoFactorAppEnabled: true, sessionVersion: true },
-    }).catch((error) => {
-      console.error("[settings/security/2fa/confirm] auth lookup failed", error);
-      return null;
-    });
-
-    if (!auth) {
-      return json(
-        { ok: false, error: "TOTP_UNAVAILABLE", message: "Authenticator confirmation is temporarily unavailable." },
-        409
-      );
-    }
+    const auth = await readSecurityUserAuth(userId);
+    if (!auth) return json({ ok: false, error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
 
     const pending = String(auth.totpSecretPending || "").trim();
     if (!pending) {
@@ -123,25 +105,13 @@ export async function POST(req: NextRequest) {
       return json({ ok: false, error: "INVALID_CODE", message: "Invalid code." }, 403);
     }
 
-    // Commit + enable + rotate sessions (recommended)
-    const updated = await prisma.userAuth.update({
-      where: { userId },
-      data: {
-        totpSecret: pending,
-        totpSecretPending: null,
-        twoFactorAppEnabled: true,
-        sessionVersion: Number(auth.sessionVersion || 1) + 1,
-      },
-    }).catch((error) => {
-      console.error("[settings/security/2fa/confirm] auth update failed", error);
-      return null;
+    const committed = await confirmPendingTotpSecret({
+      userId,
+      pendingSecret: pending,
+      nextSessionVersion: Number(auth.sessionVersion || 1) + 1,
     });
-
-    if (!updated) {
-      return json(
-        { ok: false, error: "TOTP_UNAVAILABLE", message: "Authenticator confirmation is temporarily unavailable." },
-        409
-      );
+    if (!committed) {
+      return json({ ok: false, error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
     }
 
     return json({ ok: true }, 200);

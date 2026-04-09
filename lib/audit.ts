@@ -1,6 +1,7 @@
-import { prisma } from "@/lib/prisma";
-import { Prisma, type AuditAction, type AuditCategory, type AuditSeverity } from "@prisma/client";
-import { withAuditLogUserIdField } from "@/lib/auditModelCompat";
+import "server-only";
+
+import { getAuthPool, newDbId } from "@/lib/authDb";
+import type { AuditAction, AuditCategory, AuditSeverity } from "@prisma/client";
 
 type AuditActionDefinition = {
   label: string;
@@ -129,7 +130,9 @@ function canonicalizeLast4(value?: unknown) {
   return digits.slice(-4);
 }
 
-function normalizeMeta(meta?: Record<string, unknown> | null): Prisma.InputJsonObject | null {
+type AuditMeta = Record<string, unknown>;
+
+function normalizeMeta(meta?: Record<string, unknown> | null): AuditMeta | null {
   if (!meta) return null;
   const normalized: Record<string, unknown> = {};
 
@@ -168,13 +171,13 @@ function normalizeMeta(meta?: Record<string, unknown> | null): Prisma.InputJsonO
 
   if (!Object.keys(normalized).length) return null;
   try {
-    return JSON.parse(JSON.stringify(normalized)) as Prisma.InputJsonObject;
+    return JSON.parse(JSON.stringify(normalized)) as AuditMeta;
   } catch {
     return null;
   }
 }
 
-function attachOrigin(meta: Prisma.InputJsonObject | null, value?: string | null) {
+function attachOrigin(meta: AuditMeta | null, value?: string | null) {
   const canonical = canonicalizeOrigin(value ?? undefined);
   if (!canonical) return meta;
   if (meta && typeof meta.origin === "string" && meta.origin.trim()) {
@@ -184,7 +187,7 @@ function attachOrigin(meta: Prisma.InputJsonObject | null, value?: string | null
 }
 
 function deriveTargetLabelFromMeta(
-  meta: Prisma.InputJsonObject | null,
+  meta: AuditMeta | null,
   fallbackType?: string | null,
   fallbackId?: string | null
 ) {
@@ -235,26 +238,55 @@ export async function auditLogWrite(params: AuditLogWriteParams) {
   const resolvedTargetLabel = params.targetLabel?.trim() || deriveTargetLabelFromMeta(meta) || null;
 
   try {
-    const data = withAuditLogUserIdField(
-      {
-        accountId: params.accountId,
-        action: params.action,
+    await getAuthPool().query(
+      `INSERT INTO "AuditLog" (
+         "id",
+         "accountId",
+         "operatorUserId",
+         "action",
+         "actionLabel",
+         "category",
+         "severity",
+         "targetType",
+         "targetId",
+         "targetLabel",
+         "metaJson",
+         "ip",
+         "userAgent",
+         "createdAt"
+       )
+       VALUES (
+         $1,
+         $2,
+         $3,
+         $4::"AuditAction",
+         $5,
+         $6::"AuditCategory",
+         $7::"AuditSeverity",
+         $8,
+         $9,
+         $10,
+         $11::jsonb,
+         $12,
+         $13,
+         NOW()
+       )`,
+      [
+        newDbId(),
+        params.accountId,
+        params.operatorUserId ?? null,
+        params.action,
         actionLabel,
         category,
         severity,
-        targetType: params.targetType ?? null,
-        targetId: params.targetId ?? null,
-        targetLabel: resolvedTargetLabel,
-        metaJson: meta ?? undefined,
-        ip: ip || null,
-        userAgent: userAgent || null,
-      },
-      params.operatorUserId ?? null
+        params.targetType ?? null,
+        params.targetId ?? null,
+        resolvedTargetLabel,
+        meta ? JSON.stringify(meta) : null,
+        ip || null,
+        userAgent || null,
+      ],
     );
-
-    await prisma.auditLog.create({
-      data: data as Prisma.AuditLogUncheckedCreateInput,
-    });
   } catch (error) {
     console.error("[auditLog] write failed", error);
   }

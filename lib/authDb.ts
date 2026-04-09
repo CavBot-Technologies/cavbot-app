@@ -80,6 +80,7 @@ type RawUserAuthRow = {
   twoFactorEmailEnabled: boolean;
   twoFactorAppEnabled: boolean;
   totpSecret: string | null;
+  totpSecretPending: string | null;
   sessionVersion: number | null;
 };
 
@@ -173,6 +174,7 @@ export type AuthUserAuth = {
   twoFactorEmailEnabled: boolean;
   twoFactorAppEnabled: boolean;
   totpSecret: string | null;
+  totpSecretPending: string | null;
   sessionVersion: number | null;
 };
 
@@ -344,6 +346,7 @@ function mapUserAuth(row: RawUserAuthRow): AuthUserAuth {
     twoFactorEmailEnabled: Boolean(row.twoFactorEmailEnabled),
     twoFactorAppEnabled: Boolean(row.twoFactorAppEnabled),
     totpSecret: row.totpSecret,
+    totpSecretPending: row.totpSecretPending,
     sessionVersion: row.sessionVersion == null ? null : Number(row.sessionVersion),
   };
 }
@@ -586,6 +589,7 @@ export async function findUserAuth(queryable: Queryable, userId: string) {
         "twoFactorEmailEnabled",
         "twoFactorAppEnabled",
         "totpSecret",
+        "totpSecretPending",
         "sessionVersion"
       FROM "UserAuth"
       WHERE "userId" = $1

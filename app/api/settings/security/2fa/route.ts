@@ -2,9 +2,9 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
+import { readSecurityUserAuth, updateSecurityTwoFactorFlags } from "@/lib/settings/securityRuntime.server";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { readCoarseRequestGeo } from "@/lib/requestGeo";
@@ -31,10 +31,7 @@ export async function GET(req: NextRequest) {
 
     const userId = sess.sub;
 
-    const auth = await prisma.userAuth.findUnique({
-      where: { userId },
-      select: { twoFactorEmailEnabled: true, twoFactorAppEnabled: true },
-    });
+    const auth = await readSecurityUserAuth(userId);
 
     if (!auth) return json({ error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
 
@@ -67,14 +64,10 @@ export async function PATCH(req: NextRequest) {
 
     const geo = readCoarseRequestGeo(req);
 
-    await prisma.userAuth.update({
-      where: { userId },
-      data: {
-        twoFactorEmailEnabled: email2fa,
-        twoFactorAppEnabled: app2fa,
-      },
-      select: { twoFactorEmailEnabled: true, twoFactorAppEnabled: true },
-    });
+    const updated = await updateSecurityTwoFactorFlags({ userId, email2fa, app2fa });
+    if (!updated) {
+      return json({ error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
+    }
 
     if (accountId) {
       await auditLogWrite({

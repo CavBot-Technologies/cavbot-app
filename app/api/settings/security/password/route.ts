@@ -3,7 +3,6 @@ import "server-only";
 
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import {
   isApiAuthError,
   verifyPassword,
@@ -12,6 +11,7 @@ import {
   sessionCookieOptions,
 } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
+import { readSecurityUserAuth, updateSecurityPasswordHash } from "@/lib/settings/securityRuntime.server";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { readCoarseRequestGeo } from "@/lib/requestGeo";
@@ -67,10 +67,7 @@ export async function PATCH(req: NextRequest) {
 
 
     // Load auth record
-    const auth = await prisma.userAuth.findUnique({
-      where: { userId },
-      select: { passwordSalt: true, passwordHash: true, passwordIters: true, sessionVersion: true },
-    });
+    const auth = await readSecurityUserAuth(userId);
 
 
     if (!auth) {
@@ -94,22 +91,16 @@ export async function PATCH(req: NextRequest) {
 
 
     // Transaction: update password + bump sessionVersion
-    const updated = await prisma.$transaction(async (tx) => {
-      return tx.userAuth.update({
-        where: { userId },
-        data: {
-          passwordAlgo: next.algo,
-          passwordIters: next.iters,
-          passwordSalt: next.salt,
-          passwordHash: next.hash,
-
-
-          // revoke ALL existing sessions instantly
-          sessionVersion: { increment: 1 },
-        },
-        select: { sessionVersion: true },
-      });
+    const nextSessionVersion = await updateSecurityPasswordHash({
+      userId,
+      algo: next.algo,
+      iters: next.iters,
+      salt: next.salt,
+      hash: next.hash,
     });
+    if (!nextSessionVersion) {
+      return json({ error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
+    }
 
 
     // Keep current user logged in by minting a NEW session cookie with the new sessionVersion
@@ -117,7 +108,7 @@ export async function PATCH(req: NextRequest) {
       userId,
       accountId,
       memberRole: sess.memberRole,
-      sessionVersion: Number(updated.sessionVersion || 1),
+      sessionVersion: nextSessionVersion,
     });
 
 

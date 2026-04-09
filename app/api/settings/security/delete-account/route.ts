@@ -2,9 +2,13 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { isApiAuthError, verifyPassword } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
+import {
+  countAccountOwners,
+  deleteUserAccount,
+  readSecurityUserAuth,
+} from "@/lib/settings/securityRuntime.server";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { readCoarseRequestGeo } from "@/lib/requestGeo";
@@ -38,23 +42,19 @@ export async function POST(req: NextRequest) {
 
     const geo = readCoarseRequestGeo(req);
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { auth: true },
-    });
+    const auth = await readSecurityUserAuth(userId);
+    if (!auth) return json({ error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
 
-    if (!user || !user.auth) return json({ error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
-
-    const salt = String(user.auth.passwordSalt || "");
-    const hash = String(user.auth.passwordHash || "");
-    const iters = Number(user.auth.passwordIters || 210000);
+    const salt = String(auth.passwordSalt || "");
+    const hash = String(auth.passwordHash || "");
+    const iters = Number(auth.passwordIters || 210000);
 
     const ok = await verifyPassword(password, salt, iters, hash);
     if (!ok) return json({ error: "INVALID_PASSWORD", message: "Password is incorrect." }, 403);
 
     // Block removing last OWNER (industry standard)
     if (sess.memberRole === "OWNER") {
-      const owners = await prisma.membership.count({ where: { accountId, role: "OWNER" } });
+      const owners = await countAccountOwners(accountId);
       if (owners <= 1) {
         return json(
           {
@@ -66,17 +66,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await prisma.$transaction(async (tx) => {
-      // Cascades remove UserAuth/AuthTokens/Memberships/etc (per your schema)
-      await tx.user.delete({ where: { id: userId } });
-    });
+    const deleted = await deleteUserAccount(userId);
+    if (!deleted) return json({ error: "AUTH_NOT_FOUND", message: "Auth record not found." }, 404);
 
     if (accountId) {
       await auditLogWrite({
         request: req,
         action: "ACCOUNT_DELETED",
         accountId,
-        operatorUserId: userId,
+        operatorUserId: null,
         targetType: "auth",
         targetId: userId,
         targetLabel: userId,
