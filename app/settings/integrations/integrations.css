@@ -677,8 +677,10 @@
 }
 .cb-filterSelect{
   appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
   height: 34px;
-  padding: 0 34px 0 12px;
+  padding: 0 40px 0 12px;
   border-radius: 10px;
   border: 1px solid rgba(255,255,255,0.16);
   background:
@@ -691,15 +693,9 @@
   line-height: 1;
   cursor: pointer;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
-  background-image:
-    linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.72) 50%),
-    linear-gradient(135deg, rgba(255,255,255,0.72) 50%, transparent 50%);
-  background-position:
-    right 14px center,
-    right 9px center;
-  background-size:
-    6px 6px,
-    6px 6px;
+  background-image: var(--sx-select-chevron-svg, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23C5CEE7' stroke-width='1.35' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"));
+  background-position: calc(100% - 14px) center;
+  background-size: 10px 6px;
   background-repeat: no-repeat;
 }
 .cb-filterSelect:focus{
@@ -714,6 +710,10 @@
   background:
     linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.14)),
     rgba(0,0,0,0.32);
+  background-image: var(--sx-select-chevron-svg, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23C5CEE7' stroke-width='1.35' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"));
+  background-position: calc(100% - 14px) center;
+  background-size: 10px 6px;
+  background-repeat: no-repeat;
 }
 
 .cb-filterBar {
@@ -1348,6 +1348,8 @@
 
 .cb-pickerSelect {
   appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
   height: 38px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -1355,7 +1357,7 @@
     linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.14)),
     rgba(0, 0, 0, 0.34);
   color: rgba(247, 249, 255, 0.88);
-  padding: 0 38px 0 12px;
+  padding: 0 40px 0 12px;
   font-size: 13px;
   font-weight: 550;
   cursor: pointer;
@@ -1363,15 +1365,9 @@
   line-height: 1;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
   transition: border-color 0.2s ease, background 0.2s ease;
-  background-image:
-    linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.70) 50%),
-    linear-gradient(135deg, rgba(255,255,255,0.70) 50%, transparent 50%);
-  background-position:
-    right 14px center,
-    right 9px center;
-  background-size:
-    6px 6px,
-    6px 6px;
+  background-image: var(--sx-select-chevron-svg, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23C5CEE7' stroke-width='1.35' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"));
+  background-position: calc(100% - 14px) center;
+  background-size: 10px 6px;
   background-repeat: no-repeat;
 }
 .cb-pickerSelect:hover{
@@ -1379,6 +1375,10 @@
   background:
     linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.16)),
     rgba(0, 0, 0, 0.36);
+  background-image: var(--sx-select-chevron-svg, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23C5CEE7' stroke-width='1.35' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"));
+  background-position: calc(100% - 14px) center;
+  background-size: 10px 6px;
+  background-repeat: no-repeat;
 }
 .cb-pickerSelect:focus{
   outline: none;
