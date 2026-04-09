@@ -26,7 +26,10 @@ jobs:
       # Official production app origin used for URL generation during build.
       CAVBOT_APP_ORIGIN: https://app.cavbot.io
       APP_URL: https://app.cavbot.io
+      NEXT_PUBLIC_APP_ORIGIN: https://app.cavbot.io
       NEXT_PUBLIC_APP_URL: https://app.cavbot.io
+      NEXT_PUBLIC_WIDGET_CONFIG_ORIGIN: https://app.cavbot.io
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_live_51SsIgA0H03R4PCfTE71vHIXAcwrTiXITwassSUpLsl7aMn4HmpcstFXO6tCi2FxCXClrPPQcUMHN6Af4NEDtPhLo00XiNpm18i
       ALLOWED_ORIGINS: https://app.cavbot.io
       # Optional security secret for CavAi external share tokens.
       CAVAI_SHARE_TOKEN_SECRET: ${{ secrets.CAVAI_SHARE_TOKEN_SECRET }}
