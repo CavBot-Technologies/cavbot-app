@@ -1259,8 +1259,10 @@ body{ margin:0; }
 .cavcloud-galleryLayoutMenu{
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
-  width: min(270px, 84vw);
+  left: 0;
+  right: auto;
+  width: min(270px, calc(100vw - 56px));
+  max-width: calc(100vw - 56px);
   border-radius: 14px;
   border: 1px solid rgba(255,255,255,.18);
   background:
@@ -1273,6 +1275,7 @@ body{ margin:0; }
   flex-direction: column;
   gap: 10px;
   z-index: 24;
+  overflow: hidden;
 }
 .cavcloud-galleryLayoutMenuTitle{
   font-size: 11px;
