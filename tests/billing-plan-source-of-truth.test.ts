@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { computeBillingPlanResolution } from "../lib/billingPlan.server";
+import { inferBillingCycleFromSubscription, normalizeBillingCycleValue } from "../lib/billingRuntime.server";
 
 function read(relPath: string) {
   return fs.readFileSync(path.resolve(relPath), "utf8");
@@ -72,4 +73,22 @@ test("billing client ignores non-authoritative fallback summaries and does not w
   assert.equal(source.includes("(!billingSummaryResolved ? bootPlanId : null)"), true);
   assert.equal(source.includes('label: billingSummaryResolved ? "Plan unavailable" : "Loading..."'), true);
   assert.equal(source.includes("globalThis.__cbLocalStore.setItem("), false);
+});
+
+test("billing runtime infers annual cycle from a legacy year-long subscription window", () => {
+  const billingCycle = inferBillingCycleFromSubscription({
+    billingCycle: null,
+    stripePriceId: null,
+    currentPeriodStart: new Date("2026-04-06T19:01:48.858Z"),
+    currentPeriodEnd: new Date("2027-04-06T19:01:48.858Z"),
+  });
+
+  assert.equal(billingCycle, "annual");
+});
+
+test("billing cycle normalization ignores empty metadata instead of forcing monthly", () => {
+  assert.equal(normalizeBillingCycleValue(""), null);
+  assert.equal(normalizeBillingCycleValue(null), null);
+  assert.equal(normalizeBillingCycleValue("annual"), "annual");
+  assert.equal(normalizeBillingCycleValue("monthly"), "monthly");
 });

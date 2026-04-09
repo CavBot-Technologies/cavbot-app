@@ -3,6 +3,8 @@ import "server-only";
 import pg from "pg";
 
 import { getAuthPool } from "@/lib/authDb";
+import type { BillingCycle } from "@/lib/plans";
+import { planFromPriceId } from "@/lib/stripe";
 
 type Queryable = {
   query: <T extends pg.QueryResultRow = pg.QueryResultRow>(
@@ -94,7 +96,7 @@ export type BillingRuntimeSubscription = {
   currentPeriodEnd: Date | null;
   provider: string | null;
   customerId: string | null;
-  billingCycle: string | null;
+  billingCycle: BillingCycle | null;
   stripePriceId: string | null;
   stripeSubscriptionId: string | null;
 };
@@ -116,6 +118,11 @@ const BILLING_RUNTIME_SOFT_FAIL_DB_CODES = new Set([
   "57P02",
   "57P03",
 ]);
+
+const ONE_DAY_MS = 86_400_000;
+const MONTHLY_CYCLE_MIN_DAYS = 20;
+const MONTHLY_CYCLE_MAX_DAYS = 45;
+const ANNUAL_CYCLE_MIN_DAYS = 300;
 
 function collectErrorMessages(err: unknown, depth = 0): string[] {
   if (!err || depth > 3) return [];
@@ -168,6 +175,38 @@ function asNumber(value: number | string | null | undefined) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
+export function normalizeBillingCycleValue(value: unknown): BillingCycle | null {
+  const token = String(value ?? "").trim().toLowerCase();
+  if (!token) return null;
+  if (token.includes("annual") || token.includes("year")) return "annual";
+  if (token.includes("month")) return "monthly";
+  return null;
+}
+
+export function inferBillingCycleFromSubscription(args: {
+  billingCycle?: unknown;
+  stripePriceId?: unknown;
+  currentPeriodStart?: Date | string | null;
+  currentPeriodEnd?: Date | string | null;
+}): BillingCycle | null {
+  const explicit = normalizeBillingCycleValue(args.billingCycle);
+  if (explicit) return explicit;
+
+  const stripePriceId = String(args.stripePriceId ?? "").trim();
+  const priceMatch = stripePriceId ? planFromPriceId(stripePriceId) : null;
+  if (priceMatch?.billing) return priceMatch.billing;
+
+  const currentPeriodStart = asDate(args.currentPeriodStart);
+  const currentPeriodEnd = asDate(args.currentPeriodEnd);
+  if (!currentPeriodStart || !currentPeriodEnd) return null;
+
+  const durationDays = (currentPeriodEnd.getTime() - currentPeriodStart.getTime()) / ONE_DAY_MS;
+  if (!Number.isFinite(durationDays) || durationDays <= 0) return null;
+  if (durationDays >= ANNUAL_CYCLE_MIN_DAYS) return "annual";
+  if (durationDays >= MONTHLY_CYCLE_MIN_DAYS && durationDays <= MONTHLY_CYCLE_MAX_DAYS) return "monthly";
+  return null;
+}
+
 function mapBillingAccount(row: RawBillingAccountRow): BillingRuntimeAccount {
   return {
     id: row.id,
@@ -202,7 +241,12 @@ function mapBillingSubscription(row: RawBillingSubscriptionRow): BillingRuntimeS
     currentPeriodEnd: asDate(row.currentPeriodEnd),
     provider: row.provider ?? null,
     customerId: row.customerId ?? null,
-    billingCycle: row.billingCycle ?? null,
+    billingCycle: inferBillingCycleFromSubscription({
+      billingCycle: row.billingCycle,
+      stripePriceId: row.stripePriceId,
+      currentPeriodStart: row.currentPeriodStart,
+      currentPeriodEnd: row.currentPeriodEnd,
+    }),
     stripePriceId: row.stripePriceId ?? null,
     stripeSubscriptionId: row.stripeSubscriptionId ?? null,
   };

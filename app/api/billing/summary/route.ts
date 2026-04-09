@@ -8,6 +8,7 @@ import { getQwenCoderPopoverState } from "@/src/lib/ai/qwen-coder-credits.server
 import { resolveBillingAccountContext } from "@/lib/billingAccount.server";
 import { resolveBillingPlanResolution, type BillingPlanSource } from "@/lib/billingPlan.server";
 import {
+  normalizeBillingCycleValue,
   isBillingRuntimeUnavailableError,
   readBillingAccount,
   readBillingUsageMetrics,
@@ -154,9 +155,11 @@ export async function GET(req: NextRequest) {
     const seatLimit = limitToNullable(planDef.limits.seats);
     const websiteLimit = limitToNullable(planDef.limits.websites);
 
-    const billingCycleRaw =
-      subRow?.billingCycle || account.pendingDowngradeBilling || account.lastUpgradeBilling || "monthly";
-    const billingCycle = billingCycleRaw === "annual" ? "annual" : "monthly";
+    const billingCycle =
+      normalizeBillingCycleValue(subRow?.billingCycle)
+      ?? normalizeBillingCycleValue(account.pendingDowngradeBilling)
+      ?? normalizeBillingCycleValue(account.lastUpgradeBilling)
+      ?? "monthly";
 
     let subscription = null;
 

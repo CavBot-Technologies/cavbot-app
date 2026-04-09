@@ -50,6 +50,9 @@ test("billing runtime store reads account state, subscriptions, usage counts, an
   const source = read("lib/billingRuntime.server.ts");
 
   assert.equal(source.includes("getAuthPool"), true);
+  assert.equal(source.includes("inferBillingCycleFromSubscription"), true);
+  assert.equal(source.includes("normalizeBillingCycleValue"), true);
+  assert.equal(source.includes("planFromPriceId"), true);
   assert.equal(source.includes('FROM "Account"'), true);
   assert.equal(source.includes('UPDATE "Account"'), true);
   assert.equal(source.includes('FROM "Subscription"'), true);
@@ -69,6 +72,7 @@ test("billing summary source-of-truth path avoids Prisma runtime reads and uses 
   assert.equal(routeSource.includes("readBillingAccount"), true);
   assert.equal(routeSource.includes("readLatestBillingSubscription"), true);
   assert.equal(routeSource.includes("readBillingUsageMetrics"), true);
+  assert.equal(routeSource.includes("normalizeBillingCycleValue"), true);
 
   assert.equal(planSource.includes('from "@/lib/prisma"'), false);
   assert.equal(planSource.includes("getAuthPool"), true);
