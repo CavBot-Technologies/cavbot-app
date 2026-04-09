@@ -6320,12 +6320,23 @@ body{ margin:0; }
     align-items: stretch;
   }
   .cavcloud-paneHead{
-    align-items: flex-start;
+    align-items: center;
     gap: 10px;
   }
   .cavcloud-paneTitle{
     flex: 1 1 auto;
     min-width: 0;
+  }
+  .cavcloud-paneSub{
+    margin-left: auto;
+    flex: 0 0 auto;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    text-align: right;
+    white-space: nowrap;
   }
   .cavcloud-opQueueHead{
     flex-direction: column;
@@ -6348,13 +6359,19 @@ body{ margin:0; }
   }
   .cavcloud-galleryHeadControls{
     width: 100%;
-    justify-content: flex-end;
+    justify-content: flex-start;
     flex-wrap: nowrap;
     gap: 8px;
     min-width: 0;
   }
   .cavcloud-galleryHeadControls .cavcloud-folderBackBtn{
-    margin-right: auto;
+    margin-right: 0;
+  }
+  .cavcloud-galleryHeadControls .cavcloud-galleryLayoutBtn,
+  .cavcloud-recentsHeadControls .cavcloud-trashClearFiltersBtn,
+  .cavcloud-syncedHeadControls .cavcloud-trashClearFiltersBtn,
+  .cavcloud-trashHeadControls .cavcloud-trashLayoutControls{
+    margin-left: auto;
   }
   .cavcloud-sharedGrid.is-list .cavcloud-galleryFrame{
     width: 108px;
@@ -6366,7 +6383,7 @@ body{ margin:0; }
   }
   .cavcloud-trashHeadControls{
     width: 100%;
-    justify-content: flex-end;
+    justify-content: flex-start;
     flex-wrap: nowrap;
     gap: 8px;
     min-width: 0;
@@ -6374,28 +6391,30 @@ body{ margin:0; }
   .cavcloud-trashRestorationFilters{
     width: auto;
     max-width: 100%;
-    justify-content: flex-end;
+    justify-content: flex-start;
     flex-wrap: nowrap;
     gap: 8px;
     min-width: 0;
+    margin-right: auto;
   }
   .cavcloud-galleryHeadControls .cavcloud-paneTitleSelect,
   .cavcloud-trashHeadControls .cavcloud-paneTitleSelect,
   .cavcloud-trashRestorationFilters .cavcloud-paneTitleSelect{
-    width: 36px;
-    min-width: 36px;
-    height: 36px;
-    flex: 0 0 36px;
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
     padding: 0;
     border-radius: 8px;
     border-color: rgba(255,255,255,.16);
     background-color: rgba(0,0,0,.22);
-    background-image: url("/icons/app/filter-svgrepo-com.svg");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M19 3H5C3.89543 3 3 3.89543 3 5V6.17157C3 6.70201 3.21071 7.21071 3.58579 7.58579L9.41421 13.4142C9.78929 13.7893 10 14.298 10 14.8284V20.2857C10 20.9183 10.7649 21.2351 11.2122 20.7878L13.4142 18.5858C13.7893 18.2107 14 17.702 14 17.1716V14.8284C14 14.298 14.2107 13.7893 14.5858 13.4142L20.4142 7.58579C20.7893 7.21071 21 6.70201 21 6.17157V5C21 3.89543 20.1046 3 19 3Z' stroke='%23F7FBFF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: center;
-    background-size: 16px 16px;
+    background-size: 13px 13px;
     appearance: none;
     -webkit-appearance: none;
+    color: transparent;
     text-indent: 180%;
     white-space: nowrap;
     overflow: hidden;
@@ -6427,14 +6446,25 @@ body{ margin:0; }
   .cavcloud-syncedHeadControls .cavcloud-paneTitleSelect:nth-of-type(2),
   .cavcloud-trashHeadControls .cavcloud-paneTitleSelect.is-trashTimeline,
   .cavcloud-trashRestorationFilters .cavcloud-paneTitleSelect.is-trashTimeline{
-    background-image: url("/icons/app/clock-three-svgrepo-com.svg");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M12 7V12H15M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z' stroke='%23F7FBFF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   }
   .cavcloud-trashLayoutControls{
     flex-wrap: nowrap;
     gap: 8px;
   }
   .cavcloud-paneSubTrash{
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    width: 100%;
+  }
+  .cavcloud-paneSubTrash .cavcloud-trashRestorationFilters{
+    order: 1;
+  }
+  .cavcloud-paneSubTrash .cavcloud-trashRestoreLogBtn,
+  .cavcloud-paneSubTrash .cavcloud-trashNoticeBtn{
+    order: 2;
+  }
+  .cavcloud-paneSubTrash > span{
+    order: 3;
   }
   .cavcloud-galleryLayoutMenu{
     left: 0;
