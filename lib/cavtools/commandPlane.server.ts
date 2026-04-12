@@ -5,7 +5,7 @@ import type { ChildProcess } from "node:child_process";
 import { lstat, mkdtemp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Prisma, type CavCloudShareMode, type PlanTier, type PublicArtifactVisibility } from "@prisma/client";
+import { Prisma, type CavCloudShareMode, type PublicArtifactVisibility } from "@prisma/client";
 
 import {
   ApiAuthError,
@@ -15,6 +15,7 @@ import {
   requireUser,
   type CavbotAccountSession,
 } from "@/lib/apiAuth";
+import { findLatestEntitledSubscription, resolveEffectivePlanId } from "@/lib/accountPlan.server";
 import { auditLogWrite } from "@/lib/audit";
 import { getProjectSummaryForTenant } from "@/lib/cavbotApi.server";
 import {
@@ -51,7 +52,7 @@ import {
 } from "@/lib/cavsafe/storage.server";
 import { getCavsafeObjectStream } from "@/lib/cavsafe/r2.server";
 import { createCavSafeInvite, revokeCavSafeAccess } from "@/lib/cavsafe/privateShare.server";
-import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
+import { type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { requirePremiumEntitlement } from "@/lib/security/authorize";
 import { buildCavGuardDecision } from "@/src/lib/cavguard/cavGuard.registry";
@@ -1264,13 +1265,69 @@ async function resolveAccountPlan(accountId: string): Promise<PlanId> {
       trialEndsAt: true,
     },
   });
+  const entitledSubscription = await findLatestEntitledSubscription(accountId);
+  return resolveEffectivePlanId({
+    account,
+    subscription: entitledSubscription,
+  });
+}
 
-  const tier = (account?.tier || "FREE") as PlanTier;
-  const trialEndsAtMs = account?.trialEndsAt ? new Date(account.trialEndsAt).getTime() : 0;
-  if (account?.trialSeatActive && Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now()) {
-    return "premium_plus";
+function normalizeExecMemberRole(value: unknown): "OWNER" | "ADMIN" | "MEMBER" {
+  const normalized = s(value).toUpperCase();
+  if (normalized === "OWNER") return "OWNER";
+  if (normalized === "ADMIN") return "ADMIN";
+  return "MEMBER";
+}
+
+function pickPrimaryExecMembership<
+  T extends {
+    accountId: string;
+    role: unknown;
+    createdAt: Date;
+  },
+>(rows: T[]) {
+  return [...rows].sort((a, b) => {
+    const aRole = normalizeExecMemberRole(a.role);
+    const bRole = normalizeExecMemberRole(b.role);
+    const rank =
+      (bRole === "OWNER" ? 3 : bRole === "ADMIN" ? 2 : 1) -
+      (aRole === "OWNER" ? 3 : aRole === "ADMIN" ? 2 : 1);
+    if (rank !== 0) return rank;
+    return a.createdAt.getTime() - b.createdAt.getTime();
+  })[0] ?? null;
+}
+
+async function resolveMembershipForExecContext(accountId: string, userId: string) {
+  const memberships = await prisma.membership.findMany({
+    where: {
+      userId,
+    },
+    select: {
+      accountId: true,
+      role: true,
+      createdAt: true,
+    },
+  });
+
+  const exact = memberships.find((membership) => membership.accountId === accountId) || null;
+  if (exact) {
+    return {
+      accountId: exact.accountId,
+      memberRole: normalizeExecMemberRole(exact.role),
+      repairedFromSession: false,
+    };
   }
-  return resolvePlanIdFromTier(tier);
+
+  const primary = pickPrimaryExecMembership(memberships);
+  if (!primary) {
+    throw new CavtoolsExecError("UNAUTHORIZED", "Unauthorized", 401, "AUTH_REQUIRED");
+  }
+
+  return {
+    accountId: primary.accountId,
+    memberRole: normalizeExecMemberRole(primary.role),
+    repairedFromSession: primary.accountId !== accountId,
+  };
 }
 
 async function resolveProjectForContext(accountId: string, projectIdHint: number | null) {
@@ -1322,13 +1379,15 @@ async function resolveExecContext(req: Request, input: CavtoolsExecInput): Promi
   requireUser(session);
   requireAccountContext(session);
 
-  const accountId = s(session.accountId);
+  const sessionAccountId = s(session.accountId);
   const userId = s(session.sub);
-  if (!accountId || !userId) {
+  if (!sessionAccountId || !userId) {
     throw new CavtoolsExecError("UNAUTHORIZED", "Unauthorized", 401, "AUTH_REQUIRED");
   }
 
-  const memberRole = (s(session.memberRole).toUpperCase() || "MEMBER") as "OWNER" | "ADMIN" | "MEMBER";
+  const membership = await resolveMembershipForExecContext(sessionAccountId, userId);
+  const accountId = membership.accountId;
+  const memberRole = membership.memberRole;
 
   const projectIdHintNum = Number(input.projectId);
   const projectIdHint = Number.isFinite(projectIdHintNum) && Number.isInteger(projectIdHintNum) && projectIdHintNum > 0
@@ -1341,7 +1400,11 @@ async function resolveExecContext(req: Request, input: CavtoolsExecInput): Promi
   ]);
 
   return {
-    session: session as CavbotAccountSession & { sub: string },
+    session: {
+      ...(session as CavbotAccountSession & { sub: string }),
+      accountId,
+      memberRole,
+    },
     accountId,
     userId,
     memberRole,

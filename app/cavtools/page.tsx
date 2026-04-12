@@ -124,6 +124,12 @@ type RunResult = {
 
 type BootPhase = "mounting" | "context-loading" | "ready" | "limited";
 
+type ExplorerRootState = {
+  loading: boolean;
+  errorCode: string | null;
+  errorMessage: string | null;
+};
+
 const ROOTS: Array<{ namespace: CavtoolsNamespace; label: string; path: string }> = [
   { namespace: "cavcloud", label: "CavCloud", path: "/cavcloud" },
   { namespace: "cavsafe", label: "CavSafe", path: "/cavsafe" },
@@ -131,6 +137,49 @@ const ROOTS: Array<{ namespace: CavtoolsNamespace; label: string; path: string }
   { namespace: "telemetry", label: "Telemetry", path: "/telemetry" },
   { namespace: "workspace", label: "Workspace", path: "/workspace" },
 ];
+
+const STATIC_ROOT_ITEMS: Record<"/telemetry" | "/workspace", CavtoolsFsItem[]> = {
+  "/telemetry": [
+    "summary",
+    "routes",
+    "errors",
+    "seo",
+    "a11y",
+    "geo",
+    "scans",
+    "export",
+  ].map((name) => ({
+    type: "file",
+    namespace: "telemetry",
+    name,
+    path: `/telemetry/${name}`,
+    readOnly: true,
+  })),
+  "/workspace": [
+    "status",
+    "sites",
+    "members",
+    "guardrails",
+    "notices",
+  ].map((name) => ({
+    type: "file",
+    namespace: "workspace",
+    name,
+    path: `/workspace/${name}`,
+    readOnly: true,
+  })),
+};
+
+const INITIAL_ROOT_SYNC_STATE: Record<string, ExplorerRootState> = Object.fromEntries(
+  ROOTS.map((root) => [
+    root.path,
+    {
+      loading: false,
+      errorCode: null,
+      errorMessage: null,
+    } satisfies ExplorerRootState,
+  ])
+);
 
 const DEFAULT_CWD = "/cavcloud";
 const ROOT_TOKEN_RE = /^(cavcloud|cavsafe|cavcode|telemetry|workspace)(\/|$)/i;
@@ -664,9 +713,10 @@ function CavToolsPageInner() {
     "/cavcloud": [],
     "/cavsafe": [],
     "/cavcode": [],
-    "/telemetry": [],
-    "/workspace": [],
+    "/telemetry": STATIC_ROOT_ITEMS["/telemetry"],
+    "/workspace": STATIC_ROOT_ITEMS["/workspace"],
   });
+  const [rootSyncState, setRootSyncState] = useState<Record<string, ExplorerRootState>>(INITIAL_ROOT_SYNC_STATE);
   const [expandedDirs, setExpandedDirs] = useState<Record<string, boolean>>({
     "/cavcloud": true,
     "/cavsafe": false,
@@ -1005,11 +1055,36 @@ function CavToolsPageInner() {
   const refreshDirectory = useCallback(
     async (path: string, opts?: { silent?: boolean; logEvent?: boolean }) => {
       const p = normalizePath(path);
+      setRootSyncState((prev) => ({
+        ...prev,
+        [p]: {
+          loading: true,
+          errorCode: null,
+          errorMessage: null,
+        },
+      }));
       try {
         const result = await callExec(`ls ${p}`, p);
         applyExecResult(result, { renderOutput: false, updateCwd: false, logEvent: opts?.logEvent ?? false });
+        setRootSyncState((prev) => ({
+          ...prev,
+          [p]: {
+            loading: false,
+            errorCode: result.ok ? null : String(result.error?.code || "SYNC_FAILED"),
+            errorMessage: result.ok ? null : String(result.error?.message || "Directory sync failed."),
+          },
+        }));
         return result;
       } catch (error) {
+        const message = String((error as Error)?.message || "Directory sync failed.");
+        setRootSyncState((prev) => ({
+          ...prev,
+          [p]: {
+            loading: false,
+            errorCode: "SYNC_FAILED",
+            errorMessage: message,
+          },
+        }));
         if (opts?.silent) return;
         setSyncStatus({ lastSyncTs: Date.now(), serverReachable: false });
         pushSystemEvent("directory_refresh_fail", `Failed to sync ${p}.`, "bad", {
@@ -1346,6 +1421,68 @@ function CavToolsPageInner() {
     );
   }
 
+  function renderRootPlaceholder(root: { namespace: CavtoolsNamespace; label: string; path: string }) {
+    const sync = rootSyncState[root.path] || INITIAL_ROOT_SYNC_STATE[root.path];
+
+    if (root.namespace === "cavsafe" && !canUseCavsafe) {
+      const title = memberRole !== "OWNER" ? "Owner required" : "Premium required";
+      const detail =
+        memberRole !== "OWNER"
+          ? "CavSafe in CavTools requires the workspace owner session."
+          : "CavSafe access requires Premium or Premium Plus on this workspace.";
+      return (
+        <div className="cb-cavtools-rootempty">
+          <div className="cb-cavtools-rootempty-title">{title}</div>
+          <div className="cb-cavtools-rootempty-copy">{detail}</div>
+        </div>
+      );
+    }
+
+    if (root.namespace === "cavcode" && activeProjectId == null) {
+      return (
+        <div className="cb-cavtools-rootempty">
+          <div className="cb-cavtools-rootempty-title">No active project</div>
+          <div className="cb-cavtools-rootempty-copy">Select or bind a project to load CavCode workspace files.</div>
+        </div>
+      );
+    }
+
+    if (sync?.loading) {
+      return (
+        <div className="cb-cavtools-rootempty">
+          <div className="cb-cavtools-rootempty-title">Loading…</div>
+          <div className="cb-cavtools-rootempty-copy">Syncing {root.label} entries from the command plane.</div>
+        </div>
+      );
+    }
+
+    if (sync?.errorCode) {
+      const title =
+        sync.errorCode === "PROCESS_RUNTIME_UNAVAILABLE"
+          ? "Unavailable"
+          : sync.errorCode === "PROJECT_REQUIRED"
+            ? "No active project"
+            : sync.errorCode === "CAVSAFE_OWNER_ONLY"
+              ? "Owner required"
+              : sync.errorCode === "CAVSAFE_PLAN_REQUIRED"
+                ? "Premium required"
+                : "Sync failed";
+      return (
+        <div className="cb-cavtools-rootempty">
+          <div className="cb-cavtools-rootempty-title">{title}</div>
+          <div className="cb-cavtools-rootempty-copy">{sync.errorMessage || `Unable to load ${root.label}.`}</div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="cb-cavtools-rootempty">
+        <div className="cb-cavtools-rootempty-title">Empty</div>
+        <div className="cb-cavtools-rootempty-copy">No {root.label.toLowerCase()} entries are available yet.</div>
+      </div>
+    );
+  }
+
   const inspectorBody = useMemo(() => {
     return [
       "# CavTools Command Plane",
@@ -1673,7 +1810,6 @@ function CavToolsPageInner() {
 
   useEffect(() => {
     if (!canUseCavsafe) {
-      setGroupOpen((prev) => (prev.cavsafe ? { ...prev, cavsafe: false } : prev));
       if (cwd.startsWith("/cavsafe")) setCwd("/cavcloud");
       if (activePath.startsWith("/cavsafe")) {
         setActiveNamespace(null);
@@ -2084,19 +2220,22 @@ function CavToolsPageInner() {
                   const isOpen = Boolean(groupOpen[root.namespace]);
                   const rootItems = dirCache[root.path] || [];
                   const isCavsafeLocked = root.namespace === "cavsafe" && !canUseCavsafe;
+                  const cavsafeLockReason =
+                    memberRole !== "OWNER"
+                      ? "CavSafe in CavTools requires the workspace owner session."
+                      : "CavSafe access requires Premium or Premium Plus on this workspace.";
                   return (
                     <div className="cb-cavtools-group" key={root.path}>
                       <button
                         type="button"
                         className={`cb-cavtools-grouphead cb-cavtools-groupbtn${isCavsafeLocked ? " is-disabled" : ""}`}
                         onClick={() => {
-                          if (isCavsafeLocked) return;
                           const nextOpen = !Boolean(groupOpen[root.namespace]);
                           setGroupOpen((prev) => ({
                             ...prev,
                             [root.namespace]: nextOpen,
                           }));
-                          if (nextOpen && !rootItems.length) {
+                          if (nextOpen && !isCavsafeLocked && !rootItems.length) {
                             void refreshDirectory(root.path);
                           }
                         }}
@@ -2104,18 +2243,16 @@ function CavToolsPageInner() {
                           if (!isCavsafeLocked && !rootItems.length) prefetchDirectory(root.path);
                         }}
                         aria-expanded={isOpen}
-                        disabled={isCavsafeLocked}
-                        title={isCavsafeLocked ? "CavSafe is owner-only in CavTools." : undefined}
+                        aria-disabled={isCavsafeLocked}
+                        title={isCavsafeLocked ? cavsafeLockReason : undefined}
                       >
-                        <span className={`cb-cavtools-groupchev ${isOpen ? "is-open" : ""}`} aria-hidden="true">
-                          ▸
-                        </span>
-                        <span>{root.label}</span>
+                        <span className="cb-cavtools-grouplabel">{root.label}</span>
+                        <span className={`cb-cavtools-groupchev ${isOpen ? "is-open" : ""}`} aria-hidden="true" />
                       </button>
 
                       {isOpen ? (
                         <div className="cb-cavtools-groupitems">
-                          {!isCavsafeLocked && rootItems.length ? renderDirectory(root.path, 0) : null}
+                          {!isCavsafeLocked && rootItems.length ? renderDirectory(root.path, 0) : renderRootPlaceholder(root)}
                         </div>
                       ) : null}
                     </div>

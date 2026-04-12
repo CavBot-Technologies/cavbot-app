@@ -516,7 +516,8 @@ body{
 
   display:flex;
   align-items:center;
-  gap:8px;
+  justify-content:space-between;
+  gap:10px;
   cursor:pointer;
   border-radius:2px !important;
   transition: background 80ms linear, color 80ms linear;
@@ -535,13 +536,27 @@ body{
   background: rgba(8,15,37,0.42);
 }
 
-.cb-cavtools-groupchev{
-  display:inline-block;
-  transform: rotate(0deg);
-  transition: transform 90ms linear;
-  color: rgba(222,233,255,0.76);
+.cb-cavtools-grouplabel{
+  min-width:0;
+  flex:1 1 auto;
 }
-.cb-cavtools-groupchev.is-open{ transform: rotate(90deg); }
+.cb-cavtools-groupchev{
+  flex:0 0 auto;
+  width:10px;
+  height:6px;
+  pointer-events:none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23DDE7FF' stroke-width='1.35' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position:center;
+  background-repeat:no-repeat;
+  background-size:10px 6px;
+  opacity:0.72;
+  transform: rotate(0deg);
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+.cb-cavtools-grouphead:hover .cb-cavtools-groupchev{
+  opacity:0.96;
+}
+.cb-cavtools-groupchev.is-open{ transform: rotate(180deg); }
 
 .cb-cavtools-groupitems{
   display:flex;
@@ -550,6 +565,25 @@ body{
   padding:12px 8px 14px;
   margin-top:0;
   border-top:1px solid rgba(137,163,218,0.10);
+}
+.cb-cavtools-rootempty{
+  border:1px solid rgba(137,163,218,0.14);
+  background: rgba(8,14,34,0.44);
+  border-radius:9px;
+  padding:11px 12px;
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+}
+.cb-cavtools-rootempty-title{
+  font-size:10px;
+  font-weight:860;
+  color: rgba(236,243,255,0.9);
+}
+.cb-cavtools-rootempty-copy{
+  font-size:10px;
+  line-height:1.45;
+  color: rgba(182,198,231,0.72);
 }
 .cb-cavtools-treelevel{
   display:flex;
