@@ -23,6 +23,12 @@ test("production deploy wiring applies prisma migrations before shipping", () =>
   assert.match(workflow, /npx prisma migrate deploy/);
   assert.match(workflow, /MIGRATE_DATABASE_URL/);
   assert.match(workflow, /MIGRATE_DIRECT_URL/);
+  assert.match(workflow, /secrets\.MIGRATE_DATABASE_URL \|\| secrets\.DATABASE_URL/);
+  assert.match(workflow, /secrets\.MIGRATE_DIRECT_URL \|\| secrets\.DIRECT_URL/);
   assert.match(workflow, /Missing database deploy secret/);
-  assert.match(workflow, /DATABASE_URL or DIRECT_URL/);
+  assert.match(workflow, /MIGRATE_DIRECT_URL \(preferred\) or MIGRATE_DATABASE_URL/);
+  assert.match(workflow, /Invalid migrate DATABASE_URL/);
+  assert.match(workflow, /Invalid migrate DIRECT_URL/);
+  assert.match(workflow, /db\.prisma\.io:5432/);
+  assert.match(deployScript, /!trimmed\.includes\("db\.prisma\.io:5432"\)/);
 });

@@ -15,7 +15,9 @@ const env = {
 function hasRealDatabaseUrl(value) {
   const trimmed = String(value || "").trim();
   if (!trimmed) return false;
-  return !trimmed.includes("placeholder@127.0.0.1:5432/cavbot");
+  return !trimmed.includes("placeholder@127.0.0.1:5432/cavbot")
+    && !trimmed.includes("paste_your_base_url_here")
+    && !trimmed.includes("db.prisma.io:5432");
 }
 
 function run(command, args) {
