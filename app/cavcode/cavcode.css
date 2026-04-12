@@ -5884,13 +5884,15 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-term-inbar{
-  height: 36px;
-  border-top: 1px solid rgba(255,255,255,.08);
+  height: 38px;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 0 12px;
-  background: rgba(4,7,22,.88);
+  margin: 8px 10px 10px;
+  border: 1px solid rgba(255,255,255,.09);
+  background: linear-gradient(180deg, rgba(10,14,33,.94), rgba(5,8,22,.92));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
 }
 
 .cc-term-prompt{
@@ -8287,8 +8289,11 @@ html body .cc-root .cc-ide .cc-panel [data-cc-hard="term-input"]{
 html body .cc-root .cc-ide .cc-panel [data-cc-hard="term-inbar"]{
   gap: 12px !important;
   padding: 0 12px !important;
-  background: rgba(4,7,22,.92) !important;
-  border-top: 1px solid rgba(255,255,255,.08) !important;
+  height: 38px !important;
+  margin: 8px 10px 10px !important;
+  border: 1px solid rgba(255,255,255,.09) !important;
+  background: linear-gradient(180deg, rgba(10,14,33,.96), rgba(5,8,22,.94)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.03) !important;
 }
 
 html body .cc-root .cc-ide .cc-panel [data-cc-hard="term-input"]{

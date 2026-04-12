@@ -1789,14 +1789,27 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   const hasPendingPrompt = submitting && Boolean(s(pendingPromptText));
   const hasInlineEdit = Boolean(inlineEditDraft);
   const hasExistingThread = Boolean(sessionId || visibleMessages.length || currentSession || hasPendingPrompt || hasInlineEdit);
-  const showCodePanelEmptyLogo =
+  const showCodePanelChatBrand =
     !cavenInteractionLocked
     && viewMode !== "history"
     && !loadingMessages
+    && !loadingQueue
     && !hasPendingPrompt
     && !hasInlineEdit
     && !visibleMessages.length
     && !hasQueuedPrompts;
+  const showCodePanelHistoryBrand =
+    !cavenInteractionLocked
+    && viewMode === "history"
+    && !loadingSessions
+    && !filteredSessions.length;
+  const codePanelIdleBrand = (
+    <div className={styles.codePanelIdleBrand}>
+      <span className={styles.codePanelEmptyLogo} role="img" aria-label={heroLine}>
+        <span className={styles.codePanelEmptyLogoGlyph} aria-hidden="true" />
+      </span>
+    </div>
+  );
   const promptPlaceholder = promptFocused
     ? ""
     : hasExistingThread
@@ -4875,7 +4888,9 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
           {viewMode === "history" ? (
             <div className={styles.sessionsList}>
               {!filteredSessions.length ? (
-                <div className={styles.historyEmpty} />
+                <div className={styles.historyEmpty}>
+                  {showCodePanelHistoryBrand ? codePanelIdleBrand : null}
+                </div>
               ) : null}
 
               {filteredSessions.map((item) => {
@@ -4906,22 +4921,8 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
               })}
             </div>
           ) : (
-            <div className={[styles.chatStream, showCodePanelEmptyLogo ? styles.chatStreamEmpty : ""].filter(Boolean).join(" ")}>
-              {showCodePanelEmptyLogo ? (
-                <div className={styles.codePanelIdleBrand}>
-                  <span className={styles.codePanelEmptyLogo} role="img" aria-label={heroLine}>
-                    <Image
-                      src="/icons/app/cavcode/atom-svgrepo-com.svg"
-                      alt=""
-                      width={58}
-                      height={58}
-                      className={styles.codePanelEmptyLogoGlyph}
-                      aria-hidden="true"
-                      unoptimized
-                    />
-                  </span>
-                </div>
-              ) : null}
+            <div className={[styles.chatStream, showCodePanelChatBrand ? styles.chatStreamEmpty : ""].filter(Boolean).join(" ")}>
+              {showCodePanelChatBrand ? codePanelIdleBrand : null}
 
               {loadingQueue ? <div className={styles.metaText}>Loading queue...</div> : null}
 

@@ -23,16 +23,18 @@ test("caven empty state renders the atom svg with a soft light-grey treatment", 
   const source = read("components/cavai/CavAiCodeWorkspace.tsx");
   const css = read("components/cavai/CavAiWorkspace.module.css");
 
-  assert.equal(source.includes('src="/icons/app/cavcode/atom-svgrepo-com.svg"'), true);
-  assert.equal(source.includes("className={styles.codePanelIdleBrand}"), true);
-  assert.equal(source.includes("width={58}"), true);
-  assert.equal(source.includes("height={58}"), true);
+  assert.equal(source.includes("const showCodePanelHistoryBrand ="), true);
+  assert.equal(source.includes("const codePanelIdleBrand = ("), true);
+  assert.equal(source.includes("className={styles.codePanelEmptyLogoGlyph}"), true);
+  assert.equal(source.includes("{showCodePanelHistoryBrand ? codePanelIdleBrand : null}"), true);
   assert.equal(source.includes("className={styles.codePanelEmptyLogoGlyph}"), true);
   assert.equal(css.includes(".codePanelIdleBrand {"), true);
   assert.equal(css.includes("min-height: clamp(220px, 42vh, 360px);"), true);
   assert.equal(css.includes(".codePanelEmptyLogo {"), true);
-  assert.equal(css.includes("width: 92px;"), true);
-  assert.equal(css.includes("height: 92px;"), true);
-  assert.equal(css.includes("opacity: 0.62;"), true);
-  assert.equal(css.includes("filter: brightness(0) saturate(100%) invert(88%)"), true);
+  assert.equal(css.includes("width: 104px;"), true);
+  assert.equal(css.includes("height: 104px;"), true);
+  assert.equal(css.includes('-webkit-mask: url("/icons/app/cavcode/atom-svgrepo-com.svg") center / contain no-repeat;'), true);
+  assert.equal(css.includes('mask: url("/icons/app/cavcode/atom-svgrepo-com.svg") center / contain no-repeat;'), true);
+  assert.equal(css.includes("background: rgba(224, 231, 242, 0.7);"), true);
+  assert.equal(css.includes("opacity: 0.9;"), true);
 });

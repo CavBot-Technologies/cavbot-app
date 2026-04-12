@@ -1678,23 +1678,26 @@
   min-height: clamp(220px, 42vh, 360px);
   display: grid;
   place-items: center;
+  width: 100%;
   padding: 8px 0 0;
 }
 
 .codePanelEmptyLogo {
-  width: 92px;
-  height: 92px;
+  width: 104px;
+  height: 104px;
   display: grid;
   place-items: center;
 }
 
 .codePanelEmptyLogoGlyph {
-  width: 58px;
-  height: 58px;
+  width: 64px;
+  height: 64px;
   display: block;
-  opacity: 0.62;
-  object-fit: contain;
-  filter: brightness(0) saturate(100%) invert(88%) sepia(12%) saturate(251%) hue-rotate(184deg) brightness(97%) contrast(92%);
+  background: rgba(224, 231, 242, 0.7);
+  -webkit-mask: url("/icons/app/cavcode/atom-svgrepo-com.svg") center / contain no-repeat;
+  mask: url("/icons/app/cavcode/atom-svgrepo-com.svg") center / contain no-repeat;
+  opacity: 0.9;
+  filter: drop-shadow(0 0 20px rgba(208, 220, 244, 0.08));
 }
 
 .codePanelMode .empty,
