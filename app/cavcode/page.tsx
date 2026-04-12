@@ -1,8 +1,10 @@
 "use client";
 
 /**
- * CavCode — CavBot Code Editor — VS Code-class shell (no toy UI)
+ * CavCode — CavBot Code Editor (Monaco) — VS Code-class shell (no toy UI)
  *
+ * Install:
+ *   npm i monaco-editor @monaco-editor/react
  */
 
 import "./cavcode.css";
@@ -12,7 +14,7 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DiffEditorProps, EditorProps } from "@monaco-editor/react";
 import type * as MonacoType from "monaco-editor";
 import type { WorkspaceNode } from "@/src/lib/cavTerminal";
@@ -42,7 +44,6 @@ import {
   resolveAiModelLabel,
 } from "@/src/lib/ai/model-catalog";
 import { toReasoningDisplayHelper, toReasoningDisplayLabel } from "@/src/lib/ai/reasoning-display";
-import { readBootClientPlanBootstrap, subscribeClientPlan } from "@/lib/clientPlan";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 
 type MonacoApi = typeof import("monaco-editor");
@@ -70,7 +71,7 @@ type MonacoLangs = {
   };
 };
 
-/** Default export is the editor component */
+/** @monaco-editor/react default export is the Editor component */
 const MonacoEditor = dynamic(async () => {
   const mod = await import("@monaco-editor/react");
   return mod.default;
@@ -1160,7 +1161,7 @@ const CAVCODE_SHORTCUTS: ShortcutDefinition[] = [
     id: "find",
     command: "Find in active editor",
     when: "Editor",
-    source: "Editor",
+    source: "Monaco",
     mac: [["⌘", "F"]],
     win: [["Ctrl", "F"]],
     keywords: ["find", "search", "editor"],
@@ -1169,7 +1170,7 @@ const CAVCODE_SHORTCUTS: ShortcutDefinition[] = [
     id: "replace",
     command: "Replace in active editor",
     when: "Editor",
-    source: "Editor",
+    source: "Monaco",
     mac: [["⌘", "H"]],
     win: [["Ctrl", "H"]],
     keywords: ["replace", "editor"],
@@ -1178,7 +1179,7 @@ const CAVCODE_SHORTCUTS: ShortcutDefinition[] = [
     id: "quick-fix",
     command: "Quick fix or CavAi fix",
     when: "Editor diagnostics",
-    source: "Editor + CavAi",
+    source: "Monaco + CavAi",
     mac: [["⌘", "."]],
     win: [["Ctrl", "."]],
     keywords: ["quick fix", "fix", "diagnostics"],
@@ -1187,7 +1188,7 @@ const CAVCODE_SHORTCUTS: ShortcutDefinition[] = [
     id: "organize-imports",
     command: "Organize imports",
     when: "Editor",
-    source: "Editor",
+    source: "Monaco",
     mac: [["⌘", "⇧", "O"]],
     win: [["Ctrl", "Shift", "O"]],
     keywords: ["imports", "organize"],
@@ -1825,13 +1826,6 @@ function normalizePlanId(value: unknown): "free" | "premium" | "premium_plus" {
   return "free";
 }
 
-function resolveServerPlanId(
-  planIdRaw: unknown,
-  fallback: "free" | "premium" | "premium_plus"
-): "free" | "premium" | "premium_plus" {
-  return String(planIdRaw || "").trim() ? normalizePlanId(planIdRaw) : fallback;
-}
-
 function planTierRank(planId: "free" | "premium" | "premium_plus"): number {
   if (planId === "premium_plus") return 3;
   if (planId === "premium") return 2;
@@ -2001,24 +1995,27 @@ function agentBuilderPlanModelOptions(planIdRaw: unknown): AgentBuilderModelOpti
   }));
 }
 
-function clampAgentBuilderModelOptionsToPlan(
+function mergeAgentBuilderModelOptionsWithPlan(
   options: AgentBuilderModelOption[],
   planIdRaw: unknown
 ): AgentBuilderModelOption[] {
-  const allowed = new Set(agentBuilderPlanModelIds(planIdRaw));
-  const nextOptions = normalizeAgentBuilderModelOptions(options.filter((option) => allowed.has(String(option.id || "").trim())));
-  return nextOptions.length ? nextOptions : agentBuilderPlanModelOptions(planIdRaw);
+  return normalizeAgentBuilderModelOptions([
+    ...agentBuilderPlanModelOptions(planIdRaw),
+    ...options,
+  ]);
 }
 
-function clampAgentBuilderReasoningOptionsToPlan(
+function mergeAgentBuilderReasoningOptionsWithPlan(
   options: AgentBuilderReasoningLevel[],
   planIdRaw: unknown
 ): AgentBuilderReasoningLevel[] {
-  const set = new Set<AgentBuilderReasoningLevel>(reasoningLevelsForPlan(planIdRaw));
-  const nextOptions = AGENT_BUILDER_REASONING_OPTIONS
+  const set = new Set<AgentBuilderReasoningLevel>([
+    ...reasoningLevelsForPlan(planIdRaw),
+    ...options,
+  ]);
+  return AGENT_BUILDER_REASONING_OPTIONS
     .map((option) => option.value)
-    .filter((level) => set.has(level) && options.includes(level));
-  return nextOptions.length ? nextOptions : reasoningLevelsForPlan(planIdRaw);
+    .filter((level) => set.has(level));
 }
 
 function normalizeAgentSurfaceFromUnknown(value: unknown): "cavcode" | "center" | "all" {
@@ -5169,7 +5166,7 @@ function isTypingTarget(t: EventTarget | null) {
   const tag = (el.tagName || "").toLowerCase();
   if (tag === "input" || tag === "textarea" || tag === "select") return true;
   if (el.isContentEditable) return true;
-  // If inside the editor, never treat Delete as a filesystem delete.
+  // If inside Monaco, never treat Delete as filesystem delete.
   if (el.closest?.(".monaco-editor")) return true;
   return false;
 }
@@ -5403,48 +5400,41 @@ function IconGearGlyph({ className, size }: { className?: string; size?: number 
   );
 }
 
-function IconThemeGlyph({ className, size }: { className?: string; size?: number }) {
-  const iconSize = Number.isFinite(size) ? Math.max(8, Math.round(size as number)) : 18;
-  return (
-    <Image
-      className={className}
-      src="/icons/app/cavcode/palette-svgrepo-com.svg"
-      alt=""
-      width={iconSize}
-      height={iconSize}
-      aria-hidden="true"
-      unoptimized
-    />
-  );
-}
-
 function IconKeyboardGlyph({ className, size }: { className?: string; size?: number }) {
   const iconSize = Number.isFinite(size) ? Math.max(8, Math.round(size as number)) : 18;
   return (
-    <Image
+    <svg
       className={className}
-      src="/icons/app/cavcode/keyboard-svgrepo-com.svg"
-      alt=""
       width={iconSize}
       height={iconSize}
+      viewBox="0 0 24 24"
+      fill="none"
       aria-hidden="true"
-      unoptimized
-    />
+      focusable="false"
+    >
+      <rect x="2.5" y="5" width="19" height="14" rx="3.2" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M6.5 10.2h1.4M9.6 10.2H11m2.1 0h1.4m2.1 0H18m-11.5 3.3h1.4m2.1 0H11m2.1 0h4.9m-11.5 3.3H18" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
   );
 }
 
 function IconCollaboratorsGlyph({ className, size }: { className?: string; size?: number }) {
   const iconSize = Number.isFinite(size) ? Math.max(8, Math.round(size as number)) : 18;
   return (
-    <Image
+    <svg
       className={className}
-      src="/icons/app/cavcode/team-svgrepo-com.svg"
-      alt=""
       width={iconSize}
       height={iconSize}
+      viewBox="0 0 24 24"
+      fill="none"
       aria-hidden="true"
-      unoptimized
-    />
+      focusable="false"
+    >
+      <path
+        d="M8 11.2a2.9 2.9 0 1 0 0-5.8 2.9 2.9 0 0 0 0 5.8Zm8 0a2.55 2.55 0 1 0 0-5.1 2.55 2.55 0 0 0 0 5.1ZM4.5 18.2c0-2.2 2.1-4 4.7-4s4.8 1.8 4.8 4v.3H4.5v-.3Zm10.4.3c.2-1.15-.1-2.24-.73-3.14 1.97.18 3.43 1.54 3.43 3.14v.02H14.9v-.02Z"
+        fill="currentColor"
+      />
+    </svg>
   );
 }
 
@@ -5556,86 +5546,6 @@ function seedFS(): FolderNode {
   };
 }
 
-const SELF_TEST_FOLDER_PATH = "/.cavcode-self-test";
-const DIAGNOSTICS_SELF_TEST_FILES: Array<{ name: string; lang: Lang; content: string }> = [
-  {
-    name: "ts-error.ts",
-    lang: "typescript",
-    content: `const typedNumber: number = "untyped";`,
-  },
-  {
-    name: "ts-quickfix.tsx",
-    lang: "typescript",
-    content: `import { useMemo } from "react";
-
-export default function QuickFixExample() {
-  return <div>CavAi Fixes</div>;
-}`,
-  },
-  {
-    name: "ts-alias.ts",
-    lang: "typescript",
-    content: `import { default as layout } from "@/app/layout";
-console.log(layout);`,
-  },
-  {
-    name: "valid.html",
-    lang: "html",
-    content: `<!DOCTYPE html>
-<html lang="en">
-  <body>
-    <button type="button">Valid</button>
-  </body>
-</html>`,
-  },
-  {
-    name: "invalid.html",
-    lang: "html",
-    content: `<div>
-  <span>Missing closing tags`,
-  },
-];
-
-function injectDiagnosticsSelfTestFiles(root: FolderNode): FolderNode {
-  const clone = safeClone(root);
-  let folder = findNodeByPath(clone, SELF_TEST_FOLDER_PATH);
-  if (!folder) {
-    folder = {
-      id: uid("fld"),
-      kind: "folder",
-      name: ".cavcode-self-test",
-      path: SELF_TEST_FOLDER_PATH,
-      children: [],
-    };
-    clone.children = [...clone.children, folder];
-  }
-  if (!isFolder(folder)) return clone;
-
-  folder.children = DIAGNOSTICS_SELF_TEST_FILES.map((fileDef) => {
-    const filePath = joinPath(SELF_TEST_FOLDER_PATH, fileDef.name);
-    const existing = findNodeByPath(clone, filePath);
-    if (existing && isFile(existing)) {
-      return {
-        ...existing,
-        lang: fileDef.lang,
-        content: fileDef.content,
-        name: fileDef.name,
-        path: filePath,
-      };
-    }
-    return {
-      id: uid("file"),
-      kind: "file",
-      name: fileDef.name,
-      lang: fileDef.lang,
-      path: filePath,
-      content: fileDef.content,
-    };
-  });
-
-  return clone;
-}
-
 function cloneNodeWithNewIds(node: FolderNode | FileNode, parentPath: string): FolderNode | FileNode {
   if (node.kind === "file") {
     return {
@@ -5731,12 +5641,11 @@ export default function CavCodePage() {
 
   // settings
   const [settings, setSettings] = useState<EditorSettings>(DEFAULT_SETTINGS);
-  const [settingsSection, setSettingsSection] = useState<"editor" | "theme" | "collaborators">("editor");
+  const [settingsSection, setSettingsSection] = useState<"editor" | "collaborators">("editor");
   const [keyboardShortcutsQuery, setKeyboardShortcutsQuery] = useState("");
   const [skillsPageView, setSkillsPageView] = useState<SkillsPageView>("agents");
   const [cavenIdeSettings, setCavenIdeSettings] = useState<CavenIdeSettings>(DEFAULT_CAVEN_IDE_SETTINGS);
-  const [planBoot] = useState(() => readBootClientPlanBootstrap());
-  const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">(() => planBoot.planId);
+  const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">("free");
   const [savingCavenIdeSettingsKey, setSavingCavenIdeSettingsKey] = useState<keyof CavenIdeSettings | "">("");
   const settingsBootstrappedRef = useRef(false);
   const settingsPersistTimerRef = useRef<number | null>(null);
@@ -5788,11 +5697,11 @@ export default function CavCodePage() {
   const [createAgentAiWorkingMode, setCreateAgentAiWorkingMode] = useState<AgentBuilderAiMode | null>(null);
   const [createAgentAiControlMenu, setCreateAgentAiControlMenu] = useState<AgentBuilderControlMenu>(null);
   const [createAgentAiModelOptions, setCreateAgentAiModelOptions] = useState<AgentBuilderModelOption[]>(
-    () => agentBuilderPlanModelOptions(planBoot.planId)
+    () => agentBuilderPlanModelOptions("free")
   );
   const [createAgentAiModelId, setCreateAgentAiModelId] = useState(DEEPSEEK_CHAT_MODEL_ID);
   const [createAgentAiReasoningOptions, setCreateAgentAiReasoningOptions] = useState<AgentBuilderReasoningLevel[]>(
-    () => reasoningLevelsForPlan(planBoot.planId)
+    DEFAULT_AGENT_BUILDER_REASONING_LEVELS
   );
   const [createAgentAiReasoningLevel, setCreateAgentAiReasoningLevel] =
     useState<AgentBuilderReasoningLevel>("medium");
@@ -5829,13 +5738,11 @@ export default function CavCodePage() {
   const [changesHeaderMenuOpen, setChangesHeaderMenuOpen] = useState(false);
   const [explorerHeaderMenuOpen, setExplorerHeaderMenuOpen] = useState(false);
   const [runHeaderMenuOpen, setRunHeaderMenuOpen] = useState(false);
-  const [settingsHeaderMenuOpen, setSettingsHeaderMenuOpen] = useState(false);
   const panelViewMenuRef = useRef<HTMLDivElement | null>(null);
   const scmHeaderMenuRef = useRef<HTMLDivElement | null>(null);
   const changesHeaderMenuRef = useRef<HTMLDivElement | null>(null);
   const explorerHeaderMenuRef = useRef<HTMLDivElement | null>(null);
   const runHeaderMenuRef = useRef<HTMLDivElement | null>(null);
-  const settingsHeaderMenuRef = useRef<HTMLDivElement | null>(null);
   const [runDebugExpanded, setRunDebugExpanded] = useState(false);
 
   // problems
@@ -5849,8 +5756,6 @@ export default function CavCodePage() {
 
   // Auth context (for System virtual files)
   const [me, setMe] = useState<{ userId: string; username: string; displayName: string } | null>(null);
-  const [sessionAuthenticated, setSessionAuthenticated] = useState(false);
-  const [authProbeReady, setAuthProbeReady] = useState(false);
 
   // terminal (command bus day-1)
   const [termLines, setTermLines] = useState<string[]>([]);
@@ -5960,11 +5865,11 @@ export default function CavCodePage() {
   const [changesCommitAiPromptHintCycle, setChangesCommitAiPromptHintCycle] = useState(0);
   const [changesCommitAiWorkingMode, setChangesCommitAiWorkingMode] = useState<CommitMessageAiMode | null>(null);
   const [changesCommitAiModelOptions, setChangesCommitAiModelOptions] = useState<AgentBuilderModelOption[]>(
-    () => agentBuilderPlanModelOptions(planBoot.planId)
+    () => agentBuilderPlanModelOptions("free")
   );
   const [changesCommitAiModelId, setChangesCommitAiModelId] = useState(DEEPSEEK_CHAT_MODEL_ID);
   const [changesCommitAiReasoningOptions, setChangesCommitAiReasoningOptions] = useState<AgentBuilderReasoningLevel[]>(
-    () => reasoningLevelsForPlan(planBoot.planId)
+    DEFAULT_AGENT_BUILDER_REASONING_LEVELS
   );
   const [changesCommitAiReasoningLevel, setChangesCommitAiReasoningLevel] =
     useState<AgentBuilderReasoningLevel>("medium");
@@ -6009,7 +5914,7 @@ export default function CavCodePage() {
     lastSavedRevision: 0,
   });
 
-  // Editor refs
+  // Monaco refs
   const editorRef = useRef<MonacoType.editor.IStandaloneCodeEditor | null>(null);
   const editorRefs = useRef<Record<EditorPane, MonacoType.editor.IStandaloneCodeEditor | null>>({
     primary: null,
@@ -6129,21 +6034,6 @@ export default function CavCodePage() {
     const timerOwner = typeof window === "undefined" ? globalThis : window;
     if (toastTimer.current) timerOwner.clearTimeout(toastTimer.current);
     toastTimer.current = timerOwner.setTimeout(() => setToast(null), 2600);
-  }, []);
-
-  useLayoutEffect(() => {
-    const boot = readBootClientPlanBootstrap();
-    setAccountPlanId(boot.planId);
-    setCreateAgentAiModelOptions(agentBuilderPlanModelOptions(boot.planId));
-    setCreateAgentAiReasoningOptions(reasoningLevelsForPlan(boot.planId));
-    setChangesCommitAiModelOptions(agentBuilderPlanModelOptions(boot.planId));
-    setChangesCommitAiReasoningOptions(reasoningLevelsForPlan(boot.planId));
-  }, []);
-
-  useEffect(() => {
-    return subscribeClientPlan((planId) => {
-      setAccountPlanId(planId);
-    });
   }, []);
 
   const persistWorkspaceSnapshotToServer = useCallback(
@@ -7216,9 +7106,8 @@ export default function CavCodePage() {
   }, [applyAgentSettingsFromServer, cavenIdeSettings, installedAgentIds, pushToast, savingCavenIdeSettingsKey]);
 
   useEffect(() => {
-    if (!authProbeReady || !sessionAuthenticated) return;
     void refreshInstalledAgentsFromSettings(true);
-  }, [authProbeReady, refreshInstalledAgentsFromSettings, sessionAuthenticated]);
+  }, [refreshInstalledAgentsFromSettings]);
 
   useEffect(() => {
     if (!agentManageMenuId) return;
@@ -7505,13 +7394,14 @@ export default function CavCodePage() {
         modelCatalog?: { text?: unknown[] };
         reasoning?: { maxLevel?: unknown; options?: unknown[] };
       };
-      const effectivePlanId = resolveServerPlanId(body.planId, accountPlanId);
+      const policyPlanId = normalizePlanId(body.planId);
+      const effectivePlanId =
+        planTierRank(policyPlanId) >= planTierRank(accountPlanId) ? policyPlanId : accountPlanId;
       if (!res.ok || body.ok !== true) {
-        setChangesCommitAiModelOptions(agentBuilderPlanModelOptions(effectivePlanId));
-        setChangesCommitAiReasoningOptions(reasoningLevelsForPlan(effectivePlanId));
+        setChangesCommitAiModelOptions((prev) => mergeAgentBuilderModelOptionsWithPlan(prev, effectivePlanId));
+        setChangesCommitAiReasoningOptions((prev) => mergeAgentBuilderReasoningOptionsWithPlan(prev, effectivePlanId));
         return;
       }
-      setAccountPlanId(effectivePlanId);
 
       const catalogRows = Array.isArray(body.modelCatalog?.text)
         ? body.modelCatalog?.text.map((row) => toModelOptionFromUnknown(row)).filter(Boolean) as AgentBuilderModelOption[]
@@ -7520,7 +7410,7 @@ export default function CavCodePage() {
         .filter(Boolean)
         .map((id) => ({ id, label: resolveAiModelLabel(id) }));
       const nextModels = normalizeAgentBuilderModelOptions(catalogRows.length ? catalogRows : fallbackRows);
-      setChangesCommitAiModelOptions(clampAgentBuilderModelOptionsToPlan(nextModels, effectivePlanId));
+      setChangesCommitAiModelOptions(mergeAgentBuilderModelOptionsWithPlan(nextModels, effectivePlanId));
 
       const optionsFromPolicy = normalizeReasoningOptions(body.reasoning?.options);
       const optionsFromMax = reasoningLevelsUpTo(body.reasoning?.maxLevel);
@@ -7531,10 +7421,10 @@ export default function CavCodePage() {
           : optionsFromMax.length
             ? optionsFromMax
             : optionsFromPlan;
-      setChangesCommitAiReasoningOptions(clampAgentBuilderReasoningOptionsToPlan(nextReasoning, effectivePlanId));
+      setChangesCommitAiReasoningOptions(mergeAgentBuilderReasoningOptionsWithPlan(nextReasoning, effectivePlanId));
     } catch {
-      setChangesCommitAiModelOptions(agentBuilderPlanModelOptions(accountPlanId));
-      setChangesCommitAiReasoningOptions(reasoningLevelsForPlan(accountPlanId));
+      setChangesCommitAiModelOptions((prev) => mergeAgentBuilderModelOptionsWithPlan(prev, accountPlanId));
+      setChangesCommitAiReasoningOptions((prev) => mergeAgentBuilderReasoningOptionsWithPlan(prev, accountPlanId));
     } finally {
       setChangesCommitAiModelsLoaded(true);
     }
@@ -7554,13 +7444,14 @@ export default function CavCodePage() {
         modelCatalog?: { text?: unknown[] };
         reasoning?: { maxLevel?: unknown; options?: unknown[] };
       };
-      const effectivePlanId = resolveServerPlanId(body.planId, accountPlanId);
+      const policyPlanId = normalizePlanId(body.planId);
+      const effectivePlanId =
+        planTierRank(policyPlanId) >= planTierRank(accountPlanId) ? policyPlanId : accountPlanId;
       if (!res.ok || body.ok !== true) {
-        setCreateAgentAiModelOptions(agentBuilderPlanModelOptions(effectivePlanId));
-        setCreateAgentAiReasoningOptions(reasoningLevelsForPlan(effectivePlanId));
+        setCreateAgentAiModelOptions((prev) => mergeAgentBuilderModelOptionsWithPlan(prev, effectivePlanId));
+        setCreateAgentAiReasoningOptions((prev) => mergeAgentBuilderReasoningOptionsWithPlan(prev, effectivePlanId));
         return;
       }
-      setAccountPlanId(effectivePlanId);
 
       const catalogRows = Array.isArray(body.modelCatalog?.text)
         ? body.modelCatalog?.text.map((row) => toModelOptionFromUnknown(row)).filter(Boolean) as AgentBuilderModelOption[]
@@ -7569,7 +7460,7 @@ export default function CavCodePage() {
         .filter(Boolean)
         .map((id) => ({ id, label: resolveAiModelLabel(id) }));
       const nextModels = normalizeAgentBuilderModelOptions(catalogRows.length ? catalogRows : fallbackRows);
-      setCreateAgentAiModelOptions(clampAgentBuilderModelOptionsToPlan(nextModels, effectivePlanId));
+      setCreateAgentAiModelOptions(mergeAgentBuilderModelOptionsWithPlan(nextModels, effectivePlanId));
 
       const optionsFromPolicy = normalizeReasoningOptions(body.reasoning?.options);
       const optionsFromMax = reasoningLevelsUpTo(body.reasoning?.maxLevel);
@@ -7580,10 +7471,10 @@ export default function CavCodePage() {
           : optionsFromMax.length
             ? optionsFromMax
             : optionsFromPlan;
-      setCreateAgentAiReasoningOptions(clampAgentBuilderReasoningOptionsToPlan(nextReasoning, effectivePlanId));
+      setCreateAgentAiReasoningOptions(mergeAgentBuilderReasoningOptionsWithPlan(nextReasoning, effectivePlanId));
     } catch {
-      setCreateAgentAiModelOptions(agentBuilderPlanModelOptions(accountPlanId));
-      setCreateAgentAiReasoningOptions(reasoningLevelsForPlan(accountPlanId));
+      setCreateAgentAiModelOptions((prev) => mergeAgentBuilderModelOptionsWithPlan(prev, accountPlanId));
+      setCreateAgentAiReasoningOptions((prev) => mergeAgentBuilderReasoningOptionsWithPlan(prev, accountPlanId));
     } finally {
       setCreateAgentAiModelsLoaded(true);
     }
@@ -7796,10 +7687,10 @@ export default function CavCodePage() {
   }, [changesCommitAiReasoningLevel, changesCommitAiReasoningOptions]);
 
   useEffect(() => {
-    setChangesCommitAiModelOptions(agentBuilderPlanModelOptions(accountPlanId));
-    setChangesCommitAiReasoningOptions(reasoningLevelsForPlan(accountPlanId));
-    setCreateAgentAiModelOptions(agentBuilderPlanModelOptions(accountPlanId));
-    setCreateAgentAiReasoningOptions(reasoningLevelsForPlan(accountPlanId));
+    setChangesCommitAiModelOptions((prev) => mergeAgentBuilderModelOptionsWithPlan(prev, accountPlanId));
+    setChangesCommitAiReasoningOptions((prev) => mergeAgentBuilderReasoningOptionsWithPlan(prev, accountPlanId));
+    setCreateAgentAiModelOptions((prev) => mergeAgentBuilderModelOptionsWithPlan(prev, accountPlanId));
+    setCreateAgentAiReasoningOptions((prev) => mergeAgentBuilderReasoningOptionsWithPlan(prev, accountPlanId));
   }, [accountPlanId]);
 
   useEffect(() => {
@@ -8201,8 +8092,8 @@ export default function CavCodePage() {
   }, [activeProjectRoot, fs]);
 
   /* =========================
-    Editor cancellation noise suppression (dev overlay killer)
-    The editor can legitimately cancel async work when switching models.
+    Monaco cancellation noise suppression (dev overlay killer)
+    Monaco can legitimately cancel async work when switching models.
   ========================= */
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -8590,7 +8481,6 @@ export default function CavCodePage() {
     setActivePane("primary");
   }, [cavenConfigToml, sysProfileReadme.loaded, sysProfileReadme.markdown]);
   const openKeyboardShortcutsTab = useCallback(() => {
-    setSettingsHeaderMenuOpen(false);
     setTabs((prev) => {
       if (prev.some((tab) => tab.id === CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID)) return prev;
       return [...prev, toKeyboardShortcutsTab()];
@@ -8600,15 +8490,10 @@ export default function CavCodePage() {
     setSidebarOpen(true);
     setActivity("settings");
   }, []);
-  const scrollSettingsSection = useCallback((section: "editor" | "theme" | "collaborators") => {
-    setSettingsSection(section);
-  }, []);
-  const openSettingsSection = useCallback((section: "editor" | "theme" | "collaborators") => {
-    setSettingsHeaderMenuOpen(false);
+  const scrollSettingsSection = useCallback((section: "editor" | "collaborators") => {
     setSettingsSection(section);
   }, []);
   const openSettingsSidebar = useCallback(() => {
-    setSettingsHeaderMenuOpen(false);
     setSidebarOpen(true);
     setActivity("settings");
     scrollSettingsSection("editor");
@@ -8698,11 +8583,7 @@ export default function CavCodePage() {
         const j = (await res.json().catch(() => null)) as unknown;
         if (!alive) return;
         const r = j && typeof j === "object" ? (j as Record<string, unknown>) : null;
-        if (!r || r.ok !== true || r.authenticated !== true) {
-          setSessionAuthenticated(false);
-          setAuthProbeReady(true);
-          return;
-        }
+        if (!r || r.ok !== true || r.authenticated !== true) return;
         const u = r.user && typeof r.user === "object" ? (r.user as Record<string, unknown>) : null;
         const account = r.account && typeof r.account === "object" ? (r.account as Record<string, unknown>) : null;
         const authPlanId = normalizePlanId(account?.tierEffective ?? account?.tier);
@@ -8723,14 +8604,8 @@ export default function CavCodePage() {
         if (typeof u?.publicProfileEnabled === "boolean") {
           setProfilePublicEnabled(u.publicProfileEnabled);
         }
-        setSessionAuthenticated(true);
-        setAuthProbeReady(true);
-        setAccountPlanId(authPlanId);
-      } catch {
-        if (!alive) return;
-        setSessionAuthenticated(false);
-        setAuthProbeReady(true);
-      }
+        setAccountPlanId((prev) => (planTierRank(authPlanId) >= planTierRank(prev) ? authPlanId : prev));
+      } catch {}
     })();
     return () => {
       alive = false;
@@ -9582,30 +9457,6 @@ export default function CavCodePage() {
   }, [runHeaderMenuOpen]);
 
   useEffect(() => {
-    if (!settingsHeaderMenuOpen) return;
-    const onDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        setSettingsHeaderMenuOpen(false);
-        return;
-      }
-      const root = settingsHeaderMenuRef.current;
-      if (root && root.contains(target)) return;
-      setSettingsHeaderMenuOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setSettingsHeaderMenuOpen(false);
-    };
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [settingsHeaderMenuOpen]);
-
-  useEffect(() => {
     if (!panelOpen) setPanelViewMenuOpen(false);
   }, [panelOpen]);
 
@@ -9629,10 +9480,6 @@ export default function CavCodePage() {
 
   useEffect(() => {
     if (activity !== "run") setRunHeaderMenuOpen(false);
-  }, [activity]);
-
-  useEffect(() => {
-    if (activity !== "settings") setSettingsHeaderMenuOpen(false);
   }, [activity]);
 
   useEffect(() => {
@@ -9690,7 +9537,7 @@ export default function CavCodePage() {
   }, [explorerHeaderMenuOpen]);
 
   /* =========================
-    Editor: workspace model sync
+    Monaco: workspace model sync
   ========================= */
   const syncMonacoModels = useCallback((root: FolderNode, activeUriStr?: string) => {
     const monaco = monacoRef.current;
@@ -9720,7 +9567,7 @@ export default function CavCodePage() {
         } catch {}
 
         try {
-          // Avoid fighting the controlled editor value prop for the active file.
+          // Avoid fighting the controlled MonacoEditor value prop for the active file.
           if (activeUriStr && uriStr === activeUriStr) continue;
           const cur = existing.getValue();
           if (cur !== f.content) existing.setValue(f.content);
@@ -9752,41 +9599,6 @@ export default function CavCodePage() {
     if (didMountRef.current) return;
     window.requestAnimationFrame(() => setBooting(false));
   }, [fsReady, activeFile]);
-
-  const runDiagnosticsSelfTest = useCallback(() => {
-    let targetId: string | null = null;
-    setFS((prev) => {
-      const next = injectDiagnosticsSelfTestFiles(prev);
-      const candidate = findNodeByPath(next, `${SELF_TEST_FOLDER_PATH}/ts-error.ts`);
-      if (candidate && isFile(candidate)) {
-        targetId = candidate.id;
-      }
-      return next;
-    });
-    setActivity("explorer");
-    if (targetId) {
-      setSelectedId(targetId);
-      setActiveFileId(targetId);
-    }
-    pushToast("Diagnostics self-test workspace is ready.", "good");
-    return {
-      files: DIAGNOSTICS_SELF_TEST_FILES.map((f) => `${SELF_TEST_FOLDER_PATH}/${f.name}`),
-    };
-  }, [setFS, setSelectedId, setActiveFileId, setActivity, pushToast]);
-
-  useEffect(() => {
-    if (!isClient) return;
-    type WindowWithSelfTest = Window & { __CAVCODE_SELF_TEST?: { run: () => unknown } };
-    const win = window as WindowWithSelfTest;
-    const payload = { run: runDiagnosticsSelfTest };
-    win.__CAVCODE_SELF_TEST = payload;
-    console.info("CavCode diagnostics self-test ready. Run window.__CAVCODE_SELF_TEST.run() in CavTools.");
-    return () => {
-      if (win.__CAVCODE_SELF_TEST === payload) {
-        win.__CAVCODE_SELF_TEST = undefined;
-      }
-    };
-  }, [isClient, runDiagnosticsSelfTest]);
 
   /* =========================
     Explorer actions
@@ -12902,7 +12714,7 @@ export default function CavCodePage() {
   }, [termLines]);
 
   /* =========================
-    Editor mount + diagnostics
+    Monaco mount + diagnostics
   ========================= */
   function disposePaneDisposables(pane: EditorPane) {
     const bag = paneDisposablesRef.current[pane];
@@ -12932,7 +12744,7 @@ export default function CavCodePage() {
     monacoRef.current = monaco;
 
     try {
-      // Editor workers (Next.js compatible)
+      // Monaco workers (Next.js compatible)
       const globalEnv = globalThis as typeof globalThis & {
         MonacoEnvironment?: { getWorker: (moduleId: string, label: string) => Worker };
       };
@@ -13094,13 +12906,7 @@ export default function CavCodePage() {
                 ? String(mk.code.value || "")
                 : "";
             const code = String(rawCode || "").trim();
-            const sourceToken = String(mk.owner || "editor").trim().toLowerCase();
-            const source =
-              sourceToken === "monaco"
-                ? "Editor"
-                : sourceToken === "monaco + cavai"
-                ? "Editor + CavAi"
-                : String(mk.owner || "Editor").trim() || "Editor";
+            const source = String(mk.owner || "monaco").trim() || "monaco";
             return {
               severity,
               message: String(mk.message || "").trim(),
@@ -13379,11 +13185,11 @@ export default function CavCodePage() {
   }, [debugBreakpoints, debugCurrentLocation, debugVariables]);
 
   /* =========================
-    VS Code Find (native editor)
+    VS Code Find (Monaco native)
     - No custom modal.
-    - Cmd/Ctrl+F uses the built-in find widget.
+    - Cmd/Ctrl+F uses Monaco's built-in find widget.
   ========================= */
-  function openEditorFind(mode: "find" | "replace" = "find") {
+  function openMonacoFind(mode: "find" | "replace" = "find") {
     const ed = editorRef.current;
     if (!ed) return;
     try {
@@ -13437,7 +13243,7 @@ export default function CavCodePage() {
         }
       }
 
-      // Always capture Cmd/Ctrl+S inside CavCode, including editor inputs.
+      // Always capture Cmd/Ctrl+S inside CavCode (including Monaco/editor inputs)
       // so browser/system "Save Page" never opens here.
       if (mod && !e.shiftKey && !e.altKey && key === "s") {
         e.preventDefault();
@@ -13529,7 +13335,7 @@ export default function CavCodePage() {
 
       if (mod && key === "f") {
         e.preventDefault();
-        openEditorFind("find");
+        openMonacoFind("find");
         setPanelOpen(false);
         return;
       }
@@ -13537,7 +13343,7 @@ export default function CavCodePage() {
       // Optional: VS Code replace shortcut (Cmd/Ctrl+H) -> replace widget
       if (mod && key === "h") {
         e.preventDefault();
-        openEditorFind("replace");
+        openMonacoFind("replace");
         setPanelOpen(false);
         return;
       }
@@ -14157,7 +13963,7 @@ export default function CavCodePage() {
                   verticalScrollbarSize: 14,
                   horizontalScrollbarSize: 10,
                 },
-                fontFamily: '"JetBrains Mono","SF Mono",Menlo,Consolas,"Liberation Mono",monospace',
+                fontFamily: '"JetBrains Mono","SF Mono",Menlo,Monaco,Consolas,"Liberation Mono",monospace',
                 fontSize: settings.fontSize,
                 lineHeight: Math.round(settings.fontSize * 1.5),
                 renderWhitespace: "selection",
@@ -14263,7 +14069,7 @@ export default function CavCodePage() {
           overviewRulerLanes: 3,
           overviewRulerBorder: false,
           readOnly: normalizePath(file.path) === SYS_CAVEN_CONFIG_PATH,
-          fontFamily: '"JetBrains Mono","SF Mono",Menlo,Consolas,"Liberation Mono",monospace',
+          fontFamily: '"JetBrains Mono","SF Mono",Menlo,Monaco,Consolas,"Liberation Mono",monospace',
           fontSize: settings.fontSize,
           lineHeight: Math.round(settings.fontSize * 1.5),
           padding: { top: 12, bottom: 12 },
@@ -14677,21 +14483,9 @@ export default function CavCodePage() {
         {/* Primary Sidebar */}
         {sidebarOpen ? (
           <aside className="cc-sidebar" aria-label="Primary Sidebar">
-            {activity === "ai" ? (
-              <div className="cc-sidebar-brandMark" aria-hidden="true">
-                <Image
-                  src="/icons/app/cavcode/atom-svgrepo-com.svg"
-                  alt=""
-                  width={72}
-                  height={72}
-                  className="cc-sidebar-brandMarkImg"
-                  unoptimized
-                />
-              </div>
-            ) : null}
             {activity === "explorer" ? (
               <>
-                <div className={`cc-sidebar-head ${explorerHeaderMenuOpen ? "is-menu-open" : ""}`}>
+                <div className="cc-sidebar-head">
                   <div className="cc-side-title">EXPLORER</div>
                   <br />
                   <div className="cc-side-actions" aria-label="Explorer Actions">
@@ -14707,7 +14501,7 @@ export default function CavCodePage() {
                     <button className="cc-side-icbtn" onClick={collapseAll} title="Collapse All">
                       <IconCollapseAll />
                     </button>
-                    <div className={`cc-side-menuShell ${explorerHeaderMenuOpen ? "is-open" : ""}`} ref={explorerHeaderMenuRef}>
+                    <div className="cc-side-menuShell" ref={explorerHeaderMenuRef}>
                       <button
                         className={`cc-side-icbtn ${explorerHeaderMenuOpen ? "is-on" : ""}`}
                         type="button"
@@ -14833,10 +14627,10 @@ export default function CavCodePage() {
 	              </>
 	            ) : activity === "scm" ? (
 	              <>
-	                <div className={`cc-sidebar-head ${scmHeaderMenuOpen ? "is-menu-open" : ""}`}>
+	                <div className="cc-sidebar-head">
 	                  <div className="cc-side-title">SOURCE CONTROL</div>
                     <div className="cc-side-actions">
-                      <div className={`cc-side-menuShell ${scmHeaderMenuOpen ? "is-open" : ""}`} ref={scmHeaderMenuRef}>
+                      <div className="cc-side-menuShell" ref={scmHeaderMenuRef}>
                         <button
                           className={`cc-side-menuBtn ${scmHeaderMenuOpen ? "is-on" : ""}`}
                           type="button"
@@ -14916,10 +14710,10 @@ export default function CavCodePage() {
 	              </>
 	            ) : activity === "changes" ? (
               <>
-                <div className={`cc-sidebar-head ${changesHeaderMenuOpen ? "is-menu-open" : ""}`}>
+                <div className="cc-sidebar-head">
                   <div className="cc-side-title">CHANGES</div>
                   <div className="cc-side-actions">
-                    <div className={`cc-side-menuShell ${changesHeaderMenuOpen ? "is-open" : ""}`} ref={changesHeaderMenuRef}>
+                    <div className="cc-side-menuShell" ref={changesHeaderMenuRef}>
                       <button
                         className={`cc-side-menuBtn ${changesHeaderMenuOpen ? "is-on" : ""}`}
                         type="button"
@@ -15268,80 +15062,70 @@ export default function CavCodePage() {
               />
             ) : activity === "settings" ? (
               <>
-                <div className={`cc-sidebar-head ${settingsHeaderMenuOpen ? "is-menu-open" : ""}`}>
+                <div className="cc-sidebar-head">
                   <div className="cc-side-title">SETTINGS</div>
-                  <div className="cc-side-actions">
-                    <div className={`cc-side-menuShell ${settingsHeaderMenuOpen ? "is-open" : ""}`} ref={settingsHeaderMenuRef}>
-                      <button
-                        className={`cc-side-menuBtn ${settingsHeaderMenuOpen ? "is-on" : ""}`}
-                        type="button"
-                        aria-haspopup="menu"
-                        aria-expanded={settingsHeaderMenuOpen}
-                        aria-label="Settings actions"
-                        onClick={() => setSettingsHeaderMenuOpen((prev) => !prev)}
-                      >
-                        <IconMenuDots />
-                      </button>
-                      {settingsHeaderMenuOpen ? (
-                        <div className="cc-side-menu" role="menu" aria-label="Settings menu">
-                          <button
-                            className="cc-side-menuItem cc-side-menuItemWithIcon"
-                            role="menuitem"
-                            type="button"
-                            onClick={() => openSettingsSection("editor")}
-                          >
-                            <IconGearGlyph className="cc-act-svg" size={14} />
-                            <span className="cc-side-menuItemLabel">Editor</span>
-                          </button>
-                          <button
-                            className="cc-side-menuItem cc-side-menuItemWithIcon"
-                            role="menuitem"
-                            type="button"
-                            onClick={() => openSettingsSection("theme")}
-                          >
-                            <IconThemeGlyph className="cc-act-svg" size={14} />
-                            <span className="cc-side-menuItemLabel">Theme</span>
-                          </button>
-                          <button
-                            className="cc-side-menuItem cc-side-menuItemWithIcon"
-                            role="menuitem"
-                            type="button"
-                            onClick={openKeyboardShortcutsTab}
-                          >
-                            <IconKeyboardGlyph className="cc-act-svg" size={14} />
-                            <span className="cc-side-menuItemLabel">Keyboard Shortcuts</span>
-                            <span className="cc-side-menuItemKey">{isMacPlatform ? "⌘K ⌘S" : "Ctrl+K Ctrl+S"}</span>
-                          </button>
-                          <button
-                            className="cc-side-menuItem cc-side-menuItemWithIcon"
-                            role="menuitem"
-                            type="button"
-                            onClick={() => openSettingsSection("collaborators")}
-                          >
-                            <IconCollaboratorsGlyph className="cc-act-svg" size={14} />
-                            <span className="cc-side-menuItemLabel">Project Collaborators</span>
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
                 </div>
 
                 <div className="cc-settings">
+                  <div className="cc-settingsNav">
+                    <button
+                      type="button"
+                      className={`cc-settingsNavItem ${settingsSection === "editor" ? "is-on" : ""}`}
+                      onClick={() => scrollSettingsSection("editor")}
+                    >
+                      <span className="cc-settingsNavIcon" aria-hidden="true">
+                        <IconGearGlyph size={15} />
+                      </span>
+                      <span className="cc-settingsNavCopy">
+                        <span className="cc-settingsNavLabel">Editor</span>
+                        <span className="cc-settingsNavHint">Typography, save flow, theme, and sync.</span>
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`cc-settingsNavItem ${activeKeyboardShortcutsTab ? "is-on" : ""}`}
+                      onClick={openKeyboardShortcutsTab}
+                    >
+                      <span className="cc-settingsNavIcon" aria-hidden="true">
+                        <IconKeyboardGlyph size={15} />
+                      </span>
+                      <span className="cc-settingsNavCopy">
+                        <span className="cc-settingsNavLabel">Keyboard Shortcuts</span>
+                        <span className="cc-settingsNavHint">Open the CavCode keybinding editor tab.</span>
+                      </span>
+                      <span className="cc-settingsNavKey">{isMacPlatform ? "⌘K ⌘S" : "Ctrl+K Ctrl+S"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`cc-settingsNavItem ${settingsSection === "collaborators" ? "is-on" : ""}`}
+                      onClick={() => scrollSettingsSection("collaborators")}
+                    >
+                      <span className="cc-settingsNavIcon" aria-hidden="true">
+                        <IconCollaboratorsGlyph size={15} />
+                      </span>
+                      <span className="cc-settingsNavCopy">
+                        <span className="cc-settingsNavLabel">Project Collaborators</span>
+                        <span className="cc-settingsNavHint">Manage who can view, edit, or administer a project.</span>
+                      </span>
+                    </button>
+                  </div>
+
                   {settingsSection === "editor" ? (
                     <div className="cc-set-card cc-set-cardSettings">
-                      <div className="cc-set-head">
-                        <div>
-                          <div className="cc-set-title">Editor</div>
-                          <div className="cc-set-note">Keep CavCode tight, readable, and consistent across your workspace.</div>
-                        </div>
+                    <div className="cc-set-head">
+                      <div>
+                        <div className="cc-set-title">Editor</div>
+                        <div className="cc-set-note">Keep CavCode tight, readable, and consistent across your workspace.</div>
                       </div>
+                    </div>
 
-                      <div className="cc-set-stack">
+                    <div className="cc-set-stack">
                       <div className="cc-set-row cc-set-rowDetailed">
                         <div className="cc-set-copy">
                           <span className="cc-set-label">Font Size</span>
-                          <span className="cc-set-note">Editor text scale for code, diffs, and inline diagnostics.</span>
+                          <span className="cc-set-note">Editor text scale for Monaco, diffs, and inline diagnostics.</span>
                         </div>
                         <div className="cc-set-stepper" role="group" aria-label="Font Size">
                           <span className="cc-set-stepperValue" aria-live="polite">{settings.fontSize}</span>
@@ -15423,7 +15207,7 @@ export default function CavCodePage() {
                       <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
                         <span className="cc-set-copy">
                           <span className="cc-set-label">Format on Save</span>
-                          <span className="cc-set-note">Apply editor formatting whenever a save is triggered.</span>
+                          <span className="cc-set-note">Apply Monaco formatting whenever a save is triggered.</span>
                         </span>
                         <input
                           className="cc-set-toggle"
@@ -15459,6 +15243,57 @@ export default function CavCodePage() {
                         />
                       </label>
 
+                      <div className="cc-set-row cc-set-rowTheme">
+                        <div className="cc-set-copy">
+                          <span className="cc-set-label">Theme</span>
+                          <span className="cc-set-note">12 professional CavCode themes. Monaco rendering stays on the same theme pipeline.</span>
+                        </div>
+                        <div className="cc-themeList" role="list" aria-label="CavCode themes">
+                          {THEME_OPTIONS.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              className={`cc-themeCard ${settings.theme === option.value ? "is-on" : ""}`}
+                              data-theme-value={option.value}
+                              onClick={() => setSettings((s) => ({ ...s, theme: option.value }))}
+                              style={{
+                                "--cc-theme-card-bg": option.previewBackground,
+                                "--cc-theme-card-border": option.previewBorder,
+                                "--cc-theme-card-fg": option.previewText,
+                                "--cc-theme-card-line": option.previewLine,
+                                "--cc-theme-card-accent": option.accent,
+                                "--cc-theme-card-keyword": option.tokens.keyword,
+                                "--cc-theme-card-string": option.tokens.string,
+                                "--cc-theme-card-number": option.tokens.number,
+                                "--cc-theme-card-type": option.tokens.type,
+                                "--cc-theme-card-comment": option.tokens.comment,
+                              } as React.CSSProperties}
+                            >
+                              <span className="cc-themeCardMeta">
+                                <span className="cc-themeCardTitleWrap">
+                                  <span className="cc-themeCardName">{option.label}</span>
+                                  <span className="cc-themeCardHint">{option.hint}</span>
+                                </span>
+                                <span className="cc-themeCardDot" aria-hidden="true" />
+                              </span>
+                              <span className="cc-themeCardCode" aria-hidden="true">
+                                <span className="cc-themeCardCodeLine is-comment">{`// ${option.value}`}</span>
+                                <span className="cc-themeCardCodeLine">
+                                  <span className="tok-keyword">const</span>{" "}
+                                  <span className="tok-type">accent</span>{" "}
+                                  ={" "}
+                                  <span className="tok-string">{JSON.stringify(option.label)}</span>
+                                </span>
+                                <span className="cc-themeCardCodeLine">
+                                  <span className="tok-keyword">return</span>{" "}
+                                  <span className="tok-number">12</span>
+                                </span>
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
                         <span className="cc-set-copy">
                           <span className="cc-set-label">Telemetry</span>
@@ -15471,183 +15306,123 @@ export default function CavCodePage() {
                           onChange={(e) => setSettings((s) => ({ ...s, telemetry: e.target.checked }))}
                         />
                       </label>
-                      </div>
                     </div>
-                  ) : null}
-
-                  {settingsSection === "theme" ? (
-                    <div className="cc-set-card cc-set-cardSettings">
-                      <div className="cc-set-head">
-                        <div>
-                          <div className="cc-set-title">Theme</div>
-                          <div className="cc-set-note">12 professional CavCode themes.</div>
-                        </div>
-                      </div>
-
-                      <div className="cc-set-stack">
-                        <div className="cc-set-row cc-set-rowTheme">
-                          <div className="cc-themeList" role="list" aria-label="CavCode themes">
-                            {THEME_OPTIONS.map((option) => (
-                              <button
-                                key={option.value}
-                                type="button"
-                                className={`cc-themeCard ${settings.theme === option.value ? "is-on" : ""}`}
-                                data-theme-value={option.value}
-                                onClick={() => setSettings((s) => ({ ...s, theme: option.value }))}
-                                style={{
-                                  "--cc-theme-card-bg": option.previewBackground,
-                                  "--cc-theme-card-border": option.previewBorder,
-                                  "--cc-theme-card-fg": option.previewText,
-                                  "--cc-theme-card-line": option.previewLine,
-                                  "--cc-theme-card-accent": option.accent,
-                                  "--cc-theme-card-keyword": option.tokens.keyword,
-                                  "--cc-theme-card-string": option.tokens.string,
-                                  "--cc-theme-card-number": option.tokens.number,
-                                  "--cc-theme-card-type": option.tokens.type,
-                                  "--cc-theme-card-comment": option.tokens.comment,
-                                } as React.CSSProperties}
-                              >
-                                <span className="cc-themeCardMeta">
-                                  <span className="cc-themeCardTitleWrap">
-                                    <span className="cc-themeCardName">{option.label}</span>
-                                    <span className="cc-themeCardHint">{option.hint}</span>
-                                  </span>
-                                  <span className="cc-themeCardDot" aria-hidden="true" />
-                                </span>
-                                <span className="cc-themeCardCode" aria-hidden="true">
-                                  <span className="cc-themeCardCodeLine is-comment">{`// ${option.value}`}</span>
-                                  <span className="cc-themeCardCodeLine">
-                                    <span className="tok-keyword">const</span>{" "}
-                                    <span className="tok-type">accent</span>{" "}
-                                    ={" "}
-                                    <span className="tok-string">{JSON.stringify(option.label)}</span>
-                                  </span>
-                                  <span className="cc-themeCardCodeLine">
-                                    <span className="tok-keyword">return</span>{" "}
-                                    <span className="tok-number">12</span>
-                                  </span>
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
                     </div>
                   ) : null}
 
                   {settingsSection === "collaborators" ? (
                     <div className="cc-set-card cc-set-cardSettings">
-                      <div className="cc-set-head">
-                        <div>
-                          <div className="cc-set-title">Project Collaborators</div>
-                          <div className="cc-set-note">Invite workspace members into this project without leaving CavCode.</div>
-                        </div>
+                    <div className="cc-set-head">
+                      <div>
+                        <div className="cc-set-title">Project Collaborators</div>
+                        <div className="cc-set-note">Invite workspace members into this project without leaving CavCode.</div>
                       </div>
-                      {!projectIdFromQuery ? (
+                    </div>
+                    {!projectIdFromQuery ? (
+                      <div className="cc-set-note">
+                        Open CavCode with a project context to manage collaborators.
+                      </div>
+                    ) : (
+                      <>
                         <div className="cc-set-note">
-                          Open CavCode with a project context to manage collaborators.
+                          {`Project #${projectIdFromQuery}`}
                         </div>
-                      ) : (
-                        <>
-                          <div className="cc-set-note">
-                            {`Project #${projectIdFromQuery}`}
-                          </div>
 
-                          <label className="cc-set-row cc-set-rowStack">
-                            <span className="cc-set-label">Workspace member</span>
-                            <span className="cc-set-selectWrap">
-                              <select
-                                className="cc-set-input cc-set-inputWide cc-set-select"
-                                value={projectCollabUserId}
-                                onChange={(e) => setProjectCollabUserId(e.target.value)}
-                                disabled={projectCollabBusy || projectCollabSubmitting || !workspaceMemberOptions.length}
-                              >
-                                {workspaceMemberOptions.length ? null : <option value="">No workspace members</option>}
-                                {workspaceMemberOptions.map((member) => (
-                                  <option key={member.userId} value={member.userId}>
-                                    {member.displayName ? `${member.displayName} (${member.email})` : member.email}
-                                  </option>
-                                ))}
-                              </select>
-                              <span className="cc-set-selectChevron" aria-hidden="true">
-                                <Image src="/icons/app/cavcode/arrow-down-svgrepo-com.svg" alt="" width={10} height={10} />
-                              </span>
-                            </span>
-                          </label>
-
-                          <label className="cc-set-row cc-set-rowStack">
-                            <span className="cc-set-label">Role</span>
-                            <span className="cc-set-selectWrap">
-                              <select
-                                className="cc-set-input cc-set-inputWide cc-set-select"
-                                value={projectCollabRole}
-                                onChange={(e) => {
-                                  const next = String(e.target.value || "").toUpperCase();
-                                  setProjectCollabRole(next === "EDITOR" || next === "ADMIN" ? next : "VIEWER");
-                                }}
-                                disabled={projectCollabBusy || projectCollabSubmitting}
-                              >
-                                <option value="VIEWER">Viewer</option>
-                                <option value="EDITOR">Editor</option>
-                                <option value="ADMIN">Admin</option>
-                              </select>
-                              <span className="cc-set-selectChevron" aria-hidden="true">
-                                <Image src="/icons/app/cavcode/arrow-down-svgrepo-com.svg" alt="" width={10} height={10} />
-                              </span>
-                            </span>
-                          </label>
-
-                          <div className="cc-run-actions">
-                            <button
-                              className="cc-run-btn cc-run-btn2"
-                              onClick={() => void addProjectCollaborator()}
-                              disabled={projectCollabBusy || projectCollabSubmitting || !projectCollabUserId}
+                        <label className="cc-set-row cc-set-rowStack">
+                          <span className="cc-set-label">Workspace member</span>
+                          <span className="cc-set-selectWrap">
+                            <select
+                              className="cc-set-input cc-set-inputWide cc-set-select"
+                              value={projectCollabUserId}
+                              onChange={(e) => setProjectCollabUserId(e.target.value)}
+                              disabled={projectCollabBusy || projectCollabSubmitting || !workspaceMemberOptions.length}
                             >
-                              {projectCollabSubmitting ? "Saving..." : "Save collaborator"}
-                            </button>
-                          </div>
-
-                          {projectCollabError ? <div className="cc-set-note is-error">{projectCollabError}</div> : null}
-                          {projectCollabStatus ? <div className="cc-set-note is-success">{projectCollabStatus}</div> : null}
-
-                          <div className="cc-set-subtitle">Current collaborators</div>
-                          {projectCollaborators.length ? (
-                            <div className="cc-collabList">
-                              {projectCollaborators.map((collaborator) => (
-                                <div key={collaborator.userId} className="cc-collabRow">
-                                  <div>
-                                    <div className="cc-collabName">
-                                      {collaborator.displayName || collaborator.email || collaborator.userId}
-                                    </div>
-                                    <div className="cc-collabMeta">{collaborator.role}</div>
-                                  </div>
-                                  <button
-                                    className="cc-run-btn cc-collabRevokeBtn"
-                                    onClick={() => void revokeProjectCollaborator(collaborator.userId)}
-                                    disabled={projectCollabBusy || projectCollabSubmitting}
-                                  >
-                                    Revoke
-                                  </button>
-                                </div>
+                              {workspaceMemberOptions.length ? null : <option value="">No workspace members</option>}
+                              {workspaceMemberOptions.map((member) => (
+                                <option key={member.userId} value={member.userId}>
+                                  {member.displayName ? `${member.displayName} (${member.email})` : member.email}
+                                </option>
                               ))}
-                            </div>
-                          ) : (
-                            <div className="cc-set-note">
-                              {projectCollabBusy ? "Loading collaborators..." : "No project collaborators set."}
-                            </div>
-                          )}
+                            </select>
+                            <span className="cc-set-selectChevron" aria-hidden="true">
+                              <Image src="/icons/app/cavcode/arrow-down-svgrepo-com.svg" alt="" width={10} height={10} />
+                            </span>
+                          </span>
+                        </label>
 
-                          <div className="cc-run-actions">
-                            <button
-                              className="cc-run-btn"
-                              onClick={() => void loadProjectCollaborators()}
+                        <label className="cc-set-row cc-set-rowStack">
+                          <span className="cc-set-label">Role</span>
+                          <span className="cc-set-selectWrap">
+                            <select
+                              className="cc-set-input cc-set-inputWide cc-set-select"
+                              value={projectCollabRole}
+                              onChange={(e) => {
+                                const next = String(e.target.value || "").toUpperCase();
+                                setProjectCollabRole(next === "EDITOR" || next === "ADMIN" ? next : "VIEWER");
+                              }}
                               disabled={projectCollabBusy || projectCollabSubmitting}
                             >
-                              {projectCollabBusy ? "Refreshing..." : "Refresh"}
-                            </button>
+                              <option value="VIEWER">Viewer</option>
+                              <option value="EDITOR">Editor</option>
+                              <option value="ADMIN">Admin</option>
+                            </select>
+                            <span className="cc-set-selectChevron" aria-hidden="true">
+                              <Image src="/icons/app/cavcode/arrow-down-svgrepo-com.svg" alt="" width={10} height={10} />
+                            </span>
+                          </span>
+                        </label>
+
+                        <div className="cc-run-actions">
+                          <button
+                            className="cc-run-btn cc-run-btn2"
+                            onClick={() => void addProjectCollaborator()}
+                            disabled={projectCollabBusy || projectCollabSubmitting || !projectCollabUserId}
+                          >
+                            {projectCollabSubmitting ? "Saving..." : "Save collaborator"}
+                          </button>
+                        </div>
+
+                        {projectCollabError ? <div className="cc-set-note is-error">{projectCollabError}</div> : null}
+                        {projectCollabStatus ? <div className="cc-set-note is-success">{projectCollabStatus}</div> : null}
+
+                        <div className="cc-set-subtitle">Current collaborators</div>
+                        {projectCollaborators.length ? (
+                          <div className="cc-collabList">
+                            {projectCollaborators.map((collaborator) => (
+                              <div key={collaborator.userId} className="cc-collabRow">
+                                <div>
+                                  <div className="cc-collabName">
+                                    {collaborator.displayName || collaborator.email || collaborator.userId}
+                                  </div>
+                                  <div className="cc-collabMeta">{collaborator.role}</div>
+                                </div>
+                                <button
+                                  className="cc-run-btn cc-collabRevokeBtn"
+                                  onClick={() => void revokeProjectCollaborator(collaborator.userId)}
+                                  disabled={projectCollabBusy || projectCollabSubmitting}
+                                >
+                                  Revoke
+                                </button>
+                              </div>
+                            ))}
                           </div>
-                        </>
-                      )}
+                        ) : (
+                          <div className="cc-set-note">
+                            {projectCollabBusy ? "Loading collaborators..." : "No project collaborators set."}
+                          </div>
+                        )}
+
+                        <div className="cc-run-actions">
+                          <button
+                            className="cc-run-btn"
+                            onClick={() => void loadProjectCollaborators()}
+                            disabled={projectCollabBusy || projectCollabSubmitting}
+                          >
+                            {projectCollabBusy ? "Refreshing..." : "Refresh"}
+                          </button>
+                        </div>
+                      </>
+                    )}
                     </div>
                   ) : null}
                 </div>
@@ -15672,10 +15447,10 @@ export default function CavCodePage() {
               </>
             ) : activity === "run" ? (
               <>
-                <div className={`cc-sidebar-head ${runHeaderMenuOpen ? "is-menu-open" : ""}`}>
+                <div className="cc-sidebar-head">
                   <div className="cc-side-title">RUN &amp; DEBUG</div>
                   <div className="cc-side-actions">
-                    <div className={`cc-side-menuShell ${runHeaderMenuOpen ? "is-open" : ""}`} ref={runHeaderMenuRef}>
+                    <div className="cc-side-menuShell" ref={runHeaderMenuRef}>
                       <button
                         className={`cc-side-menuBtn ${runHeaderMenuOpen ? "is-on" : ""}`}
                         type="button"
@@ -18929,7 +18704,7 @@ export default function CavCodePage() {
                         </div>
                         <div className="cc-prob-file mono">{p.file}</div>
                         <div className="cc-prob-meta mono">
-                          <span>{p.source || "Editor"}</span>
+                          <span>{p.source || "monaco"}</span>
                           {p.code ? <span>{p.code}</span> : <span>no-code</span>}
                           <span>{p.fixReady ? "cavai-fix-ready" : "manual-fix"}</span>
                         </div>
@@ -19004,7 +18779,7 @@ export default function CavCodePage() {
               </button>
 
               <span className="cc-status-sep" aria-hidden="true">•</span>
-              <button className="cc-sbtn" onClick={() => openEditorFind("find")} title="Find (Cmd/Ctrl+F)">
+              <button className="cc-sbtn" onClick={() => openMonacoFind("find")} title="Find (Cmd/Ctrl+F)">
                 FIND
               </button>
 
