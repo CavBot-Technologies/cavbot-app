@@ -800,7 +800,7 @@ function CavToolsPageInner() {
   const tabSubtitle = useMemo(() => {
     if (tab === "inspector") return "For Developers";
     if (tab === "events") return "Operational event stream";
-    if (tab === "studio") return "Real file editor";
+    if (tab === "studio") return "for developers";
     return "Workspace posture and policy";
   }, [tab]);
 
@@ -2147,13 +2147,13 @@ function CavToolsPageInner() {
 
               <div className="cb-cavtools-top-meta">
                 <div className="cb-cavtools-top-title">
-                  <span className="cb-cavtools-title-row">
+                  <Link className="cb-cavtools-title-row" aria-label="Go to homepage" href="/">
                     <span className="cb-cavtools-title-ic" aria-hidden="true">
                       <IconCavTools />
                     </span>
                     <span>CavTools</span>
-                    <div className="cb-cavtools-top-sub">{tabSubtitle}</div>
-                  </span>
+                    <span className="cb-cavtools-top-sub">{tabSubtitle}</span>
+                  </Link>
                 </div>
               </div>
             </div>
