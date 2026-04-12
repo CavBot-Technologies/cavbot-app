@@ -122,6 +122,8 @@ type RunResult = {
   tone: Tone;
 };
 
+type BootPhase = "mounting" | "context-loading" | "ready" | "limited";
+
 const ROOTS: Array<{ namespace: CavtoolsNamespace; label: string; path: string }> = [
   { namespace: "cavcloud", label: "CavCloud", path: "/cavcloud" },
   { namespace: "cavsafe", label: "CavSafe", path: "/cavsafe" },
@@ -218,6 +220,35 @@ function normalizePath(rawPath: string) {
   const normalized = `/${stack.join("/")}`;
   if (normalized.length > 1 && normalized.endsWith("/")) return normalized.slice(0, -1);
   return normalized || "/";
+}
+
+function parseProjectId(value: unknown): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.trunc(parsed);
+}
+
+function readStatusWorkspace(result: CavtoolsExecResult): { projectId: number | null; projectName: string | null } | null {
+  if (String(result.command || "").trim().toLowerCase() !== "cav status") return null;
+  const block = (result.blocks || []).find(
+    (entry): entry is Extract<CavtoolsExecBlock, { kind: "json" }> => entry.kind === "json" && entry.title === "CavTools Status"
+  );
+  const data = block?.data;
+  if (!data || typeof data !== "object") return null;
+  const workspace = (data as { workspace?: { projectId?: unknown; projectName?: unknown } }).workspace;
+  return {
+    projectId: parseProjectId(workspace?.projectId),
+    projectName: String(workspace?.projectName || "").trim() || null,
+  };
+}
+
+function shouldRefreshRoot(
+  root: { namespace: CavtoolsNamespace; path: string },
+  options: { activeProjectId: number | null; canUseCavsafe: boolean }
+) {
+  if (root.namespace === "cavsafe") return options.canUseCavsafe;
+  if (root.namespace === "cavcode") return options.activeProjectId != null;
+  return true;
 }
 
 function toUiPath(path: string) {
@@ -527,6 +558,7 @@ function eventTypeLabel(type: string) {
     cavtools_mount: "CavTools Ready",
     command_ok: "Success",
     command_fail: "Failed",
+    command_unavailable: "Unavailable",
     file_open: "File Opened",
     file_open_fail: "Open Failed",
     file_save: "Saved",
@@ -612,8 +644,9 @@ function CavToolsPageInner() {
 
   const projectId = (sp.get("project") || "").trim();
   const siteOrigin = (sp.get("site") || "").trim();
+  const initialProjectId = useMemo(() => parseProjectId(projectId), [projectId]);
 
-  const [booting] = useState(false);
+  const [bootPhase, setBootPhase] = useState<BootPhase>("mounting");
   const [isDesktop, setIsDesktop] = useState(true);
   const [welcomeName, setWelcomeName] = useState("");
 
@@ -656,6 +689,7 @@ function CavToolsPageInner() {
   const [cmdOpen, setCmdOpen] = useState(false);
   const [cmd, setCmd] = useState("");
   const [terminalExpanded, setTerminalExpanded] = useState(false);
+  const [activeProjectId, setActiveProjectId] = useState<number | null>(initialProjectId);
 
   const [syncStatus, setSyncStatus] = useState<{ lastSyncTs?: number; serverReachable: boolean }>({
     lastSyncTs: undefined,
@@ -835,9 +869,10 @@ function CavToolsPageInner() {
   }, []);
 
   const applyExecResult = useCallback(
-    (result: CavtoolsExecResult, opts?: { renderOutput?: boolean; updateCwd?: boolean }) => {
+    (result: CavtoolsExecResult, opts?: { renderOutput?: boolean; updateCwd?: boolean; logEvent?: boolean }) => {
       const renderOutput = opts?.renderOutput !== false;
       const updateCwd = opts?.updateCwd !== false;
+      const logEvent = opts?.logEvent !== false;
 
       if (updateCwd && result.cwd) setCwd(normalizePath(result.cwd));
       setSyncStatus({ lastSyncTs: Date.now(), serverReachable: true });
@@ -848,6 +883,11 @@ function CavToolsPageInner() {
       }
       if (typeof result.actor?.includeCavsafe === "boolean") {
         setCavsafeEntitled(Boolean(result.actor.includeCavsafe));
+      }
+
+      const statusWorkspace = readStatusWorkspace(result);
+      if (statusWorkspace) {
+        setActiveProjectId(statusWorkspace.projectId);
       }
 
       for (const block of result.blocks || []) {
@@ -866,16 +906,19 @@ function CavToolsPageInner() {
         if (renderOutput) pushRun(`Warning\n${warning}`, "watch");
       }
 
-      const tone = toneFromStatus(Boolean(result.ok), Boolean((result.warnings || []).length));
-      pushSystemEvent(result.ok ? "command_ok" : "command_fail", `${clamp(result.command, 160)} (${result.durationMs}ms)`, tone, {
-        command: result.command,
-        cwd: result.cwd,
-        durationMs: result.durationMs,
-        ok: result.ok,
-        warnings: result.warnings,
-        error: result.error || null,
-        audit: result.audit,
-      });
+      const unavailable = result.error?.code === "PROCESS_RUNTIME_UNAVAILABLE";
+      const tone = unavailable ? "watch" : toneFromStatus(Boolean(result.ok), Boolean((result.warnings || []).length));
+      if (logEvent) {
+        pushSystemEvent(result.ok ? "command_ok" : unavailable ? "command_unavailable" : "command_fail", `${clamp(result.command, 160)} (${result.durationMs}ms)`, tone, {
+          command: result.command,
+          cwd: result.cwd,
+          durationMs: result.durationMs,
+          ok: result.ok,
+          warnings: result.warnings,
+          error: result.error || null,
+          audit: result.audit,
+        });
+      }
 
       const cmd = String(result.command || "").trim().toLowerCase();
       const isOpenCommand = cmd === "open" || cmd.startsWith("open ");
@@ -960,11 +1003,12 @@ function CavToolsPageInner() {
   );
 
   const refreshDirectory = useCallback(
-    async (path: string, opts?: { silent?: boolean }) => {
+    async (path: string, opts?: { silent?: boolean; logEvent?: boolean }) => {
       const p = normalizePath(path);
       try {
         const result = await callExec(`ls ${p}`, p);
-        applyExecResult(result, { renderOutput: false, updateCwd: false });
+        applyExecResult(result, { renderOutput: false, updateCwd: false, logEvent: opts?.logEvent ?? false });
+        return result;
       } catch (error) {
         if (opts?.silent) return;
         setSyncStatus({ lastSyncTs: Date.now(), serverReachable: false });
@@ -977,13 +1021,15 @@ function CavToolsPageInner() {
     [applyExecResult, callExec, pushSystemEvent]
   );
 
-  const refreshRoots = useCallback(async () => {
+  const refreshRoots = useCallback(async (opts?: { silent?: boolean; logEvent?: boolean; projectId?: number | null; canUseCavsafe?: boolean }) => {
+    const nextProjectId = opts?.projectId === undefined ? activeProjectId : opts.projectId;
+    const nextCanUseCavsafe = opts?.canUseCavsafe === undefined ? canUseCavsafe : opts.canUseCavsafe;
     await Promise.all(
       ROOTS
-        .filter((root) => (root.namespace === "cavsafe" ? canUseCavsafe : true))
-        .map((root) => refreshDirectory(root.path))
+        .filter((root) => shouldRefreshRoot(root, { activeProjectId: nextProjectId, canUseCavsafe: nextCanUseCavsafe }))
+        .map((root) => refreshDirectory(root.path, { silent: opts?.silent, logEvent: opts?.logEvent }))
     );
-  }, [canUseCavsafe, refreshDirectory]);
+  }, [activeProjectId, canUseCavsafe, refreshDirectory]);
 
   const openFileInStudio = useCallback(
     async (path: string, namespaceHint?: CavtoolsNamespace) => {
@@ -1504,6 +1550,10 @@ function CavToolsPageInner() {
   }, []);
 
   useEffect(() => {
+    setActiveProjectId(initialProjectId);
+  }, [initialProjectId]);
+
+  useEffect(() => {
     function onDocPointer(event: MouseEvent | TouchEvent) {
       const target = event.target;
       if (!accountWrapRef.current) return;
@@ -1558,13 +1608,66 @@ function CavToolsPageInner() {
   }
 
   useEffect(() => {
-    pushSystemEvent("cavtools_mount", "CavTools command plane mounted.", "good", {
-      projectId: projectId || null,
-      siteOrigin: siteOrigin || null,
-      ua: typeof navigator !== "undefined" ? navigator.userAgent : null,
-    });
-    void refreshRoots();
-    void runCommandFromInput("cav status");
+    let active = true;
+
+    async function warmCommandPlane() {
+      setBootPhase("context-loading");
+      try {
+        const statusResult = await callExec("cav status");
+        if (!active) return;
+        applyExecResult(statusResult, { renderOutput: false, updateCwd: false, logEvent: false });
+
+        const workspace = readStatusWorkspace(statusResult);
+        const nextProjectId = workspace?.projectId ?? initialProjectId;
+        const nextCanUseCavsafe = statusResult.actor?.memberRole === "OWNER" && Boolean(statusResult.actor?.includeCavsafe);
+        const skippedRoots = ROOTS
+          .filter((root) => !shouldRefreshRoot(root, { activeProjectId: nextProjectId, canUseCavsafe: nextCanUseCavsafe }))
+          .map((root) => root.path);
+        const syncResults = await Promise.all(
+          ROOTS
+            .filter((root) => shouldRefreshRoot(root, { activeProjectId: nextProjectId, canUseCavsafe: nextCanUseCavsafe }))
+            .map((root) => refreshDirectory(root.path, { silent: true, logEvent: false }))
+        );
+        if (!active) return;
+
+        const issues = [
+          ...(statusResult.ok ? [] : [String(statusResult.error?.message || "cav status failed.")]),
+          ...syncResults
+            .filter((result): result is CavtoolsExecResult => Boolean(result))
+            .filter((result) => !result.ok)
+            .map((result) => `${result.command}: ${String(result.error?.message || "sync failed")}`),
+        ];
+        const limited = issues.length > 0;
+        setBootPhase(limited ? "limited" : "ready");
+        pushSystemEvent(
+          "cavtools_mount",
+          limited ? "CavTools command plane mounted with limited startup sync." : "CavTools command plane mounted.",
+          limited ? "watch" : "good",
+          {
+            projectId: nextProjectId,
+            siteOrigin: siteOrigin || null,
+            ua: typeof navigator !== "undefined" ? navigator.userAgent : null,
+            skippedRoots,
+            issues,
+          }
+        );
+      } catch (error) {
+        if (!active) return;
+        setSyncStatus({ lastSyncTs: Date.now(), serverReachable: false });
+        setBootPhase("limited");
+        pushSystemEvent("cavtools_mount", "CavTools command plane mounted with limited startup sync.", "watch", {
+          projectId: initialProjectId,
+          siteOrigin: siteOrigin || null,
+          ua: typeof navigator !== "undefined" ? navigator.userAgent : null,
+          issues: [String((error as Error)?.message || error || "Startup sync failed.")],
+        });
+      }
+    }
+
+    void warmCommandPlane();
+    return () => {
+      active = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1583,7 +1686,7 @@ function CavToolsPageInner() {
 
   useEffect(() => {
     if (!canUseCavsafe) return;
-    void refreshDirectory("/cavsafe");
+    void refreshDirectory("/cavsafe", { silent: true, logEvent: false });
   }, [canUseCavsafe, refreshDirectory]);
 
   useEffect(() => {
@@ -1859,6 +1962,7 @@ function CavToolsPageInner() {
   }
 
   const editorContent = tab === "inspector" ? inspectorBody : tab === "events" ? eventsBody : settingsBody;
+  const booting = bootPhase === "mounting";
 
   if (booting) {
     return (

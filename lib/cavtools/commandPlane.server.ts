@@ -1,7 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { lstat, mkdtemp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -905,6 +905,43 @@ class CavtoolsExecError extends Error {
     this.status = status;
     this.guardActionId = guardActionId || null;
   }
+}
+
+const PROCESS_RUNTIME_UNAVAILABLE_MESSAGE =
+  "Process-backed CavTools commands are unavailable on this deployment. Use a Node-hosted CavTools command plane for runtime, task, debug, tsserver, and ripgrep execution.";
+
+let childProcessModulePromise: Promise<typeof import("node:child_process")> | null = null;
+
+async function loadChildProcessModule() {
+  if (!childProcessModulePromise) {
+    childProcessModulePromise = import("node:child_process").catch((error) => {
+      childProcessModulePromise = null;
+      const message = String((error as Error)?.message || error || "");
+      if (message.includes('Dynamic require of "node:child_process" is not supported')) {
+        throw new CavtoolsExecError("PROCESS_RUNTIME_UNAVAILABLE", PROCESS_RUNTIME_UNAVAILABLE_MESSAGE, 503);
+      }
+      throw new CavtoolsExecError(
+        "PROCESS_RUNTIME_UNAVAILABLE",
+        PROCESS_RUNTIME_UNAVAILABLE_MESSAGE,
+        503
+      );
+    });
+  }
+  return await childProcessModulePromise;
+}
+
+async function spawnProcess(command: string, options: Record<string, unknown>): Promise<ChildProcess>;
+async function spawnProcess(command: string, argv: string[], options: Record<string, unknown>): Promise<ChildProcess>;
+async function spawnProcess(
+  command: string,
+  argvOrOptions: string[] | Record<string, unknown>,
+  maybeOptions?: Record<string, unknown>
+): Promise<ChildProcess> {
+  const { spawn } = await loadChildProcessModule();
+  if (Array.isArray(argvOrOptions)) {
+    return spawn(command, argvOrOptions, maybeOptions as never);
+  }
+  return spawn(command, argvOrOptions as never);
 }
 
 type Token = {
@@ -5482,13 +5519,12 @@ async function runCommandWithCapturedOutput(args: {
   stdinText?: string | null;
 }): Promise<{ code: number; stdout: string; stderr: string }> {
   const timeoutMs = Number.isFinite(Number(args.timeoutMs)) ? Math.max(1000, Math.trunc(Number(args.timeoutMs))) : 60_000;
+  const child = await spawnProcess(args.bin, args.argv, {
+    cwd: args.cwd,
+    env: args.env || process.env,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
   return await new Promise((resolve) => {
-    const child = spawn(args.bin, args.argv, {
-      cwd: args.cwd,
-      env: args.env || process.env,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-
     try {
       if (args.stdinText != null) {
         child.stdin?.write(String(args.stdinText));
@@ -6361,7 +6397,7 @@ async function runRipgrepSearch(args: {
   }
   argv.push(args.pattern);
   if (args.relPath && args.relPath !== ".") argv.push(args.relPath);
-  const child = spawn("rg", argv, {
+  const child = await spawnProcess("rg", argv, {
     cwd: args.repoDir,
     stdio: ["ignore", "pipe", "pipe"],
     env: process.env,
@@ -9782,7 +9818,7 @@ async function startRuntimeSession(
   };
   const secretEnv = await resolveSecretEnvForScope(ctx, "runtime").catch(() => ({}));
 
-  const child = spawn(runPlan.command, {
+  const child = await spawnProcess(runPlan.command, {
     cwd: runPlan.cwd,
     shell: true,
     stdio: ["ignore", "pipe", "pipe"],
@@ -10242,36 +10278,46 @@ async function startTaskSessionFromDefinition(
     }).catch(() => {});
   }
 
-  const child =
-    task.type === "shell"
-      ? spawn(process.env.SHELL || "/bin/sh", ["-lc", shellCommand], {
-          cwd: taskCwd,
-          stdio: ["ignore", "pipe", "pipe"],
-          env: {
-            ...process.env,
-            ...task.env,
-            ...secretEnv,
-            FORCE_COLOR: "0",
-            CAVCODE_TASK_SESSION_ID: session.id,
-            CAVCODE_SECURITY_PROFILE: policy.profile,
-            CAVCODE_SECURITY_SANDBOX: policy.sandboxMode,
-            CAVCODE_SECURITY_NETWORK: policy.networkPolicy,
-          },
-        })
-      : spawn(renderedCommand, renderedArgs, {
-          cwd: taskCwd,
-          stdio: ["ignore", "pipe", "pipe"],
-          env: {
-            ...process.env,
-            ...task.env,
-            ...secretEnv,
-            FORCE_COLOR: "0",
-            CAVCODE_TASK_SESSION_ID: session.id,
-            CAVCODE_SECURITY_PROFILE: policy.profile,
-            CAVCODE_SECURITY_SANDBOX: policy.sandboxMode,
-            CAVCODE_SECURITY_NETWORK: policy.networkPolicy,
-          },
-        });
+  let child: ChildProcess;
+  try {
+    child =
+      task.type === "shell"
+        ? await spawnProcess(process.env.SHELL || "/bin/sh", ["-lc", shellCommand], {
+            cwd: taskCwd,
+            stdio: ["ignore", "pipe", "pipe"],
+            env: {
+              ...process.env,
+              ...task.env,
+              ...secretEnv,
+              FORCE_COLOR: "0",
+              CAVCODE_TASK_SESSION_ID: session.id,
+              CAVCODE_SECURITY_PROFILE: policy.profile,
+              CAVCODE_SECURITY_SANDBOX: policy.sandboxMode,
+              CAVCODE_SECURITY_NETWORK: policy.networkPolicy,
+            },
+          })
+        : await spawnProcess(renderedCommand, renderedArgs, {
+            cwd: taskCwd,
+            stdio: ["ignore", "pipe", "pipe"],
+            env: {
+              ...process.env,
+              ...task.env,
+              ...secretEnv,
+              FORCE_COLOR: "0",
+              CAVCODE_TASK_SESSION_ID: session.id,
+              CAVCODE_SECURITY_PROFILE: policy.profile,
+              CAVCODE_SECURITY_SANDBOX: policy.sandboxMode,
+              CAVCODE_SECURITY_NETWORK: policy.networkPolicy,
+            },
+          });
+  } catch (error) {
+    taskSessions.delete(session.id);
+    session.status = "failed";
+    session.updatedAtMs = Date.now();
+    pushTaskLogLine(session, "system", String((error as Error)?.message || PROCESS_RUNTIME_UNAVAILABLE_MESSAGE));
+    await persistTaskRunUpdate(session).catch(() => {});
+    throw error;
+  }
 
   session.process = child;
   pushTaskLogLine(session, "system", `[task:${task.label}] ${session.command}`);
@@ -11034,7 +11080,7 @@ async function startProjectServiceSession(
     sourceVersion: 1,
   };
 
-  const child = spawn(process.execPath, [tsserverPath, "--useInferredProjectPerProjectRoot", "true", "--disableAutomaticTypingAcquisition"], {
+  const child = await spawnProcess(process.execPath, [tsserverPath, "--useInferredProjectPerProjectRoot", "true", "--disableAutomaticTypingAcquisition"], {
     cwd: workspaceDir,
     stdio: ["pipe", "pipe", "pipe"],
     env: {
@@ -13680,7 +13726,7 @@ async function startDebugSession(
   const sessionId = session.id;
   const secretEnv = await resolveSecretEnvForScope(ctx, "debug").catch(() => ({}));
 
-  const child = spawn("node", ["--inspect-brk=0", entryRelPath], {
+  const child = await spawnProcess("node", ["--inspect-brk=0", entryRelPath], {
     cwd: stage.workspaceDir,
     stdio: ["ignore", "pipe", "pipe"],
     env: {
@@ -13835,7 +13881,7 @@ async function startDebugSessionFromLaunchTarget(
       }
     }
     const secretEnv = await resolveSecretEnvForScope(ctx, "debug").catch(() => ({}));
-    const child = spawn(runtimeExecutable, argv, {
+    const child = await spawnProcess(runtimeExecutable, argv, {
       cwd: spawnCwd,
       stdio: ["ignore", "pipe", "pipe"],
       env: {
