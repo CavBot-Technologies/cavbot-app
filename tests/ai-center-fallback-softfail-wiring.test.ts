@@ -15,9 +15,12 @@ test("center semantic soft-fail keeps model output instead of forcing determinis
   assert.equal(source.includes("answerPath.push(\"soft_fail_keep_model_output\")"), true);
 });
 
-test("safe center fallback copy includes companion-aware backup response", () => {
+test("safe center fallback copy avoids meta echo loops and companion self-description", () => {
   const source = read("src/lib/ai/ai.service.ts");
   assert.equal(source.includes("if (args.actionClass === \"companion_chat\")"), true);
-  assert.equal(source.includes("I am CavBot Companion: a calm, practical AI partner for clarity, decisions, and momentum."), true);
+  assert.equal(source.includes("I understood your request:"), false);
+  assert.equal(source.includes("I am CavBot Companion: a calm, practical AI partner for clarity, decisions, and momentum."), false);
+  assert.equal(source.includes("I could not complete image generation right now"), true);
+  assert.equal(source.includes("I hit a temporary model issue before finishing the direct answer"), true);
   assert.equal(source.includes("actionClass: policy.actionClass"), true);
 });

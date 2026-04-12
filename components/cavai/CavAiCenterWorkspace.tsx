@@ -3622,7 +3622,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [cavCloudAttachItems, setCavCloudAttachItems] = useState<CavCloudAttachFileItem[]>([]);
   const [cavCloudAttachQuery, setCavCloudAttachQuery] = useState("");
   const [selectedAudioModel, setSelectedAudioModel] = useState("auto");
-  const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>("high");
+  const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>("medium");
   const [availableReasoningLevels, setAvailableReasoningLevels] = useState<ReasoningLevel[]>(
     () => reasoningLevelsForPlan(planBoot.planId)
   );
@@ -6715,7 +6715,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
       if (!res.ok || !body.ok || !body.data) {
         emitGuardDecisionFromPayload(body);
-        const message = s((body as { message?: unknown }).message) || "Assist request failed.";
+        const message = s((body as { message?: unknown }).message)
+          || "CavAi hit a temporary issue before it could finish the reply. Please retry.";
         throw new Error(message);
       }
 
@@ -6846,7 +6847,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         setError("");
         return null;
       }
-      setError(err instanceof Error ? err.message : "Assist request failed.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "CavAi hit a temporary issue before it could finish the reply. Please retry."
+      );
       return null;
     } finally {
       if (requestAbortRef.current === controller) {

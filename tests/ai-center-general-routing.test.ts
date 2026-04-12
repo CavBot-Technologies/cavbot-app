@@ -46,6 +46,27 @@ test("general prompt inference is semantic and not locked to default write_note"
     ),
     "email_text_agent"
   );
+  assert.equal(
+    inferCenterActionFromPrompt(
+      "Generate an image of a square ceramic clock with Kosiv style painting.",
+      "technical_recap"
+    ),
+    "image_studio"
+  );
+  assert.equal(
+    inferCenterActionFromPrompt(
+      "Make a realistic image of a ceramic clock for me.",
+      "technical_recap"
+    ),
+    "image_studio"
+  );
+  assert.equal(
+    inferCenterActionFromPrompt(
+      "Edit this image and clean up the ceramic glaze highlights.",
+      "technical_recap"
+    ),
+    "image_edit"
+  );
 });
 
 test("server-side general action routing maps generic actions to task-appropriate lanes", () => {

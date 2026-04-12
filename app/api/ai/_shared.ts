@@ -21,6 +21,7 @@ export function aiJson(payload: unknown, init?: number | ResponseInit) {
 }
 
 export function aiErrorResponse(error: unknown, requestId: string) {
+  const genericProductionMessage = "CavAi hit a temporary server issue before it could finish the reply. Please retry.";
   if (isApiAuthError(error)) {
     return aiJson({ ok: false, requestId, error: error.code }, error.status);
   }
@@ -30,12 +31,16 @@ export function aiErrorResponse(error: unknown, requestId: string) {
       details && typeof details === "object" && !Array.isArray(details)
         ? (details as { guardDecision?: unknown }).guardDecision
         : null;
+    const safeMessage =
+      process.env.NODE_ENV !== "production" || error.status < 500
+        ? error.message
+        : genericProductionMessage;
     return aiJson(
       {
         ok: false,
         requestId,
         error: error.code,
-        message: error.message,
+        message: safeMessage,
         ...(guardDecision && typeof guardDecision === "object" ? { guardDecision } : {}),
         ...(process.env.NODE_ENV !== "production" ? { details: error.details } : {}),
       },
@@ -48,7 +53,7 @@ export function aiErrorResponse(error: unknown, requestId: string) {
       ok: false,
       requestId,
       error: "SERVER_ERROR",
-      ...(process.env.NODE_ENV !== "production" ? { message } : {}),
+      message: process.env.NODE_ENV !== "production" ? message : genericProductionMessage,
     },
     500
   );

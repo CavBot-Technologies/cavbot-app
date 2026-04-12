@@ -52,7 +52,11 @@ import {
   resolveModelRoleForTaskType,
   resolveModelRoleForSurfaceAction,
 } from "@/src/lib/ai/model-routing";
-import { resolveCenterActionForTask } from "@/src/lib/ai/ai.center-routing";
+import {
+  inferCenterActionFromPrompt,
+  isGenericCenterAction,
+  resolveCenterActionForTask,
+} from "@/src/lib/ai/ai.center-routing";
 import {
   resolveAiExecutionPolicy,
   resolveReasoningDirective,
@@ -990,21 +994,130 @@ function hasCheck(items: string[], matcher: RegExp): boolean {
   return items.some((item) => matcher.test(s(item).toLowerCase()));
 }
 
+function extractSimpleArithmeticExpression(prompt: string, goal?: string | null): string | null {
+  const full = `${s(prompt)} ${s(goal)}`.trim().replace(/\?+$/g, "");
+  if (!full) return null;
+  const matched = full.match(/^(?:what(?:'s| is)?|calculate|solve|evaluate)\s+([0-9+\-*/%().\s]+)$/i);
+  const candidate = s(matched?.[1] || full);
+  if (!candidate || /[a-z]/i.test(candidate)) return null;
+  if (!/^[0-9+\-*/%().\s]+$/.test(candidate)) return null;
+  const compact = candidate.replace(/\s+/g, "");
+  if (!compact || !/[+\-*/%]/.test(compact)) return null;
+  if (compact.includes("**") || compact.includes("//")) return null;
+  const openCount = (compact.match(/\(/g) || []).length;
+  const closeCount = (compact.match(/\)/g) || []).length;
+  if (openCount !== closeCount) return null;
+  return compact;
+}
+
+function tryResolveSimpleArithmeticAnswer(prompt: string, goal?: string | null): string | null {
+  const expression = extractSimpleArithmeticExpression(prompt, goal);
+  if (!expression) return null;
+  try {
+    const value = Function(`"use strict"; return (${expression});`)() as unknown;
+    if (typeof value !== "number" || !Number.isFinite(value)) return null;
+    const rounded = Number.isInteger(value) ? value : Number(value.toFixed(8));
+    return String(rounded);
+  } catch {
+    return null;
+  }
+}
+
+function hasFastDirectHeavySignals(text: string): boolean {
+  return (
+    /\b(image|picture|illustration|render|photo|screenshot|mockup)\b/.test(text)
+    || /\b(research|sources?|citation|evidence|compare market)\b/.test(text)
+    || /\b(code|html|css|javascript|typescript|python|sql|component|api|debug|fix|refactor)\b/.test(text)
+    || /\b(cavsafe|security|policy|permission|acl|private)\b/.test(text)
+    || /\b(cavcloud|storage|folder|artifact|directory)\b/.test(text)
+    || /\b(dashboard|incident|latency|anomaly|error|spike|telemetry)\b/.test(text)
+    || /\b(upload|attachment|file|document|pdf)\b/.test(text)
+    || /https?:\/\//.test(text)
+  );
+}
+
+function shouldUseFastDirectCenterLane(args: {
+  surface: AiCenterSurface;
+  effectiveAction: AiCenterAssistAction;
+  taskType: ReturnType<typeof classifyAiTaskType>;
+  prompt: string;
+  goal?: string | null;
+  researchModeRequested: boolean;
+  imageAttachmentCount: number;
+  uploadedFileCount: number;
+  researchUrlsCount: number;
+  hasCustomAgent: boolean;
+}): boolean {
+  if (args.researchModeRequested || args.hasCustomAgent) return false;
+  if (args.imageAttachmentCount > 0 || args.uploadedFileCount > 0 || args.researchUrlsCount > 0) return false;
+  if (args.surface !== "general" && args.surface !== "workspace") return false;
+  if (
+    args.effectiveAction === "image_studio"
+    || args.effectiveAction === "image_edit"
+    || args.effectiveAction === "web_research"
+    || isCompanionCenterAction(args.effectiveAction)
+  ) {
+    return false;
+  }
+
+  if (tryResolveSimpleArithmeticAnswer(args.prompt, args.goal)) return true;
+
+  const fullText = `${s(args.prompt)} ${s(args.goal)}`.trim();
+  if (!fullText) return false;
+  const wordCount = fullText.split(/\s+/).filter(Boolean).length;
+  if (fullText.length > 160 || wordCount > 24) return false;
+  if (hasFastDirectHeavySignals(fullText.toLowerCase())) return false;
+
+  return (
+    args.taskType === "general_chat"
+    || args.taskType === "explanation"
+    || args.taskType === "comparison"
+    || args.taskType === "tutoring"
+    || args.taskType === "rewrite"
+    || args.taskType === "writing"
+    || args.taskType === "summarization"
+    || args.taskType === "note_summary"
+    || args.taskType === "note_rewrite"
+    || args.taskType === "title_improvement"
+    || args.taskType === "naming"
+    || args.taskType === "brainstorming"
+  );
+}
+
+function buildFastDirectCenterResponse(answer: string): AiCenterAssistResponse {
+  return {
+    summary: "Direct answer completed.",
+    risk: "low",
+    answer,
+    recommendations: [],
+    notes: ["Returned a direct answer without a heavyweight reasoning pass."],
+    followUpChecks: [],
+    evidenceRefs: [],
+  };
+}
+
 function safeFallbackAnswer(args: {
   taskType: ReturnType<typeof classifyAiTaskType>;
   prompt: string;
   goal?: string | null;
   actionClass?: AiActionClass | null;
+  effectiveAction?: AiCenterAssistAction | null;
+  errorCode?: string | null;
+  fastDirectMode?: boolean;
 }): string {
   const prompt = s(args.prompt);
   const goal = s(args.goal);
   const full = `${prompt} ${goal}`.toLowerCase();
+  const directArithmeticAnswer = tryResolveSimpleArithmeticAnswer(prompt, goal);
+  if (directArithmeticAnswer) return directArithmeticAnswer;
+  if (args.effectiveAction === "image_studio" || args.effectiveAction === "image_edit") {
+    const lead = s(prompt).replace(/\s+/g, " ").slice(0, 180) || "your image request";
+    return args.effectiveAction === "image_edit"
+      ? `I could not complete the image edit right now, but your edit request is ready to retry: "${lead}".`
+      : `I could not complete image generation right now, but your prompt is ready to retry: "${lead}".`;
+  }
   if (args.actionClass === "companion_chat") {
-    return [
-      "I hear you.",
-      "I am CavBot Companion: a calm, practical AI partner for clarity, decisions, and momentum.",
-      "I can talk things through, help you reset when stressed, and turn what you are facing into concrete next steps.",
-    ].join(" ");
+    return "I am still here with you. A temporary model issue interrupted this reply, but you can send the same message again and I will stay focused on what you are dealing with and the next step.";
   }
   if (args.taskType === "writing" || args.taskType === "rewrite" || args.taskType === "title_improvement" || args.taskType === "note_writing" || args.taskType === "note_rewrite") {
     if (full.includes("birthday")) {
@@ -1021,16 +1134,18 @@ function safeFallbackAnswer(args: {
     ].join("\n");
   }
   if (args.taskType === "research" || args.taskType === "keyword_research" || args.taskType === "seo" || args.taskType === "website_improvement" || args.taskType === "content_brief") {
-    return "I could not confidently return a high-fidelity researched result on the first pass. Treat this as heuristic guidance; I can rerun with stricter source constraints.";
+    return "I could not complete a reliable research pass on this attempt. Retry with the same request or add explicit source constraints so I can return a tighter evidence-backed answer.";
   }
   if (args.taskType === "tutoring" || args.taskType === "explanation" || args.taskType === "comparison") {
-    return "I can explain this clearly step-by-step. Share the exact concept or options you want compared and I will return a structured breakdown.";
+    return "I hit a temporary model issue before I could finish the direct explanation. Retry once and I will return the explanation itself, not a meta summary.";
   }
   const lead = s(prompt).replace(/\s+/g, " ").slice(0, 140);
   if (lead) {
-    return `I understood your request: "${lead}". I can answer directly, break it into steps, or draft it in your preferred style.`;
+    return args.fastDirectMode
+      ? `I hit a temporary model issue before finishing the direct answer to: "${lead}". Retry once and I will answer directly.`
+      : `I hit a temporary model issue before finishing the answer to: "${lead}". Retry once and I will return the direct response.`;
   }
-  return "I can help with this request. Tell me if you want a direct answer, a step-by-step plan, or a drafted version.";
+  return "I hit a temporary model issue before I could finish the answer. Retry once and I will return the direct response.";
 }
 
 function buildSafeCenterFallbackResponse(args: {
@@ -1038,6 +1153,9 @@ function buildSafeCenterFallbackResponse(args: {
   prompt: string;
   goal?: string | null;
   actionClass?: AiActionClass | null;
+  effectiveAction?: AiCenterAssistAction | null;
+  errorCode?: string | null;
+  fastDirectMode?: boolean;
   researchMode: boolean;
   model: string;
   reasoningLevel: "low" | "medium" | "high" | "extra_high";
@@ -1048,20 +1166,34 @@ function buildSafeCenterFallbackResponse(args: {
     prompt: args.prompt,
     goal: args.goal,
     actionClass: args.actionClass,
+    effectiveAction: args.effectiveAction,
+    errorCode: args.errorCode,
+    fastDirectMode: args.fastDirectMode,
   });
   const response: AiCenterAssistResponse = {
-    summary: "Safe fallback response delivered to keep the request unblocked.",
+    summary:
+      args.effectiveAction === "image_studio" || args.effectiveAction === "image_edit"
+        ? "Image request preserved while CavAi recovers."
+        : "Safe fallback response delivered to keep the request unblocked.",
     risk: "low",
     answer,
     recommendations: [
-      "Refine the target output format for a tighter result.",
-      "Include any required constraints (tone, length, scope).",
+      args.effectiveAction === "image_studio" || args.effectiveAction === "image_edit"
+        ? "Retry the same prompt once Image Studio is available again."
+        : "Refine the target output format for a tighter result.",
+      args.effectiveAction === "image_edit"
+        ? "Keep the same source image attached when you retry."
+        : "Include any required constraints (tone, length, scope).",
     ],
     notes: [
-      "Fallback mode avoided a blank, failed, or low-confidence response.",
+      args.effectiveAction === "image_studio" || args.effectiveAction === "image_edit"
+        ? "Fallback mode preserved the image request instead of returning a blank or raw infrastructure failure."
+        : "Fallback mode avoided a blank, failed, or low-confidence response.",
     ],
     followUpChecks: [
-      "Retry with a more explicit target format if needed.",
+      args.effectiveAction === "image_studio" || args.effectiveAction === "image_edit"
+        ? "Confirm the prompt and any source asset are still correct before rerunning."
+        : "Retry with a more explicit target format if needed.",
     ],
     evidenceRefs: [],
   };
@@ -1227,6 +1359,30 @@ function shouldReturnSafeFallbackOnProviderFailure(error: AiServiceError): boole
     || code.includes("TIMEOUT")
     || code.includes("NETWORK_ERROR")
     || error.status === 504
+  );
+}
+
+function shouldReturnSafeCenterFallbackOnError(error: AiServiceError): boolean {
+  const code = s(error.code).toUpperCase();
+  if (
+    error.status === 400
+    || error.status === 401
+    || error.status === 403
+    || error.status === 429
+    || code === "AI_KILL_SWITCH_ENABLED"
+    || code === "AI_ACTION_CLASS_DISABLED"
+    || code === "AI_MODEL_NOT_ALLOWED_FOR_ACTION"
+    || code === "AI_IMAGE_PRESET_PLAN_LOCKED"
+  ) {
+    return false;
+  }
+  if (shouldReturnSafeFallbackOnProviderFailure(error)) return true;
+  return (
+    error.status >= 500
+    || code.includes("IMAGE_STUDIO")
+    || code.includes("PROVIDER_UNAVAILABLE")
+    || code.includes("EMPTY_RESPONSE")
+    || code.includes("AI_SERVICE_ERROR")
   );
 }
 
@@ -1886,6 +2042,7 @@ function centerSystemPrompt(args: {
   reasoningDirective: string;
   actionClass: AiActionClass;
   taskType: ReturnType<typeof classifyAiTaskType>;
+  fastDirectMode?: boolean;
   researchMode: boolean;
   researchToolBundle: AiResearchToolId[];
   model: string;
@@ -1953,6 +2110,12 @@ function centerSystemPrompt(args: {
     "Task type and user prompt are source of truth; action is only a routing hint.",
     CAVBOT_ANSWER_QUALITY_DIRECTIVE,
     CAVBOT_MODEL_BEHAVIOR_DIRECTIVE,
+    ...(args.fastDirectMode
+      ? [
+          "Fast direct-answer mode is active.",
+          "Answer the user's question in the shortest correct form. Do not pad, narrate, or over-explain.",
+        ]
+      : []),
     args.reasoningDirective,
     ...centerCompanionDirective({
       surface: args.input.surface,
@@ -1990,7 +2153,8 @@ function centerUserPrompt(
   contextPack?: ReturnType<typeof buildSurfaceContextPack>,
   effectiveAction?: string,
   customAgent?: CavenCustomAgent | null,
-  uploadedWorkspaceFiles?: UploadedWorkspaceFileContext[]
+  uploadedWorkspaceFiles?: UploadedWorkspaceFileContext[],
+  fastDirectMode = false,
 ) {
   const imageAttachments = (input.imageAttachments || []).map((item) => ({
     id: item.id,
@@ -2036,6 +2200,7 @@ function centerUserPrompt(
         goal: input.goal || null,
         model: input.model || null,
         researchMode,
+        fastDirectMode,
         researchUrls: Array.isArray(input.researchUrls) ? input.researchUrls : [],
         reasoningLevel: input.reasoningLevel || "medium",
         imageAttachments,
@@ -4770,26 +4935,30 @@ export async function runCenterAssist(args: {
     );
   }
 
-  const requestedModel = s(args.input.model);
+  const rawRequestedModel = s(args.input.model);
   const requestedInputAction = args.input.action;
   const modelForcedAction: AiCenterAssistAction | null =
-    requestedModel === ALIBABA_QWEN_CHARACTER_MODEL_ID
-      ? (isCompanionCenterAction(requestedInputAction) ? requestedInputAction : "companion_chat")
-      : requestedModel === ALIBABA_QWEN_IMAGE_MODEL_ID
-        ? "image_studio"
-        : requestedModel === ALIBABA_QWEN_IMAGE_EDIT_MODEL_ID
+    rawRequestedModel === ALIBABA_QWEN_IMAGE_MODEL_ID
+      ? "image_studio"
+      : rawRequestedModel === ALIBABA_QWEN_IMAGE_EDIT_MODEL_ID
           ? "image_edit"
           : null;
   const requestedActionBase = modelForcedAction
     || (s(requestedInputAction).toLowerCase() === "web_research" ? "web_research" : requestedInputAction);
+  const promptRoutedAction = isGenericCenterAction(requestedActionBase)
+    ? inferCenterActionFromPrompt(
+        [args.input.prompt, args.input.goal || null].filter(Boolean).join("\n"),
+        requestedActionBase,
+      )
+    : requestedActionBase;
   const requestedAction = selectedCustomAgent
     ? inferCenterActionFromCustomAgent({
         agent: selectedCustomAgent,
         prompt: args.input.prompt,
         goal: args.input.goal || null,
-        fallback: requestedActionBase,
+        fallback: promptRoutedAction,
       })
-    : requestedActionBase;
+    : promptRoutedAction;
   const actionForAudit = selectedCustomAgent
     ? (s(selectedCustomAgent.actionKey).toLowerCase() || requestedAction)
     : requestedAction;
@@ -4813,6 +4982,9 @@ export async function runCenterAssist(args: {
     taskType: requestedTaskType,
     researchModeRequested,
   });
+  const requestedModel = rawRequestedModel === ALIBABA_QWEN_CHARACTER_MODEL_ID && !isCompanionCenterAction(effectiveAction)
+    ? ""
+    : rawRequestedModel;
   const imageAttachmentMeta = (args.input.imageAttachments || []).map((item) => ({
     id: item.id,
     assetId: s(item.assetId) || null,
@@ -4864,6 +5036,21 @@ export async function runCenterAssist(args: {
     prompt: args.input.prompt,
     goal: args.input.goal || null,
   });
+  const fastDirectMode = shouldUseFastDirectCenterLane({
+    surface: args.input.surface,
+    effectiveAction,
+    taskType,
+    prompt: args.input.prompt,
+    goal: args.input.goal || null,
+    researchModeRequested,
+    imageAttachmentCount: imageAttachmentMeta.length,
+    uploadedFileCount: uploadedWorkspaceFileMeta.length,
+    researchUrlsCount: requestedResearchUrls.length,
+    hasCustomAgent: Boolean(selectedCustomAgent),
+  });
+  const deterministicDirectAnswer = fastDirectMode
+    ? tryResolveSimpleArithmeticAnswer(args.input.prompt, args.input.goal || null)
+    : null;
   const modelRole: AiModelRole = researchModeRequested
     ? "reasoning"
     : resolveModelRoleForTaskType({
@@ -4871,45 +5058,13 @@ export async function runCenterAssist(args: {
       surface: guardSurface,
       action: effectiveAction,
     });
-  const sessionHistory = await loadCenterSessionHistoryContext({
-    accountId: ctx.accountId,
-    sessionId: initialSessionId,
-    maxMessages: 10,
-  });
-  const memoryFacts = await retrieveRelevantAiUserMemoryFactsSafe({
-    accountId: ctx.accountId,
-    userId: ctx.userId,
-    prompt: args.input.prompt,
-    goal: args.input.goal || null,
-    limit: 6,
-    sessionId: initialSessionId,
-    requestId: args.requestId,
-  }).catch(() => []);
-  const {
-    routeManifestCoverageContext,
-    websiteKnowledgeContext,
-  } = await loadRouteAndWebsiteContextEnrichments({
-    accountId: ctx.accountId,
-    userId: ctx.userId,
-    sessionId: initialSessionId,
-    requestId: args.requestId,
-    surface: "center",
-    action: effectiveAction,
-    taskType,
-    prompt: args.input.prompt,
-    goal: args.input.goal || null,
-    workspaceId: ctx.workspaceId,
-    projectId: ctx.projectId,
-    routeAwareContext,
-  });
-  const inputContext: Record<string, unknown> = {
+  let inputContext: Record<string, unknown> = {
     ...routeAwareContext,
     ...inputContextRaw,
     uploadedWorkspaceFiles: uploadedWorkspaceFileMeta,
-    ...(routeManifestCoverageContext ? { routeManifestCoverage: routeManifestCoverageContext } : {}),
-    ...(websiteKnowledgeContext ? { websiteKnowledge: websiteKnowledgeContext } : {}),
+    ...(fastDirectMode ? { fastDirectMode: true } : {}),
   };
-  const contextPack = buildSurfaceContextPack({
+  let contextPack = buildSurfaceContextPack({
     surface: args.input.surface,
     taskType,
     prompt: args.input.prompt,
@@ -4922,19 +5077,13 @@ export async function runCenterAssist(args: {
       uploadedWorkspaceFiles: uploadedWorkspaceFileMeta,
       launchSurface: args.input.surface,
       effectiveAction,
-      sessionHistory,
-      sessionHistoryCount: sessionHistory.length,
-      memoryFacts: memoryFacts.map((row) => ({
-        key: row.factKey,
-        value: row.factValue,
-        category: row.category,
-        confidence: row.confidence,
-      })),
+      sessionHistory: [],
+      sessionHistoryCount: 0,
+      memoryFacts: [],
+      fastDirectMode: fastDirectMode || undefined,
       customAgent: selectedCustomAgent
         ? normalizeCustomAgentRuntimePayload(selectedCustomAgent)
         : null,
-      ...(routeManifestCoverageContext ? { routeManifestCoverage: routeManifestCoverageContext } : {}),
-      ...(websiteKnowledgeContext ? { websiteKnowledge: websiteKnowledgeContext } : {}),
     },
   });
   let providerId = "deepseek";
@@ -4953,7 +5102,7 @@ export async function runCenterAssist(args: {
       action: effectiveAction,
       taskType,
       requestedModel: requestedModel || null,
-      requestedReasoningLevel: args.input.reasoningLevel || null,
+      requestedReasoningLevel: fastDirectMode ? "low" : (args.input.reasoningLevel || null),
       promptText: args.input.prompt,
       context: inputContext,
       imageAttachmentCount: imageAttachmentMeta.length,
@@ -4980,6 +5129,172 @@ export async function runCenterAssist(args: {
       manualSelection: policy.manualModelSelected,
       fallbackReason: policy.modelFallbackReason,
     });
+    if (deterministicDirectAnswer) {
+      providerId = "cavai_fast_direct";
+      model = policy.model;
+      const data = buildFastDirectCenterResponse(deterministicDirectAnswer);
+      const checksPerformed = ["fast_direct_resolution"];
+      const answerPath = ["deterministic_fast_direct"];
+      const quality = evaluateAiAnswerQuality({
+        prompt: args.input.prompt,
+        goal: args.input.goal || null,
+        answer: textFromStructuredOutput(data),
+        surface: args.input.surface,
+        taskType,
+        contextSignals: contextPack.signalsUsed,
+      });
+      executionMeta = buildExecutionMeta({
+        startedAtMs: startedAt,
+        surface: args.input.surface,
+        action: actionForAudit,
+        actionClass: policy.actionClass,
+        prompt: args.input.prompt,
+        model,
+        providerId,
+        reasoningLevel: policy.reasoningLevel,
+        taskType,
+        researchMode: false,
+        contextSignals: contextPack.signalsUsed,
+        quality,
+        repairAttempted: false,
+        repairApplied: false,
+        checksPerformed,
+        answerPath,
+      });
+      sessionId = await persistSessionTurn({
+        accountId: ctx.accountId,
+        userId: ctx.userId,
+        requestId: args.requestId,
+        action: actionForAudit,
+        surface: toSessionSurface(args.input.surface),
+        sessionId: sessionId || null,
+        contextLabel: args.input.contextLabel || sessionTitleFromSurface(toSessionSurface(args.input.surface)),
+        workspaceId: ctx.workspaceId,
+        projectId: ctx.projectId,
+        origin: s(args.input.origin) || null,
+        userText: args.input.prompt,
+        userJson: buildCenterRetryUserJson({
+          input: args.input,
+          effectiveAction,
+          model: requestedModelForRetry,
+          reasoningLevel: policy.reasoningLevel,
+          actionClass: policy.actionClass,
+          taskType,
+          researchMode: false,
+          researchToolBundle: [],
+          researchUrls: requestedResearchUrls,
+          imageAttachments: imageAttachmentsForRetry,
+          contextPack,
+          context: inputContext,
+        }),
+        assistantText: data.answer,
+        assistantJson: {
+          ...data,
+          __cavAiMeta: executionMeta,
+        },
+        provider: providerId,
+        model,
+        status: "SUCCESS",
+      });
+      await persistAiReasoningTrace({
+        accountId: ctx.accountId,
+        userId: ctx.userId,
+        sessionId,
+        requestId: args.requestId,
+        surface: args.input.surface,
+        action: actionForAudit,
+        taskType,
+        actionClass: policy.actionClass,
+        provider: providerId,
+        model,
+        reasoningLevel: policy.reasoningLevel,
+        researchMode: false,
+        durationMs: executionMeta.durationMs,
+        showReasoningChip: executionMeta.showReasoningChip,
+        repairAttempted: false,
+        repairApplied: false,
+        quality: executionMeta.quality as unknown as Record<string, unknown>,
+        safeSummary: executionMeta.safeSummary as unknown as Record<string, unknown>,
+        contextSignals: executionMeta.contextSignals,
+        checksPerformed,
+        answerPath,
+      });
+      await learnAiUserMemoryFromPromptSafe({
+        accountId: ctx.accountId,
+        userId: ctx.userId,
+        sessionId,
+        requestId: args.requestId,
+        userPrompt: args.input.prompt,
+      });
+      await persistAiNarration({
+        accountId: ctx.accountId,
+        userId: ctx.userId,
+        requestId: args.requestId,
+        provider: providerId,
+        model,
+        runId: null,
+        workspaceId: ctx.workspaceId,
+        projectId: ctx.projectId,
+        origin: s(args.input.origin) || null,
+        narrationJson: {
+          surface: args.input.surface,
+          action: actionForAudit,
+          summary: data.summary,
+          answer: data.answer,
+        },
+      });
+      await writeAiUsageLog({
+        accountId: ctx.accountId,
+        userId: ctx.userId,
+        surface: guardSurface,
+        action: actionForAudit,
+        provider: providerId,
+        model,
+        requestId: args.requestId,
+        runId: null,
+        workspaceId: ctx.workspaceId,
+        projectId: ctx.projectId,
+        origin: s(args.input.origin) || null,
+        inputChars: args.input.prompt.length,
+        outputChars: data.answer.length,
+        latencyMs: Date.now() - startedAt,
+        status: "SUCCESS",
+        promptTokens: null,
+        completionTokens: null,
+        totalTokens: null,
+      });
+      await writeAiAudit({
+        req: args.req,
+        accountId: ctx.accountId,
+        userId: ctx.userId,
+        requestId: args.requestId,
+        surface: guardSurface,
+        action: actionForAudit,
+        provider: providerId,
+        model,
+        status: "SUCCESS",
+        memberRole: ctx.memberRole,
+        planId: ctx.planId,
+        actionClass: policy.actionClass,
+        reasoningLevel: policy.reasoningLevel,
+        weightedUsageUnits: policy.weightedUsageUnits,
+        latencyMs: Date.now() - startedAt,
+        workspaceId: ctx.workspaceId,
+        projectId: ctx.projectId,
+        origin: s(args.input.origin) || null,
+        attachmentCount: imageAttachmentMeta.length,
+        outcome: "fast_direct_response_generated",
+      });
+      return {
+        ok: true,
+        requestId: args.requestId,
+        providerId,
+        model,
+        sessionId,
+        meta: executionMeta || undefined,
+        data,
+      };
+    }
     const retryContext = inputContext;
     const retryFromMessageId = s(retryContext.retryFromMessageId);
     const retryFromSessionId = s(retryContext.retryFromSessionId) || s(args.input.sessionId);
@@ -5434,6 +5749,72 @@ export async function runCenterAssist(args: {
         throw error;
       }
     }
+    if (!fastDirectMode) {
+      const sessionHistory = await loadCenterSessionHistoryContext({
+        accountId: ctx.accountId,
+        sessionId: initialSessionId,
+        maxMessages: 10,
+      });
+      const memoryFacts = await retrieveRelevantAiUserMemoryFactsSafe({
+        accountId: ctx.accountId,
+        userId: ctx.userId,
+        prompt: args.input.prompt,
+        goal: args.input.goal || null,
+        limit: 6,
+        sessionId: initialSessionId,
+        requestId: args.requestId,
+      }).catch(() => []);
+      const {
+        routeManifestCoverageContext,
+        websiteKnowledgeContext,
+      } = await loadRouteAndWebsiteContextEnrichments({
+        accountId: ctx.accountId,
+        userId: ctx.userId,
+        sessionId: initialSessionId,
+        requestId: args.requestId,
+        surface: "center",
+        action: effectiveAction,
+        taskType,
+        prompt: args.input.prompt,
+        goal: args.input.goal || null,
+        workspaceId: ctx.workspaceId,
+        projectId: ctx.projectId,
+        routeAwareContext,
+      });
+      inputContext = {
+        ...inputContext,
+        ...(routeManifestCoverageContext ? { routeManifestCoverage: routeManifestCoverageContext } : {}),
+        ...(websiteKnowledgeContext ? { websiteKnowledge: websiteKnowledgeContext } : {}),
+      };
+      contextPack = buildSurfaceContextPack({
+        surface: args.input.surface,
+        taskType,
+        prompt: args.input.prompt,
+        goal: args.input.goal || null,
+        context: inputContext,
+        injectedContext: {
+          contextLabel: args.input.contextLabel || null,
+          researchUrls: requestedResearchUrls,
+          imageAttachments: imageAttachmentMeta,
+          uploadedWorkspaceFiles: uploadedWorkspaceFileMeta,
+          launchSurface: args.input.surface,
+          effectiveAction,
+          sessionHistory,
+          sessionHistoryCount: sessionHistory.length,
+          memoryFacts: memoryFacts.map((row) => ({
+            key: row.factKey,
+            value: row.factValue,
+            category: row.category,
+            confidence: row.confidence,
+          })),
+          customAgent: selectedCustomAgent
+            ? normalizeCustomAgentRuntimePayload(selectedCustomAgent)
+            : null,
+          ...(routeManifestCoverageContext ? { routeManifestCoverage: routeManifestCoverageContext } : {}),
+          ...(websiteKnowledgeContext ? { websiteKnowledge: websiteKnowledgeContext } : {}),
+        },
+      });
+    }
     const researchMode = policy.researchMode;
     if (researchMode && policy.researchToolBundle.length) {
       await Promise.all(
@@ -5470,7 +5851,8 @@ export async function runCenterAssist(args: {
       contextPack,
       effectiveAction,
       selectedCustomAgent,
-      uploadedWorkspaceFiles
+      uploadedWorkspaceFiles,
+      fastDirectMode,
     );
 
     const providerCall = await runProviderJson({
@@ -5485,6 +5867,7 @@ export async function runCenterAssist(args: {
             reasoningDirective,
             actionClass: policy.actionClass,
             taskType,
+            fastDirectMode,
             researchMode,
             researchToolBundle: policy.researchToolBundle,
             model: policy.model,
@@ -5565,7 +5948,7 @@ export async function runCenterAssist(args: {
       answerText: textFromStructuredOutput(data),
       startedAtMs: startedAt,
       maxExecutionTimeMs: policy.requestLimits.maxExecutionTimeMs,
-      minimumUsefulChars: researchMode ? 180 : 96,
+      minimumUsefulChars: fastDirectMode ? 0 : (researchMode ? 180 : 96),
       force: researchMode,
     });
 
@@ -5591,6 +5974,7 @@ export async function runCenterAssist(args: {
                 reasoningDirective,
                 actionClass: policy.actionClass,
                 taskType,
+                fastDirectMode,
                 researchMode,
                 researchToolBundle: policy.researchToolBundle,
                 model: policy.model,
@@ -5672,6 +6056,9 @@ export async function runCenterAssist(args: {
             prompt: args.input.prompt,
             goal: args.input.goal || null,
             actionClass: policy.actionClass,
+            effectiveAction,
+            errorCode: "AI_SEMANTIC_VALIDATION_FAILED",
+            fastDirectMode,
             researchMode,
             model: policy.model,
             reasoningLevel: policy.reasoningLevel,
@@ -5876,7 +6263,7 @@ export async function runCenterAssist(args: {
     };
   } catch (error) {
     const mapped = mapProviderError(error);
-    const shouldReturnSafeJsonFallback = shouldReturnSafeFallbackOnProviderFailure(mapped);
+    const shouldReturnSafeJsonFallback = shouldReturnSafeCenterFallbackOnError(mapped);
 
     if (shouldReturnSafeJsonFallback) {
       const fallbackResearchMode = policy?.researchMode || researchModeRequested;
@@ -5887,6 +6274,9 @@ export async function runCenterAssist(args: {
         prompt: args.input.prompt,
         goal: args.input.goal || null,
         actionClass: policy?.actionClass || null,
+        effectiveAction,
+        errorCode: mapped.code,
+        fastDirectMode,
         researchMode: fallbackResearchMode,
         model: fallbackModel,
         reasoningLevel: fallbackReasoningLevel,

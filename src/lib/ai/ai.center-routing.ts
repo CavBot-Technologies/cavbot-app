@@ -15,6 +15,28 @@ export function isGenericCenterAction(action: AiCenterAssistAction): boolean {
   return GENERIC_CENTER_ACTIONS.has(action);
 }
 
+function looksLikeImageEditRequest(text: string): boolean {
+  return (
+    /\b(image edit|edit image|edit this image|retouch|remove background|background replacement|enhance screenshot|touch[- ]?up)\b/.test(text)
+    || /\b(edit|retouch|enhance|modify|transform|clean up|touch up)\b.{0,32}\b(image|photo|picture|screenshot|graphic|logo)\b/.test(text)
+  );
+}
+
+function looksLikeImageGenerationRequest(text: string): boolean {
+  return (
+    /\b(image studio|visual concept|mockup visual|realistic image|product render)\b/.test(text)
+    || /\b(generate|make|create|render|illustrate)\b.{0,40}\b(image|picture|illustration|render|visual|mockup|scene)\b/.test(text)
+  );
+}
+
+export function inferCenterImageActionFromPrompt(prompt: string): AiCenterAssistAction | null {
+  const text = s(prompt).toLowerCase();
+  if (!text) return null;
+  if (looksLikeImageEditRequest(text)) return "image_edit";
+  if (looksLikeImageGenerationRequest(text)) return "image_studio";
+  return null;
+}
+
 export function inferCenterActionFromPrompt(
   prompt: string,
   selectedAction: AiCenterAssistAction = "technical_recap"
@@ -22,6 +44,9 @@ export function inferCenterActionFromPrompt(
   const text = s(prompt).toLowerCase();
   const normalizedSelected = selectedAction || "technical_recap";
   if (!text) return normalizedSelected;
+
+  const inferredImageAction = inferCenterImageActionFromPrompt(text);
+  if (inferredImageAction) return inferredImageAction;
 
   const candidates: Array<{ pattern: RegExp; action: AiCenterAssistAction }> = [
     { pattern: /\b(multimodal|live multimodal|omni|analyze this video|analyze this audio|cross-modal)\b/, action: "live_multimodal" },
