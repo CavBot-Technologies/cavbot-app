@@ -628,7 +628,7 @@ body[data-cb-footer-hidden="1"] .cc-ide{
 }
 
 .cc-sidebar-head.is-menu-open{
-  z-index: var(--z-pop) !important;
+  z-index: calc(var(--z-pop) + 2) !important;
 }
 
 .cc-brand-row{
@@ -691,7 +691,28 @@ body[data-cb-footer-hidden="1"] .cc-ide{
 }
 
 .cc-side-menuShell.is-open{
-  z-index: var(--z-pop);
+  z-index: calc(var(--z-pop) + 4);
+}
+
+.cc-side-menuOverlay{
+  position: fixed;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background:
+    radial-gradient(circle at 24px 24px, rgba(96,116,168,.10) 0, rgba(96,116,168,0) 180px),
+    rgba(2,5,16,.42);
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  cursor: default;
+  z-index: 0;
+}
+
+.cc-side-menuShell > .cc-side-menuBtn,
+.cc-side-menuShell > .cc-side-icbtn{
+  position: relative;
+  z-index: 2;
 }
 
 .cc-side-menuBtn{
@@ -717,39 +738,47 @@ body[data-cb-footer-hidden="1"] .cc-ide{
 
 .cc-side-menu{
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 8px);
   right: 0;
-  min-width: 188px;
-  padding: 7px;
-  border: 1px solid rgba(255,255,255,.14);
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(16,20,34,.99), rgba(8,12,24,.995)), rgba(8,12,24,.995);
-  box-shadow: 0 28px 70px rgba(0,0,0,.72), 0 0 0 1px rgba(255,255,255,.05);
-  z-index: calc(var(--z-pop) + 2);
+  min-width: 196px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(8,12,25,.985) 0%, rgba(5,9,19,.99) 100%),
+    rgba(3,6,22,.96);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow:
+    0 34px 88px rgba(0,0,0,.78),
+    0 14px 32px rgba(0,0,0,.46),
+    0 0 0 1px rgba(255,255,255,.05);
+  z-index: 3;
   overflow: hidden;
   isolation: isolate;
   background-clip: padding-box;
   display: grid;
-  gap: 3px;
+  gap: 4px;
 }
 
 .cc-side-menuItem{
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 10px;
   height: 30px;
   padding: 0 11px;
-  background: transparent;
-  color: rgba(232,240,255,.92);
+  background: rgba(255,255,255,.015);
+  color: rgba(240,246,255,.96);
   font-size: 12px;
   font-weight: 700;
   text-align: left;
   cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
 }
 
 .cc-side-menuItem:hover{
-  background: rgba(255,255,255,.08);
-  color: rgba(247,251,255,.96);
+  background: rgba(255,255,255,.07);
+  border-color: rgba(255,255,255,.08);
+  color: rgba(247,251,255,.98);
 }
 
 .cc-side-menuItem:disabled{
@@ -799,7 +828,7 @@ body[data-cb-footer-hidden="1"] .cc-ide{
 .cc-side-menuItemKey{
   margin-left: auto;
   padding-left: 12px;
-  color: rgba(197,206,231,.72);
+  color: rgba(197,206,231,.82);
   font-family: var(--cb-mono);
   font-size: 11px;
   font-weight: 700;

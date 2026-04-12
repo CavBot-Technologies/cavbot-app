@@ -14,7 +14,9 @@ test("cavcode sidebar menus render on an isolated top-layer surface", () => {
 
   assert.match(source, /\.cc-sidebar-head\{[\s\S]*position: relative;[\s\S]*overflow: visible;[\s\S]*isolation: isolate;/);
   assert.match(source, /\.cc-side-menuShell\{[\s\S]*z-index: calc\(var\(--z-pop\) \+ 1\);[\s\S]*isolation: isolate;/);
-  assert.match(source, /\.cc-side-menu\{[\s\S]*z-index: calc\(var\(--z-pop\) \+ 2\);[\s\S]*overflow: hidden;[\s\S]*isolation: isolate;/);
+  assert.match(source, /\.cc-side-menuOverlay\{[\s\S]*position: fixed;[\s\S]*backdrop-filter: blur\(10px\) saturate\(120%\);/);
+  assert.match(source, /\.cc-side-menuShell\.is-open\{[\s\S]*z-index: calc\(var\(--z-pop\) \+ 4\);/);
+  assert.match(source, /\.cc-side-menu\{[\s\S]*backdrop-filter: blur\(18px\) saturate\(140%\);[\s\S]*z-index: 3;[\s\S]*overflow: hidden;[\s\S]*isolation: isolate;/);
 });
 
 test("cavcode search stays top-aligned and changes commit input keeps shared field styling", () => {

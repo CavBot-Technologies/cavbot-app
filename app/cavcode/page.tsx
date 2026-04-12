@@ -14545,6 +14545,14 @@ export default function CavCodePage() {
                       <IconCollapseAll />
                     </button>
                     <div className={`cc-side-menuShell ${explorerHeaderMenuOpen ? "is-open" : ""}`} ref={explorerHeaderMenuRef}>
+                      {explorerHeaderMenuOpen ? (
+                        <button
+                          type="button"
+                          className="cc-side-menuOverlay"
+                          aria-label="Dismiss explorer actions menu"
+                          onClick={() => setExplorerHeaderMenuOpen(false)}
+                        />
+                      ) : null}
                       <button
                         className={`cc-side-icbtn ${explorerHeaderMenuOpen ? "is-on" : ""}`}
                         type="button"
@@ -14676,6 +14684,14 @@ export default function CavCodePage() {
 	                  <div className="cc-side-title">SOURCE CONTROL</div>
                     <div className="cc-side-actions">
                       <div className={`cc-side-menuShell ${scmHeaderMenuOpen ? "is-open" : ""}`} ref={scmHeaderMenuRef}>
+                        {scmHeaderMenuOpen ? (
+                          <button
+                            type="button"
+                            className="cc-side-menuOverlay"
+                            aria-label="Dismiss source control menu"
+                            onClick={() => setScmHeaderMenuOpen(false)}
+                          />
+                        ) : null}
                         <button
                           className={`cc-side-menuBtn ${scmHeaderMenuOpen ? "is-on" : ""}`}
                           type="button"
@@ -14759,6 +14775,14 @@ export default function CavCodePage() {
                   <div className="cc-side-title">CHANGES</div>
                   <div className="cc-side-actions">
                     <div className={`cc-side-menuShell ${changesHeaderMenuOpen ? "is-open" : ""}`} ref={changesHeaderMenuRef}>
+                      {changesHeaderMenuOpen ? (
+                        <button
+                          type="button"
+                          className="cc-side-menuOverlay"
+                          aria-label="Dismiss changes menu"
+                          onClick={() => setChangesHeaderMenuOpen(false)}
+                        />
+                      ) : null}
                       <button
                         className={`cc-side-menuBtn ${changesHeaderMenuOpen ? "is-on" : ""}`}
                         type="button"
@@ -15111,6 +15135,14 @@ export default function CavCodePage() {
                   <div className="cc-side-title">SETTINGS</div>
                   <div className="cc-side-actions">
                     <div className={`cc-side-menuShell ${settingsHeaderMenuOpen ? "is-open" : ""}`} ref={settingsHeaderMenuRef}>
+                      {settingsHeaderMenuOpen ? (
+                        <button
+                          type="button"
+                          className="cc-side-menuOverlay"
+                          aria-label="Dismiss settings menu"
+                          onClick={() => setSettingsHeaderMenuOpen(false)}
+                        />
+                      ) : null}
                       <button
                         className={`cc-side-menuBtn ${settingsHeaderMenuOpen ? "is-on" : ""}`}
                         type="button"
@@ -15515,6 +15547,14 @@ export default function CavCodePage() {
                   <div className="cc-side-title">RUN &amp; DEBUG</div>
                   <div className="cc-side-actions">
                     <div className={`cc-side-menuShell ${runHeaderMenuOpen ? "is-open" : ""}`} ref={runHeaderMenuRef}>
+                      {runHeaderMenuOpen ? (
+                        <button
+                          type="button"
+                          className="cc-side-menuOverlay"
+                          aria-label="Dismiss run and debug menu"
+                          onClick={() => setRunHeaderMenuOpen(false)}
+                        />
+                      ) : null}
                       <button
                         className={`cc-side-menuBtn ${runHeaderMenuOpen ? "is-on" : ""}`}
                         type="button"
