@@ -2,7 +2,6 @@
 import { NextResponse } from "next/server";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 
-import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/apiAuth";
 import {
@@ -30,6 +29,7 @@ const OWNER_USERNAME = normalizeUsername(process.env.CAVBOT_OWNER_USERNAME || ""
 const ALLOW_RUNTIME_STORAGE_BOOTSTRAP = process.env.NODE_ENV !== "production";
 const STORAGE_READY_CACHE_TTL_MS = ALLOW_RUNTIME_STORAGE_BOOTSTRAP ? 2_000 : 60_000;
 const STORAGE_UNAVAILABLE_MESSAGE = "Profile README storage is temporarily unavailable.";
+const STORAGE_UNAVAILABLE_RETRY_AFTER_MS = 15_000;
 
 let _tableReady: boolean | null = null;
 let _tableReadyCheckedAt = 0;
@@ -145,14 +145,16 @@ function storageUnavailableResponse() {
   return json(
     {
       ok: false,
+      kind: "retryable",
       error: "README_STORAGE_UNAVAILABLE",
       message: STORAGE_UNAVAILABLE_MESSAGE,
+      retryAfterMs: STORAGE_UNAVAILABLE_RETRY_AFTER_MS,
     },
     {
-      status: 503,
+      status: 200,
       headers: {
         "Cache-Control": "no-store",
-        "Retry-After": "15",
+        "Retry-After": String(Math.ceil(STORAGE_UNAVAILABLE_RETRY_AFTER_MS / 1_000)),
       },
     },
   );
@@ -251,14 +253,11 @@ export async function GET(req: Request) {
       }
     );
   } catch (e) {
-    if (isSchemaMismatchError(e, { tables: ["PublicProfileReadme"], columns: ["revision"] })) {
-      return json(
-        { ok: true, markdown: null, updatedAt: null, revision: 0 },
-        { status: 200, headers: { "Cache-Control": "no-store" } },
-      );
-    }
     console.error("GET /api/profile/readme failed:", e);
-    return json({ ok: false, message: "Failed to load README." }, { status: 500, headers: { "Cache-Control": "no-store" } });
+    return json(
+      { ok: true, degraded: true, markdown: null, updatedAt: null, revision: 0 },
+      { status: 200, headers: { "Cache-Control": "no-store" } },
+    );
   }
 }
 
@@ -407,10 +406,7 @@ export async function PUT(req: Request) {
       { status: 200, headers: { "Cache-Control": "no-store" } }
     );
   } catch (e) {
-    if (isSchemaMismatchError(e, { tables: ["PublicProfileReadme"], columns: ["revision"] })) {
-      return storageUnavailableResponse();
-    }
     console.error("PUT /api/profile/readme failed:", e);
-    return json({ ok: false, message: "Save failed." }, { status: 500, headers: { "Cache-Control": "no-store" } });
+    return storageUnavailableResponse();
   }
 }

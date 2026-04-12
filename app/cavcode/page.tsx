@@ -2678,6 +2678,7 @@ const SYS_PROFILE_PATH = "/system/profile";
 const SYS_README_PATH = "/system/profile/README.md";
 const SYS_CAVEN_PATH = "/system/caven";
 const SYS_CAVEN_CONFIG_PATH = "/system/caven/config.toml";
+const PROFILE_README_SAVE_RETRY_MS = 15_000;
 
 /* =========================
   Utils
@@ -5917,10 +5918,18 @@ export default function CavCodePage() {
   });
   const sysOpenRef = useRef(false);
   const cloudOpenRef = useRef("");
-  const sysAutosaveRef = useRef<{ timer: number | null; lastSavedHash: string; lastSavedRevision: number }>({
+  const sysAutosaveRef = useRef<{
+    timer: number | null;
+    lastSavedHash: string;
+    lastSavedRevision: number;
+    unavailableUntil: number;
+    lastUnavailableMessage: string;
+  }>({
     timer: null,
     lastSavedHash: "",
     lastSavedRevision: 0,
+    unavailableUntil: 0,
+    lastUnavailableMessage: "",
   });
 
   // Monaco refs
@@ -6044,6 +6053,28 @@ export default function CavCodePage() {
     if (toastTimer.current) timerOwner.clearTimeout(toastTimer.current);
     toastTimer.current = timerOwner.setTimeout(() => setToast(null), 2600);
   }, []);
+
+  const clearProfileReadmeStorageUnavailable = useCallback(() => {
+    sysAutosaveRef.current.unavailableUntil = 0;
+    sysAutosaveRef.current.lastUnavailableMessage = "";
+  }, []);
+
+  const markProfileReadmeStorageUnavailable = useCallback(
+    (payload?: Record<string, unknown> | null, opts?: { notify?: boolean }) => {
+      const retryAfterRaw = Number(payload?.retryAfterMs);
+      const retryAfterMs =
+        Number.isFinite(retryAfterRaw) && Number.isInteger(retryAfterRaw) && retryAfterRaw >= 1_000
+          ? Math.trunc(retryAfterRaw)
+          : PROFILE_README_SAVE_RETRY_MS;
+      const message = String(payload?.message || "Profile README storage is temporarily unavailable.").trim();
+      sysAutosaveRef.current.unavailableUntil = Date.now() + retryAfterMs;
+      sysAutosaveRef.current.lastUnavailableMessage = message;
+      if (opts?.notify !== false) {
+        pushToast(message, "watch");
+      }
+    },
+    [pushToast],
+  );
 
   const persistWorkspaceSnapshotToServer = useCallback(
     async (snapshot: CavCodeWorkspaceSnapshot): Promise<boolean> => {
@@ -10717,6 +10748,13 @@ export default function CavCodePage() {
         pushToast("README too large (max 64KB).", "bad");
         return;
       }
+      if (sysAutosaveRef.current.unavailableUntil > Date.now()) {
+        pushToast(
+          sysAutosaveRef.current.lastUnavailableMessage || "Profile README storage is temporarily unavailable.",
+          "watch",
+        );
+        return;
+      }
       try {
         const expectedRevision = Math.max(0, Math.trunc(Number(sysAutosaveRef.current.lastSavedRevision || 0)));
         const res = await fetch("/api/profile/readme", {
@@ -10731,6 +10769,7 @@ export default function CavCodePage() {
         const j = (await res.json().catch(() => null)) as unknown;
         const r = j && typeof j === "object" ? (j as Record<string, unknown>) : null;
         if (r && r.ok === true) {
+          clearProfileReadmeStorageUnavailable();
           const revisionRaw = Number(r.revision);
           const revision =
             Number.isFinite(revisionRaw) && Number.isInteger(revisionRaw) && revisionRaw >= 0
@@ -10745,6 +10784,7 @@ export default function CavCodePage() {
           }
           pushToast("Saved.", "good");
         } else if (r && r.error === "REVISION_CONFLICT") {
+          clearProfileReadmeStorageUnavailable();
           const currentRevisionRaw = Number(r.currentRevision);
           const currentRevision =
             Number.isFinite(currentRevisionRaw) && Number.isInteger(currentRevisionRaw) && currentRevisionRaw >= 0
@@ -10754,11 +10794,13 @@ export default function CavCodePage() {
           setSysProfileReadme({ markdown: md, loaded: true, revision: currentRevision });
           publishSysProfileReadme(md, currentRevision);
           pushToast("README changed in another tab. Save again to apply your latest edit.", "watch");
+        } else if (r && r.error === "README_STORAGE_UNAVAILABLE") {
+          markProfileReadmeStorageUnavailable(r);
         } else {
           pushToast(String(r?.message || "Save failed."), "bad");
         }
       } catch {
-        pushToast("Save failed.", "bad");
+        markProfileReadmeStorageUnavailable(null);
       }
       return;
     }
@@ -10811,7 +10853,9 @@ export default function CavCodePage() {
     activeFile,
     activeFileId,
     activeProjectRootPath,
+    clearProfileReadmeStorageUnavailable,
     fs,
+    markProfileReadmeStorageUnavailable,
     tabs,
     setSysProfileReadme,
     markFileSaved,
@@ -10831,6 +10875,7 @@ export default function CavCodePage() {
     const md = String(f.content ?? "");
     const h = hashString(md);
     if (h === sysAutosaveRef.current.lastSavedHash) return;
+    if (sysAutosaveRef.current.unavailableUntil > Date.now()) return;
 
     const ref = sysAutosaveRef.current;
     if (ref.timer) window.clearTimeout(ref.timer);
@@ -10843,6 +10888,7 @@ export default function CavCodePage() {
       const latestMd = String(latest.content ?? "");
       const latestHash = hashString(latestMd);
       if (latestHash === ref.lastSavedHash) return;
+      if (ref.unavailableUntil > Date.now()) return;
       if (Buffer.byteLength(latestMd, "utf8") > 64 * 1024) return; // don't spam API; user will see size error on hard save
 
       try {
@@ -10859,6 +10905,7 @@ export default function CavCodePage() {
         const j = (await res.json().catch(() => null)) as unknown;
         const r = j && typeof j === "object" ? (j as Record<string, unknown>) : null;
         if (r && r.ok === true) {
+          clearProfileReadmeStorageUnavailable();
           const revisionRaw = Number(r.revision);
           const revision =
             Number.isFinite(revisionRaw) && Number.isInteger(revisionRaw) && revisionRaw >= 0
@@ -10870,12 +10917,17 @@ export default function CavCodePage() {
           publishSysProfileReadme(latestMd, revision);
           markFileSaved(latest.id, latestMd);
         } else if (r && r.error === "REVISION_CONFLICT") {
+          clearProfileReadmeStorageUnavailable();
           const currentRevisionRaw = Number(r.currentRevision);
           if (Number.isFinite(currentRevisionRaw) && Number.isInteger(currentRevisionRaw) && currentRevisionRaw >= 0) {
             ref.lastSavedRevision = Math.trunc(currentRevisionRaw);
           }
+        } else if (r && r.error === "README_STORAGE_UNAVAILABLE") {
+          markProfileReadmeStorageUnavailable(r, { notify: false });
         }
-      } catch {}
+      } catch {
+        markProfileReadmeStorageUnavailable(null, { notify: false });
+      }
     }, 650);
     const timerId = ref.timer;
 
@@ -10883,7 +10935,7 @@ export default function CavCodePage() {
       if (timerId) window.clearTimeout(timerId);
       if (ref.timer === timerId) ref.timer = null;
     };
-  }, [activeFile, markFileSaved, settings.autosave, fs]);
+  }, [activeFile, clearProfileReadmeStorageUnavailable, markFileSaved, markProfileReadmeStorageUnavailable, settings.autosave, fs]);
 
   /* =========================
     Editor content updates (autosave)

@@ -13,6 +13,7 @@ import {
   getAuthPool,
 } from "@/lib/authDb";
 import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
 import { AiServiceError, type AiSurface } from "@/src/lib/ai/ai.types";
@@ -39,13 +40,35 @@ async function resolvePlanId(accountId: string): Promise<PlanId> {
     return effectivePlan.planId;
   }
   const pool = getAuthPool();
-  await clearExpiredTrialSeat(pool, accountId);
-  const account = await findAccountById(pool, accountId);
-  if (!account) {
-    throw new AiServiceError("UNAUTHORIZED", "Account not found for authenticated session.", 401);
+  try {
+    await clearExpiredTrialSeat(pool, accountId);
+    const account = await findAccountById(pool, accountId);
+    if (!account) {
+      throw new AiServiceError("UNAUTHORIZED", "Account not found for authenticated session.", 401);
+    }
+    if (isTrialActive(account.trialSeatActive, account.trialEndsAt)) return "premium_plus";
+    return resolvePlanIdFromTier(account.tier);
+  } catch (error) {
+    if (!isSchemaMismatchError(error, { tables: ["Account"], columns: ["trialSeatActive", "trialEndsAt", "tier"] })) {
+      throw error;
+    }
+
+    const fallback = await pool
+      .query<{ tier: string }>(
+        `SELECT "tier"
+          FROM "Account"
+          WHERE "id" = $1
+          LIMIT 1`,
+        [accountId],
+      )
+      .then((result) => result.rows?.[0] || null)
+      .catch(() => null);
+
+    if (!fallback?.tier) {
+      throw new AiServiceError("UNAUTHORIZED", "Account not found for authenticated session.", 401);
+    }
+    return resolvePlanIdFromTier(fallback.tier);
   }
-  if (isTrialActive(account.trialSeatActive, account.trialEndsAt)) return "premium_plus";
-  return resolvePlanIdFromTier(account.tier);
 }
 
 function assertSurfacePlan(surface: AiSurface, planId: PlanId) {

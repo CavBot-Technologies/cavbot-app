@@ -15,7 +15,9 @@ test("profile README route probes storage readiness and gates runtime bootstrap 
   assert.equal(route.includes("SELECT \"revision\""), true);
   assert.equal(route.includes("async function ensureStorageReady"), true);
   assert.equal(route.includes("README_STORAGE_UNAVAILABLE"), true);
-  assert.equal(route.includes("\"Retry-After\": \"15\""), true);
+  assert.equal(route.includes("kind: \"retryable\""), true);
+  assert.equal(route.includes("retryAfterMs: STORAGE_UNAVAILABLE_RETRY_AFTER_MS"), true);
+  assert.equal(route.includes("Math.ceil(STORAGE_UNAVAILABLE_RETRY_AFTER_MS / 1_000)"), true);
 });
 
 test("CavCode README autosave backs off when storage is unavailable", () => {
@@ -24,7 +26,8 @@ test("CavCode README autosave backs off when storage is unavailable", () => {
   assert.equal(source.includes("PROFILE_README_SAVE_RETRY_MS = 15_000"), true);
   assert.equal(source.includes("unavailableUntil"), true);
   assert.equal(source.includes("lastUnavailableMessage"), true);
-  assert.equal(source.includes("kind: \"retryable\""), true);
+  assert.equal(source.includes("markProfileReadmeStorageUnavailable"), true);
+  assert.equal(source.includes("clearProfileReadmeStorageUnavailable"), true);
   assert.equal(source.includes("README_STORAGE_UNAVAILABLE"), true);
 });
 

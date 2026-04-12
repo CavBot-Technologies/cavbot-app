@@ -60,9 +60,12 @@ test("qwen schema mismatch detector recognizes missing tables and missing column
   assert.equal(isQwenCoderCreditSchemaMismatchError(new Error("totally unrelated failure")), false);
 });
 
-test("qwen popover route degrades instead of surfacing a 500 for schema drift", () => {
+test("qwen popover route degrades instead of surfacing a 500 for schema drift or state-load failures", () => {
   const routeSource = fs.readFileSync(path.resolve("app/api/ai/qwen-coder/popover/route.ts"), "utf8");
   assert.equal(routeSource.includes("buildQwenCoderPopoverFallbackState"), true);
   assert.equal(routeSource.includes("isQwenCoderCreditSchemaMismatchError"), true);
-  assert.equal(routeSource.includes("degraded: true"), true);
+  assert.equal(routeSource.includes("buildDegradedPopoverPayload"), true);
+  assert.equal(routeSource.includes("degraded after unexpected state load failure"), true);
+  assert.equal(routeSource.includes("degraded before AI context resolution"), true);
+  assert.equal(routeSource.includes("QWEN_CODER_POPOVER_FAILED"), false);
 });

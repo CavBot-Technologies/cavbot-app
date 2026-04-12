@@ -70,6 +70,38 @@ function buildPopoverPayload(args: {
   };
 }
 
+function buildDegradedPopoverPayload(args: {
+  requestId: string;
+  planId: "free" | "premium" | "premium_plus";
+  ctx?: Awaited<ReturnType<typeof requireAiRequestContext>> | null;
+}) {
+  const state = buildQwenCoderPopoverFallbackState({
+    planId: args.planId,
+  });
+  if (args.ctx) {
+    return buildPopoverPayload({
+      requestId: args.requestId,
+      state,
+      ctx: args.ctx,
+      degraded: true,
+    });
+  }
+  return {
+    ok: true,
+    degraded: true,
+    requestId: args.requestId,
+    qwenCoder: state,
+    guardDecision: null,
+    modelAvailability: {
+      [ALIBABA_QWEN_CODER_MODEL_ID]: {
+        selectable: state.entitlement.selectable,
+        state: state.entitlement.state,
+        nextActionId: state.entitlement.nextActionId,
+      },
+    },
+  };
+}
+
 export async function GET(req: NextRequest) {
   const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
   try {
@@ -87,19 +119,18 @@ export async function GET(req: NextRequest) {
       });
       return json(buildPopoverPayload({ requestId, state, ctx }));
     } catch (error) {
-      if (!isQwenCoderCreditSchemaMismatchError(error)) throw error;
-      console.warn("[qwen-coder/popover] degraded to fallback state", error);
-      const state = buildQwenCoderPopoverFallbackState({
-        planId: ctx.planId,
-      });
-      return json(buildPopoverPayload({ requestId, state, ctx, degraded: true }));
+      const warningLabel = isQwenCoderCreditSchemaMismatchError(error)
+        ? "[qwen-coder/popover] degraded to fallback state"
+        : "[qwen-coder/popover] degraded after unexpected state load failure";
+      console.warn(warningLabel, error);
+      return json(buildDegradedPopoverPayload({ requestId, planId: ctx.planId, ctx }));
     }
   } catch (error) {
     if (isApiAuthError(error)) {
       return json({ ok: false, requestId, error: error.code, message: error.message }, error.status);
     }
-    const message = error instanceof Error ? error.message : "Failed to load Caven usage.";
-    return json({ ok: false, requestId, error: "QWEN_CODER_POPOVER_FAILED", message }, 500);
+    console.warn("[qwen-coder/popover] degraded before AI context resolution", error);
+    return json(buildDegradedPopoverPayload({ requestId, planId: "free" }));
   }
 }
 
