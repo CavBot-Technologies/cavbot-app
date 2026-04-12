@@ -20,6 +20,7 @@ test("account plan lookup defaults to account-db queries instead of Prisma runti
   assert.doesNotMatch(source, /import \{ prisma \} from "@\/lib\/prisma";/);
   assert.match(source, /tx: PlanResolverDbClient = getAuthPool\(\)/);
   assert.match(source, /if \(isRawQueryClient\(tx\)\)/);
+  assert.match(source, /UPPER\(COALESCE\("status"::text, ''\)\) = ANY\(\$2::text\[\]\)/);
 });
 
 test("findLatestEntitledSubscription falls back when subscription ordering columns drift", async () => {

@@ -58,6 +58,7 @@ test("billing runtime store reads account state, subscriptions, usage counts, an
   assert.equal(source.includes('FROM "Subscription"'), true);
   assert.equal(source.includes('FROM "Membership"'), true);
   assert.equal(source.includes('FROM "Invite"'), true);
+  assert.equal(source.includes('UPPER(COALESCE("status"::text, \'\')) = \'PENDING\''), true);
   assert.equal(source.includes('FROM "Site" AS s'), true);
   assert.equal(source.includes('FROM "AuditLog"'), true);
   assert.equal(source.includes("isBillingRuntimeUnavailableError"), true);

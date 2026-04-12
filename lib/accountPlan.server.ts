@@ -178,7 +178,7 @@ async function findLatestEntitledSubscriptionViaQuery(accountId: string, tx: Que
         `SELECT "tier", "status", "currentPeriodEnd"
          FROM "Subscription"
          WHERE "accountId" = $1
-           AND UPPER(COALESCE("status", '')) = ANY($2::text[])
+           AND UPPER(COALESCE("status"::text, '')) = ANY($2::text[])
          ORDER BY "currentPeriodEnd" DESC NULLS LAST, "updatedAt" DESC NULLS LAST, "createdAt" DESC NULLS LAST
          LIMIT 1`,
         [accountId, entitledStatuses],
@@ -194,7 +194,7 @@ async function findLatestEntitledSubscriptionViaQuery(accountId: string, tx: Que
         `SELECT "tier", "status"
          FROM "Subscription"
          WHERE "accountId" = $1
-           AND UPPER(COALESCE("status", '')) = ANY($2::text[])
+           AND UPPER(COALESCE("status"::text, '')) = ANY($2::text[])
          ORDER BY "updatedAt" DESC NULLS LAST, "createdAt" DESC NULLS LAST
          LIMIT 1`,
         [accountId, entitledStatuses],
@@ -209,7 +209,7 @@ async function findLatestEntitledSubscriptionViaQuery(accountId: string, tx: Que
         `SELECT "tier", "status"
          FROM "Subscription"
          WHERE "accountId" = $1
-           AND UPPER(COALESCE("status", '')) = ANY($2::text[])
+           AND UPPER(COALESCE("status"::text, '')) = ANY($2::text[])
          ORDER BY "createdAt" DESC NULLS LAST
          LIMIT 1`,
         [accountId, entitledStatuses],
@@ -224,7 +224,7 @@ async function findLatestEntitledSubscriptionViaQuery(accountId: string, tx: Que
         `SELECT "tier", "status"
          FROM "Subscription"
          WHERE "accountId" = $1
-           AND UPPER(COALESCE("status", '')) = ANY($2::text[])
+           AND UPPER(COALESCE("status"::text, '')) = ANY($2::text[])
          LIMIT 1`,
         [accountId, entitledStatuses],
         (row) => ({

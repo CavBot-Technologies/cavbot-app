@@ -508,7 +508,7 @@ async function resolveAccountPlan(accountId: string) {
        LIMIT 1`,
       [accountId],
     ),
-    findLatestEntitledSubscription(accountId),
+    findLatestEntitledSubscription(accountId).catch(() => null),
   ]);
 
   const account = accountResult.rows[0] || null;

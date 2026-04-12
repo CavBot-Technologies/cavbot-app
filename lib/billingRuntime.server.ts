@@ -407,7 +407,7 @@ export async function readBillingUsageMetrics(
       `SELECT COUNT(*)::int AS total
        FROM "Invite"
        WHERE "accountId" = $1
-         AND UPPER(COALESCE("status", '')) = 'PENDING'
+         AND UPPER(COALESCE("status"::text, '')) = 'PENDING'
          AND ("expiresAt" IS NULL OR "expiresAt" > NOW())`,
       [accountId],
     ),
