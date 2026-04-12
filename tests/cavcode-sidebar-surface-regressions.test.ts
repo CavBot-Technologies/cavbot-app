@@ -35,3 +35,15 @@ test("cavcode search stays top-aligned and changes commit input keeps shared fie
   assert.match(cssSource, /\.cc-changes-commitInput\{[\s\S]*padding: 0 40px 0 9px;/);
   assert.match(cssSource, /\.cc-hit:last-child\{/);
 });
+
+test("cavcode terminal strip stays panel-blended and sidebar status label stays stable", () => {
+  const pageSource = read("app/cavcode/page.tsx");
+  const cssSource = read("app/cavcode/cavcode.css");
+
+  assert.match(pageSource, /<button className="cc-sbtn"[\s\S]*>\s*SIDEBAR\s*<\/button>/);
+  assert.doesNotMatch(pageSource, /SIDEBAR OFF/);
+
+  assert.match(cssSource, /\.cc-term-inbar\{[\s\S]*gap: 12px;[\s\S]*background: rgba\(4,7,22,.88\);/);
+  assert.match(cssSource, /\.cc-term-in\{[\s\S]*height: 100%;[\s\S]*border: 0;[\s\S]*background: transparent;[\s\S]*padding: 0;[\s\S]*box-shadow: none;/);
+  assert.match(cssSource, /\.cc-term-in:focus\{[\s\S]*border-color: transparent;[\s\S]*background: transparent;/);
+});

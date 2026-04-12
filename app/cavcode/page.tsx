@@ -18882,7 +18882,7 @@ export default function CavCodePage() {
           <footer className="cc-status" aria-label="Status Bar">
             <div className="cc-status-left">
               <button className="cc-sbtn" onClick={() => setSidebarOpen((p) => !p)} title="Toggle Sidebar (Cmd/Ctrl+B)">
-                {sidebarOpen ? "SIDEBAR" : "SIDEBAR OFF"}
+                SIDEBAR
               </button>
               <span className="cc-sbadge cc-sbadge-static" aria-label="Cursor position">
                 Ln {cursorPos.line}, Col {cursorPos.col}

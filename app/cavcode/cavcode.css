@@ -5888,9 +5888,9 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   border-top: 1px solid rgba(255,255,255,.08);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 0 12px;
-  background: rgba(0,0,0,.14);
+  background: rgba(4,7,22,.88);
 }
 
 .cc-term-prompt{
@@ -5902,22 +5902,23 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-term-in{
   width: 100%;
-  height: 28px;
+  height: 100%;
   border-radius: 0;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(0,0,0,.18);
+  border: 0;
+  background: transparent;
   color: rgba(247,251,255,.92);
-  padding: 0 10px;
+  padding: 0;
   outline: none;
   font-family: var(--cb-mono);
   font-size: 12px;
+  box-shadow: none;
 }
 
 .cc-term-in::placeholder{ color: rgba(197,206,231,.48); }
 
 .cc-term-in:focus{
-  border-color: rgba(185,200,90,.22);
-  
+  border-color: transparent;
+  background: transparent;
 }
 
 /* Problems */
