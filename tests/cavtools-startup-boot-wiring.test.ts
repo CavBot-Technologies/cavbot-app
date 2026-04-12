@@ -15,6 +15,7 @@ test("cavtools boot warms context before declaring the command plane ready", () 
   assert.equal(source.includes('const [activeProjectId, setActiveProjectId] = useState<number | null>(initialProjectId);'), true);
   assert.equal(source.includes('const statusResult = await callExec("cav status");'), true);
   assert.equal(source.includes('applyExecResult(statusResult, { renderOutput: false, updateCwd: false, logEvent: false });'), true);
+  assert.equal(source.includes("const nextCanUseCavsafe = Boolean(statusResult.actor?.includeCavsafe);"), true);
   assert.equal(source.includes('shouldRefreshRoot(root, { activeProjectId: nextProjectId, canUseCavsafe: nextCanUseCavsafe })'), true);
   assert.equal(source.includes('refreshDirectory(root.path, { silent: true, logEvent: false })'), true);
   assert.equal(source.includes('command_unavailable: "Unavailable"'), true);

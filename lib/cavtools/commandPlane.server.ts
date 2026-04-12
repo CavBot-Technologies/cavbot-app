@@ -6840,17 +6840,6 @@ async function getSafeNodeByPath(accountId: string, sourcePath: string): Promise
   return { folder, file };
 }
 
-function assertCavsafeOwnerOnly(ctx: ExecContext) {
-  if (ctx.memberRole !== "OWNER") {
-    throw new CavtoolsExecError(
-      "CAVSAFE_OWNER_ONLY",
-      "CavSafe in CavTools is restricted to the workspace owner.",
-      403,
-      "CAVSAFE_OWNER_ONLY"
-    );
-  }
-}
-
 async function requireCloudPermission(ctx: ExecContext, args: {
   action:
     | "CREATE_FOLDER"
@@ -6878,7 +6867,6 @@ async function requireCloudPermission(ctx: ExecContext, args: {
 }
 
 async function ensureCavsafeEntitlement(ctx: ExecContext) {
-  assertCavsafeOwnerOnly(ctx);
   if (!ctx.includeCavsafe) {
     // Fallback verification in case request context was initialized before a plan upgrade.
     try {

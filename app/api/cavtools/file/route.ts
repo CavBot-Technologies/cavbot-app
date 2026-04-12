@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { maybeReadRuntimeCavtoolsFile } from "@/lib/cavtools/runtimePlane.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -13,6 +14,26 @@ function jsonNoStore(body: unknown, status = 200) {
       "Cache-Control": "no-store",
     },
   });
+}
+
+function normalizeRuntimeFailureMessage(raw: string) {
+  const message = String(raw || "").trim();
+  if (message.includes('Dynamic require of "node:child_process" is not supported')) {
+    return {
+      code: "PROCESS_RUNTIME_UNAVAILABLE",
+      message: "This CavTools action requires a full Node runtime and is unavailable in the current deployment surface.",
+    };
+  }
+  if (message.includes("WebAssembly.Module(): Wasm code generation disallowed by embedder")) {
+    return {
+      code: "CAVTOOLS_RUNTIME_UNAVAILABLE",
+      message: "This CavTools file surface is unavailable in the current deployment runtime.",
+    };
+  }
+  return {
+    code: "INTERNAL",
+    message: message || "Failed to read file.",
+  };
 }
 
 function parseProjectId(raw: string | null): number | null {
@@ -32,6 +53,15 @@ export async function GET(req: Request) {
       return jsonNoStore({ ok: false, error: { code: "PATH_REQUIRED", message: "path is required." } }, 400);
     }
 
+    const runtimeFile = await maybeReadRuntimeCavtoolsFile(req, {
+      path,
+      projectId,
+      siteOrigin,
+    });
+    if (runtimeFile) {
+      return jsonNoStore(runtimeFile, 200);
+    }
+
     const { readCavtoolsFile } = await import("@/lib/cavtools/commandPlane.server");
 
     const out = await readCavtoolsFile(req, {
@@ -42,11 +72,11 @@ export async function GET(req: Request) {
 
     return jsonNoStore(out, 200);
   } catch (error) {
-    const code = String((error as { code?: unknown })?.code || "INTERNAL").trim();
+    const code = String((error as { code?: unknown })?.code || "").trim();
     const statusRaw = Number((error as { status?: unknown })?.status || 500);
     const status = Number.isFinite(statusRaw) ? statusRaw : 500;
-    const message = error instanceof Error ? error.message : "Failed to read file.";
-    return jsonNoStore({ ok: false, error: { code, message } }, status);
+    const normalized = normalizeRuntimeFailureMessage(error instanceof Error ? error.message : "Failed to read file.");
+    return jsonNoStore({ ok: false, error: { code: code || normalized.code, message: normalized.message } }, status);
   }
 }
 

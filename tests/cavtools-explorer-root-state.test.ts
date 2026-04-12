@@ -15,7 +15,8 @@ test("cavtools explorer pre-seeds static roots and shows explicit root placehold
   assert.equal(source.includes('"/workspace": STATIC_ROOT_ITEMS["/workspace"],'), true);
   assert.equal(source.includes("const [rootSyncState, setRootSyncState] = useState<Record<string, ExplorerRootState>>(INITIAL_ROOT_SYNC_STATE);"), true);
   assert.equal(source.includes("function renderRootPlaceholder(root: { namespace: CavtoolsNamespace; label: string; path: string }) {"), true);
-  assert.equal(source.includes("CavSafe in CavTools requires the workspace owner session."), true);
+  assert.equal(source.includes('const canUseCavsafe = useMemo(() => cavsafeEntitled, [cavsafeEntitled]);'), true);
+  assert.equal(source.includes("CavSafe in CavTools requires the workspace owner session."), false);
   assert.equal(source.includes("CavSafe access requires Premium or Premium Plus on this workspace."), true);
   assert.equal(source.includes("Select or bind a project to load CavCode workspace files."), true);
   assert.equal(source.includes("Syncing {root.label} entries from the command plane."), true);

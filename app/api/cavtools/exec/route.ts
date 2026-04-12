@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { ApiAuthError } from "@/lib/apiAuth";
+import { maybeHandleRuntimeExecCommand } from "@/lib/cavtools/runtimePlane.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -14,6 +15,26 @@ function jsonNoStore(body: unknown, status = 200) {
       "Cache-Control": "no-store",
     },
   });
+}
+
+function normalizeRuntimeFailureMessage(raw: string) {
+  const message = String(raw || "").trim();
+  if (message.includes('Dynamic require of "node:child_process" is not supported')) {
+    return {
+      code: "PROCESS_RUNTIME_UNAVAILABLE",
+      message: "This CavTools command requires a full Node runtime and is unavailable in the current deployment surface.",
+    };
+  }
+  if (message.includes("WebAssembly.Module(): Wasm code generation disallowed by embedder")) {
+    return {
+      code: "CAVTOOLS_RUNTIME_UNAVAILABLE",
+      message: "This CavTools action is unavailable in the current deployment runtime.",
+    };
+  }
+  return {
+    code: "INTERNAL",
+    message: message || "Failed to execute command.",
+  };
 }
 
 export async function POST(req: Request) {
@@ -35,6 +56,17 @@ export async function POST(req: Request) {
     const command = String(body.command || "").trim();
     if (!command) {
       return jsonNoStore({ ok: false, error: { code: "COMMAND_REQUIRED", message: "command is required." } }, 400);
+    }
+
+    const runtimeResult = await maybeHandleRuntimeExecCommand(req, {
+      cwd: body.cwd,
+      command,
+      projectId: body.projectId,
+      siteOrigin: body.siteOrigin,
+      path: null,
+    });
+    if (runtimeResult) {
+      return jsonNoStore(runtimeResult, 200);
     }
 
     const { executeCavtoolsCommand } = await import("@/lib/cavtools/commandPlane.server");
@@ -77,7 +109,7 @@ export async function POST(req: Request) {
         error.status
       );
     }
-    const message = error instanceof Error ? error.message : "Failed to execute command.";
+    const normalized = normalizeRuntimeFailureMessage(error instanceof Error ? error.message : "Failed to execute command.");
     return jsonNoStore(
       {
         ok: false,
@@ -88,7 +120,7 @@ export async function POST(req: Request) {
           {
             kind: "text",
             title: "Command Failed",
-            lines: [message],
+            lines: [normalized.message],
           },
         ],
         durationMs: 0,
@@ -98,8 +130,8 @@ export async function POST(req: Request) {
           denied: false,
         },
         error: {
-          code: "INTERNAL",
-          message,
+          code: normalized.code,
+          message: normalized.message,
         },
       },
       200

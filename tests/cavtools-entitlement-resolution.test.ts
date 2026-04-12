@@ -19,4 +19,6 @@ test("cavtools resolves owner role and effective plan from live membership and s
   assert.equal(source.includes("return resolveEffectivePlanId({"), true);
   assert.equal(source.includes("const membership = await resolveMembershipForExecContext(sessionAccountId, userId);"), true);
   assert.equal(source.includes("accountId,\n      memberRole,"), true);
+  assert.equal(source.includes("assertCavsafeOwnerOnly"), false);
+  assert.equal(source.includes("CavSafe in CavTools is restricted to the workspace owner."), false);
 });

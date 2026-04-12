@@ -804,7 +804,7 @@ function CavToolsPageInner() {
     return "Workspace posture and policy";
   }, [tab]);
 
-  const canUseCavsafe = useMemo(() => memberRole === "OWNER" && cavsafeEntitled, [memberRole, cavsafeEntitled]);
+  const canUseCavsafe = useMemo(() => cavsafeEntitled, [cavsafeEntitled]);
 
   function pushRun(out: string, tone: Tone) {
     setRunLog((prev) => [{ id: uid("run"), ts: Date.now(), out, tone }, ...prev].slice(0, 180));
@@ -1425,11 +1425,8 @@ function CavToolsPageInner() {
     const sync = rootSyncState[root.path] || INITIAL_ROOT_SYNC_STATE[root.path];
 
     if (root.namespace === "cavsafe" && !canUseCavsafe) {
-      const title = memberRole !== "OWNER" ? "Owner required" : "Premium required";
-      const detail =
-        memberRole !== "OWNER"
-          ? "CavSafe in CavTools requires the workspace owner session."
-          : "CavSafe access requires Premium or Premium Plus on this workspace.";
+      const title = "Premium required";
+      const detail = "CavSafe access requires Premium or Premium Plus on this workspace.";
       return (
         <div className="cb-cavtools-rootempty">
           <div className="cb-cavtools-rootempty-title">{title}</div>
@@ -1462,9 +1459,7 @@ function CavToolsPageInner() {
           ? "Unavailable"
           : sync.errorCode === "PROJECT_REQUIRED"
             ? "No active project"
-            : sync.errorCode === "CAVSAFE_OWNER_ONLY"
-              ? "Owner required"
-              : sync.errorCode === "CAVSAFE_PLAN_REQUIRED"
+            : sync.errorCode === "CAVSAFE_PLAN_REQUIRED"
                 ? "Premium required"
                 : "Sync failed";
       return (
@@ -1756,7 +1751,7 @@ function CavToolsPageInner() {
 
         const workspace = readStatusWorkspace(statusResult);
         const nextProjectId = workspace?.projectId ?? initialProjectId;
-        const nextCanUseCavsafe = statusResult.actor?.memberRole === "OWNER" && Boolean(statusResult.actor?.includeCavsafe);
+        const nextCanUseCavsafe = Boolean(statusResult.actor?.includeCavsafe);
         const skippedRoots = ROOTS
           .filter((root) => !shouldRefreshRoot(root, { activeProjectId: nextProjectId, canUseCavsafe: nextCanUseCavsafe }))
           .map((root) => root.path);
@@ -2220,10 +2215,7 @@ function CavToolsPageInner() {
                   const isOpen = Boolean(groupOpen[root.namespace]);
                   const rootItems = dirCache[root.path] || [];
                   const isCavsafeLocked = root.namespace === "cavsafe" && !canUseCavsafe;
-                  const cavsafeLockReason =
-                    memberRole !== "OWNER"
-                      ? "CavSafe in CavTools requires the workspace owner session."
-                      : "CavSafe access requires Premium or Premium Plus on this workspace.";
+                  const cavsafeLockReason = "CavSafe access requires Premium or Premium Plus on this workspace.";
                   return (
                     <div className="cb-cavtools-group" key={root.path}>
                       <button
