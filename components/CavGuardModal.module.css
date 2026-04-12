@@ -317,6 +317,10 @@
     padding: 18px 15px 14px;
   }
 
+  .card[data-variant="modal"] .footer {
+    padding-inline-end: 8px;
+  }
+
   .header {
     padding-top: 8px;
   }

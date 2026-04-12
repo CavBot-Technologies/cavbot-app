@@ -28,3 +28,11 @@ test("cavguard modal wrapper is hard-anchored to dead center", () => {
   assert.match(source, /placeSelf: "center"/);
   assert.match(source, /boxSizing: "border-box"/);
 });
+
+test("cavguard modal footer keeps a small right inset on small screens", () => {
+  const source = read("components/CavGuardModal.module.css");
+
+  assert.match(source, /@media \(max-width: 620px\)/);
+  assert.match(source, /\.card\[data-variant="modal"\] \.footer \{/);
+  assert.match(source, /padding-inline-end: 8px;/);
+});
