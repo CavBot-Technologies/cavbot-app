@@ -1,8 +1,14 @@
-import { requireCavsafeOwnerSession } from "@/lib/cavsafe/auth.server";
-import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
+import { isApiAuthError } from "@/lib/apiAuth";
+import {
+  isCavsafePlanSchemaMismatchError,
+  requireCavsafeOwnerContext,
+  requireCavsafeOwnerSession,
+  resolveCavsafePlanIdOrDefault,
+} from "@/lib/cavsafe/auth.server";
 import { cavsafeErrorResponse, jsonNoStore } from "@/lib/cavsafe/http.server";
 import { getTree, getTreeLite } from "@/lib/cavsafe/storage.server";
 import { cavsafeSecuredStorageLimitBytesForPlan } from "@/lib/cavsafe/policy.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import type { PlanId } from "@/lib/plans";
 
 export const runtime = "nodejs";
@@ -44,9 +50,9 @@ function envPositiveInt(name: string, fallback: number): number {
 }
 
 function perFileMaxBytesForPlan(planId: PlanId): number {
-  const free = envPositiveInt("CAVSAFE_MAX_FILE_BYTES_FREE", envPositiveInt("CAVCLOUD_MAX_FILE_BYTES_FREE", 64 * 1024 * 1024));
-  const premium = envPositiveInt("CAVSAFE_MAX_FILE_BYTES_PREMIUM", envPositiveInt("CAVCLOUD_MAX_FILE_BYTES_PREMIUM", 1024 * 1024 * 1024));
-  const premiumPlus = envPositiveInt("CAVSAFE_MAX_FILE_BYTES_PREMIUM_PLUS", envPositiveInt("CAVCLOUD_MAX_FILE_BYTES_PREMIUM_PLUS", 5 * 1024 * 1024 * 1024));
+  const free = envPositiveInt("CAVCLOUD_MAX_FILE_BYTES_FREE", 64 * 1024 * 1024);
+  const premium = envPositiveInt("CAVCLOUD_MAX_FILE_BYTES_PREMIUM", 1024 * 1024 * 1024);
+  const premiumPlus = envPositiveInt("CAVCLOUD_MAX_FILE_BYTES_PREMIUM_PLUS", 5 * 1024 * 1024 * 1024);
   if (planId === "premium_plus") return premiumPlus;
   if (planId === "premium") return premium;
   return free;
@@ -74,8 +80,7 @@ function isMissingCavSafeTablesError(err: unknown): boolean {
 }
 
 async function fallbackTreeForMissingTables(accountId: string) {
-  const plan = await getEffectiveAccountPlanContext(accountId).catch(() => null);
-  const planId: PlanId = plan?.planId || "free";
+  const planId: PlanId = await resolveCavsafePlanIdOrDefault(accountId, "premium");
 
   const limitBytes = storageLimitBytesForPlan(planId);
   const perFileMaxBytes = perFileMaxBytesForPlan(planId);
@@ -83,6 +88,7 @@ async function fallbackTreeForMissingTables(accountId: string) {
 
   return {
     ok: true,
+    degraded: true,
     folder: { id: "root", name: "root", path: "/", parentId: null, createdAtISO: now, updatedAtISO: now },
     breadcrumbs: [{ id: "root", name: "root", path: "/" }],
     folders: [],
@@ -102,6 +108,44 @@ async function fallbackTreeForMissingTables(accountId: string) {
     activity: [],
     storageHistory: [],
   };
+}
+
+function isCavSafeTreeSchemaMismatch(err: unknown) {
+  return isCavsafePlanSchemaMismatchError(err) || isSchemaMismatchError(err, {
+    tables: ["CavSafeFolder", "CavSafeFile", "CavSafeQuota", "CavSafeTrash", "CavSafeShare", "CavSafeOperationLog"],
+    columns: [
+      "path",
+      "name",
+      "parentId",
+      "createdAt",
+      "updatedAt",
+      "deletedAt",
+      "folderId",
+      "bytes",
+      "mimeType",
+      "sha256",
+      "previewSnippet",
+      "previewSnippetUpdatedAt",
+      "usedBytes",
+      "deletedAt",
+      "purgeAfter",
+      "fileId",
+      "revokedAt",
+      "expiresAt",
+      "mode",
+      "action",
+      "targetType",
+      "targetId",
+      "targetPath",
+      "metaJson",
+    ],
+  });
+}
+
+async function buildDegradedTreeResponse(req: Request) {
+  const sess = await requireCavsafeOwnerContext(req);
+  const fallback = await fallbackTreeForMissingTables(String(sess.accountId || ""));
+  return jsonNoStore(fallback, 200);
 }
 
 export async function GET(req: Request) {
@@ -132,15 +176,19 @@ export async function GET(req: Request) {
     const filtered = normalizePath(folder) === "/" ? stripReservedSystemEntriesAtRoot(tree) : tree;
     return jsonNoStore({ ok: true, ...filtered }, 200);
   } catch (err) {
-    if (isMissingCavSafeTablesError(err)) {
+    if (isApiAuthError(err)) {
+      return cavsafeErrorResponse(err, "Failed to load CavSafe tree.");
+    }
+    if (isMissingCavSafeTablesError(err) || isCavSafeTreeSchemaMismatch(err)) {
       try {
-        const sess = await requireCavsafeOwnerSession(req);
-        const fallback = await fallbackTreeForMissingTables(sess.accountId);
-        return jsonNoStore(fallback, 200);
-      } catch {
-        // fall through to standard error response
+        return await buildDegradedTreeResponse(req);
+      } catch (fallbackError) {
+        return cavsafeErrorResponse(fallbackError, "Failed to load CavSafe tree.");
       }
     }
+    try {
+      return await buildDegradedTreeResponse(req);
+    } catch {}
     return cavsafeErrorResponse(err, "Failed to load CavSafe tree.");
   }
 }

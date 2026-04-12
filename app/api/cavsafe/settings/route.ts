@@ -1,9 +1,18 @@
-import { requireCavsafeOwnerSession } from "@/lib/cavsafe/auth.server";
+import { isApiAuthError } from "@/lib/apiAuth";
+import {
+  cavsafeTierTokenFromPlanId,
+  isCavsafePlanSchemaMismatchError,
+  requireCavsafeOwnerContext,
+  requireCavsafeOwnerSession,
+  resolveCavsafePlanIdOrDefault,
+} from "@/lib/cavsafe/auth.server";
 import { cavsafeErrorResponse, jsonNoStore } from "@/lib/cavsafe/http.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import {
   CAVSAFE_ENFORCED_POLICY_SUMMARY,
+  DEFAULT_CAVSAFE_SETTINGS,
   getCavSafeSettings,
+  isCavSafeSettingsSchemaMismatchError,
   parseCavSafeSettingsPatch,
   patchContainsPremiumPlusOnlyField,
   updateCavSafeSettings,
@@ -15,6 +24,26 @@ export const revalidate = 0;
 
 function tierFromSession(premiumPlus: boolean): "PREMIUM" | "PREMIUM_PLUS" {
   return premiumPlus ? "PREMIUM_PLUS" : "PREMIUM";
+}
+
+function isCavSafeSettingsReadSchemaMismatch(err: unknown) {
+  return isCavsafePlanSchemaMismatchError(err) || isCavSafeSettingsSchemaMismatchError(err);
+}
+
+async function buildDegradedSettingsResponse(req: Request) {
+  const sess = await requireCavsafeOwnerContext(req);
+  const planId = await resolveCavsafePlanIdOrDefault(String(sess.accountId || ""), "premium");
+
+  return jsonNoStore(
+    {
+      ok: true,
+      degraded: true,
+      tier: cavsafeTierTokenFromPlanId(planId),
+      settings: { ...DEFAULT_CAVSAFE_SETTINGS },
+      enforcedPolicySummary: CAVSAFE_ENFORCED_POLICY_SUMMARY,
+    },
+    200,
+  );
 }
 
 export async function GET(req: Request) {
@@ -36,6 +65,19 @@ export async function GET(req: Request) {
       200,
     );
   } catch (err) {
+    if (isApiAuthError(err)) {
+      return cavsafeErrorResponse(err, "Failed to load CavSafe settings.");
+    }
+    if (isCavSafeSettingsReadSchemaMismatch(err)) {
+      try {
+        return await buildDegradedSettingsResponse(req);
+      } catch (fallbackError) {
+        return cavsafeErrorResponse(fallbackError, "Failed to load CavSafe settings.");
+      }
+    }
+    try {
+      return await buildDegradedSettingsResponse(req);
+    } catch {}
     return cavsafeErrorResponse(err, "Failed to load CavSafe settings.");
   }
 }
