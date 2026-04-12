@@ -2060,7 +2060,7 @@ function CavToolsPageInner() {
                 </button>
 
                 {accountOpen ? (
-                  <div className="cb-menu cb-menu-right" role="menu" aria-label="Account">
+                  <div className="cb-menu cb-menu-right cb-account-menu" role="menu" aria-label="Account">
                     <button className="cb-menu-item" type="button" role="menuitem" onClick={onOpenAccount}>
                       {profileMenuLabel}
                     </button>
