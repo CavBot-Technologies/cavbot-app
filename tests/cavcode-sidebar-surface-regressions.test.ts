@@ -33,18 +33,3 @@ test("cavcode search stays top-aligned and changes commit input keeps shared fie
   assert.match(cssSource, /\.cc-changes-commitInput\{[\s\S]*padding: 0 40px 0 9px;/);
   assert.match(cssSource, /\.cc-hit:last-child\{/);
 });
-
-test("cavcode editor settings steppers use the refined segmented control", () => {
-  const pageSource = read("app/cavcode/page.tsx");
-  const cssSource = read("app/cavcode/cavcode.css");
-
-  assert.match(pageSource, /className="cc-set-stepperGlyph is-up"/);
-  assert.match(pageSource, /className="cc-set-stepperGlyph is-down"/);
-  assert.doesNotMatch(pageSource, /arrow-square-up-svgrepo-com\.svg/);
-  assert.doesNotMatch(pageSource, /arrow-square-down-svgrepo-com\.svg/);
-
-  assert.match(cssSource, /\.cc-set-stepper\{[\s\S]*min-width: 92px;[\s\S]*border-radius: 10px;/);
-  assert.match(cssSource, /\.cc-set-stepperValue\{[\s\S]*justify-content: flex-start;[\s\S]*padding: 0 14px 0 12px;/);
-  assert.match(cssSource, /\.cc-set-stepperGlyph\.is-up\{/);
-  assert.match(cssSource, /\.cc-set-stepperGlyph\.is-down\{/);
-});

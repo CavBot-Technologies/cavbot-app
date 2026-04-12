@@ -1161,7 +1161,7 @@ const CAVCODE_SHORTCUTS: ShortcutDefinition[] = [
     id: "find",
     command: "Find in active editor",
     when: "Editor",
-    source: "Monaco",
+    source: "Editor",
     mac: [["⌘", "F"]],
     win: [["Ctrl", "F"]],
     keywords: ["find", "search", "editor"],
@@ -1170,7 +1170,7 @@ const CAVCODE_SHORTCUTS: ShortcutDefinition[] = [
     id: "replace",
     command: "Replace in active editor",
     when: "Editor",
-    source: "Monaco",
+    source: "Editor",
     mac: [["⌘", "H"]],
     win: [["Ctrl", "H"]],
     keywords: ["replace", "editor"],
@@ -1179,7 +1179,7 @@ const CAVCODE_SHORTCUTS: ShortcutDefinition[] = [
     id: "quick-fix",
     command: "Quick fix or CavAi fix",
     when: "Editor diagnostics",
-    source: "Monaco + CavAi",
+    source: "Editor + CavAi",
     mac: [["⌘", "."]],
     win: [["Ctrl", "."]],
     keywords: ["quick fix", "fix", "diagnostics"],
@@ -1188,7 +1188,7 @@ const CAVCODE_SHORTCUTS: ShortcutDefinition[] = [
     id: "organize-imports",
     command: "Organize imports",
     when: "Editor",
-    source: "Monaco",
+    source: "Editor",
     mac: [["⌘", "⇧", "O"]],
     win: [["Ctrl", "Shift", "O"]],
     keywords: ["imports", "organize"],
@@ -5400,41 +5400,48 @@ function IconGearGlyph({ className, size }: { className?: string; size?: number 
   );
 }
 
+function IconThemeGlyph({ className, size }: { className?: string; size?: number }) {
+  const iconSize = Number.isFinite(size) ? Math.max(8, Math.round(size as number)) : 18;
+  return (
+    <Image
+      className={className}
+      src="/icons/app/cavcode/palette-svgrepo-com.svg"
+      alt=""
+      width={iconSize}
+      height={iconSize}
+      aria-hidden="true"
+      unoptimized
+    />
+  );
+}
+
 function IconKeyboardGlyph({ className, size }: { className?: string; size?: number }) {
   const iconSize = Number.isFinite(size) ? Math.max(8, Math.round(size as number)) : 18;
   return (
-    <svg
+    <Image
       className={className}
+      src="/icons/app/cavcode/keyboard-svgrepo-com.svg"
+      alt=""
       width={iconSize}
       height={iconSize}
-      viewBox="0 0 24 24"
-      fill="none"
       aria-hidden="true"
-      focusable="false"
-    >
-      <rect x="2.5" y="5" width="19" height="14" rx="3.2" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M6.5 10.2h1.4M9.6 10.2H11m2.1 0h1.4m2.1 0H18m-11.5 3.3h1.4m2.1 0H11m2.1 0h4.9m-11.5 3.3H18" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
+      unoptimized
+    />
   );
 }
 
 function IconCollaboratorsGlyph({ className, size }: { className?: string; size?: number }) {
   const iconSize = Number.isFinite(size) ? Math.max(8, Math.round(size as number)) : 18;
   return (
-    <svg
+    <Image
       className={className}
+      src="/icons/app/cavcode/team-svgrepo-com.svg"
+      alt=""
       width={iconSize}
       height={iconSize}
-      viewBox="0 0 24 24"
-      fill="none"
       aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        d="M8 11.2a2.9 2.9 0 1 0 0-5.8 2.9 2.9 0 0 0 0 5.8Zm8 0a2.55 2.55 0 1 0 0-5.1 2.55 2.55 0 0 0 0 5.1ZM4.5 18.2c0-2.2 2.1-4 4.7-4s4.8 1.8 4.8 4v.3H4.5v-.3Zm10.4.3c.2-1.15-.1-2.24-.73-3.14 1.97.18 3.43 1.54 3.43 3.14v.02H14.9v-.02Z"
-        fill="currentColor"
-      />
-    </svg>
+      unoptimized
+    />
   );
 }
 
@@ -5641,7 +5648,7 @@ export default function CavCodePage() {
 
   // settings
   const [settings, setSettings] = useState<EditorSettings>(DEFAULT_SETTINGS);
-  const [settingsSection, setSettingsSection] = useState<"editor" | "collaborators">("editor");
+  const [settingsSection, setSettingsSection] = useState<"editor" | "theme" | "collaborators">("editor");
   const [keyboardShortcutsQuery, setKeyboardShortcutsQuery] = useState("");
   const [skillsPageView, setSkillsPageView] = useState<SkillsPageView>("agents");
   const [cavenIdeSettings, setCavenIdeSettings] = useState<CavenIdeSettings>(DEFAULT_CAVEN_IDE_SETTINGS);
@@ -5738,11 +5745,13 @@ export default function CavCodePage() {
   const [changesHeaderMenuOpen, setChangesHeaderMenuOpen] = useState(false);
   const [explorerHeaderMenuOpen, setExplorerHeaderMenuOpen] = useState(false);
   const [runHeaderMenuOpen, setRunHeaderMenuOpen] = useState(false);
+  const [settingsHeaderMenuOpen, setSettingsHeaderMenuOpen] = useState(false);
   const panelViewMenuRef = useRef<HTMLDivElement | null>(null);
   const scmHeaderMenuRef = useRef<HTMLDivElement | null>(null);
   const changesHeaderMenuRef = useRef<HTMLDivElement | null>(null);
   const explorerHeaderMenuRef = useRef<HTMLDivElement | null>(null);
   const runHeaderMenuRef = useRef<HTMLDivElement | null>(null);
+  const settingsHeaderMenuRef = useRef<HTMLDivElement | null>(null);
   const [runDebugExpanded, setRunDebugExpanded] = useState(false);
 
   // problems
@@ -8481,6 +8490,7 @@ export default function CavCodePage() {
     setActivePane("primary");
   }, [cavenConfigToml, sysProfileReadme.loaded, sysProfileReadme.markdown]);
   const openKeyboardShortcutsTab = useCallback(() => {
+    setSettingsHeaderMenuOpen(false);
     setTabs((prev) => {
       if (prev.some((tab) => tab.id === CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID)) return prev;
       return [...prev, toKeyboardShortcutsTab()];
@@ -8490,10 +8500,15 @@ export default function CavCodePage() {
     setSidebarOpen(true);
     setActivity("settings");
   }, []);
-  const scrollSettingsSection = useCallback((section: "editor" | "collaborators") => {
+  const scrollSettingsSection = useCallback((section: "editor" | "theme" | "collaborators") => {
+    setSettingsSection(section);
+  }, []);
+  const openSettingsSection = useCallback((section: "editor" | "theme" | "collaborators") => {
+    setSettingsHeaderMenuOpen(false);
     setSettingsSection(section);
   }, []);
   const openSettingsSidebar = useCallback(() => {
+    setSettingsHeaderMenuOpen(false);
     setSidebarOpen(true);
     setActivity("settings");
     scrollSettingsSection("editor");
@@ -9457,6 +9472,30 @@ export default function CavCodePage() {
   }, [runHeaderMenuOpen]);
 
   useEffect(() => {
+    if (!settingsHeaderMenuOpen) return;
+    const onDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        setSettingsHeaderMenuOpen(false);
+        return;
+      }
+      const root = settingsHeaderMenuRef.current;
+      if (root && root.contains(target)) return;
+      setSettingsHeaderMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setSettingsHeaderMenuOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [settingsHeaderMenuOpen]);
+
+  useEffect(() => {
     if (!panelOpen) setPanelViewMenuOpen(false);
   }, [panelOpen]);
 
@@ -9480,6 +9519,10 @@ export default function CavCodePage() {
 
   useEffect(() => {
     if (activity !== "run") setRunHeaderMenuOpen(false);
+  }, [activity]);
+
+  useEffect(() => {
+    if (activity !== "settings") setSettingsHeaderMenuOpen(false);
   }, [activity]);
 
   useEffect(() => {
@@ -14485,7 +14528,7 @@ export default function CavCodePage() {
           <aside className="cc-sidebar" aria-label="Primary Sidebar">
             {activity === "explorer" ? (
               <>
-                <div className="cc-sidebar-head">
+                <div className={`cc-sidebar-head ${explorerHeaderMenuOpen ? "is-menu-open" : ""}`}>
                   <div className="cc-side-title">EXPLORER</div>
                   <br />
                   <div className="cc-side-actions" aria-label="Explorer Actions">
@@ -14501,7 +14544,7 @@ export default function CavCodePage() {
                     <button className="cc-side-icbtn" onClick={collapseAll} title="Collapse All">
                       <IconCollapseAll />
                     </button>
-                    <div className="cc-side-menuShell" ref={explorerHeaderMenuRef}>
+                    <div className={`cc-side-menuShell ${explorerHeaderMenuOpen ? "is-open" : ""}`} ref={explorerHeaderMenuRef}>
                       <button
                         className={`cc-side-icbtn ${explorerHeaderMenuOpen ? "is-on" : ""}`}
                         type="button"
@@ -14629,10 +14672,10 @@ export default function CavCodePage() {
 	              </>
 	            ) : activity === "scm" ? (
 	              <>
-	                <div className="cc-sidebar-head">
+	                <div className={`cc-sidebar-head ${scmHeaderMenuOpen ? "is-menu-open" : ""}`}>
 	                  <div className="cc-side-title">SOURCE CONTROL</div>
                     <div className="cc-side-actions">
-                      <div className="cc-side-menuShell" ref={scmHeaderMenuRef}>
+                      <div className={`cc-side-menuShell ${scmHeaderMenuOpen ? "is-open" : ""}`} ref={scmHeaderMenuRef}>
                         <button
                           className={`cc-side-menuBtn ${scmHeaderMenuOpen ? "is-on" : ""}`}
                           type="button"
@@ -14712,10 +14755,10 @@ export default function CavCodePage() {
 	              </>
 	            ) : activity === "changes" ? (
               <>
-                <div className="cc-sidebar-head">
+                <div className={`cc-sidebar-head ${changesHeaderMenuOpen ? "is-menu-open" : ""}`}>
                   <div className="cc-side-title">CHANGES</div>
                   <div className="cc-side-actions">
-                    <div className="cc-side-menuShell" ref={changesHeaderMenuRef}>
+                    <div className={`cc-side-menuShell ${changesHeaderMenuOpen ? "is-open" : ""}`} ref={changesHeaderMenuRef}>
                       <button
                         className={`cc-side-menuBtn ${changesHeaderMenuOpen ? "is-on" : ""}`}
                         type="button"
@@ -15064,367 +15107,386 @@ export default function CavCodePage() {
               />
             ) : activity === "settings" ? (
               <>
-                <div className="cc-sidebar-head">
+                <div className={`cc-sidebar-head ${settingsHeaderMenuOpen ? "is-menu-open" : ""}`}>
                   <div className="cc-side-title">SETTINGS</div>
+                  <div className="cc-side-actions">
+                    <div className={`cc-side-menuShell ${settingsHeaderMenuOpen ? "is-open" : ""}`} ref={settingsHeaderMenuRef}>
+                      <button
+                        className={`cc-side-menuBtn ${settingsHeaderMenuOpen ? "is-on" : ""}`}
+                        type="button"
+                        aria-haspopup="menu"
+                        aria-expanded={settingsHeaderMenuOpen}
+                        aria-label="Settings actions"
+                        onClick={() => setSettingsHeaderMenuOpen((prev) => !prev)}
+                      >
+                        <IconMenuDots />
+                      </button>
+                      {settingsHeaderMenuOpen ? (
+                        <div className="cc-side-menu" role="menu" aria-label="Settings menu">
+                          <button
+                            className="cc-side-menuItem cc-side-menuItemWithIcon"
+                            role="menuitem"
+                            type="button"
+                            onClick={() => openSettingsSection("editor")}
+                          >
+                            <IconGearGlyph className="cc-act-svg" size={14} />
+                            <span className="cc-side-menuItemLabel">Editor</span>
+                          </button>
+                          <button
+                            className="cc-side-menuItem cc-side-menuItemWithIcon"
+                            role="menuitem"
+                            type="button"
+                            onClick={() => openSettingsSection("theme")}
+                          >
+                            <IconThemeGlyph className="cc-act-svg" size={14} />
+                            <span className="cc-side-menuItemLabel">Theme</span>
+                          </button>
+                          <button
+                            className="cc-side-menuItem cc-side-menuItemWithIcon"
+                            role="menuitem"
+                            type="button"
+                            onClick={openKeyboardShortcutsTab}
+                          >
+                            <IconKeyboardGlyph className="cc-act-svg" size={14} />
+                            <span className="cc-side-menuItemLabel">Keyboard Shortcuts</span>
+                            <span className="cc-side-menuItemKey">{isMacPlatform ? "⌘K ⌘S" : "Ctrl+K Ctrl+S"}</span>
+                          </button>
+                          <button
+                            className="cc-side-menuItem cc-side-menuItemWithIcon"
+                            role="menuitem"
+                            type="button"
+                            onClick={() => openSettingsSection("collaborators")}
+                          >
+                            <IconCollaboratorsGlyph className="cc-act-svg" size={14} />
+                            <span className="cc-side-menuItemLabel">Project Collaborators</span>
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="cc-settings">
-                  <div className="cc-settingsNav">
-                    <button
-                      type="button"
-                      className={`cc-settingsNavItem ${settingsSection === "editor" ? "is-on" : ""}`}
-                      onClick={() => scrollSettingsSection("editor")}
-                    >
-                      <span className="cc-settingsNavIcon" aria-hidden="true">
-                        <IconGearGlyph size={15} />
-                      </span>
-                      <span className="cc-settingsNavCopy">
-                        <span className="cc-settingsNavLabel">Editor</span>
-                        <span className="cc-settingsNavHint">Typography, save flow, theme, and sync.</span>
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className={`cc-settingsNavItem ${activeKeyboardShortcutsTab ? "is-on" : ""}`}
-                      onClick={openKeyboardShortcutsTab}
-                    >
-                      <span className="cc-settingsNavIcon" aria-hidden="true">
-                        <IconKeyboardGlyph size={15} />
-                      </span>
-                      <span className="cc-settingsNavCopy">
-                        <span className="cc-settingsNavLabel">Keyboard Shortcuts</span>
-                        <span className="cc-settingsNavHint">Open the CavCode keybinding editor tab.</span>
-                      </span>
-                      <span className="cc-settingsNavKey">{isMacPlatform ? "⌘K ⌘S" : "Ctrl+K Ctrl+S"}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className={`cc-settingsNavItem ${settingsSection === "collaborators" ? "is-on" : ""}`}
-                      onClick={() => scrollSettingsSection("collaborators")}
-                    >
-                      <span className="cc-settingsNavIcon" aria-hidden="true">
-                        <IconCollaboratorsGlyph size={15} />
-                      </span>
-                      <span className="cc-settingsNavCopy">
-                        <span className="cc-settingsNavLabel">Project Collaborators</span>
-                        <span className="cc-settingsNavHint">Manage who can view, edit, or administer a project.</span>
-                      </span>
-                    </button>
-                  </div>
-
                   {settingsSection === "editor" ? (
                     <div className="cc-set-card cc-set-cardSettings">
-                    <div className="cc-set-head">
-                      <div>
-                        <div className="cc-set-title">Editor</div>
-                        <div className="cc-set-note">Keep CavCode tight, readable, and consistent across your workspace.</div>
+                      <div className="cc-set-head">
+                        <div>
+                          <div className="cc-set-title">Editor</div>
+                          <div className="cc-set-note">Keep CavCode tight, readable, and consistent across your workspace.</div>
+                        </div>
+                      </div>
+
+                      <div className="cc-set-stack">
+                        <div className="cc-set-row cc-set-rowDetailed">
+                          <div className="cc-set-copy">
+                            <span className="cc-set-label">Font Size</span>
+                            <span className="cc-set-note">Editor text scale for active files, diffs, and inline diagnostics.</span>
+                          </div>
+                          <div className="cc-set-stepper" role="group" aria-label="Font Size">
+                            <span className="cc-set-stepperValue" aria-live="polite">{settings.fontSize}</span>
+                            <span className="cc-set-stepperButtons">
+                              <button
+                                type="button"
+                                className="cc-set-stepperBtn"
+                                aria-label="Increase font size"
+                                onClick={() => setSettings((s) => ({ ...s, fontSize: Math.max(10, Math.min(22, s.fontSize + 1)) }))}
+                              >
+                                <Image src="/icons/app/arrow-square-up-svgrepo-com.svg" alt="" width={12} height={12} aria-hidden="true" />
+                              </button>
+                              <button
+                                type="button"
+                                className="cc-set-stepperBtn"
+                                aria-label="Decrease font size"
+                                onClick={() => setSettings((s) => ({ ...s, fontSize: Math.max(10, Math.min(22, s.fontSize - 1)) }))}
+                              >
+                                <Image src="/icons/app/arrow-square-down-svgrepo-com.svg" alt="" width={12} height={12} aria-hidden="true" />
+                              </button>
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="cc-set-row cc-set-rowDetailed">
+                          <div className="cc-set-copy">
+                            <span className="cc-set-label">Tab Size</span>
+                            <span className="cc-set-note">Default indentation width for tabs and inserted spaces.</span>
+                          </div>
+                          <div className="cc-set-stepper" role="group" aria-label="Tab Size">
+                            <span className="cc-set-stepperValue" aria-live="polite">{settings.tabSize}</span>
+                            <span className="cc-set-stepperButtons">
+                              <button
+                                type="button"
+                                className="cc-set-stepperBtn"
+                                aria-label="Increase tab size"
+                                onClick={() => setSettings((s) => ({ ...s, tabSize: Math.max(2, Math.min(8, s.tabSize + 1)) }))}
+                              >
+                                <Image src="/icons/app/arrow-square-up-svgrepo-com.svg" alt="" width={12} height={12} aria-hidden="true" />
+                              </button>
+                              <button
+                                type="button"
+                                className="cc-set-stepperBtn"
+                                aria-label="Decrease tab size"
+                                onClick={() => setSettings((s) => ({ ...s, tabSize: Math.max(2, Math.min(8, s.tabSize - 1)) }))}
+                              >
+                                <Image src="/icons/app/arrow-square-down-svgrepo-com.svg" alt="" width={12} height={12} aria-hidden="true" />
+                              </button>
+                            </span>
+                          </div>
+                        </div>
+
+                        <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
+                          <span className="cc-set-copy">
+                            <span className="cc-set-label">Word Wrap</span>
+                            <span className="cc-set-note">Wrap long lines inside the editor viewport.</span>
+                          </span>
+                          <input
+                            className="cc-set-toggle"
+                            type="checkbox"
+                            checked={settings.wordWrap}
+                            onChange={(e) => setSettings((s) => ({ ...s, wordWrap: e.target.checked }))}
+                          />
+                        </label>
+
+                        <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
+                          <span className="cc-set-copy">
+                            <span className="cc-set-label">Minimap</span>
+                            <span className="cc-set-note">Keep the overview map visible for fast scanning.</span>
+                          </span>
+                          <input
+                            className="cc-set-toggle"
+                            type="checkbox"
+                            checked={settings.minimap}
+                            onChange={(e) => setSettings((s) => ({ ...s, minimap: e.target.checked }))}
+                          />
+                        </label>
+
+                        <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
+                          <span className="cc-set-copy">
+                            <span className="cc-set-label">Format on Save</span>
+                            <span className="cc-set-note">Apply automatic formatting whenever a save is triggered.</span>
+                          </span>
+                          <input
+                            className="cc-set-toggle"
+                            type="checkbox"
+                            checked={settings.formatOnSave}
+                            onChange={(e) => setSettings((s) => ({ ...s, formatOnSave: e.target.checked }))}
+                          />
+                        </label>
+
+                        <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
+                          <span className="cc-set-copy">
+                            <span className="cc-set-label">Autosave</span>
+                            <span className="cc-set-note">Write changes automatically to CavBot persistence while you work.</span>
+                          </span>
+                          <input
+                            className="cc-set-toggle"
+                            type="checkbox"
+                            checked={settings.autosave}
+                            onChange={(e) => setSettings((s) => ({ ...s, autosave: e.target.checked }))}
+                          />
+                        </label>
+
+                        <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
+                          <span className="cc-set-copy">
+                            <span className="cc-set-label">Sync to CavCloud</span>
+                            <span className="cc-set-note">Mirror CavCode settings into your CavCloud-linked workspace profile.</span>
+                          </span>
+                          <input
+                            className="cc-set-toggle"
+                            type="checkbox"
+                            checked={settings.syncToCavcloud}
+                            onChange={(e) => setSettings((s) => ({ ...s, syncToCavcloud: e.target.checked }))}
+                          />
+                        </label>
+
+                        <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
+                          <span className="cc-set-copy">
+                            <span className="cc-set-label">Telemetry</span>
+                            <span className="cc-set-note">Share editor diagnostics and behavior signals with CavBot telemetry.</span>
+                          </span>
+                          <input
+                            className="cc-set-toggle"
+                            type="checkbox"
+                            checked={settings.telemetry}
+                            onChange={(e) => setSettings((s) => ({ ...s, telemetry: e.target.checked }))}
+                          />
+                        </label>
                       </div>
                     </div>
+                  ) : null}
 
-                    <div className="cc-set-stack">
-                      <div className="cc-set-row cc-set-rowDetailed">
-                        <div className="cc-set-copy">
-                          <span className="cc-set-label">Font Size</span>
-                          <span className="cc-set-note">Editor text scale for Monaco, diffs, and inline diagnostics.</span>
-                        </div>
-                        <div className="cc-set-stepper" role="group" aria-label="Font Size">
-                          <span className="cc-set-stepperValue" aria-live="polite">{settings.fontSize}</span>
-                          <span className="cc-set-stepperButtons">
-                            <button
-                              type="button"
-                              className="cc-set-stepperBtn"
-                              aria-label="Increase font size"
-                              onClick={() => setSettings((s) => ({ ...s, fontSize: Math.max(10, Math.min(22, s.fontSize + 1)) }))}
-                            >
-                              <span className="cc-set-stepperGlyph is-up" aria-hidden="true" />
-                            </button>
-                            <button
-                              type="button"
-                              className="cc-set-stepperBtn"
-                              aria-label="Decrease font size"
-                              onClick={() => setSettings((s) => ({ ...s, fontSize: Math.max(10, Math.min(22, s.fontSize - 1)) }))}
-                            >
-                              <span className="cc-set-stepperGlyph is-down" aria-hidden="true" />
-                            </button>
-                          </span>
+                  {settingsSection === "theme" ? (
+                    <div className="cc-set-card cc-set-cardSettings">
+                      <div className="cc-set-head">
+                        <div>
+                          <div className="cc-set-title">Theme</div>
+                          <div className="cc-set-note">12 professional CavCode themes.</div>
                         </div>
                       </div>
 
-                      <div className="cc-set-row cc-set-rowDetailed">
-                        <div className="cc-set-copy">
-                          <span className="cc-set-label">Tab Size</span>
-                          <span className="cc-set-note">Default indentation width for tabs and inserted spaces.</span>
-                        </div>
-                        <div className="cc-set-stepper" role="group" aria-label="Tab Size">
-                          <span className="cc-set-stepperValue" aria-live="polite">{settings.tabSize}</span>
-                          <span className="cc-set-stepperButtons">
-                            <button
-                              type="button"
-                              className="cc-set-stepperBtn"
-                              aria-label="Increase tab size"
-                              onClick={() => setSettings((s) => ({ ...s, tabSize: Math.max(2, Math.min(8, s.tabSize + 1)) }))}
-                            >
-                              <span className="cc-set-stepperGlyph is-up" aria-hidden="true" />
-                            </button>
-                            <button
-                              type="button"
-                              className="cc-set-stepperBtn"
-                              aria-label="Decrease tab size"
-                              onClick={() => setSettings((s) => ({ ...s, tabSize: Math.max(2, Math.min(8, s.tabSize - 1)) }))}
-                            >
-                              <span className="cc-set-stepperGlyph is-down" aria-hidden="true" />
-                            </button>
-                          </span>
+                      <div className="cc-set-stack">
+                        <div className="cc-set-row cc-set-rowTheme">
+                          <div className="cc-themeList" role="list" aria-label="CavCode themes">
+                            {THEME_OPTIONS.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={`cc-themeCard ${settings.theme === option.value ? "is-on" : ""}`}
+                                data-theme-value={option.value}
+                                onClick={() => setSettings((s) => ({ ...s, theme: option.value }))}
+                                style={{
+                                  "--cc-theme-card-bg": option.previewBackground,
+                                  "--cc-theme-card-border": option.previewBorder,
+                                  "--cc-theme-card-fg": option.previewText,
+                                  "--cc-theme-card-line": option.previewLine,
+                                  "--cc-theme-card-accent": option.accent,
+                                  "--cc-theme-card-keyword": option.tokens.keyword,
+                                  "--cc-theme-card-string": option.tokens.string,
+                                  "--cc-theme-card-number": option.tokens.number,
+                                  "--cc-theme-card-type": option.tokens.type,
+                                  "--cc-theme-card-comment": option.tokens.comment,
+                                } as React.CSSProperties}
+                              >
+                                <span className="cc-themeCardMeta">
+                                  <span className="cc-themeCardTitleWrap">
+                                    <span className="cc-themeCardName">{option.label}</span>
+                                    <span className="cc-themeCardHint">{option.hint}</span>
+                                  </span>
+                                  <span className="cc-themeCardDot" aria-hidden="true" />
+                                </span>
+                                <span className="cc-themeCardCode" aria-hidden="true">
+                                  <span className="cc-themeCardCodeLine is-comment">{`// ${option.value}`}</span>
+                                  <span className="cc-themeCardCodeLine">
+                                    <span className="tok-keyword">const</span>{" "}
+                                    <span className="tok-type">accent</span>{" "}
+                                    ={" "}
+                                    <span className="tok-string">{JSON.stringify(option.label)}</span>
+                                  </span>
+                                  <span className="cc-themeCardCodeLine">
+                                    <span className="tok-keyword">return</span>{" "}
+                                    <span className="tok-number">12</span>
+                                  </span>
+                                </span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
-
-                      <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
-                        <span className="cc-set-copy">
-                          <span className="cc-set-label">Word Wrap</span>
-                          <span className="cc-set-note">Wrap long lines inside the editor viewport.</span>
-                        </span>
-                        <input
-                          className="cc-set-toggle"
-                          type="checkbox"
-                          checked={settings.wordWrap}
-                          onChange={(e) => setSettings((s) => ({ ...s, wordWrap: e.target.checked }))}
-                        />
-                      </label>
-
-                      <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
-                        <span className="cc-set-copy">
-                          <span className="cc-set-label">Minimap</span>
-                          <span className="cc-set-note">Keep the overview map visible for fast scanning.</span>
-                        </span>
-                        <input
-                          className="cc-set-toggle"
-                          type="checkbox"
-                          checked={settings.minimap}
-                          onChange={(e) => setSettings((s) => ({ ...s, minimap: e.target.checked }))}
-                        />
-                      </label>
-
-                      <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
-                        <span className="cc-set-copy">
-                          <span className="cc-set-label">Format on Save</span>
-                          <span className="cc-set-note">Apply Monaco formatting whenever a save is triggered.</span>
-                        </span>
-                        <input
-                          className="cc-set-toggle"
-                          type="checkbox"
-                          checked={settings.formatOnSave}
-                          onChange={(e) => setSettings((s) => ({ ...s, formatOnSave: e.target.checked }))}
-                        />
-                      </label>
-
-                      <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
-                        <span className="cc-set-copy">
-                          <span className="cc-set-label">Autosave</span>
-                          <span className="cc-set-note">Write changes automatically to CavBot persistence while you work.</span>
-                        </span>
-                        <input
-                          className="cc-set-toggle"
-                          type="checkbox"
-                          checked={settings.autosave}
-                          onChange={(e) => setSettings((s) => ({ ...s, autosave: e.target.checked }))}
-                        />
-                      </label>
-
-                      <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
-                        <span className="cc-set-copy">
-                          <span className="cc-set-label">Sync to CavCloud</span>
-                          <span className="cc-set-note">Mirror CavCode settings into your CavCloud-linked workspace profile.</span>
-                        </span>
-                        <input
-                          className="cc-set-toggle"
-                          type="checkbox"
-                          checked={settings.syncToCavcloud}
-                          onChange={(e) => setSettings((s) => ({ ...s, syncToCavcloud: e.target.checked }))}
-                        />
-                      </label>
-
-                      <div className="cc-set-row cc-set-rowTheme">
-                        <div className="cc-set-copy">
-                          <span className="cc-set-label">Theme</span>
-                          <span className="cc-set-note">12 professional CavCode themes. Monaco rendering stays on the same theme pipeline.</span>
-                        </div>
-                        <div className="cc-themeList" role="list" aria-label="CavCode themes">
-                          {THEME_OPTIONS.map((option) => (
-                            <button
-                              key={option.value}
-                              type="button"
-                              className={`cc-themeCard ${settings.theme === option.value ? "is-on" : ""}`}
-                              data-theme-value={option.value}
-                              onClick={() => setSettings((s) => ({ ...s, theme: option.value }))}
-                              style={{
-                                "--cc-theme-card-bg": option.previewBackground,
-                                "--cc-theme-card-border": option.previewBorder,
-                                "--cc-theme-card-fg": option.previewText,
-                                "--cc-theme-card-line": option.previewLine,
-                                "--cc-theme-card-accent": option.accent,
-                                "--cc-theme-card-keyword": option.tokens.keyword,
-                                "--cc-theme-card-string": option.tokens.string,
-                                "--cc-theme-card-number": option.tokens.number,
-                                "--cc-theme-card-type": option.tokens.type,
-                                "--cc-theme-card-comment": option.tokens.comment,
-                              } as React.CSSProperties}
-                            >
-                              <span className="cc-themeCardMeta">
-                                <span className="cc-themeCardTitleWrap">
-                                  <span className="cc-themeCardName">{option.label}</span>
-                                  <span className="cc-themeCardHint">{option.hint}</span>
-                                </span>
-                                <span className="cc-themeCardDot" aria-hidden="true" />
-                              </span>
-                              <span className="cc-themeCardCode" aria-hidden="true">
-                                <span className="cc-themeCardCodeLine is-comment">{`// ${option.value}`}</span>
-                                <span className="cc-themeCardCodeLine">
-                                  <span className="tok-keyword">const</span>{" "}
-                                  <span className="tok-type">accent</span>{" "}
-                                  ={" "}
-                                  <span className="tok-string">{JSON.stringify(option.label)}</span>
-                                </span>
-                                <span className="cc-themeCardCodeLine">
-                                  <span className="tok-keyword">return</span>{" "}
-                                  <span className="tok-number">12</span>
-                                </span>
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
-                        <span className="cc-set-copy">
-                          <span className="cc-set-label">Telemetry</span>
-                          <span className="cc-set-note">Share editor diagnostics and behavior signals with CavBot telemetry.</span>
-                        </span>
-                        <input
-                          className="cc-set-toggle"
-                          type="checkbox"
-                          checked={settings.telemetry}
-                          onChange={(e) => setSettings((s) => ({ ...s, telemetry: e.target.checked }))}
-                        />
-                      </label>
-                    </div>
                     </div>
                   ) : null}
 
                   {settingsSection === "collaborators" ? (
                     <div className="cc-set-card cc-set-cardSettings">
-                    <div className="cc-set-head">
-                      <div>
-                        <div className="cc-set-title">Project Collaborators</div>
-                        <div className="cc-set-note">Invite workspace members into this project without leaving CavCode.</div>
-                      </div>
-                    </div>
-                    {!projectIdFromQuery ? (
-                      <div className="cc-set-note">
-                        Open CavCode with a project context to manage collaborators.
-                      </div>
-                    ) : (
-                      <>
-                        <div className="cc-set-note">
-                          {`Project #${projectIdFromQuery}`}
+                      <div className="cc-set-head">
+                        <div>
+                          <div className="cc-set-title">Project Collaborators</div>
+                          <div className="cc-set-note">Invite workspace members into this project without leaving CavCode.</div>
                         </div>
+                      </div>
+                      {!projectIdFromQuery ? (
+                        <div className="cc-set-note">
+                          Open CavCode with a project context to manage collaborators.
+                        </div>
+                      ) : (
+                        <>
+                          <div className="cc-set-note">
+                            {`Project #${projectIdFromQuery}`}
+                          </div>
 
-                        <label className="cc-set-row cc-set-rowStack">
-                          <span className="cc-set-label">Workspace member</span>
-                          <span className="cc-set-selectWrap">
-                            <select
-                              className="cc-set-input cc-set-inputWide cc-set-select"
-                              value={projectCollabUserId}
-                              onChange={(e) => setProjectCollabUserId(e.target.value)}
-                              disabled={projectCollabBusy || projectCollabSubmitting || !workspaceMemberOptions.length}
-                            >
-                              {workspaceMemberOptions.length ? null : <option value="">No workspace members</option>}
-                              {workspaceMemberOptions.map((member) => (
-                                <option key={member.userId} value={member.userId}>
-                                  {member.displayName ? `${member.displayName} (${member.email})` : member.email}
-                                </option>
-                              ))}
-                            </select>
-                            <span className="cc-set-selectChevron" aria-hidden="true">
-                              <Image src="/icons/app/cavcode/arrow-down-svgrepo-com.svg" alt="" width={10} height={10} />
+                          <label className="cc-set-row cc-set-rowStack">
+                            <span className="cc-set-label">Workspace member</span>
+                            <span className="cc-set-selectWrap">
+                              <select
+                                className="cc-set-input cc-set-inputWide cc-set-select"
+                                value={projectCollabUserId}
+                                onChange={(e) => setProjectCollabUserId(e.target.value)}
+                                disabled={projectCollabBusy || projectCollabSubmitting || !workspaceMemberOptions.length}
+                              >
+                                {workspaceMemberOptions.length ? null : <option value="">No workspace members</option>}
+                                {workspaceMemberOptions.map((member) => (
+                                  <option key={member.userId} value={member.userId}>
+                                    {member.displayName ? `${member.displayName} (${member.email})` : member.email}
+                                  </option>
+                                ))}
+                              </select>
+                              <span className="cc-set-selectChevron" aria-hidden="true">
+                                <Image src="/icons/app/cavcode/arrow-down-svgrepo-com.svg" alt="" width={10} height={10} />
+                              </span>
                             </span>
-                          </span>
-                        </label>
+                          </label>
 
-                        <label className="cc-set-row cc-set-rowStack">
-                          <span className="cc-set-label">Role</span>
-                          <span className="cc-set-selectWrap">
-                            <select
-                              className="cc-set-input cc-set-inputWide cc-set-select"
-                              value={projectCollabRole}
-                              onChange={(e) => {
-                                const next = String(e.target.value || "").toUpperCase();
-                                setProjectCollabRole(next === "EDITOR" || next === "ADMIN" ? next : "VIEWER");
-                              }}
+                          <label className="cc-set-row cc-set-rowStack">
+                            <span className="cc-set-label">Role</span>
+                            <span className="cc-set-selectWrap">
+                              <select
+                                className="cc-set-input cc-set-inputWide cc-set-select"
+                                value={projectCollabRole}
+                                onChange={(e) => {
+                                  const next = String(e.target.value || "").toUpperCase();
+                                  setProjectCollabRole(next === "EDITOR" || next === "ADMIN" ? next : "VIEWER");
+                                }}
+                                disabled={projectCollabBusy || projectCollabSubmitting}
+                              >
+                                <option value="VIEWER">Viewer</option>
+                                <option value="EDITOR">Editor</option>
+                                <option value="ADMIN">Admin</option>
+                              </select>
+                              <span className="cc-set-selectChevron" aria-hidden="true">
+                                <Image src="/icons/app/cavcode/arrow-down-svgrepo-com.svg" alt="" width={10} height={10} />
+                              </span>
+                            </span>
+                          </label>
+
+                          <div className="cc-run-actions">
+                            <button
+                              className="cc-run-btn cc-run-btn2"
+                              onClick={() => void addProjectCollaborator()}
+                              disabled={projectCollabBusy || projectCollabSubmitting || !projectCollabUserId}
+                            >
+                              {projectCollabSubmitting ? "Saving..." : "Save collaborator"}
+                            </button>
+                          </div>
+
+                          {projectCollabError ? <div className="cc-set-note is-error">{projectCollabError}</div> : null}
+                          {projectCollabStatus ? <div className="cc-set-note is-success">{projectCollabStatus}</div> : null}
+
+                          <div className="cc-set-subtitle">Current collaborators</div>
+                          {projectCollaborators.length ? (
+                            <div className="cc-collabList">
+                              {projectCollaborators.map((collaborator) => (
+                                <div key={collaborator.userId} className="cc-collabRow">
+                                  <div>
+                                    <div className="cc-collabName">
+                                      {collaborator.displayName || collaborator.email || collaborator.userId}
+                                    </div>
+                                    <div className="cc-collabMeta">{collaborator.role}</div>
+                                  </div>
+                                  <button
+                                    className="cc-run-btn cc-collabRevokeBtn"
+                                    onClick={() => void revokeProjectCollaborator(collaborator.userId)}
+                                    disabled={projectCollabBusy || projectCollabSubmitting}
+                                  >
+                                    Revoke
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="cc-set-note">
+                              {projectCollabBusy ? "Loading collaborators..." : "No project collaborators set."}
+                            </div>
+                          )}
+
+                          <div className="cc-run-actions">
+                            <button
+                              className="cc-run-btn"
+                              onClick={() => void loadProjectCollaborators()}
                               disabled={projectCollabBusy || projectCollabSubmitting}
                             >
-                              <option value="VIEWER">Viewer</option>
-                              <option value="EDITOR">Editor</option>
-                              <option value="ADMIN">Admin</option>
-                            </select>
-                            <span className="cc-set-selectChevron" aria-hidden="true">
-                              <Image src="/icons/app/cavcode/arrow-down-svgrepo-com.svg" alt="" width={10} height={10} />
-                            </span>
-                          </span>
-                        </label>
-
-                        <div className="cc-run-actions">
-                          <button
-                            className="cc-run-btn cc-run-btn2"
-                            onClick={() => void addProjectCollaborator()}
-                            disabled={projectCollabBusy || projectCollabSubmitting || !projectCollabUserId}
-                          >
-                            {projectCollabSubmitting ? "Saving..." : "Save collaborator"}
-                          </button>
-                        </div>
-
-                        {projectCollabError ? <div className="cc-set-note is-error">{projectCollabError}</div> : null}
-                        {projectCollabStatus ? <div className="cc-set-note is-success">{projectCollabStatus}</div> : null}
-
-                        <div className="cc-set-subtitle">Current collaborators</div>
-                        {projectCollaborators.length ? (
-                          <div className="cc-collabList">
-                            {projectCollaborators.map((collaborator) => (
-                              <div key={collaborator.userId} className="cc-collabRow">
-                                <div>
-                                  <div className="cc-collabName">
-                                    {collaborator.displayName || collaborator.email || collaborator.userId}
-                                  </div>
-                                  <div className="cc-collabMeta">{collaborator.role}</div>
-                                </div>
-                                <button
-                                  className="cc-run-btn cc-collabRevokeBtn"
-                                  onClick={() => void revokeProjectCollaborator(collaborator.userId)}
-                                  disabled={projectCollabBusy || projectCollabSubmitting}
-                                >
-                                  Revoke
-                                </button>
-                              </div>
-                            ))}
+                              {projectCollabBusy ? "Refreshing..." : "Refresh"}
+                            </button>
                           </div>
-                        ) : (
-                          <div className="cc-set-note">
-                            {projectCollabBusy ? "Loading collaborators..." : "No project collaborators set."}
-                          </div>
-                        )}
-
-                        <div className="cc-run-actions">
-                          <button
-                            className="cc-run-btn"
-                            onClick={() => void loadProjectCollaborators()}
-                            disabled={projectCollabBusy || projectCollabSubmitting}
-                          >
-                            {projectCollabBusy ? "Refreshing..." : "Refresh"}
-                          </button>
-                        </div>
-                      </>
-                    )}
+                        </>
+                      )}
                     </div>
                   ) : null}
                 </div>
@@ -15449,10 +15511,10 @@ export default function CavCodePage() {
               </>
             ) : activity === "run" ? (
               <>
-                <div className="cc-sidebar-head">
+                <div className={`cc-sidebar-head ${runHeaderMenuOpen ? "is-menu-open" : ""}`}>
                   <div className="cc-side-title">RUN &amp; DEBUG</div>
                   <div className="cc-side-actions">
-                    <div className="cc-side-menuShell" ref={runHeaderMenuRef}>
+                    <div className={`cc-side-menuShell ${runHeaderMenuOpen ? "is-open" : ""}`} ref={runHeaderMenuRef}>
                       <button
                         className={`cc-side-menuBtn ${runHeaderMenuOpen ? "is-on" : ""}`}
                         type="button"
