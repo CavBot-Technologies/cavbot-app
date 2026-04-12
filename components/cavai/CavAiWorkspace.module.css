@@ -1683,15 +1683,15 @@
 }
 
 .codePanelEmptyLogo {
-  width: 104px;
-  height: 104px;
+  width: 88px;
+  height: 88px;
   display: grid;
   place-items: center;
 }
 
 .codePanelEmptyLogoGlyph {
-  width: 64px;
-  height: 64px;
+  width: 52px;
+  height: 52px;
   display: block;
   background: rgba(224, 231, 242, 0.7);
   -webkit-mask: url("/icons/app/cavcode/atom-svgrepo-com.svg") center / contain no-repeat;
