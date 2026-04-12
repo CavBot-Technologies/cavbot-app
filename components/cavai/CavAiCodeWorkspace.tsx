@@ -373,7 +373,6 @@ const REASONING_LEVEL_OPTIONS: Array<{ value: ReasoningLevel; label: string }> =
 ];
 const DEFAULT_REASONING_LEVELS: ReasoningLevel[] = ["low", "medium"];
 const CAVEN_AGENT_NAME = "Caven";
-const CAVEN_MODEL_ATTRIBUTION = "Powered by Qwen3-Coder";
 const CAVEN_AGENT_ID_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/;
 const CAVEN_AGENT_ACTION_KEY_RE = /^[a-z0-9][a-z0-9_]{1,63}$/;
 const CAVEN_DEFAULT_SETTINGS: CavenWorkspaceSettings = {
@@ -1806,8 +1805,8 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   const modelMenuOptions = useMemo(() => {
     const entries = modelOptions
       .map((option) => ({
-      id: option.id,
-      label: resolveAiModelLabel(option.id),
+        id: option.id,
+        label: option.id === ALIBABA_QWEN_CODER_MODEL_ID ? "Caven" : resolveAiModelLabel(option.id),
       }))
       .filter((option) => !isAiAutoModelId(option.id));
     const ordered: CavAiModelOption[] = [];
@@ -1847,6 +1846,11 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     () => qwenPopoverState?.modelAvailability?.[ALIBABA_QWEN_CODER_MODEL_ID] || null,
     [qwenPopoverState]
   );
+  const qwenEntitlementState = useMemo(
+    () => s(qwenPopoverState?.entitlement?.state).toLowerCase(),
+    [qwenPopoverState]
+  );
+  const qwenFreeLocked = qwenEntitlementState === "locked_free";
   const qwenLocked = useMemo(
     () => Boolean(qwenAvailability && qwenAvailability.selectable === false),
     [qwenAvailability]
@@ -1855,15 +1859,20 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     () => Math.max(0, Math.min(100, Number(qwenPopoverState?.usage?.percentUsed || 0))),
     [qwenPopoverState]
   );
+  const qwenUsageSummary = useMemo(
+    () => {
+      const creditsUsed = Math.max(0, Math.trunc(Number(qwenPopoverState?.usage?.creditsUsed || 0)));
+      const creditsTotal = Math.max(0, Math.trunc(Number(qwenPopoverState?.usage?.creditsTotal || 0)));
+      return `${creditsUsed} / ${creditsTotal} credits used`;
+    },
+    [qwenPopoverState]
+  );
   const qwenUsageLabel = useMemo(
     () => {
-      const state = s(qwenPopoverState?.entitlement?.state).toLowerCase();
-      if (state === "locked_free" || Number(qwenPopoverState?.usage?.creditsTotal || 0) <= 0) {
-        return "Not included on Free";
-      }
-      return `${Math.round(qwenUsagePercent)}% used`;
+      if (!qwenPopoverState) return "Caven usage";
+      return qwenUsageSummary;
     },
-    [qwenPopoverState, qwenUsagePercent]
+    [qwenPopoverState, qwenUsageSummary]
   );
   const maxImageAttachments = useMemo(() => maxImageAttachmentsForPlan(accountPlanId), [accountPlanId]);
   const emitQwenUpgradeDecision = useCallback(() => {
@@ -6187,15 +6196,14 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
                   {modelMenuOptions.map((option) => {
                     const isOn = selectedModel === option.id;
                     const isQwenCoder = option.id === ALIBABA_QWEN_CODER_MODEL_ID;
-                    const isLocked = isQwenCoder && qwenLocked;
-                    const lockReason = isQwenCoder && qwenPopoverState
-                      ? qwenPopoverState.entitlement.state === "cooldown"
+                    const isSelectionBlocked = isQwenCoder && qwenLocked;
+                    const showLockedTag = isQwenCoder && qwenFreeLocked;
+                    const statusReason = isQwenCoder && qwenPopoverState
+                      ? qwenEntitlementState === "cooldown"
                         ? `Cooling down until ${toCountdownLabel(qwenPopoverState.cooldownEndsAt)}`
-                        : qwenPopoverState.entitlement.state === "locked_free"
-                          ? "Not included on Free"
-                          : qwenPopoverState.entitlement.state === "premium_plus_exhausted"
+                        : qwenEntitlementState === "premium_plus_exhausted"
                             ? `Resets ${toDateLabel(qwenPopoverState.resetAt)}`
-                            : qwenPopoverState.entitlement.state === "premium_exhausted"
+                            : qwenEntitlementState === "premium_exhausted"
                               ? `Resets ${toDateLabel(qwenPopoverState.resetAt)}`
                               : ""
                       : "";
@@ -6220,10 +6228,10 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
                           className={[
                             styles.iconMenuItem,
                             isOn ? styles.iconMenuItemOn : "",
-                            isLocked ? styles.iconMenuItemLocked : "",
+                            showLockedTag ? styles.iconMenuItemLocked : "",
                           ].filter(Boolean).join(" ")}
                           onClick={() => {
-                            if (isLocked) {
+                            if (isSelectionBlocked) {
                               setQwenPopoverPinned(true);
                               setQwenPopoverOpen(true);
                               trackCavenEvent("qwen_coder_selection_blocked", {
@@ -6245,7 +6253,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
                           }}
                         >
                           <span className={styles.iconMenuItemLabel}>{option.label}</span>
-                          {isLocked ? <span className={styles.iconMenuLockTag}>Locked</span> : null}
+                          {showLockedTag ? <span className={styles.iconMenuLockTag}>Locked</span> : null}
                         </button>
                         {isQwenCoder && qwenPopoverState ? (
                           <>
@@ -6300,35 +6308,10 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
                                 >
                                   <span className={styles.qwenUsagePopoverCloseGlyph} aria-hidden="true" />
                                 </button>
-                                {qwenPopoverState.entitlement.state === "locked_free" || qwenPopoverState.usage.creditsTotal <= 0 ? (
-                                  <>
-                                    <div className={styles.qwenUsagePopoverTitle}>Caven usage</div>
-                                    <div className={styles.qwenUsagePopoverMetric}>Not included on Free</div>
-                                    <div className={styles.qwenUsagePopoverLine}>Caven is available on Premium and Premium+.</div>
-                                    <div className={styles.qwenUsagePopoverLine}>{CAVEN_MODEL_ATTRIBUTION}</div>
-                                    <a
-                                      className={styles.qwenUsagePopoverCta}
-                                      href="/settings/upgrade?plan=premium&billing=monthly"
-                                      onClick={() => {
-                                        trackCavenEvent("qwen_coder_upgrade_cta_click", {
-                                          surface: "cavcode",
-                                          source: "popover",
-                                          planLabel: qwenPopoverState.planLabel,
-                                          state: qwenPopoverState.entitlement.state,
-                                        });
-                                      }}
-                                    >
-                                      Upgrade
-                                    </a>
-                                    {lockReason ? <div className={styles.qwenUsagePopoverState}>{lockReason}</div> : null}
-                                  </>
-                                ) : (
-                                  <>
                                 <div className={styles.qwenUsagePopoverTitle}>Caven usage</div>
-                                <div className={styles.qwenUsagePopoverLine}>{CAVEN_MODEL_ATTRIBUTION}</div>
-                                <div className={styles.qwenUsagePopoverMetric}>{Math.round(qwenUsagePercent)}% used</div>
+                                <div className={styles.qwenUsagePopoverMetric}>{qwenUsageSummary}</div>
                                 <div className={styles.qwenUsagePopoverLine}>
-                                  {qwenPopoverState.usage.creditsUsed} / {qwenPopoverState.usage.creditsTotal} credits used
+                                  {Math.round(qwenUsagePercent)}% used
                                 </div>
                                 <div className={styles.qwenUsagePopoverLine}>
                                   {qwenPopoverState.usage.creditsLeft} credits left
@@ -6346,9 +6329,9 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
                                 ) : null}
                                 {qwenPopoverState.entitlement.state === "cooldown" ? (
                                   <div className={styles.qwenUsagePopoverLine}>Cooldown ends in {toCountdownLabel(qwenPopoverState.cooldownEndsAt)}</div>
-                                ) : (
+                                ) : !qwenFreeLocked ? (
                                   <div className={styles.qwenUsagePopoverLine}>Resets {toDateLabel(qwenPopoverState.resetAt)}</div>
-                                )}
+                                ) : null}
                                 {qwenPopoverState.contextWindow && qwenPopoverState.contextWindow.compactionCount > 0 ? (
                                   <div className={styles.qwenUsagePopoverHint}>CavAi automatically compacts context when needed.</div>
                                 ) : null}
@@ -6357,7 +6340,22 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
                                     {qwenPopoverState.entitlement.warningLevel}% usage warning reached
                                   </div>
                                 ) : null}
-                                {qwenPopoverState.planLabel !== "Premium+" ? (
+                                {qwenFreeLocked ? (
+                                  <a
+                                    className={styles.qwenUsagePopoverCta}
+                                    href="/settings/upgrade?plan=premium&billing=monthly"
+                                    onClick={() => {
+                                      trackCavenEvent("qwen_coder_upgrade_cta_click", {
+                                        surface: "cavcode",
+                                        source: "popover",
+                                        planLabel: qwenPopoverState.planLabel,
+                                        state: qwenPopoverState.entitlement.state,
+                                      });
+                                    }}
+                                  >
+                                    Upgrade to Premium
+                                  </a>
+                                ) : qwenPopoverState.planLabel !== "Premium+" ? (
                                   <a
                                     className={styles.qwenUsagePopoverCta}
                                     href="/settings/upgrade?plan=premium_plus&billing=monthly"
@@ -6373,9 +6371,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
                                     Upgrade to Premium+
                                   </a>
                                 ) : null}
-                                {lockReason ? <div className={styles.qwenUsagePopoverState}>{lockReason}</div> : null}
-                                  </>
-                                )}
+                                {statusReason ? <div className={styles.qwenUsagePopoverState}>{statusReason}</div> : null}
                               </div>
                             ) : null}
                           </>
