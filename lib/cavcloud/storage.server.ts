@@ -5,12 +5,13 @@ import { PassThrough, Readable, Transform } from "stream";
 import type { ReadableStream as NodeReadableStream } from "stream/web";
 import { pipeline } from "stream/promises";
 
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import type { PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
+import { SERIALIZABLE_TX_ISOLATION_LEVEL } from "@/lib/prismaRuntime";
 import { buildZipBuffer } from "@/lib/cavcloud/zip.server";
 import { preferredMimeType } from "@/lib/fileMime";
 import {
@@ -135,7 +136,7 @@ const INTERACTIVE_TX_OPTIONS = {
   timeout: INTERACTIVE_TX_TIMEOUT_MS,
 } as const;
 const SERIALIZABLE_INTERACTIVE_TX_OPTIONS = {
-  isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+  isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL,
   ...INTERACTIVE_TX_OPTIONS,
 } as const;
 type UuidString = `${string}-${string}-${string}-${string}-${string}`;
@@ -3142,7 +3143,7 @@ export async function createFolder(args: {
         createdAt: folder.createdAt,
         updatedAt: folder.updatedAt,
       };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
+    }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL }));
   } catch (err) {
     if (err instanceof CavCloudError) throw err;
     const code = String((err as { code?: unknown })?.code || "");
@@ -3348,7 +3349,7 @@ export async function updateFolder(args: {
     });
 
     return saved;
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL });
 
   return mapFolder(updated);
 }
@@ -3442,7 +3443,7 @@ export async function softDeleteFolder(args: {
         removedFiles: Number(fileUpdate.count || 0),
         targetPath: folder.path,
       };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
+    }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL }));
     return deleted;
   } catch (err) {
     if (isRetryableSerializableTxError(err)) {
@@ -3540,7 +3541,7 @@ export async function createFileMetadata(args: {
     });
 
     return file;
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL });
 
   return mapFile(created);
 }
@@ -3926,7 +3927,7 @@ export async function replaceFileContent(args: {
         changed: true as const,
         sha256,
       };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL });
 
     return {
       ...mapFile(updated.savedFile),
@@ -4226,7 +4227,7 @@ export async function restoreFileVersion(args: {
         savedFile,
         versionNumber: nextVersionNumber,
       };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL });
 
     return {
       ...mapFile(updated.savedFile),
@@ -4343,7 +4344,7 @@ export async function updateFile(args: {
     });
 
     return updatedFile;
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL });
 
   return mapFile(updated);
 }
@@ -4416,7 +4417,7 @@ export async function duplicateFile(args: {
       duplicateName: next.name,
       duplicatePath: next.path,
     };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL });
 
   await copyObjectToKey({
     sourceKey: plan.source.r2Key,
@@ -4560,7 +4561,7 @@ export async function zipFile(args: {
       zippedName: next.name,
       zippedPath: next.path,
     };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL });
 
   await putCavcloudObject({
     objectKey: plan.zippedKey,
@@ -4621,7 +4622,7 @@ export async function zipFile(args: {
       });
 
       return file;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL });
 
     return mapFile(created);
   } catch (err) {
@@ -4729,7 +4730,7 @@ export async function zipFolder(args: {
       zippedName: next.name,
       zippedPath: next.path,
     };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL });
 
   await putCavcloudObject({
     objectKey: plan.zippedKey,
@@ -4792,7 +4793,7 @@ export async function zipFolder(args: {
       });
 
       return file;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL });
 
     return mapFile(created);
   } catch (err) {
@@ -4861,7 +4862,7 @@ export async function softDeleteFile(args: {
           usedBytes: usedBytes.toString(),
         },
       });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
+    }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL }));
   } catch (err) {
     if (isRetryableSerializableTxError(err)) {
       throw new CavCloudError("TX_CONFLICT", 409, "Temporary file write conflict. Please retry.");
@@ -4995,7 +4996,7 @@ export async function restoreTrashEntry(args: {
 
     await tx.cavCloudTrash.delete({ where: { id: trash.id } });
     return { kind: "unknown" as const, restoredId: null };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL });
 
   return restored;
 }
@@ -5076,7 +5077,7 @@ export async function permanentlyDeleteTrashEntry(args: {
         targetPath: file?.path || null,
         metaJson: { reason, usedBytes: usedBytes.toString() },
       });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL });
 
     return { ok: true, removedFiles: 1, removedFolders: 0, reason };
   }
@@ -5176,7 +5177,7 @@ export async function permanentlyDeleteTrashEntry(args: {
           usedBytes: usedBytes.toString(),
         },
       });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL });
 
     return { ok: true, removedFiles: fileIds.length, removedFolders: folderIds.length, reason };
   }
@@ -5340,7 +5341,7 @@ export async function uploadSimpleFile(args: {
       });
 
       return file;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL });
 
     return mapFile(created);
   } catch (err) {
@@ -5682,7 +5683,7 @@ export async function completeMultipartSession(args: {
       });
 
       return file;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: SERIALIZABLE_TX_ISOLATION_LEVEL });
 
     return mapFile(file);
   } catch (err) {

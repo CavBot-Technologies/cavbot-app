@@ -5,7 +5,7 @@ import type { ChildProcess } from "node:child_process";
 import { lstat, mkdtemp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Prisma, type CavCloudShareMode, type PublicArtifactVisibility } from "@prisma/client";
+import type { CavCloudShareMode, PublicArtifactVisibility } from "@prisma/client";
 
 import {
   ApiAuthError,
@@ -16,6 +16,7 @@ import {
   type CavbotAccountSession,
 } from "@/lib/apiAuth";
 import { findLatestEntitledSubscription, resolveEffectivePlanId } from "@/lib/accountPlan.server";
+import { getAuthPool } from "@/lib/authDb";
 import { auditLogWrite } from "@/lib/audit";
 import { getProjectSummaryForTenant } from "@/lib/cavbotApi.server";
 import {
@@ -23,11 +24,14 @@ import {
   assertCavCodeProjectAccess,
   type CavEffectivePermission,
 } from "@/lib/cavcloud/permissions.server";
+import {
+  ensureCavCloudRootFolderRuntime,
+  loadCavCloudTreeLiteRuntime,
+} from "@/lib/cavcloud/runtimeStorage.server";
 import { getCavCloudSettings } from "@/lib/cavcloud/settings.server";
 import {
   createFolder as cavcloudCreateFolder,
   duplicateFile as cavcloudDuplicateFile,
-  getTreeLite as cavcloudTreeLite,
   softDeleteFile as cavcloudSoftDeleteFile,
   softDeleteFolder as cavcloudSoftDeleteFolder,
   replaceFileContent as cavcloudReplaceFileContent,
@@ -54,9 +58,17 @@ import { getCavsafeObjectStream } from "@/lib/cavsafe/r2.server";
 import { createCavSafeInvite, revokeCavSafeAccess } from "@/lib/cavsafe/privateShare.server";
 import { type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
+import { prismaEmpty, prismaJoin, prismaRaw, prismaSql, type Sql } from "@/lib/prismaRuntime";
 import { requirePremiumEntitlement } from "@/lib/security/authorize";
 import { buildCavGuardDecision } from "@/src/lib/cavguard/cavGuard.registry";
 import * as ts from "typescript";
+
+const Prisma = {
+  empty: prismaEmpty,
+  join: prismaJoin,
+  raw: prismaRaw,
+  sql: prismaSql,
+} as const;
 
 export type CavtoolsNamespace = "cavcloud" | "cavsafe" | "cavcode" | "telemetry" | "workspace";
 
@@ -998,6 +1010,27 @@ type CloudNode = {
   } | null;
 };
 
+type RawCloudFolderRow = {
+  id: string;
+  name: string;
+  path: string;
+  parentId: string | null;
+  updatedAt: Date | string;
+  createdAt: Date | string;
+};
+
+type RawCloudFileRow = {
+  id: string;
+  name: string;
+  path: string;
+  folderId: string;
+  mimeType: string;
+  r2Key: string;
+  bytes: bigint | number | string | null;
+  updatedAt: Date | string;
+  sha256: string;
+};
+
 type SafeNode = {
   folder: {
     id: string;
@@ -1153,6 +1186,28 @@ function toSafeNumber(value: bigint): number {
   if (value > max) return Number.MAX_SAFE_INTEGER;
   if (value < BigInt(0)) return 0;
   return Number(value);
+}
+
+function parseBigIntLike(value: unknown): bigint | null {
+  if (typeof value === "bigint") return value;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || !Number.isSafeInteger(value)) return null;
+    return BigInt(value);
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!/^-?\d+$/.test(trimmed)) return null;
+    try {
+      return BigInt(trimmed);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function toDate(value: Date | string): Date {
+  return value instanceof Date ? value : new Date(value);
 }
 
 function maybeTextMimeType(mimeType: string | null | undefined): boolean {
@@ -2962,7 +3017,7 @@ async function listExtensionMarketplaceEntries(args?: {
   await ensureCavcodeInfraTables();
   const extensionId = s(args?.extensionId || "");
   const status = s(args?.status || "");
-  const whereParts: Prisma.Sql[] = [];
+  const whereParts: Sql[] = [];
   if (extensionId) whereParts.push(Prisma.sql`"extensionId" = ${extensionId}`);
   if (status) whereParts.push(Prisma.sql`"status" = ${status}`);
   const whereSql = whereParts.length
@@ -4831,7 +4886,7 @@ async function listDeterministicReplay(
   const sessionId = s(args.sessionId || "");
   const afterSeq = Number.isFinite(Number(args.afterSeq)) ? Math.max(0, Math.trunc(Number(args.afterSeq))) : 0;
   const limit = Number.isFinite(Number(args.limit)) ? Math.max(1, Math.min(600, Math.trunc(Number(args.limit)))) : 200;
-  const whereParts: Prisma.Sql[] = [
+  const whereParts: Sql[] = [
     Prisma.sql`"accountId" = ${ctx.accountId}`,
     Prisma.sql`"projectId" = ${ctx.project.id}`,
     Prisma.sql`"seq" > ${afterSeq}`,
@@ -6674,43 +6729,71 @@ function pickTemplateById(raw: string): CavcodeTemplateSpec | null {
 
 async function getCloudNodeByPath(accountId: string, sourcePath: string): Promise<CloudNode> {
   const path = normalizePath(sourcePath);
-  const [folder, file] = await Promise.all([
-    prisma.cavCloudFolder.findFirst({
-      where: {
-        accountId,
-        path,
-        deletedAt: null,
+  if (path === "/") {
+    const root = await ensureCavCloudRootFolderRuntime(accountId);
+    return {
+      folder: {
+        id: root.id,
+        name: root.name,
+        path: root.path,
+        parentId: root.parentId,
+        updatedAt: new Date(root.updatedAtISO),
+        createdAt: new Date(root.createdAtISO),
       },
-      select: {
-        id: true,
-        name: true,
-        path: true,
-        parentId: true,
-        updatedAt: true,
-        createdAt: true,
-      },
-    }),
-    prisma.cavCloudFile.findFirst({
-      where: {
-        accountId,
-        path,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        name: true,
-        path: true,
-        folderId: true,
-        mimeType: true,
-        r2Key: true,
-        bytes: true,
-        updatedAt: true,
-        sha256: true,
-      },
-    }),
+      file: null,
+    };
+  }
+
+  const pool = getAuthPool();
+  const [folderResult, fileResult] = await Promise.all([
+    pool.query<RawCloudFolderRow>(
+      `SELECT "id", "name", "path", "parentId", "updatedAt", "createdAt"
+       FROM "CavCloudFolder"
+       WHERE "accountId" = $1
+         AND "path" = $2
+         AND "deletedAt" IS NULL
+       LIMIT 1`,
+      [accountId, path],
+    ),
+    pool.query<RawCloudFileRow>(
+      `SELECT "id", "name", "path", "folderId", "mimeType", "r2Key", "bytes", "updatedAt", "sha256"
+       FROM "CavCloudFile"
+       WHERE "accountId" = $1
+         AND "path" = $2
+         AND "deletedAt" IS NULL
+       LIMIT 1`,
+      [accountId, path],
+    ),
   ]);
 
-  return { folder, file };
+  const folderRow = folderResult.rows[0] || null;
+  const fileRow = fileResult.rows[0] || null;
+
+  return {
+    folder: folderRow
+      ? {
+          id: folderRow.id,
+          name: folderRow.name,
+          path: folderRow.path,
+          parentId: folderRow.parentId,
+          updatedAt: toDate(folderRow.updatedAt),
+          createdAt: toDate(folderRow.createdAt),
+        }
+      : null,
+    file: fileRow
+      ? {
+          id: fileRow.id,
+          name: fileRow.name,
+          path: fileRow.path,
+          folderId: fileRow.folderId,
+          mimeType: fileRow.mimeType,
+          r2Key: fileRow.r2Key,
+          bytes: parseBigIntLike(fileRow.bytes) ?? BigInt(0),
+          updatedAt: toDate(fileRow.updatedAt),
+          sha256: fileRow.sha256,
+        }
+      : null,
+  };
 }
 
 async function getSafeNodeByPath(accountId: string, sourcePath: string): Promise<SafeNode> {
@@ -6859,7 +6942,7 @@ async function cavcloudList(ctx: ExecContext, virtualPath: string): Promise<{ cw
     neededPermission: "VIEW",
   });
 
-  const tree = await cavcloudTreeLite({
+  const tree = await loadCavCloudTreeLiteRuntime({
     accountId: ctx.accountId,
     folderPath: sourcePath,
   });
@@ -7116,28 +7199,16 @@ async function listCavcode(ctx: ExecContext, virtualPath: string): Promise<{ cwd
   const sourcePath = mountMatch.sourcePath;
 
   if (sourceType === "CAVCLOUD") {
-    const tree = await cavcloudTreeLite({
+    const tree = await loadCavCloudTreeLiteRuntime({
       accountId: ctx.accountId,
       folderPath: sourcePath,
     });
-
-    const folderNode = await prisma.cavCloudFolder.findFirst({
-      where: {
-        accountId: ctx.accountId,
-        path: sourcePath,
-        deletedAt: null,
-      },
-      select: { id: true },
+    await requireCloudPermission(ctx, {
+      action: "EDIT_FILE_CONTENT",
+      resourceType: "FOLDER",
+      resourceId: tree.folder.id,
+      neededPermission: "VIEW",
     });
-
-    if (folderNode?.id) {
-      await requireCloudPermission(ctx, {
-        action: "EDIT_FILE_CONTENT",
-        resourceType: "FOLDER",
-        resourceId: folderNode.id,
-        neededPermission: "VIEW",
-      });
-    }
 
     const items: CavtoolsFsItem[] = [
       ...tree.folders.map((folder) => ({
@@ -7309,20 +7380,18 @@ async function readCloudFileText(ctx: ExecContext, virtualPath: string): Promise
   if (!stream) throw new CavtoolsExecError("FILE_NOT_FOUND", `File content missing for ${virtualPath}.`, 404);
 
   const content = await readObjectText(stream.body);
-  const latestVersion = await prisma.cavCloudFileVersion.findFirst({
-    where: {
-      accountId: ctx.accountId,
-      fileId: node.file.id,
-    },
-    orderBy: {
-      versionNumber: "desc",
-    },
-    select: {
-      versionNumber: true,
-    },
-  });
-  const versionNumber = Number.isFinite(Number(latestVersion?.versionNumber))
-    ? Math.max(1, Math.trunc(Number(latestVersion?.versionNumber)))
+  const latestVersionResult = await getAuthPool().query<{ versionNumber: number | string | null }>(
+    `SELECT "versionNumber"
+     FROM "CavCloudFileVersion"
+     WHERE "accountId" = $1
+       AND "fileId" = $2
+     ORDER BY "versionNumber" DESC
+     LIMIT 1`,
+    [ctx.accountId, node.file.id],
+  );
+  const latestVersionNumber = Number(latestVersionResult.rows[0]?.versionNumber);
+  const versionNumber = Number.isFinite(latestVersionNumber)
+    ? Math.max(1, Math.trunc(latestVersionNumber))
     : null;
 
   return {

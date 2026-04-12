@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { readCavtoolsFile, writeCavtoolsFile } from "@/lib/cavtools/commandPlane.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -32,6 +31,8 @@ export async function GET(req: Request) {
     if (!path) {
       return jsonNoStore({ ok: false, error: { code: "PATH_REQUIRED", message: "path is required." } }, 400);
     }
+
+    const { readCavtoolsFile } = await import("@/lib/cavtools/commandPlane.server");
 
     const out = await readCavtoolsFile(req, {
       path,
@@ -70,6 +71,8 @@ export async function PUT(req: Request) {
     if (!path) {
       return jsonNoStore({ ok: false, error: { code: "PATH_REQUIRED", message: "path is required." } }, 400);
     }
+
+    const { writeCavtoolsFile } = await import("@/lib/cavtools/commandPlane.server");
 
     const out = await writeCavtoolsFile(req, {
       path,
