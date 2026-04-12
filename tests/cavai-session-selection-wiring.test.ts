@@ -21,7 +21,7 @@ test("center workspace does not cache an empty thread while message loading is p
 
   assert.equal(source.includes("if (loadingMessages && !messages.length) return;"), true);
   assert.equal(
-    source.includes("}, [loadingMessages, messages, sessionId]);"),
+    source.includes("}, [loadingMessages, messages, scheduleSessionCachePersist, sessionId]);"),
     true
   );
 });

@@ -584,12 +584,6 @@ const SESSION_MESSAGE_PREFETCH_COUNT = 10;
 const RECENT_FILES_EMPTY_HINT = "No recent files yet. Add a file and it will appear here.";
 const CENTER_LOAD_SESSIONS_FAILED_MESSAGE = "Failed to load sessions.";
 const CENTER_LOAD_MESSAGES_FAILED_MESSAGE = "Failed to load messages.";
-
-function isCenterLoadFailureMessage(value: unknown): boolean {
-  const normalized = s(value).toLowerCase();
-  if (!normalized) return false;
-  return normalized.includes("failed to load sessions") || normalized.includes("failed to load messages");
-}
 const CAVAI_GUEST_SESSION_CACHE_STORAGE_PREFIX = "cavai_center_guest_session_cache_v1";
 const CAVAI_GUEST_SESSION_CACHE_MAX_SESSIONS = 60;
 const CAVAI_GUEST_SESSION_CACHE_MAX_MESSAGE_ENTRIES = 80;
@@ -4815,9 +4809,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : CENTER_LOAD_SESSIONS_FAILED_MESSAGE;
-      if (!isCenterLoadFailureMessage(message)) {
-        setError(message);
-      }
+      setError(message);
       return false;
     }
   }, [applyUnauthenticatedCenterState, authProbeReady, isGuestPreviewMode]);
@@ -4950,8 +4942,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
           if (s(activeSessionIdRef.current) !== normalized) return;
           setMessages(resolvedRows);
         })
-        .catch(() => {
-          // Keep stale cache visible when background refresh fails.
+        .catch((err) => {
+          if (s(activeSessionIdRef.current) !== normalized) return;
+          const message = err instanceof Error ? err.message : CENTER_LOAD_MESSAGES_FAILED_MESSAGE;
+          // Keep stale cache visible when background refresh fails, but surface the retryable failure.
+          setError(message);
         });
       return;
     } else {
@@ -4968,9 +4963,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       setMessages(resolvedRows);
     } catch (err) {
       const message = err instanceof Error ? err.message : CENTER_LOAD_MESSAGES_FAILED_MESSAGE;
-      if (!isCenterLoadFailureMessage(message)) {
-        setError(message);
-      }
+      setError(message);
     } finally {
       if (s(activeSessionIdRef.current) === normalized) {
         setLoadingMessages(false);
@@ -5527,8 +5520,15 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         };
       };
       if (isCancelled?.()) return false;
-      if (!res.ok || body.ok !== true || body.authenticated !== true) {
+      const shouldApplyGuestFallback = isAuthRequiredLikeResponse(res.status, body)
+        || (res.ok && body.ok === true && body.authenticated === false);
+      if (shouldApplyGuestFallback) {
         applyUnauthenticatedCenterState();
+        return false;
+      }
+      if (!res.ok || body.ok !== true || body.authenticated !== true) {
+        // Keep account history visible until the backend explicitly proves the viewer is signed out.
+        setIsAuthenticated(true);
         return false;
       }
       setIsAuthenticated(true);
@@ -5553,7 +5553,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       return true;
     } catch {
       if (isCancelled?.()) return false;
-      applyUnauthenticatedCenterState();
+      // A transient auth probe failure should not dump the user into guest preview and blank history.
+      setIsAuthenticated(true);
       return false;
     } finally {
       if (!isCancelled?.()) {
@@ -11057,7 +11058,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   );
 
   const activeImageStudioGallery = imageStudioImportSource === "cavsafe" ? imageStudioGallerySafe : imageStudioGalleryCloud;
-  const showInlineError = Boolean(error) && !isCenterLoadFailureMessage(error);
+  const showInlineError = Boolean(error);
 
   if (!isOpen) return null;
 
