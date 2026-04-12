@@ -40,7 +40,11 @@ export function CavGuardCard({
       className={cardClassName}
       data-variant={variant}
       onClick={onClick}
-      style={{ marginInline: "auto", maxWidth: "min(100%, calc(100vw - 36px))" }}
+      style={{
+        marginInline: "auto",
+        maxWidth: "min(100%, calc(100vw - 36px))",
+        boxSizing: "border-box",
+      }}
     >
       <span className={styles.glowTop} aria-hidden="true" />
       <span className={styles.glowBottom} aria-hidden="true" />

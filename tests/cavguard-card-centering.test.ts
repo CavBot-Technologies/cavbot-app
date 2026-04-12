@@ -14,6 +14,7 @@ test("cavguard card constrains itself to the viewport and stays centered", () =>
 
   assert.match(source, /marginInline: "auto"/);
   assert.match(source, /maxWidth: "min\(100%, calc\(100vw - 36px\)\)"/);
+  assert.match(source, /boxSizing: "border-box"/);
 });
 
 test("cavguard modal wrapper is hard-anchored to dead center", () => {
