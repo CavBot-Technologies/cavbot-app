@@ -15138,7 +15138,7 @@ export default function CavCodePage() {
                               aria-label="Increase font size"
                               onClick={() => setSettings((s) => ({ ...s, fontSize: Math.max(10, Math.min(22, s.fontSize + 1)) }))}
                             >
-                              <Image src="/icons/app/arrow-square-up-svgrepo-com.svg" alt="" width={12} height={12} aria-hidden="true" />
+                              <span className="cc-set-stepperGlyph is-up" aria-hidden="true" />
                             </button>
                             <button
                               type="button"
@@ -15146,7 +15146,7 @@ export default function CavCodePage() {
                               aria-label="Decrease font size"
                               onClick={() => setSettings((s) => ({ ...s, fontSize: Math.max(10, Math.min(22, s.fontSize - 1)) }))}
                             >
-                              <Image src="/icons/app/arrow-square-down-svgrepo-com.svg" alt="" width={12} height={12} aria-hidden="true" />
+                              <span className="cc-set-stepperGlyph is-down" aria-hidden="true" />
                             </button>
                           </span>
                         </div>
@@ -15166,7 +15166,7 @@ export default function CavCodePage() {
                               aria-label="Increase tab size"
                               onClick={() => setSettings((s) => ({ ...s, tabSize: Math.max(2, Math.min(8, s.tabSize + 1)) }))}
                             >
-                              <Image src="/icons/app/arrow-square-up-svgrepo-com.svg" alt="" width={12} height={12} aria-hidden="true" />
+                              <span className="cc-set-stepperGlyph is-up" aria-hidden="true" />
                             </button>
                             <button
                               type="button"
@@ -15174,7 +15174,7 @@ export default function CavCodePage() {
                               aria-label="Decrease tab size"
                               onClick={() => setSettings((s) => ({ ...s, tabSize: Math.max(2, Math.min(8, s.tabSize - 1)) }))}
                             >
-                              <Image src="/icons/app/arrow-square-down-svgrepo-com.svg" alt="" width={12} height={12} aria-hidden="true" />
+                              <span className="cc-set-stepperGlyph is-down" aria-hidden="true" />
                             </button>
                           </span>
                         </div>
