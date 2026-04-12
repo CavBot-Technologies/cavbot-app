@@ -1693,10 +1693,10 @@
   width: 52px;
   height: 52px;
   display: block;
-  background: rgba(224, 231, 242, 0.7);
+  background: rgba(224, 231, 242, 0.52);
   -webkit-mask: url("/icons/app/cavcode/atom-svgrepo-com.svg") center / contain no-repeat;
   mask: url("/icons/app/cavcode/atom-svgrepo-com.svg") center / contain no-repeat;
-  opacity: 0.9;
+  opacity: 0.72;
   filter: drop-shadow(0 0 20px rgba(208, 220, 244, 0.08));
 }
 

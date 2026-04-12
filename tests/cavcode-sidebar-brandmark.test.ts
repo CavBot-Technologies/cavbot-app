@@ -35,8 +35,8 @@ test("caven empty state renders the atom svg with a soft light-grey treatment", 
   assert.equal(css.includes("height: 88px;"), true);
   assert.equal(css.includes("width: 52px;"), true);
   assert.equal(css.includes("height: 52px;"), true);
+  assert.equal(css.includes("background: rgba(224, 231, 242, 0.52);"), true);
+  assert.equal(css.includes("opacity: 0.72;"), true);
   assert.equal(css.includes('-webkit-mask: url("/icons/app/cavcode/atom-svgrepo-com.svg") center / contain no-repeat;'), true);
   assert.equal(css.includes('mask: url("/icons/app/cavcode/atom-svgrepo-com.svg") center / contain no-repeat;'), true);
-  assert.equal(css.includes("background: rgba(224, 231, 242, 0.7);"), true);
-  assert.equal(css.includes("opacity: 0.9;"), true);
 });
