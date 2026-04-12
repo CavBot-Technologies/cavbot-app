@@ -41,8 +41,9 @@ export function CavGuardCard({
       data-variant={variant}
       onClick={onClick}
       style={{
+        width: "100%",
         marginInline: "auto",
-        maxWidth: "min(100%, calc(100vw - 36px))",
+        maxWidth: "100%",
         boxSizing: "border-box",
       }}
     >

@@ -12,8 +12,9 @@ function read(relPath: string) {
 test("cavguard card constrains itself to the viewport and stays centered", () => {
   const source = read("components/CavGuardCard.tsx");
 
+  assert.match(source, /width: "100%"/);
   assert.match(source, /marginInline: "auto"/);
-  assert.match(source, /maxWidth: "min\(100%, calc\(100vw - 36px\)\)"/);
+  assert.match(source, /maxWidth: "100%"/);
   assert.match(source, /boxSizing: "border-box"/);
 });
 
@@ -22,8 +23,8 @@ test("cavguard modal wrapper is hard-anchored to dead center", () => {
 
   assert.match(source, /createPortal/);
   assert.match(source, /document\.body/);
-  assert.match(source, /insetInlineStart: "50%"/);
-  assert.match(source, /insetBlockStart: "50%"/);
-  assert.match(source, /transform: "translate\(-50%, -50%\)"/);
+  assert.match(source, /width: "min\(620px, 100%\)"/);
   assert.match(source, /justifyItems: "center"/);
+  assert.match(source, /placeSelf: "center"/);
+  assert.match(source, /boxSizing: "border-box"/);
 });

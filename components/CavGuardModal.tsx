@@ -79,14 +79,11 @@ export function CavGuardModal(props: CavGuardModalProps) {
   }, [cta?.href, headline, onCtaClick]);
 
   const dialogStyle: React.CSSProperties = {
-    position: "fixed",
-    insetInlineStart: "50%",
-    insetBlockStart: "50%",
-    transform: "translate(-50%, -50%)",
-    width: "calc(100vw - 36px)",
-    maxWidth: "620px",
+    width: "min(620px, 100%)",
     display: "grid",
     justifyItems: "center",
+    placeSelf: "center",
+    boxSizing: "border-box",
     margin: 0,
   };
 
