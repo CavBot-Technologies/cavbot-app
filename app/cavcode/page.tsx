@@ -14585,13 +14585,15 @@ export default function CavCodePage() {
                 </div>
 
                 <div className="cc-search">
-                  <input
-                    id="cc-search"
-                    className="cc-search-in"
-                    placeholder="Search files (Cmd/Ctrl+P)"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
+                  <div className="cc-search-bar">
+                    <input
+                      id="cc-search"
+                      className="cc-search-in"
+                      placeholder="Search files (Cmd/Ctrl+P)"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
                   <div className="cc-search-results">
                     {searchQuery.trim() ? (
                       searchHits.length ? (

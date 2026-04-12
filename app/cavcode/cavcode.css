@@ -2166,14 +2166,19 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 /* SEARCH */
 .cc-search{
-  padding: 0 8px 12px;
+  padding: 10px 8px 12px;
   display: grid;
-  gap: 8px;
+  gap: 12px;
   min-height: 0;
   height: 100%;
   overflow: hidden;
   position: relative;
   z-index: 0;
+}
+
+.cc-search-bar{
+  display: grid;
+  padding-top: 2px;
 }
 
 .cc-search-in{
@@ -2196,6 +2201,25 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-search-in:focus{
   border-color: rgba(185,200,90,.28);
   background: rgba(4,8,20,.84);
+}
+
+.cc-search .cc-search-in{
+  height: 36px;
+  border-radius: 10px;
+  border-color: rgba(255,255,255,.08);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.03) 0%, rgba(255,255,255,.01) 100%),
+    rgba(6,10,22,.82);
+  padding: 0 12px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+.cc-search .cc-search-in:focus{
+  border-color: rgba(185,200,90,.24);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.035) 0%, rgba(255,255,255,.015) 100%),
+    rgba(8,12,24,.92);
+  box-shadow: 0 0 0 1px rgba(185,200,90,.12), inset 0 1px 0 rgba(255,255,255,.04);
 }
 
 .cc-search-results{

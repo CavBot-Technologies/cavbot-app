@@ -21,12 +21,15 @@ test("cavcode search stays top-aligned and changes commit input keeps shared fie
   const pageSource = read("app/cavcode/page.tsx");
   const cssSource = read("app/cavcode/cavcode.css");
 
+  assert.match(pageSource, /className="cc-search-bar"/);
   assert.doesNotMatch(pageSource, /className="cc-search-shell"/);
   assert.doesNotMatch(pageSource, /className="cc-search-kicker mono"/);
   assert.doesNotMatch(pageSource, /className="cc-search-note"/);
 
-  assert.match(cssSource, /\.cc-search\{[\s\S]*padding: 0 8px 12px;[\s\S]*gap: 8px;/);
+  assert.match(cssSource, /\.cc-search\{[\s\S]*padding: 10px 8px 12px;[\s\S]*gap: 12px;/);
+  assert.match(cssSource, /\.cc-search-bar\{[\s\S]*padding-top: 2px;/);
   assert.match(cssSource, /\.cc-search-in\{[\s\S]*font-family: var\(--cb-mono\);/);
+  assert.match(cssSource, /\.cc-search \.cc-search-in\{[\s\S]*border-radius: 10px;/);
   assert.match(cssSource, /\.cc-changes-commitInput\{[\s\S]*padding: 0 40px 0 9px;/);
   assert.match(cssSource, /\.cc-hit:last-child\{/);
 });
