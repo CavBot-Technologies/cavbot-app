@@ -13,11 +13,10 @@ const env = {
 };
 
 function hasRealDatabaseUrl(value) {
-  const trimmed = String(value || "").trim();
+  const trimmed = String(value || "").trim().replace(/^"(.*)"$/, "$1");
   if (!trimmed) return false;
   return !trimmed.includes("placeholder@127.0.0.1:5432/cavbot")
-    && !trimmed.includes("paste_your_base_url_here")
-    && !trimmed.includes("db.prisma.io:5432");
+    && !trimmed.includes("paste_your_base_url_here");
 }
 
 function run(command, args) {

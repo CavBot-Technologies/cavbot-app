@@ -53,6 +53,10 @@ jobs:
         run: |
           export DATABASE_URL="${MIGRATE_DATABASE_URL:-}"
           export DIRECT_URL="${MIGRATE_DIRECT_URL:-}"
+          DATABASE_URL="${DATABASE_URL#\"}"
+          DATABASE_URL="${DATABASE_URL%\"}"
+          DIRECT_URL="${DIRECT_URL#\"}"
+          DIRECT_URL="${DIRECT_URL%\"}"
           if [ -z "$DATABASE_URL" ] && [ -z "$DIRECT_URL" ]; then
             echo "::error title=Missing database deploy secret::Set production secret MIGRATE_DIRECT_URL (preferred) or MIGRATE_DATABASE_URL for Deploy Cloudflare."
             exit 1
@@ -60,14 +64,14 @@ jobs:
           export DATABASE_URL="${DATABASE_URL:-$DIRECT_URL}"
           export DIRECT_URL="${DIRECT_URL:-$DATABASE_URL}"
           case "$DATABASE_URL" in
-            *"placeholder@127.0.0.1:5432/cavbot"*|*"paste_your_base_url_here"*|*"db.prisma.io:5432"*)
-              echo "::error title=Invalid migrate DATABASE_URL::Deploy Cloudflare is using a placeholder or unreachable database URL. Set MIGRATE_DATABASE_URL or MIGRATE_DIRECT_URL to the real production Postgres endpoint reachable from GitHub Actions."
+            *"placeholder@127.0.0.1:5432/cavbot"*|*"paste_your_base_url_here"*)
+              echo "::error title=Invalid migrate DATABASE_URL::Deploy Cloudflare is using a placeholder database URL. Set MIGRATE_DATABASE_URL or MIGRATE_DIRECT_URL to the real production Postgres endpoint reachable from GitHub Actions."
               exit 1
               ;;
           esac
           case "$DIRECT_URL" in
-            *"placeholder@127.0.0.1:5432/cavbot"*|*"paste_your_base_url_here"*|*"db.prisma.io:5432"*)
-              echo "::error title=Invalid migrate DIRECT_URL::Deploy Cloudflare is using a placeholder or unreachable direct database URL. Set MIGRATE_DIRECT_URL to the real production direct Postgres endpoint reachable from GitHub Actions."
+            *"placeholder@127.0.0.1:5432/cavbot"*|*"paste_your_base_url_here"*)
+              echo "::error title=Invalid migrate DIRECT_URL::Deploy Cloudflare is using a placeholder direct database URL. Set MIGRATE_DIRECT_URL to the real production direct Postgres endpoint reachable from GitHub Actions."
               exit 1
               ;;
           esac

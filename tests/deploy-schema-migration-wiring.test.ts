@@ -29,6 +29,8 @@ test("production deploy wiring applies prisma migrations before shipping", () =>
   assert.match(workflow, /MIGRATE_DIRECT_URL \(preferred\) or MIGRATE_DATABASE_URL/);
   assert.match(workflow, /Invalid migrate DATABASE_URL/);
   assert.match(workflow, /Invalid migrate DIRECT_URL/);
-  assert.match(workflow, /db\.prisma\.io:5432/);
-  assert.match(deployScript, /!trimmed\.includes\("db\.prisma\.io:5432"\)/);
+  assert.match(workflow, /DATABASE_URL="\$\{DATABASE_URL#\\\"\}"/);
+  assert.match(workflow, /DIRECT_URL="\$\{DIRECT_URL#\\\"\}"/);
+  assert.doesNotMatch(workflow, /db\.prisma\.io:5432/);
+  assert.doesNotMatch(deployScript, /db\.prisma\.io:5432/);
 });
