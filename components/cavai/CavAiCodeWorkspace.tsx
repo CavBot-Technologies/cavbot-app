@@ -4901,7 +4901,15 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
               {showCodePanelEmptyLogo ? (
                 <div className={styles.emptyLarge}>
                   <span className={styles.codePanelEmptyLogo} role="img" aria-label={heroLine}>
-                    <span className={styles.codePanelEmptyLogoGlyph} aria-hidden="true" />
+                    <Image
+                      src="/icons/app/cavcode/atom-svgrepo-com.svg"
+                      alt=""
+                      width={46}
+                      height={46}
+                      className={styles.codePanelEmptyLogoGlyph}
+                      aria-hidden="true"
+                      unoptimized
+                    />
                   </span>
                 </div>
               ) : null}
