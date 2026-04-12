@@ -14585,19 +14585,13 @@ export default function CavCodePage() {
                 </div>
 
                 <div className="cc-search">
-                  <div className="cc-search-shell">
-                    <div className="cc-search-kicker mono">Quick Open</div>
-                    <div className="cc-search-note">
-                      Search the workspace with the new CavCode sidebar surface.
-                    </div>
-                    <input
-                      id="cc-search"
-                      className="cc-search-in"
-                      placeholder="Search files (Cmd/Ctrl+P)"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
+                  <input
+                    id="cc-search"
+                    className="cc-search-in"
+                    placeholder="Search files (Cmd/Ctrl+P)"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
                   <div className="cc-search-results">
                     {searchQuery.trim() ? (
                       searchHits.length ? (

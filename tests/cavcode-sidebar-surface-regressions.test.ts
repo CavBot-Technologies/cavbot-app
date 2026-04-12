@@ -17,17 +17,16 @@ test("cavcode sidebar menus render on an isolated top-layer surface", () => {
   assert.match(source, /\.cc-side-menu\{[\s\S]*z-index: calc\(var\(--z-pop\) \+ 2\);[\s\S]*overflow: hidden;[\s\S]*isolation: isolate;/);
 });
 
-test("cavcode search sidebar uses the new sidebar surface styling", () => {
+test("cavcode search stays top-aligned and changes commit input keeps shared field styling", () => {
   const pageSource = read("app/cavcode/page.tsx");
   const cssSource = read("app/cavcode/cavcode.css");
 
-  assert.match(pageSource, /className="cc-search-shell"/);
-  assert.match(pageSource, /className="cc-search-kicker mono"/);
-  assert.match(pageSource, /className="cc-search-note"/);
+  assert.doesNotMatch(pageSource, /className="cc-search-shell"/);
+  assert.doesNotMatch(pageSource, /className="cc-search-kicker mono"/);
+  assert.doesNotMatch(pageSource, /className="cc-search-note"/);
 
-  assert.match(cssSource, /\.cc-search-shell\{/);
-  assert.match(cssSource, /\.cc-search-kicker\{/);
-  assert.match(cssSource, /\.cc-search-note\{/);
-  assert.match(cssSource, /\.cc-search \.cc-search-in\{[\s\S]*font-family: var\(--cb-mono\);/);
+  assert.match(cssSource, /\.cc-search\{[\s\S]*padding: 0 8px 12px;[\s\S]*gap: 8px;/);
+  assert.match(cssSource, /\.cc-search-in\{[\s\S]*font-family: var\(--cb-mono\);/);
+  assert.match(cssSource, /\.cc-changes-commitInput\{[\s\S]*padding: 0 40px 0 9px;/);
   assert.match(cssSource, /\.cc-hit:last-child\{/);
 });
