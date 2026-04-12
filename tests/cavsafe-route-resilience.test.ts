@@ -47,6 +47,24 @@ test("cavsafe tree and root routes degrade on schema drift without bypassing aut
   assert.match(rootSource, /if \(isMissingCavSafeTablesError\(err\) \|\| isCavSafeRootSchemaMismatch\(err\)\)/);
 });
 
+test("cavsafe gallery and dashboard routes degrade on schema drift without bypassing auth errors", () => {
+  const gallerySource = read("app/api/cavsafe/gallery/route.ts");
+  const dashboardSource = read("app/api/cavsafe/dashboard/route.ts");
+
+  assert.match(gallerySource, /async function buildDegradedGalleryResponse\(req: Request\)/);
+  assert.match(gallerySource, /degraded: true/);
+  assert.match(gallerySource, /files: \[\]/);
+  assert.match(gallerySource, /if \(isApiAuthError\(err\)\)/);
+  assert.match(gallerySource, /if \(isCavSafeGallerySchemaMismatch\(err\)\)/);
+
+  assert.match(dashboardSource, /async function buildDegradedDashboardResponse\(req: Request\)/);
+  assert.match(dashboardSource, /function degradedDashboardPayload\(tier: "PREMIUM" \| "PREMIUM_PLUS", limitBytes: number\)/);
+  assert.match(dashboardSource, /degraded: true/);
+  assert.match(dashboardSource, /trendPoints: \[\{ t: Date\.now\(\), usedBytes: 0 \}\]/);
+  assert.match(dashboardSource, /if \(isApiAuthError\(err\)\)/);
+  assert.match(dashboardSource, /if \(isMissingUsagePointTableError\(err\) \|\| isCavSafeDashboardSchemaMismatch\(err\)\)/);
+});
+
 test("cavsafe settings server falls back to defaults when settings columns drift", () => {
   const source = read("lib/cavsafe/settings.server.ts");
 
