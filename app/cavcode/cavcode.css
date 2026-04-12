@@ -8284,6 +8284,30 @@ html body .cc-root .cc-ide .cc-panel [data-cc-hard="term-input"]{
   mask-image: none !important;
 }
 
+html body .cc-root .cc-ide .cc-panel [data-cc-hard="term-inbar"]{
+  gap: 12px !important;
+  padding: 0 12px !important;
+  background: rgba(4,7,22,.92) !important;
+  border-top: 1px solid rgba(255,255,255,.08) !important;
+}
+
+html body .cc-root .cc-ide .cc-panel [data-cc-hard="term-input"]{
+  height: 100% !important;
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+}
+
+html body .cc-root .cc-ide .cc-panel [data-cc-hard="term-input"]:focus{
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 html body .cc-root .cc-ide .cc-panel [data-cc-hard="panel-tab"]{
   appearance: none !important;
   -webkit-appearance: none !important;

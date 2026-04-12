@@ -24,13 +24,15 @@ test("caven empty state renders the atom svg with a soft light-grey treatment", 
   const css = read("components/cavai/CavAiWorkspace.module.css");
 
   assert.equal(source.includes('src="/icons/app/cavcode/atom-svgrepo-com.svg"'), true);
-  assert.equal(source.includes("width={46}"), true);
-  assert.equal(source.includes("height={46}"), true);
+  assert.equal(source.includes("className={styles.codePanelIdleBrand}"), true);
+  assert.equal(source.includes("width={58}"), true);
+  assert.equal(source.includes("height={58}"), true);
   assert.equal(source.includes("className={styles.codePanelEmptyLogoGlyph}"), true);
+  assert.equal(css.includes(".codePanelIdleBrand {"), true);
+  assert.equal(css.includes("min-height: clamp(220px, 42vh, 360px);"), true);
   assert.equal(css.includes(".codePanelEmptyLogo {"), true);
-  assert.equal(css.includes("width: 76px;"), true);
-  assert.equal(css.includes("height: 76px;"), true);
-  assert.equal(css.includes("border-radius: 999px;"), true);
-  assert.equal(css.includes("opacity: 0.5;"), true);
-  assert.equal(css.includes("filter: brightness(0) saturate(100%) invert(91%)"), true);
+  assert.equal(css.includes("width: 92px;"), true);
+  assert.equal(css.includes("height: 92px;"), true);
+  assert.equal(css.includes("opacity: 0.62;"), true);
+  assert.equal(css.includes("filter: brightness(0) saturate(100%) invert(88%)"), true);
 });

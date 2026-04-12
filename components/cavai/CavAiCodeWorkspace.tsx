@@ -4899,13 +4899,13 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
           ) : (
             <div className={[styles.chatStream, showCodePanelEmptyLogo ? styles.chatStreamEmpty : ""].filter(Boolean).join(" ")}>
               {showCodePanelEmptyLogo ? (
-                <div className={styles.emptyLarge}>
+                <div className={styles.codePanelIdleBrand}>
                   <span className={styles.codePanelEmptyLogo} role="img" aria-label={heroLine}>
                     <Image
                       src="/icons/app/cavcode/atom-svgrepo-com.svg"
                       alt=""
-                      width={46}
-                      height={46}
+                      width={58}
+                      height={58}
                       className={styles.codePanelEmptyLogoGlyph}
                       aria-hidden="true"
                       unoptimized

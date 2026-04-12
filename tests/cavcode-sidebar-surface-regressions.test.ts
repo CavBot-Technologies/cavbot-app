@@ -46,4 +46,6 @@ test("cavcode terminal strip stays panel-blended and sidebar status label stays 
   assert.match(cssSource, /\.cc-term-inbar\{[\s\S]*gap: 12px;[\s\S]*background: rgba\(4,7,22,.88\);/);
   assert.match(cssSource, /\.cc-term-in\{[\s\S]*height: 100%;[\s\S]*border: 0;[\s\S]*background: transparent;[\s\S]*padding: 0;[\s\S]*box-shadow: none;/);
   assert.match(cssSource, /\.cc-term-in:focus\{[\s\S]*border-color: transparent;[\s\S]*background: transparent;/);
+  assert.match(cssSource, /\[data-cc-hard="term-inbar"\]\{[\s\S]*background: rgba\(4,7,22,.92\) !important;[\s\S]*border-top: 1px solid rgba\(255,255,255,.08\) !important;/);
+  assert.match(cssSource, /\[data-cc-hard="term-input"\]\{[\s\S]*border: 0 !important;[\s\S]*background: transparent !important;[\s\S]*appearance: none !important;/);
 });
