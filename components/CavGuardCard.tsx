@@ -36,7 +36,12 @@ export function CavGuardCard({
   const copyLines = [request, reason].map((line) => String(line || "").trim()).filter(Boolean);
 
   return (
-    <div className={cardClassName} data-variant={variant} onClick={onClick}>
+    <div
+      className={cardClassName}
+      data-variant={variant}
+      onClick={onClick}
+      style={{ marginInline: "auto", maxWidth: "min(100%, calc(100vw - 36px))" }}
+    >
       <span className={styles.glowTop} aria-hidden="true" />
       <span className={styles.glowBottom} aria-hidden="true" />
 
