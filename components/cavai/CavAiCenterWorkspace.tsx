@@ -11540,7 +11540,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
   return (
     <div
-      className={overlay ? styles.centerOverlayRoot : styles.centerPageRoot}
+      className={[
+        overlay ? styles.centerOverlayRoot : styles.centerPageRoot,
+        imageStudioMobileLayoutActive ? styles.centerPageRootImageStudioMobile : "",
+      ].filter(Boolean).join(" ")}
       onClick={(event) => {
         if (!overlay) return;
         if (event.currentTarget !== event.target) return;

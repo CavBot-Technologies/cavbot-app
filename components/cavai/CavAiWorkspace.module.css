@@ -8495,14 +8495,33 @@
     overflow: hidden;
   }
 
-  .centerMainImageStudioMobile {
-    display: block;
+  .centerPageRootImageStudioMobile {
+    min-height: 100dvh;
+    height: auto;
     overflow-y: auto;
-    overscroll-behavior-y: contain;
-    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: auto;
+  }
+
+  .centerPageRootImageStudioMobile .centerShell,
+  .centerPageRootImageStudioMobile .centerShellPage,
+  .centerPageRootImageStudioMobile .centerMain {
+    min-height: 100dvh;
+    height: auto;
+  }
+
+  .centerPageRootImageStudioMobile .centerShellPage {
+    grid-template-rows: auto;
+    overflow: visible;
+  }
+
+  .centerMainImageStudioMobile {
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
   }
 
   .centerMainImageStudioMobile .centerThread {
+    flex: 0 0 auto;
     overflow: visible;
     padding: 22px 11px 8px;
   }

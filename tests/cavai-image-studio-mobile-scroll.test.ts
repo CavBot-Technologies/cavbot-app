@@ -13,9 +13,13 @@ test("CavAi image studio uses a relaxed scrollable layout on small screens", () 
 
   assert.equal(source.includes("const imageStudioMobileLayoutActive = !overlay && isPhoneLayout && imageComposerModeActive;"), true);
   assert.equal(source.includes("imageStudioMobileLayoutActive ? styles.centerMainImageStudioMobile : \"\""), true);
+  assert.equal(source.includes("imageStudioMobileLayoutActive ? styles.centerPageRootImageStudioMobile : \"\""), true);
 
+  assert.equal(css.includes(".centerPageRootImageStudioMobile {"), true);
+  assert.equal(css.includes(".centerPageRootImageStudioMobile .centerShellPage {"), true);
   assert.equal(css.includes(".centerMainImageStudioMobile {"), true);
   assert.equal(css.includes("overflow-y: auto;"), true);
+  assert.equal(css.includes("overflow: visible;"), true);
   assert.equal(css.includes(".centerMainImageStudioMobile .centerThreadInnerEmpty {"), true);
   assert.equal(css.includes("justify-content: flex-start;"), true);
   assert.equal(css.includes(".centerMainImageStudioMobile .centerEmptyState {"), true);
