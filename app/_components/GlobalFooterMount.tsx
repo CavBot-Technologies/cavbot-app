@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { isCavAiCanonicalHost } from "@/lib/cavai/url";
 import CavbotGlobalFooter from "@/components/footer/CavbotGlobalFooter";
 
 const ROUTE_FOOTER_BLOCKLIST = ["/status", "/status/history"] as const;
@@ -23,6 +24,19 @@ function normalizePathname(pathname: string | null): string {
     return pathname.replace(/\/+$/, "");
   }
   return pathname;
+}
+
+function normalizeHost(host: string | null | undefined): string {
+  const candidate = String(host || "")
+    .split(",")[0]
+    ?.trim()
+    .toLowerCase() || "";
+  if (!candidate) return "";
+  if (candidate.startsWith("[")) {
+    const closing = candidate.indexOf("]");
+    return closing >= 0 ? candidate.slice(1, closing) : candidate;
+  }
+  return candidate.split(":")[0] || "";
 }
 
 function isAuthRoute(pathname: string): boolean {
@@ -70,10 +84,13 @@ function hasOpenModal(): boolean {
   return false;
 }
 
-export default function GlobalFooterMount() {
+export default function GlobalFooterMount(props: {
+  initialHost?: string | null;
+}) {
   const pathname = usePathname();
   const [modalOpen, setModalOpen] = useState(false);
   const normalizedPathname = useMemo(() => normalizePathname(pathname), [pathname]);
+  const normalizedHost = useMemo(() => normalizeHost(props.initialHost), [props.initialHost]);
   const hideFooterForRoute = useMemo(() => {
     if (ROUTE_FOOTER_BLOCKLIST.some((route) => route === normalizedPathname)) return true;
     if (ARCADE_FOOTER_BLOCKLIST.some((route) => route === normalizedPathname)) return true;
@@ -82,6 +99,7 @@ export default function GlobalFooterMount() {
     if (isAuthRoute(normalizedPathname)) return true;
     return false;
   }, [normalizedPathname]);
+  const hideFooterForCavAiHost = useMemo(() => isCavAiCanonicalHost(normalizedHost), [normalizedHost]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -105,7 +123,7 @@ export default function GlobalFooterMount() {
     return () => observer.disconnect();
   }, [normalizedPathname]);
 
-  const hideFooter = hideFooterForRoute || modalOpen;
+  const hideFooter = hideFooterForRoute || hideFooterForCavAiHost || modalOpen;
 
   useEffect(() => {
     if (!document.body) return;

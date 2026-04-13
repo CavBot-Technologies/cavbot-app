@@ -1,6 +1,7 @@
 // app/layout.tsx
 import type { Metadata } from "next";
 import { Suspense, type ReactNode } from "react";
+import { headers } from "next/headers";
 import Script from "next/script";
 import "./globals.css";
 import "./workspace.css";
@@ -90,6 +91,8 @@ type RootLayoutProps = {
 };
 
 export default async function RootLayout({ children }: RootLayoutProps) {
+  const requestHeaders = headers();
+  const requestHost = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "";
   const authBootstrapScript = buildClientAuthBootstrapScript(await readClientAuthBootstrapServerState());
   return (
     <html lang="en" data-cavbot-react-app="1" style={{ backgroundColor: "#01030f" }}>
@@ -123,7 +126,7 @@ export default async function RootLayout({ children }: RootLayoutProps) {
 
         {children}
         <Suspense fallback={null}>
-          <GlobalFooterMount />
+          <GlobalFooterMount initialHost={requestHost} />
         </Suspense>
         <Script
           id="cavbot-official-brain-cdn"
