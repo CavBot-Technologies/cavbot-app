@@ -227,7 +227,6 @@ export async function GET(req: Request) {
     const client = makeClientMeta(req);
     const pool = getAuthPool();
     sess = await requireSession(req);
-    const pool = getAuthPool();
 
     // System session (ops)
     if (sess.systemRole === "system") {
