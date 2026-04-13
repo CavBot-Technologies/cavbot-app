@@ -51,6 +51,7 @@
     "stripe": "^20.2.0",
     "stylelint": "^17.0.0",
     "swr": "^2.3.8",
+    "three": "^0.183.2",
     "typescript": "^5"
   },
   "devDependencies": {

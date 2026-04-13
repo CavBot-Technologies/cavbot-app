@@ -7,6 +7,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import { LockIcon } from "@/components/LockIcon";
+import CavAiVoiceOrb, { type CavAiVoiceOrbMode } from "@/components/cavai/CavAiVoiceOrb";
 import { isReservedUsername, isValidUsername, normalizeUsername } from "@/lib/username";
 import {
   CAVAI_SAFE_FALLBACK_LINE,
@@ -3632,6 +3633,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [recordingVoice, setRecordingVoice] = useState(false);
   const [processingVoice, setProcessingVoice] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState("");
+  const [voiceOrbState, setVoiceOrbState] = useState<CavAiVoiceOrbMode>("idle");
+  const [voiceOrbStream, setVoiceOrbStream] = useState<MediaStream | null>(null);
   const [pendingPromptText, setPendingPromptText] = useState("");
   const [pendingImageGeneration, setPendingImageGeneration] = useState(false);
   const [reasoningContextLines, setReasoningContextLines] = useState<string[]>([]);
@@ -4097,6 +4100,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const hasPendingPrompt = submitting && (Boolean(s(pendingPromptText)) || hasInlineEditPending);
   const hasInlineEdit = Boolean(inlineEditDraft);
   const isEmptyThread = !messages.length && !loadingMessages && !hasPendingPrompt && !hasInlineEdit;
+  const showVoiceOrb = voiceOrbState !== "idle";
   const threadInnerClassName = [styles.centerThreadInner, isEmptyThread ? styles.centerThreadInnerEmpty : styles.centerThreadInnerChat]
     .filter(Boolean)
     .join(" ");
@@ -7990,6 +7994,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       stream.getTracks().forEach((track) => track.stop());
       voiceStreamRef.current = null;
     }
+    setVoiceOrbStream(null);
     voiceChunksRef.current = [];
   }, []);
 
@@ -8012,6 +8017,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     ttsPlaybackSessionRef.current += 1;
     clearTtsPlayback();
     setSpeakingMessageId("");
+    setVoiceOrbState("idle");
   }, [clearTtsPlayback]);
 
   const cacheTtsBlob = useCallback((cacheKeyRaw: string, blob: Blob) => {
@@ -8392,9 +8398,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const processCapturedVoice = useCallback(async (blob: Blob) => {
     if (!blob.size) {
       setError("No audio was captured.");
+      setVoiceOrbState("idle");
       return;
     }
     setProcessingVoice(true);
+    setVoiceOrbState("processing");
     try {
       const extension = inferAudioFileExtension(blob.type);
       const file = new File(
@@ -8407,6 +8415,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       if (!spokenPrompt) {
         setError("Voice input did not produce a transcript.");
         autoSpeakNextVoiceReplyRef.current = false;
+        setVoiceOrbState("idle");
         return;
       }
       autoSpeakNextVoiceReplyRef.current = true;
@@ -8418,19 +8427,24 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       const replyText = s(reply);
       if (!replyText) {
         autoSpeakNextVoiceReplyRef.current = false;
+        setVoiceOrbState("idle");
         return;
       }
       const quickSpeakKey = `voice-auto-inline-${hashSpeechText(replyText)}`;
       autoSpeakNextVoiceReplyRef.current = false;
+      setVoiceOrbState("speaking");
       const started = await playSpeechFromText(replyText, quickSpeakKey);
       if (!started) {
         autoSpeakNextVoiceReplyRef.current = true;
+        setVoiceOrbState("idle");
       }
     } catch (err) {
       autoSpeakNextVoiceReplyRef.current = false;
       setError(err instanceof Error ? err.message : "Voice input failed.");
+      setVoiceOrbState("idle");
     } finally {
       setProcessingVoice(false);
+      setVoiceOrbState("idle");
     }
   }, [onSubmit, playSpeechFromText, transcribeAudioFile, voiceReplyModel]);
 
@@ -8472,6 +8486,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     }
 
     setError("");
+    setVoiceOrbState("listening");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = pickAudioRecorderMimeType();
@@ -8480,6 +8495,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         : new MediaRecorder(stream);
 
       voiceStreamRef.current = stream;
+      setVoiceOrbStream(stream);
       voiceRecorderRef.current = recorder;
       voiceChunksRef.current = [];
 
@@ -8492,6 +8508,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         clearVoiceCapture();
         setRecordingVoice(false);
         setProcessingVoice(false);
+        setVoiceOrbState("idle");
         setError("Voice capture failed.");
       };
 
@@ -8502,6 +8519,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         setRecordingVoice(false);
         const blob = chunks.length ? new Blob(chunks, { type: fallbackType }) : null;
         if (!blob || !blob.size) {
+          setVoiceOrbState("idle");
           setError("No audio was captured.");
           return;
         }
@@ -8514,6 +8532,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       clearVoiceCapture();
       setRecordingVoice(false);
       setProcessingVoice(false);
+      setVoiceOrbState("idle");
       setError(err instanceof Error ? err.message : "Voice capture failed.");
     }
   }, [clearVoiceCapture, processCapturedVoice, processingVoice, recordingVoice, submitting, transcribingAudio]);
@@ -11793,7 +11812,24 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
             </section>
           ) : null}
 
-          <section ref={threadRef} className={styles.centerThread} aria-label="Conversation stream" onScroll={onThreadScroll}>
+          <section
+            ref={threadRef}
+            className={styles.centerThread}
+            aria-label="Conversation stream"
+            onScroll={onThreadScroll}
+            style={{ position: "relative" }}
+          >
+            {showVoiceOrb ? (
+              <CavAiVoiceOrb
+                active
+                mode={voiceOrbState}
+                mediaStream={voiceOrbStream}
+                placement={isEmptyThread ? "center" : "bottom"}
+                centerOffsetY={centerComposerInThread ? -84 : -28}
+                bottomOffset={22}
+                label="CavAi voice activity"
+              />
+            ) : null}
             <div className={threadInnerClassName}>
               {isEmptyThread ? (
                 <div

@@ -20,6 +20,7 @@ import { toReasoningDisplayHelper, toReasoningDisplayLabel } from "@/src/lib/ai/
 import { emitGuardDecision, emitGuardDecisionFromPayload, readGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
 import { buildCavGuardDecision } from "@/src/lib/cavguard/cavGuard.registry";
 import { track } from "@/lib/cavbotAnalytics";
+import CavAiVoiceOrb, { type CavAiVoiceOrbMode } from "@/components/cavai/CavAiVoiceOrb";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
 import { publishClientPlan, readBootClientPlanBootstrap, subscribeClientPlan } from "@/lib/clientPlan";
 import { CAVAI_UPLOAD_FILE_ICON_ASSETS, resolveUploadFileIcon } from "@/lib/cavai/uploadFileIcons";
@@ -1621,6 +1622,8 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   const [transcribingAudio, setTranscribingAudio] = useState(false);
   const [recordingVoice, setRecordingVoice] = useState(false);
   const [processingVoice, setProcessingVoice] = useState(false);
+  const [voiceOrbState, setVoiceOrbState] = useState<CavAiVoiceOrbMode>("idle");
+  const [voiceOrbStream, setVoiceOrbStream] = useState<MediaStream | null>(null);
   const [profileIdentity, setProfileIdentity] = useState<CavAiIdentityInput>({ fullName: "", username: "" });
   const [heroLine, setHeroLine] = useState(CAVAI_SAFE_FALLBACK_LINE);
   const [reasoningContextLines, setReasoningContextLines] = useState<string[]>([]);
@@ -1789,6 +1792,8 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   const hasPendingPrompt = submitting && Boolean(s(pendingPromptText));
   const hasInlineEdit = Boolean(inlineEditDraft);
   const hasExistingThread = Boolean(sessionId || visibleMessages.length || currentSession || hasPendingPrompt || hasInlineEdit);
+  const showVoiceOrb = voiceOrbState !== "idle";
+  const voiceOrbHasConversation = Boolean(visibleMessages.length || hasPendingPrompt || hasInlineEdit || loadingMessages || loadingQueue || queuedPrompts.length);
   const showCodePanelChatBrand =
     !cavenInteractionLocked
     && viewMode !== "history"
@@ -3899,15 +3904,18 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       stream.getTracks().forEach((track) => track.stop());
       voiceStreamRef.current = null;
     }
+    setVoiceOrbStream(null);
     voiceChunksRef.current = [];
   }, []);
 
   const processCapturedVoice = useCallback(async (blob: Blob) => {
     if (!blob.size) {
       setError("No audio was captured.");
+      setVoiceOrbState("idle");
       return;
     }
     setProcessingVoice(true);
+    setVoiceOrbState("processing");
     try {
       const extension = inferAudioFileExtension(blob.type);
       const file = new File(
@@ -3919,10 +3927,12 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       const spokenPrompt = s(transcript);
       if (!spokenPrompt) {
         setError("Voice input did not produce a transcript.");
+        setVoiceOrbState("idle");
         return;
       }
       if (cavenInteractionLocked) {
         emitQwenUpgradeDecision();
+        setVoiceOrbState("idle");
         return;
       }
       if (sessionBootstrapRef.current || submitting) return;
@@ -3938,8 +3948,10 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Voice input failed.");
+      setVoiceOrbState("idle");
     } finally {
       setProcessingVoice(false);
+      setVoiceOrbState("idle");
     }
   }, [
     cavenInteractionLocked,
@@ -3977,6 +3989,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     }
 
     setError("");
+    setVoiceOrbState("listening");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = pickAudioRecorderMimeType();
@@ -3985,6 +3998,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
         : new MediaRecorder(stream);
 
       voiceStreamRef.current = stream;
+      setVoiceOrbStream(stream);
       voiceRecorderRef.current = recorder;
       voiceChunksRef.current = [];
 
@@ -3997,6 +4011,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
         clearVoiceCapture();
         setRecordingVoice(false);
         setProcessingVoice(false);
+        setVoiceOrbState("idle");
         setError("Voice capture failed.");
       };
 
@@ -4007,6 +4022,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
         setRecordingVoice(false);
         const blob = chunks.length ? new Blob(chunks, { type: fallbackType }) : null;
         if (!blob || !blob.size) {
+          setVoiceOrbState("idle");
           setError("No audio was captured.");
           return;
         }
@@ -4019,6 +4035,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       clearVoiceCapture();
       setRecordingVoice(false);
       setProcessingVoice(false);
+      setVoiceOrbState("idle");
       setError(err instanceof Error ? err.message : "Voice capture failed.");
     }
   }, [
@@ -4921,7 +4938,21 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
               })}
             </div>
           ) : (
-            <div className={[styles.chatStream, showCodePanelChatBrand ? styles.chatStreamEmpty : ""].filter(Boolean).join(" ")}>
+            <div
+              className={[styles.chatStream, showCodePanelChatBrand ? styles.chatStreamEmpty : ""].filter(Boolean).join(" ")}
+              style={{ position: "relative" }}
+            >
+              {showVoiceOrb ? (
+                <CavAiVoiceOrb
+                  active
+                  mode={voiceOrbState}
+                  mediaStream={voiceOrbStream}
+                  placement={voiceOrbHasConversation ? "bottom" : "center"}
+                  centerOffsetY={-26}
+                  bottomOffset={18}
+                  label="Caven voice activity"
+                />
+              ) : null}
               {showCodePanelChatBrand ? codePanelIdleBrand : null}
 
               {loadingQueue ? <div className={styles.metaText}>Loading queue...</div> : null}
