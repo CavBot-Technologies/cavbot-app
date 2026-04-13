@@ -3870,11 +3870,17 @@
 
 .centerGuestAuthPanelDocked {
   position: absolute;
-  top: calc(56px + 14px);
-  right: clamp(12px, 1.5vw, 18px);
-  bottom: auto;
-  width: min(336px, calc(100% - 24px));
-  max-height: min(560px, calc(100% - 84px));
+  right: 0;
+  bottom: 0;
+  width: clamp(320px, 27vw, 360px);
+  max-height: min(540px, calc(100% - 72px));
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 18px 0 0 0;
+  background:
+    linear-gradient(180deg, rgba(3, 8, 24, 0.98), rgba(2, 7, 24, 0.99));
+  box-shadow: none;
+  z-index: 32;
 }
 
 .centerGuestAuthPanelHead {
@@ -8278,6 +8284,10 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     max-height: 40dvh;
   }
+
+  .centerMainWithGuestAuth {
+    padding-right: clamp(304px, 40vw, 336px);
+  }
 }
 
 @media (max-width: 760px) {
@@ -8430,10 +8440,25 @@
     display: none;
   }
 
+  .centerMainWithGuestAuth {
+    padding-right: 0;
+  }
+
   .centerGuestAuthPanel {
     right: 10px;
     bottom: calc(10px + env(safe-area-inset-bottom));
     width: min(336px, calc(100vw - 20px));
+  }
+
+  .centerGuestAuthPanelDocked {
+    right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    width: min(336px, calc(100vw - 20px));
+    max-height: min(560px, calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+    border-right: 1px solid rgba(255, 255, 255, 0.13);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 16px;
+    box-shadow: 0 18px 38px rgba(1, 4, 16, 0.6);
   }
 
   .centerComposerFooter .centerAgentModeMenu {
@@ -8525,6 +8550,12 @@
 
 @media (max-width: 620px) {
   .centerGuestAuthPanel {
+    width: min(336px, calc(100vw - 20px));
+    right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .centerGuestAuthPanelDocked {
     width: min(336px, calc(100vw - 20px));
     right: 10px;
     bottom: calc(10px + env(safe-area-inset-bottom));
