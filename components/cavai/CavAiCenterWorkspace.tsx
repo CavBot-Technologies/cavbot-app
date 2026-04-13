@@ -4717,10 +4717,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const publicProfileHref = useMemo(() => {
     return buildCanonicalPublicProfileHref(accountProfileUsername);
   }, [accountProfileUsername]);
-  const profileMenuLabel = useMemo(() => {
-    if (accountProfilePublicEnabled === null) return "Profile";
-    return accountProfilePublicEnabled ? "Public Profile" : "Private Profile";
-  }, [accountProfilePublicEnabled]);
+  const guestAccountLabel = "Not logged in";
+  const profileMenuLabel = useMemo(() => (accountProfilePublicEnabled ? "Public Profile" : "Private Profile"), [accountProfilePublicEnabled]);
   const clearReasoningTicker = useCallback(() => {
     if (typeof window === "undefined") return;
     if (reasoningTickerRef.current === null) return;
@@ -11470,8 +11468,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                       type="button"
                       className={[styles.centerSidebarActionBtn, styles.centerSidebarActionBtnPrimary].join(" ")}
                       onClick={() => openGuestAuthPanel({ closeDrawer: isPhoneLayout })}
-                      aria-label="CavBot Operator"
-                      title="CavBot Operator"
+                      aria-label={guestAccountLabel}
+                      title={guestAccountLabel}
                       aria-haspopup="dialog"
                       aria-expanded={accountMenuOpen}
                     >
@@ -11488,7 +11486,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                       >
                         <span className={styles.centerHeaderAccountInitials}>C</span>
                       </span>
-                      <span className={styles.centerSidebarActionText}>CavBot Operator</span>
+                      <span className={styles.centerSidebarActionText}>{guestAccountLabel}</span>
                     </button>
                     {accountMenuOpen ? (
                       <div
