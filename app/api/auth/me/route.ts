@@ -1,6 +1,7 @@
 // app/api/auth/me/route.ts
 import { NextResponse } from "next/server";
-import { createUserSession, requireSession, isApiAuthError, sessionCookieOptions } from "@/lib/apiAuth";
+
+import { createUserSession, getSession, requireSession, isApiAuthError, sessionCookieOptions } from "@/lib/apiAuth";
 import type { CavbotSession } from "@/lib/apiAuth";
 import {
   compareMembershipPriority,
@@ -96,7 +97,6 @@ function resolveIssuedSessionVersion(value: unknown) {
   return Number.isFinite(parsed) && Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
 }
 
-/** Returns { trialActive, tierEffective, daysLeft } */
 type MembershipRecord = {
   role: string;
   createdAt: Date;
@@ -208,22 +208,76 @@ function buildFallbackAccountFromMembership(args: {
   };
 }
 
+function buildDegradedAuthMePayloadFromSession(sess: CavbotSession) {
+  if (sess.systemRole === "system") {
+    return {
+      ok: true,
+      authenticated: true,
+      degraded: true,
+      indeterminate: true,
+      session: sess,
+      capabilities: { aiReady: false },
+    } as const;
+  }
+
+  const userId = String(sess?.sub || "").trim();
+  if (!userId) {
+    return {
+      ok: true,
+      authenticated: false,
+      degraded: true,
+      indeterminate: true,
+      capabilities: { aiReady: false },
+    } as const;
+  }
+
+  const membership = fallbackMembershipFromSession(sess);
+  const user = buildFallbackUser(userId, sess);
+  const initials = deriveInitials(user.displayName, user.username);
+  const account = buildFallbackAccountFromMembership({
+    sess,
+    membership,
+    entitledSubscription: null,
+  });
+  const responseUser = {
+    ...user,
+    initials,
+  };
+
+  return {
+    ok: true,
+    authenticated: true,
+    degraded: true,
+    indeterminate: true,
+    session: sess,
+    user: responseUser,
+    profile: responseUser,
+    account,
+    membership,
+    capabilities: { aiReady: false },
+    policy: {
+      ...DEFAULT_CAVCLOUD_COLLAB_POLICY,
+      allowArcadeCollaboratorAccess: false,
+    },
+  } as const;
+}
+
 export async function GET(req: Request) {
+  let sess: CavbotSession | null = await getSession(req).catch(() => null);
+
   try {
     const pool = getAuthPool();
     let degraded = false;
-    let sess: CavbotSession;
 
     try {
       sess = await requireSession(req);
     } catch (error) {
       if (isApiAuthError(error) && (error.status === 401 || error.status === 403)) {
-        return json({ ok: true, authenticated: false, error: error.code, capabilities: { aiReady: false } }, 200);
+        return json({ ok: true, authenticated: false, signedOut: true, error: error.code, capabilities: { aiReady: false } }, 200);
       }
       throw error;
     }
 
-    // System sessions (internal tooling)
     if (sess.systemRole === "system") {
       return json({ ok: true, authenticated: true, degraded, session: sess, capabilities: { aiReady: false } }, 200);
     }
@@ -231,7 +285,9 @@ export async function GET(req: Request) {
     const userId = String(sess?.sub || "").trim();
     const accountId = sess?.accountId ? String(sess.accountId).trim() : null;
 
-    if (!userId) return json({ ok: true, authenticated: false, capabilities: { aiReady: false } }, 200);
+    if (!userId) {
+      return json({ ok: true, authenticated: false, signedOut: true, capabilities: { aiReady: false } }, 200);
+    }
 
     let user: AuthUser | null = null;
     let userLookupFailed = false;
@@ -243,7 +299,9 @@ export async function GET(req: Request) {
     }
 
     if (!user) {
-      if (!userLookupFailed) return json({ ok: true, authenticated: false, capabilities: { aiReady: false } }, 200);
+      if (!userLookupFailed) {
+        return json({ ok: true, authenticated: false, signedOut: true, capabilities: { aiReady: false } }, 200);
+      }
       user = buildFallbackUser(userId, sess);
     }
 
@@ -310,7 +368,7 @@ export async function GET(req: Request) {
     const effectiveMembershipRecord = promotedMembershipRecord ?? currentMembershipRecord ?? fallbackMembership;
 
     if (!effectiveMembershipRecord) {
-      return json({ ok: true, authenticated: false, capabilities: { aiReady: false } }, 200);
+      return json({ ok: true, authenticated: false, signedOut: true, capabilities: { aiReady: false } }, 200);
     }
 
     membership = {
@@ -342,7 +400,9 @@ export async function GET(req: Request) {
     ]);
 
     if (!accountRecord) {
-      if (!accountLookupFailed) return json({ ok: true, authenticated: false, capabilities: { aiReady: false } }, 200);
+      if (!accountLookupFailed) {
+        return json({ ok: true, authenticated: false, signedOut: true, capabilities: { aiReady: false } }, 200);
+      }
       accountWithComputed = buildFallbackAccountFromMembership({
         sess,
         membership,
@@ -351,7 +411,6 @@ export async function GET(req: Request) {
     } else {
       account = accountRecord;
 
-      // Compute effective tier for UI + gates
       const eff = computeEffectiveTier(account);
       const effectivePlanId = resolveEffectivePlanId({
         account,
@@ -391,7 +450,6 @@ export async function GET(req: Request) {
         account: accountWithComputed ?? account,
         membership,
         capabilities: {
-          // AI routes require a real account context; fallback account payloads are UI-safe but not AI-safe.
           aiReady,
         },
         policy: {
@@ -412,7 +470,29 @@ export async function GET(req: Request) {
     }
     return response;
   } catch (error) {
-    if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
-    return json({ ok: true, authenticated: false, capabilities: { aiReady: false } }, 200);
+    if (isApiAuthError(error) && (error.status === 401 || error.status === 403)) {
+      return json({ ok: true, authenticated: false, signedOut: true, error: error.code, capabilities: { aiReady: false } }, 200);
+    }
+    if (sess) {
+      const payload = buildDegradedAuthMePayloadFromSession(sess);
+      return json(
+        {
+          ...payload,
+          ...(isApiAuthError(error) ? { error: error.code } : {}),
+        },
+        200
+      );
+    }
+    return json(
+      {
+        ok: true,
+        authenticated: false,
+        degraded: true,
+        indeterminate: true,
+        capabilities: { aiReady: false },
+        ...(isApiAuthError(error) ? { error: error.code } : {}),
+      },
+      200
+    );
   }
 }

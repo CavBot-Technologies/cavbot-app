@@ -14,6 +14,7 @@ import {
   readPassiveAiAuthErrorCode,
 } from "@/src/lib/ai/ai.route-response";
 import { resolveAiExecutionPolicy } from "@/src/lib/ai/ai.policy";
+import { buildPassiveAiUnavailablePayload, isPassiveAiReadUnavailableError } from "@/src/lib/ai/ai.route-response";
 import { AI_CENTER_SURFACE_SCHEMA, AiServiceError } from "@/src/lib/ai/ai.types";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
@@ -149,6 +150,18 @@ export async function GET(req: NextRequest) {
           ...(process.env.NODE_ENV !== "production" ? { details: error.details } : {}),
         },
         error.status
+      );
+    }
+    if (isPassiveAiReadUnavailableError(error)) {
+      return json(
+        {
+          ...buildPassiveAiUnavailablePayload(
+            "AI_SESSIONS_UNAVAILABLE",
+            "AI session history is temporarily unavailable."
+          ),
+          requestId,
+        },
+        503
       );
     }
     const message = error instanceof Error ? error.message : "Server error";

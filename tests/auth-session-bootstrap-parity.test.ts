@@ -13,6 +13,7 @@ test("auth session bootstrap uses strict requireSession validation", () => {
   const source = read("app/api/auth/session/route.ts");
 
   assert.match(source, /requireSession,/);
-  assert.match(source, /const sess: CavbotSession = await requireSession\(req\);/);
+  assert.match(source, /let sess: CavbotSession \| null = await getSession\(req\)\.catch\(\(\) => null\);/);
+  assert.match(source, /sess = await requireSession\(req\);/);
   assert.doesNotMatch(source, /const sess: CavbotSession \| null = await getSession\(req\);/);
 });

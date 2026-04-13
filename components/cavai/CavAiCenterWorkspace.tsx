@@ -425,6 +425,11 @@ type ApiEnvelope<T> =
       error?: string;
       message?: string;
       guardDecision?: unknown;
+      degraded?: boolean;
+      unavailable?: boolean;
+      retryable?: boolean;
+      indeterminate?: boolean;
+      signedOut?: boolean;
     };
 
 type CenterConfig = {
@@ -588,6 +593,25 @@ const SESSION_MESSAGE_PREFETCH_COUNT = 10;
 const RECENT_FILES_EMPTY_HINT = "No recent files yet. Add a file and it will appear here.";
 const CENTER_LOAD_SESSIONS_FAILED_MESSAGE = "Failed to load sessions.";
 const CENTER_LOAD_MESSAGES_FAILED_MESSAGE = "Failed to load messages.";
+const PASSIVE_CENTER_UNAVAILABLE_ERRORS = new Set([
+  "SERVICE_UNAVAILABLE",
+  "AI_SESSIONS_UNAVAILABLE",
+  "AI_SESSION_MESSAGES_UNAVAILABLE",
+  "SESSION_HISTORY_UNAVAILABLE",
+]);
+
+function isPassiveCenterUnavailablePayload(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const payload = value as {
+    unavailable?: unknown;
+    degraded?: unknown;
+    retryable?: unknown;
+    error?: unknown;
+  };
+  if (payload.unavailable === true) return true;
+  if (payload.degraded === true && payload.retryable === true) return true;
+  return PASSIVE_CENTER_UNAVAILABLE_ERRORS.has(s(payload.error).toUpperCase());
+}
 const CAVAI_GUEST_SESSION_CACHE_STORAGE_PREFIX = "cavai_center_guest_session_cache_v1";
 const CAVAI_GUEST_SESSION_CACHE_MAX_SESSIONS = 60;
 const CAVAI_GUEST_SESSION_CACHE_MAX_MESSAGE_ENTRIES = 80;
@@ -911,16 +935,6 @@ function normalizePlanId(value: unknown): "free" | "premium" | "premium_plus" {
   if (raw === "premium_plus" || raw === "premium+") return "premium_plus";
   if (raw === "premium") return "premium";
   return "free";
-}
-
-function hasBootProfileSignal(value: {
-  fullName?: unknown;
-  email?: unknown;
-  username?: unknown;
-  initials?: unknown;
-} | null | undefined): boolean {
-  if (!value) return false;
-  return Boolean(s(value.fullName) || s(value.email) || s(value.username) || s(value.initials));
 }
 
 function resolveServerPlanId(
@@ -4907,6 +4921,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
           return true;
         }
         emitGuardDecisionFromPayload(body);
+        if (isPassiveCenterUnavailablePayload(body)) return true;
         throw new Error(s((body as { message?: unknown }).message) || CENTER_LOAD_SESSIONS_FAILED_MESSAGE);
       }
       setError("");
@@ -5010,6 +5025,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
           return [];
         }
         emitGuardDecisionFromPayload(body);
+        if (isPassiveCenterUnavailablePayload(body)) {
+          const cachedRows = sessionMessageCacheRef.current.get(normalized);
+          if (cachedRows) return cachedRows;
+          const summary = sessions.find((item) => item.id === normalized) || null;
+          return buildSyntheticThreadFromSessionSummary(summary);
+        }
         throw new Error(s((body as { message?: unknown }).message) || CENTER_LOAD_MESSAGES_FAILED_MESSAGE);
       }
       const rows = Array.isArray(body.messages) ? body.messages : [];
@@ -5644,6 +5665,9 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       const body = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         authenticated?: boolean;
+        degraded?: boolean;
+        indeterminate?: boolean;
+        signedOut?: boolean;
         session?: {
           systemRole?: unknown;
         } | null;
@@ -5666,10 +5690,17 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         };
       };
       if (isCancelled?.()) return false;
+      const authIndeterminate = body.indeterminate === true;
+      if (authIndeterminate) {
+        // Preserve the last known auth state on transient backend failures.
+        return Boolean(confirmedAuthenticatedUserRef.current);
+      }
       const systemRole = s(body.session?.systemRole).toLowerCase();
       const hasUserPayload = Boolean(body.user && typeof body.user === "object");
       const aiReady = readAuthMeAiReady(body, systemRole !== "system" && hasUserPayload);
+      const signedOut = body.signedOut === true;
       const shouldApplyGuestFallback = isAuthRequiredLikeResponse(res.status, body)
+        || signedOut
         || (res.ok && body.ok === true && body.authenticated === false)
         || (res.ok && body.ok === true && body.authenticated === true && (systemRole === "system" || !hasUserPayload || !aiReady));
       // Keep account history visible until the backend explicitly proves the viewer is signed out.
@@ -5718,10 +5749,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       return true;
     } catch {
       if (isCancelled?.()) return false;
-      if (!confirmedAuthenticatedUserRef.current) {
-        applyUnauthenticatedCenterState();
-      }
-      return false;
+      // Preserve the last known auth state on transient backend failures.
+      return Boolean(confirmedAuthenticatedUserRef.current);
     } finally {
       if (!isCancelled?.()) {
         setAuthProbeReady(true);
