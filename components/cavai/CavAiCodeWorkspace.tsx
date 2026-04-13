@@ -1491,6 +1491,14 @@ function isAuthRequiredLikeResponse(status: number, payload: unknown) {
   return errorCode === "AUTH_REQUIRED" || errorCode === "UNAUTHORIZED" || errorCode === "SESSION_REVOKED" || errorCode === "EXPIRED";
 }
 
+function readAuthMeAiReady(payload: unknown, fallbackValue: boolean) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return fallbackValue;
+  const capabilities = (payload as Record<string, unknown>).capabilities;
+  if (!capabilities || typeof capabilities !== "object" || Array.isArray(capabilities)) return fallbackValue;
+  const aiReady = (capabilities as Record<string, unknown>).aiReady;
+  return typeof aiReady === "boolean" ? aiReady : fallbackValue;
+}
+
 function matchesPath(file: CavAiProjectFileRef, hint: string): number {
   const normalizedHint = normalizePathLike(hint).toLowerCase();
   const full = normalizePathLike(file.path).toLowerCase();
@@ -2103,6 +2111,9 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
         session?: {
           systemRole?: unknown;
         } | null;
+        capabilities?: {
+          aiReady?: unknown;
+        } | null;
         user?: {
           displayName?: unknown;
           username?: unknown;
@@ -2114,8 +2125,9 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       };
       const systemRole = s(body.session?.systemRole).toLowerCase();
       const hasUserPayload = Boolean(body.user && typeof body.user === "object");
+      const aiReady = readAuthMeAiReady(body, systemRole !== "system" && hasUserPayload);
       if (isCancelled?.()) return false;
-      if (!res.ok || body.ok !== true || body.authenticated !== true || systemRole === "system" || !hasUserPayload) {
+      if (!res.ok || body.ok !== true || body.authenticated !== true || systemRole === "system" || !hasUserPayload || !aiReady) {
         applyUnauthenticatedCodeState();
         return false;
       }

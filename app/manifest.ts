@@ -1,7 +1,5 @@
 import type { MetadataRoute } from "next";
 
-const APP_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://app.cavbot.io";
-
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "CavBot",
@@ -13,7 +11,8 @@ export default function manifest(): MetadataRoute.Manifest {
     display: "standalone",
     background_color: "#01030f",
     theme_color: "#01030f",
-    id: APP_ORIGIN,
+    // Keep the app id same-origin on every served host so Chrome accepts the PWA identity.
+    id: "/",
     icons: [
       {
         src: "/android-chrome-192x192.png",

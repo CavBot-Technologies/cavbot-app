@@ -15,5 +15,5 @@ test("auth me bootstrap uses strict session validation and degrades to signed-ou
   assert.match(source, /requireSession,/);
   assert.match(source, /sess = await requireSession\(req\);/);
   assert.doesNotMatch(source, /const sess: CavbotSession \| null = await getSession\(req\);/);
-  assert.match(source, /return json\(\{ ok: true, authenticated: false, error: error\.code \}, 200\);/);
+  assert.match(source, /return json\(\{ ok: true, authenticated: false, error: error\.code, capabilities: \{ aiReady: false \} \}, 200\);/);
 });

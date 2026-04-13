@@ -3536,6 +3536,14 @@ function isSessionUnavailableLikeResponse(status: number, payload: unknown) {
   return errorCode === "SESSION_NOT_FOUND";
 }
 
+function readAuthMeAiReady(payload: unknown, fallbackValue: boolean) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return fallbackValue;
+  const capabilities = (payload as Record<string, unknown>).capabilities;
+  if (!capabilities || typeof capabilities !== "object" || Array.isArray(capabilities)) return fallbackValue;
+  const aiReady = (capabilities as Record<string, unknown>).aiReady;
+  return typeof aiReady === "boolean" ? aiReady : fallbackValue;
+}
+
 export type CavAiCenterWorkspaceProps = {
   surface: AiCenterSurface;
   contextLabel?: string;
@@ -3711,6 +3719,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const agentModeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const headerModelMenuRef = useRef<HTMLDivElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const mobileDrawerRef = useRef<HTMLElement | null>(null);
+  const mobileDrawerReturnFocusRef = useRef<HTMLElement | null>(null);
   const activeSessionIdRef = useRef(explicitInitialSessionId);
   const sessionMessageCacheRef = useRef<Map<string, CavAiMessage[]>>(new Map());
   const sessionMessageRequestRef = useRef<Map<string, Promise<CavAiMessage[]>>>(new Map());
@@ -5598,6 +5608,21 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [isPhoneLayout, mobileDrawerOpen]);
 
   useEffect(() => {
+    if (!isPhoneLayout) return;
+    if (mobileDrawerOpen || accountMenuOpen) return;
+    if (typeof document === "undefined") return;
+    const drawer = mobileDrawerRef.current;
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || !drawer?.contains(active)) return;
+    const returnTarget = mobileDrawerReturnFocusRef.current;
+    if (returnTarget?.isConnected) {
+      returnTarget.focus();
+      return;
+    }
+    active.blur();
+  }, [accountMenuOpen, isPhoneLayout, mobileDrawerOpen]);
+
+  useEffect(() => {
     if (!shouldWarm) return;
     const syncIdentity = () => setProfileIdentity(readCavAiIdentityFromStorage());
     syncIdentity();
@@ -5622,6 +5647,9 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         session?: {
           systemRole?: unknown;
         } | null;
+        capabilities?: {
+          aiReady?: unknown;
+        } | null;
         user?: {
           displayName?: unknown;
           username?: unknown;
@@ -5640,9 +5668,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       if (isCancelled?.()) return false;
       const systemRole = s(body.session?.systemRole).toLowerCase();
       const hasUserPayload = Boolean(body.user && typeof body.user === "object");
+      const aiReady = readAuthMeAiReady(body, systemRole !== "system" && hasUserPayload);
       const shouldApplyGuestFallback = isAuthRequiredLikeResponse(res.status, body)
         || (res.ok && body.ok === true && body.authenticated === false)
-        || (res.ok && body.ok === true && body.authenticated === true && (systemRole === "system" || !hasUserPayload));
+        || (res.ok && body.ok === true && body.authenticated === true && (systemRole === "system" || !hasUserPayload || !aiReady));
+      // Keep account history visible until the backend explicitly proves the viewer is signed out.
+      // A transient auth probe failure should not dump the user into guest preview and blank history.
       if (shouldApplyGuestFallback) {
         applyUnauthenticatedCenterState();
         return false;
@@ -6224,8 +6255,13 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     setComposerQuickMode((prev) => (prev === "agent_mode" ? null : prev));
   }, [installedCenterAgents, manualAgentRef]);
 
-  const openMobileDrawer = useCallback(() => {
+  const openMobileDrawer = useCallback((focusTarget?: HTMLElement | null) => {
     if (!isPhoneLayout) return;
+    mobileDrawerReturnFocusRef.current = focusTarget?.isConnected
+      ? focusTarget
+      : typeof document !== "undefined" && document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     setOpenHeaderModelMenu(false);
     setMobileDrawerOpen(true);
   }, [isPhoneLayout]);
@@ -6235,11 +6271,18 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     setAccountMenuOpen(false);
   }, []);
 
-  const toggleMobileDrawer = useCallback(() => {
+  const toggleMobileDrawer = useCallback((focusTarget?: HTMLElement | null) => {
     if (!isPhoneLayout) return;
+    if (!mobileDrawerOpen) {
+      mobileDrawerReturnFocusRef.current = focusTarget?.isConnected
+        ? focusTarget
+        : typeof document !== "undefined" && document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+    }
     setOpenHeaderModelMenu(false);
     setMobileDrawerOpen((prev) => !prev);
-  }, [isPhoneLayout]);
+  }, [isPhoneLayout, mobileDrawerOpen]);
 
   const openGuestAuthPanel = useCallback((opts?: { stage?: GuestAuthStage; closeDrawer?: boolean }) => {
     if (!isGuestPreviewMode) return;
@@ -11318,6 +11361,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
   const activeImageStudioGallery = imageStudioImportSource === "cavsafe" ? imageStudioGallerySafe : imageStudioGalleryCloud;
   const showInlineError = Boolean(error);
+  const mobileDrawerHidden = !overlay && isPhoneLayout && !mobileDrawerOpen && !accountMenuOpen;
   const renderGuestAuthPanel = (opts?: { docked?: boolean }) => (
     <div
       className={[
@@ -11578,6 +11622,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
         {!overlay ? (
           <aside
+            ref={mobileDrawerRef}
             className={[
               styles.centerSidebar,
               sidebarCollapsedActive ? styles.centerSidebarCollapsed : "",
@@ -11586,6 +11631,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
             id="cavai-mobile-drawer"
             aria-label="CavAi conversation history"
             aria-hidden={isPhoneLayout ? !mobileDrawerOpen && !accountMenuOpen : undefined}
+            {...(mobileDrawerHidden ? ({ inert: "" } as Record<string, unknown>) : {})}
           >
             <div className={styles.centerSidebarHead}>
               {sidebarCollapsedActive ? (
@@ -11834,7 +11880,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
               <button
                 type="button"
                 className={[styles.centerIconBtn, styles.centerMobileMenuBtn].join(" ")}
-                onClick={toggleMobileDrawer}
+                onClick={(event) => toggleMobileDrawer(event.currentTarget)}
                 aria-label="Open navigation drawer"
                 title="Menu"
                 aria-expanded={mobileDrawerOpen}
@@ -11998,7 +12044,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                         <button
                           type="button"
                           className={styles.centerHeaderAccountBtn}
-                          onClick={openMobileDrawer}
+                          onClick={(event) => openMobileDrawer(event.currentTarget)}
                           aria-label={`Account: ${accountNameLabel}`}
                           title="Account"
                         >

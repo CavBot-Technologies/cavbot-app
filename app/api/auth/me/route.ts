@@ -218,20 +218,20 @@ export async function GET(req: Request) {
       sess = await requireSession(req);
     } catch (error) {
       if (isApiAuthError(error) && (error.status === 401 || error.status === 403)) {
-        return json({ ok: true, authenticated: false, error: error.code }, 200);
+        return json({ ok: true, authenticated: false, error: error.code, capabilities: { aiReady: false } }, 200);
       }
       throw error;
     }
 
     // System sessions (internal tooling)
     if (sess.systemRole === "system") {
-      return json({ ok: true, authenticated: true, degraded, session: sess }, 200);
+      return json({ ok: true, authenticated: true, degraded, session: sess, capabilities: { aiReady: false } }, 200);
     }
 
     const userId = String(sess?.sub || "").trim();
     const accountId = sess?.accountId ? String(sess.accountId).trim() : null;
 
-    if (!userId) return json({ ok: true, authenticated: false }, 200);
+    if (!userId) return json({ ok: true, authenticated: false, capabilities: { aiReady: false } }, 200);
 
     let user: AuthUser | null = null;
     let userLookupFailed = false;
@@ -243,7 +243,7 @@ export async function GET(req: Request) {
     }
 
     if (!user) {
-      if (!userLookupFailed) return json({ ok: true, authenticated: false }, 200);
+      if (!userLookupFailed) return json({ ok: true, authenticated: false, capabilities: { aiReady: false } }, 200);
       user = buildFallbackUser(userId, sess);
     }
 
@@ -310,7 +310,7 @@ export async function GET(req: Request) {
     const effectiveMembershipRecord = promotedMembershipRecord ?? currentMembershipRecord ?? fallbackMembership;
 
     if (!effectiveMembershipRecord) {
-      return json({ ok: true, authenticated: false }, 200);
+      return json({ ok: true, authenticated: false, capabilities: { aiReady: false } }, 200);
     }
 
     membership = {
@@ -342,7 +342,7 @@ export async function GET(req: Request) {
     ]);
 
     if (!accountRecord) {
-      if (!accountLookupFailed) return json({ ok: true, authenticated: false }, 200);
+      if (!accountLookupFailed) return json({ ok: true, authenticated: false, capabilities: { aiReady: false } }, 200);
       accountWithComputed = buildFallbackAccountFromMembership({
         sess,
         membership,
@@ -366,6 +366,7 @@ export async function GET(req: Request) {
     }
 
     collabPolicy = { ...DEFAULT_CAVCLOUD_COLLAB_POLICY };
+    const aiReady = Boolean(accountRecord && effectiveAccountId);
 
     const responseUser = {
       ...normalizedUser,
@@ -389,6 +390,10 @@ export async function GET(req: Request) {
         profile: responseUser,
         account: accountWithComputed ?? account,
         membership,
+        capabilities: {
+          // AI routes require a real account context; fallback account payloads are UI-safe but not AI-safe.
+          aiReady,
+        },
         policy: {
           ...collabPolicy,
           allowArcadeCollaboratorAccess: Boolean(collabPolicy.enableContributorLinks),
@@ -408,6 +413,6 @@ export async function GET(req: Request) {
     return response;
   } catch (error) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
-    return json({ ok: true, authenticated: false }, 200);
+    return json({ ok: true, authenticated: false, capabilities: { aiReady: false } }, 200);
   }
 }
