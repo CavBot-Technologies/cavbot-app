@@ -10160,13 +10160,13 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
           styles.centerAgentModeMenuItem,
           isOn ? styles.centerAgentModeMenuItemOn : "",
         ].filter(Boolean).join(" ")}
+        aria-label={metaLabel ? `${agent.name}. ${metaLabel}` : agent.name}
         onClick={() => selectAgentModeOption(agent)}
         onKeyDown={(event) => {
           if (event.key !== "Enter" && event.key !== " ") return;
           event.preventDefault();
           selectAgentModeOption(agent);
         }}
-        title={agent.summary || agent.name}
       >
         <span className={styles.centerAgentModeMenuLead}>
           <Image
@@ -10189,7 +10189,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
             type="button"
             className={styles.centerAgentModeManageBtn}
             aria-label={`Manage ${agent.name}`}
-            title={`Manage ${agent.name}`}
             onClick={(event) => {
               event.stopPropagation();
               setAgentModeManageAgentId((prev) => (prev === agent.id ? "" : agent.id));
@@ -10299,6 +10298,39 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     uninstallAgentFromMenu,
   ]);
 
+  const renderLockedCenterAgentRow = useCallback((agent: CenterRuntimeAgentOption, keyPrefix: string) => {
+    const metaLabel = describeCenterAgentMeta(agent);
+    return (
+      <div
+        key={`${keyPrefix}-${agent.id}`}
+        aria-disabled="true"
+        className={[styles.centerAgentModeMenuItem, styles.centerAgentModeLockedRow].join(" ")}
+      >
+        <span className={styles.centerAgentModeMenuLead}>
+          <Image
+            src={agent.iconSrc}
+            alt=""
+            width={18}
+            height={18}
+            unoptimized
+            loading="eager"
+            data-agent-id={agent.id}
+            className={styles.centerAgentModeMenuIcon}
+          />
+          <span className={styles.centerAgentModeMenuLabelWrap}>
+            <span className={styles.centerAgentModeMenuLabel}>{agent.name}</span>
+            {metaLabel ? <span className={styles.centerAgentModeMenuMeta}>{metaLabel}</span> : null}
+          </span>
+        </span>
+        <span className={styles.centerAgentModeLockedMeta} aria-hidden="true">
+          <span className={styles.centerAgentModeLockedBadge}>
+            <LockIcon width={14} height={14} aria-hidden="true" />
+          </span>
+        </span>
+      </div>
+    );
+  }, [describeCenterAgentMeta]);
+
   const renderAvailableCenterAgentRow = useCallback((agent: CenterRuntimeAgentOption, keyPrefix: string) => {
     const busy = savingAgentId === agent.id;
     const metaLabel = describeCenterAgentMeta(agent);
@@ -10316,7 +10348,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         }}
         disabled={busy}
         aria-label={busy ? `Installing ${agent.name}` : `Install ${agent.name}`}
-        title={agent.summary || agent.name}
       >
         <span className={styles.centerAgentModeMenuLead}>
           <Image
@@ -11148,100 +11179,19 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                             aria-label={`Locked ${centerPrimarySectionLabel} (${centerPrimaryFamilyLabel})`}
                           >
                             <summary className={styles.centerAgentModeFamilyTitle}>{centerPrimarySectionLabel}</summary>
-                            {lockedCavAiAgents.map((agent) => (
-                              <div
-                                key={`agent-locked-${agent.id}`}
-                                className={styles.centerAgentModeLockedRow}
-                                title={agent.summary || agent.name}
-                              >
-                                <span className={styles.centerAgentModeMenuLead}>
-                                  <Image
-                                    src={agent.iconSrc}
-                                    alt=""
-                                    width={18}
-                                    height={18}
-                                    unoptimized
-                                    loading="eager"
-                                    data-agent-id={agent.id}
-                                    className={styles.centerAgentModeMenuIcon}
-                                  />
-                                  <span className={styles.centerAgentModeMenuLabelWrap}>
-                                    <span className={styles.centerAgentModeMenuLabel}>{agent.name}</span>
-                                  </span>
-                                </span>
-                                <span className={styles.centerAgentModeLockedMeta}>
-                                  <Link href="/plan" className={styles.centerAgentModeUpgradeCta}>
-                                    <LockIcon width={14} height={14} aria-hidden="true" />
-                                  </Link>
-                                </span>
-                              </div>
-                            ))}
+                            {lockedCavAiAgents.map((agent) => renderLockedCenterAgentRow(agent, "locked-primary"))}
                           </details>
                         ) : null}
                         {lockedCavenAgents.length ? (
                           <details className={styles.centerAgentModeFamilyGroup} open aria-label="Locked Caven agents">
                             <summary className={styles.centerAgentModeFamilyTitle}>Caven</summary>
-                            {lockedCavenAgents.map((agent) => (
-                              <div
-                                key={`agent-locked-${agent.id}`}
-                                className={styles.centerAgentModeLockedRow}
-                                title={agent.summary || agent.name}
-                              >
-                                <span className={styles.centerAgentModeMenuLead}>
-                                  <Image
-                                    src={agent.iconSrc}
-                                    alt=""
-                                    width={18}
-                                    height={18}
-                                    unoptimized
-                                    loading="eager"
-                                    data-agent-id={agent.id}
-                                    className={styles.centerAgentModeMenuIcon}
-                                  />
-                                  <span className={styles.centerAgentModeMenuLabelWrap}>
-                                    <span className={styles.centerAgentModeMenuLabel}>{agent.name}</span>
-                                  </span>
-                                </span>
-                                <span className={styles.centerAgentModeLockedMeta}>
-                                  <Link href="/plan" className={styles.centerAgentModeUpgradeCta}>
-                                    <LockIcon width={14} height={14} aria-hidden="true" />
-                                  </Link>
-                                </span>
-                              </div>
-                            ))}
+                            {lockedCavenAgents.map((agent) => renderLockedCenterAgentRow(agent, "locked-caven"))}
                           </details>
                         ) : null}
                         {isGuestPreviewMode && lockedCompanionAgents.length ? (
                           <details className={styles.centerAgentModeFamilyGroup} open aria-label="Locked CavBot Companion agents">
                             <summary className={styles.centerAgentModeFamilyTitle}>CavBot Companion</summary>
-                            {lockedCompanionAgents.map((agent) => (
-                              <div
-                                key={`agent-locked-${agent.id}`}
-                                className={styles.centerAgentModeLockedRow}
-                                title={agent.summary || agent.name}
-                              >
-                                <span className={styles.centerAgentModeMenuLead}>
-                                  <Image
-                                    src={agent.iconSrc}
-                                    alt=""
-                                    width={18}
-                                    height={18}
-                                    unoptimized
-                                    loading="eager"
-                                    data-agent-id={agent.id}
-                                    className={styles.centerAgentModeMenuIcon}
-                                  />
-                                  <span className={styles.centerAgentModeMenuLabelWrap}>
-                                    <span className={styles.centerAgentModeMenuLabel}>{agent.name}</span>
-                                  </span>
-                                </span>
-                                <span className={styles.centerAgentModeLockedMeta}>
-                                  <Link href="/plan" className={styles.centerAgentModeUpgradeCta}>
-                                    <LockIcon width={14} height={14} aria-hidden="true" />
-                                  </Link>
-                                </span>
-                              </div>
-                            ))}
+                            {lockedCompanionAgents.map((agent) => renderLockedCenterAgentRow(agent, "locked-companion"))}
                           </details>
                         ) : null}
                       </>
