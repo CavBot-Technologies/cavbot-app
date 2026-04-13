@@ -324,12 +324,12 @@ export default function CavAiVoiceOrb({
     resizeObserver.observe(mountNode);
 
     let frameId = 0;
-    const clock = new THREE.Clock();
+    const startedAt = window.performance.now();
 
-    const renderFrame = () => {
+    const renderFrame = (frameNow: number) => {
       frameId = window.requestAnimationFrame(renderFrame);
 
-      const elapsed = clock.getElapsedTime();
+      const elapsed = Math.max(0, (frameNow - startedAt) / 1000);
       const analyser = analyserRef.current;
       const analyserData = analyserDataRef.current;
       const currentMode = modeRef.current;
@@ -366,7 +366,7 @@ export default function CavAiVoiceOrb({
       renderer.render(scene, camera);
     };
 
-    renderFrame();
+    frameId = window.requestAnimationFrame(renderFrame);
 
     return () => {
       window.cancelAnimationFrame(frameId);

@@ -283,6 +283,7 @@ type ApiEnvelope<T> =
     };
 
 type ReasoningLevel = "low" | "medium" | "high" | "extra_high";
+type VoiceCaptureIntent = "dictate" | "speak";
 type CavenInferenceSpeed = "standard" | "fast";
 type ViewMode = "chat" | "history";
 type BadgeTone = "default" | "lime" | "red";
@@ -477,6 +478,37 @@ function cavenSkillHelpBullets(skillId: CavenSkillId): string[] {
 
 function s(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function toVoiceCaptureErrorMessage(error: unknown): string {
+  if (error instanceof DOMException) {
+    if (error.name === "NotAllowedError" || error.name === "SecurityError") {
+      return "Microphone access was denied. Allow microphone access and try again.";
+    }
+    if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
+      return "No microphone was detected on this device.";
+    }
+    if (error.name === "NotReadableError" || error.name === "TrackStartError") {
+      return "Microphone access is busy in another app. Close the other app and try again.";
+    }
+  }
+  const message = error instanceof Error ? s(error.message) : typeof error === "string" ? s(error) : "";
+  if (!message) return "Voice capture failed.";
+  const lowered = message.toLowerCase();
+  if (
+    lowered.includes("permission denied")
+    || lowered.includes("notallowederror")
+    || lowered.includes("user denied")
+  ) {
+    return "Microphone access was denied. Allow microphone access and try again.";
+  }
+  if (
+    lowered.includes("microphone is not allowed in this document")
+    || lowered.includes("permissions policy violation")
+  ) {
+    return "Microphone access is blocked by the app security policy.";
+  }
+  return message;
 }
 
 function toComposerEnterBehavior(value: unknown): CavenComposerEnterBehavior {
@@ -1622,6 +1654,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   const [transcribingAudio, setTranscribingAudio] = useState(false);
   const [recordingVoice, setRecordingVoice] = useState(false);
   const [processingVoice, setProcessingVoice] = useState(false);
+  const [activeVoiceCaptureIntent, setActiveVoiceCaptureIntent] = useState<VoiceCaptureIntent | null>(null);
   const [voiceOrbState, setVoiceOrbState] = useState<CavAiVoiceOrbMode>("idle");
   const [voiceOrbStream, setVoiceOrbStream] = useState<MediaStream | null>(null);
   const [profileIdentity, setProfileIdentity] = useState<CavAiIdentityInput>({ fullName: "", username: "" });
@@ -1655,6 +1688,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   const voiceChunksRef = useRef<Blob[]>([]);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const historySearchInputRef = useRef<HTMLInputElement | null>(null);
+  const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const composerControlsRef = useRef<HTMLDivElement | null>(null);
   const inlineEditInputRef = useRef<HTMLTextAreaElement | null>(null);
   const viewerImageWrapRef = useRef<HTMLDivElement | null>(null);
@@ -1841,25 +1875,11 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     }
     return ordered;
   }, [modelOptions]);
-  const audioModelMenuOptions = useMemo(() => {
-    const options: CavAiModelOption[] = [{ id: "auto", label: "Auto transcription model" }];
-    for (const option of audioModelOptions) {
-      if (options.some((row) => row.id === option.id)) continue;
-      options.push({
-        id: option.id,
-        label: option.label || resolveAiModelLabel(option.id),
-      });
-    }
-    return options;
-  }, [audioModelOptions]);
   const selectedModelLabel = useMemo(() => {
     const match = modelMenuOptions.find((option) => option.id === selectedModel);
     if (match) return match.label;
     return resolveAiModelLabel(selectedModel);
   }, [modelMenuOptions, selectedModel]);
-  const selectedAudioModelLabel = useMemo(() => {
-    return "Voice";
-  }, []);
   const qwenAvailability = useMemo(
     () => qwenPopoverState?.modelAvailability?.[ALIBABA_QWEN_CODER_MODEL_ID] || null,
     [qwenPopoverState]
@@ -1937,7 +1957,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     return match?.label || toReasoningDisplayLabel(reasoningLevel);
   }, [reasoningLevel]);
   const asrAudioSkillEnabled = cavenSettings.asrAudioSkillEnabled;
-  const showAudioModelSelector = asrAudioSkillEnabled && audioModelMenuOptions.length > 1;
   const activeSkillInfo = useMemo(
     () => CAVEN_SKILLS.find((row) => row.id === activeSkillInfoId) || null,
     [activeSkillInfoId]
@@ -3844,6 +3863,24 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     void processQueuedPrompts();
   }, [hasQueuedPrompts, processQueuedPrompts, sessionId, submitting]);
 
+  const appendTranscriptToComposer = useCallback((transcriptRaw: string) => {
+    const transcript = s(transcriptRaw);
+    if (!transcript) {
+      setError("Voice input did not produce a transcript.");
+      return false;
+    }
+    setPrompt((prev) => {
+      const existing = s(prev);
+      return existing ? `${existing}\n\n${transcript}` : transcript;
+    });
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        composerInputRef.current?.focus();
+      });
+    }
+    return true;
+  }, []);
+
   const transcribeAudioFile = useCallback(async (file: File, forcedModelId?: string): Promise<string | null> => {
     if (!asrAudioSkillEnabled) {
       throw new Error("Voice transcription is disabled in Caven settings.");
@@ -3908,10 +3945,43 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     voiceChunksRef.current = [];
   }, []);
 
-  const processCapturedVoice = useCallback(async (blob: Blob) => {
+  const processDictatedVoice = useCallback(async (blob: Blob) => {
     if (!blob.size) {
       setError("No audio was captured.");
       setVoiceOrbState("idle");
+      setActiveVoiceCaptureIntent(null);
+      return;
+    }
+    setProcessingVoice(true);
+    setVoiceOrbState("processing");
+    try {
+      const extension = inferAudioFileExtension(blob.type);
+      const file = new File(
+        [blob],
+        `dictate-${Date.now().toString(36)}.${extension}`,
+        { type: blob.type || "audio/webm" }
+      );
+      const transcript = await transcribeAudioFile(file);
+      if (!appendTranscriptToComposer(transcript || "")) {
+        setVoiceOrbState("idle");
+        return;
+      }
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Dictation failed.");
+      setVoiceOrbState("idle");
+    } finally {
+      setProcessingVoice(false);
+      setVoiceOrbState("idle");
+      setActiveVoiceCaptureIntent(null);
+    }
+  }, [appendTranscriptToComposer, transcribeAudioFile]);
+
+  const processSpokenVoice = useCallback(async (blob: Blob) => {
+    if (!blob.size) {
+      setError("No audio was captured.");
+      setVoiceOrbState("idle");
+      setActiveVoiceCaptureIntent(null);
       return;
     }
     setProcessingVoice(true);
@@ -3952,6 +4022,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     } finally {
       setProcessingVoice(false);
       setVoiceOrbState("idle");
+      setActiveVoiceCaptureIntent(null);
     }
   }, [
     cavenInteractionLocked,
@@ -3972,7 +4043,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     recorder.stop();
   }, []);
 
-  const startVoiceCapture = useCallback(async () => {
+  const startVoiceCapture = useCallback(async (intent: VoiceCaptureIntent) => {
     if (recordingVoice || processingVoice || transcribingAudio || submitting) return;
     if (!asrAudioSkillEnabled) {
       setError("Voice transcription is disabled in Caven settings.");
@@ -3989,6 +4060,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     }
 
     setError("");
+    setActiveVoiceCaptureIntent(intent);
     setVoiceOrbState("listening");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -4012,6 +4084,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
         setRecordingVoice(false);
         setProcessingVoice(false);
         setVoiceOrbState("idle");
+        setActiveVoiceCaptureIntent(null);
         setError("Voice capture failed.");
       };
 
@@ -4023,10 +4096,15 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
         const blob = chunks.length ? new Blob(chunks, { type: fallbackType }) : null;
         if (!blob || !blob.size) {
           setVoiceOrbState("idle");
+          setActiveVoiceCaptureIntent(null);
           setError("No audio was captured.");
           return;
         }
-        void processCapturedVoice(blob);
+        if (intent === "dictate") {
+          void processDictatedVoice(blob);
+          return;
+        }
+        void processSpokenVoice(blob);
       };
 
       recorder.start(250);
@@ -4036,14 +4114,16 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       setRecordingVoice(false);
       setProcessingVoice(false);
       setVoiceOrbState("idle");
-      setError(err instanceof Error ? err.message : "Voice capture failed.");
+      setActiveVoiceCaptureIntent(null);
+      setError(toVoiceCaptureErrorMessage(err));
     }
   }, [
     asrAudioSkillEnabled,
     cavenInteractionLocked,
     clearVoiceCapture,
     emitQwenUpgradeDecision,
-    processCapturedVoice,
+    processDictatedVoice,
+    processSpokenVoice,
     processingVoice,
     recordingVoice,
     submitting,
@@ -4051,22 +4131,79 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   ]);
 
   const promptHasTypedInput = prompt.length > 0;
+  const dictateCaptureActive = recordingVoice && activeVoiceCaptureIntent === "dictate";
+  const speakCaptureActive = recordingVoice && activeVoiceCaptureIntent === "speak";
+  const voiceStatus = useMemo(() => {
+    if (dictateCaptureActive) {
+      return {
+        label: "Dictating",
+        detail: "Listening now. Tap Dictate again to turn this audio into text.",
+      };
+    }
+    if (speakCaptureActive) {
+      return {
+        label: "Speak",
+        detail: "Listening now. Tap Speak again to send this request.",
+      };
+    }
+    if (transcribingAudio && activeVoiceCaptureIntent === "dictate") {
+      return {
+        label: "Transcribing",
+        detail: "Turning your audio into text for the composer.",
+      };
+    }
+    if (transcribingAudio || processingVoice) {
+      return {
+        label: "Thinking",
+        detail: "Transcribing your audio and running the request.",
+      };
+    }
+    return null;
+  }, [activeVoiceCaptureIntent, dictateCaptureActive, processingVoice, speakCaptureActive, transcribingAudio]);
+  const onComposerDictateAction = useCallback(() => {
+    if (!asrAudioSkillEnabled) {
+      setError("Voice transcription is disabled in Caven settings.");
+      return;
+    }
+    if (cavenInteractionLocked) {
+      emitQwenUpgradeDecision();
+      return;
+    }
+    if (dictateCaptureActive) {
+      stopVoiceCapture();
+      return;
+    }
+    if (recordingVoice || processingVoice || transcribingAudio || submitting) return;
+    void startVoiceCapture("dictate");
+  }, [
+    asrAudioSkillEnabled,
+    cavenInteractionLocked,
+    dictateCaptureActive,
+    emitQwenUpgradeDecision,
+    processingVoice,
+    recordingVoice,
+    startVoiceCapture,
+    stopVoiceCapture,
+    submitting,
+    transcribingAudio,
+  ]);
   const onComposerPrimaryAction = useCallback(() => {
     if (submitting || promptHasTypedInput) {
       onPrimaryAction();
       return;
     }
-    if (recordingVoice) {
+    if (speakCaptureActive) {
       stopVoiceCapture();
       return;
     }
-    if (processingVoice || transcribingAudio) return;
-    void startVoiceCapture();
+    if (recordingVoice || processingVoice || transcribingAudio) return;
+    void startVoiceCapture("speak");
   }, [
     onPrimaryAction,
     processingVoice,
     promptHasTypedInput,
     recordingVoice,
+    speakCaptureActive,
     startVoiceCapture,
     stopVoiceCapture,
     submitting,
@@ -6149,6 +6286,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
 
           <div className={styles.composerInputWrap}>
             <textarea
+              ref={composerInputRef}
               className={styles.input}
               value={prompt}
               onChange={(event) => setPrompt(event.currentTarget.value)}
@@ -6481,54 +6619,23 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
               <span className={styles.queueGlyph} aria-hidden="true" />
             </button>
 
-            {showAudioModelSelector ? (
-              <div className={[styles.iconMenuWrap, styles.composerRightStart].join(" ")}>
-                <button
-                  type="button"
-                  className={[styles.actionBtn, styles.iconActionBtn, styles.composerAudioBtn, styles.menuTriggerBtn].join(" ")}
-                  onClick={() => {
-                    if (cavenInteractionLocked) return;
-                    setOpenComposerMenu((prev) => (prev === "audio_model" ? null : "audio_model"));
-                  }}
-                  aria-label={selectedAudioModelLabel}
-                  aria-haspopup="menu"
-                  aria-expanded={openComposerMenu === "audio_model"}
-                  title={selectedAudioModelLabel}
-                  disabled={cavenInteractionLocked}
-                >
-                  <span className={[styles.selectGlyph, styles.audioGlyph].join(" ")} aria-hidden="true" />
-                </button>
-                {openComposerMenu === "audio_model" ? (
-                  <div className={styles.iconMenu} role="menu" aria-label="Transcription model options">
-                    {audioModelMenuOptions.map((option) => {
-                      const isOn = selectedAudioModel === option.id;
-                      return (
-                        <button
-                          key={option.id}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={isOn}
-                          className={[styles.iconMenuItem, isOn ? styles.iconMenuItemOn : ""].filter(Boolean).join(" ")}
-                          onClick={() => {
-                            setSelectedAudioModel(option.id);
-                            setOpenComposerMenu(null);
-                          }}
-                        >
-                          <span className={styles.iconMenuItemLabel}>{option.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
+            <button
+              type="button"
+              className={[styles.actionBtn, styles.iconActionBtn, styles.composerAudioBtn, styles.composerRightStart].join(" ")}
+              onClick={onComposerDictateAction}
+              aria-label={dictateCaptureActive ? "Stop dictate" : "Dictate"}
+              title={dictateCaptureActive ? "Stop Dictate" : "Dictate"}
+              disabled={speakCaptureActive || (!dictateCaptureActive && (processingVoice || transcribingAudio || submitting))}
+            >
+              <span className={[styles.selectGlyph, styles.audioGlyph].join(" ")} aria-hidden="true" />
+            </button>
 
             <button
               type="button"
               className={[
                 styles.primaryBtn,
                 styles.composerSendBtn,
-                showAudioModelSelector ? styles.composerSendBtnPaired : "",
+                styles.composerSendBtnPaired,
                 submitting ? styles.primaryBtnStop : "",
               ]
                 .filter(Boolean)
@@ -6537,27 +6644,27 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
               aria-label={
                 submitting
                   ? "Stop Caven prompt"
-                  : recordingVoice
-                    ? "Stop voice input"
+                  : speakCaptureActive
+                    ? "Stop speak"
                     : promptHasTypedInput
                       ? "Send Caven prompt"
-                      : "Start voice input"
+                      : "Speak"
               }
               title={
                 submitting
                   ? "Stop"
-                  : recordingVoice
-                    ? "Stop voice"
+                  : speakCaptureActive
+                    ? "Stop Speak"
                     : promptHasTypedInput
                       ? "Send"
-                      : "Start voice"
+                      : "Speak"
               }
-              disabled={cavenInteractionLocked || processingVoice}
+              disabled={cavenInteractionLocked || dictateCaptureActive || processingVoice}
             >
               <span
                 className={[
                   styles.primaryBtnGlyph,
-                  submitting || recordingVoice
+                  submitting || speakCaptureActive
                     ? styles.primaryBtnGlyphStop
                     : promptHasTypedInput
                       ? styles.primaryBtnGlyphRun
@@ -6570,7 +6677,13 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
             </button>
           </div>
 
-          {transcribingAudio ? <div className={styles.metaText}>Transcribing audio...</div> : null}
+          {voiceStatus ? (
+            <div className={styles.voiceStatusBar} role="status" aria-live="polite">
+              <span className={styles.voiceStatusDot} aria-hidden="true" />
+              <span className={styles.voiceStatusLabel}>{voiceStatus.label}</span>
+              <span className={styles.voiceStatusDetail}>{voiceStatus.detail}</span>
+            </div>
+          ) : null}
           {error ? <div className={styles.error}>{error}</div> : null}
 
           <input
