@@ -3536,6 +3536,14 @@ function isAuthRequiredLikeResponse(status: number, payload: unknown) {
   return errorCode === "AUTH_REQUIRED" || errorCode === "UNAUTHORIZED" || errorCode === "SESSION_REVOKED" || errorCode === "EXPIRED";
 }
 
+function isSessionUnavailableLikeResponse(status: number, payload: unknown) {
+  if (isAuthRequiredLikeResponse(status, payload)) return false;
+  if (status === 404) return true;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const errorCode = String((payload as Record<string, unknown>).error || "").trim().toUpperCase();
+  return errorCode === "SESSION_NOT_FOUND";
+}
+
 export type CavAiCenterWorkspaceProps = {
   surface: AiCenterSurface;
   contextLabel?: string;
@@ -3557,6 +3565,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const isOpen = overlay ? Boolean(props.open) : true;
   const shouldWarm = isOpen || (overlay ? props.preload !== false : Boolean(props.preload));
   const config = CENTER_CONFIG[props.surface] || CENTER_CONFIG.workspace;
+  const explicitInitialSessionId = s(props.initialSessionId);
   const initialSessionScopeKey = useMemo(
     () =>
       buildCenterSessionScopeKey({
@@ -3566,26 +3575,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       }),
     [props.projectId, props.surface, props.workspaceId]
   );
-  const initialSessionCacheSnapshot = useMemo(
-    () => readCenterSessionCacheSnapshot(initialSessionScopeKey),
-    [initialSessionScopeKey]
-  );
-  const initialSessionCacheMessageMap = useMemo(() => {
-    const rows = initialSessionCacheSnapshot?.messageEntries || [];
-    return new Map(rows.map((entry) => [entry.sessionId, entry.messages] as const));
-  }, [initialSessionCacheSnapshot]);
-  const initialSessionId = s(props.initialSessionId) || s(initialSessionCacheSnapshot?.activeSessionId);
-  const initialSessionSummary = initialSessionCacheSnapshot?.sessions.find((item) => item.id === initialSessionId) || null;
-  const initialMessages = initialSessionCacheMessageMap.get(initialSessionId)
-    || buildSyntheticThreadFromSessionSummary(initialSessionSummary);
 
   const [prompt, setPrompt] = useState("");
-  const [sessions, setSessions] = useState<CavAiSessionSummary[]>(initialSessionCacheSnapshot?.sessions || []);
-  const [sessionId, setSessionId] = useState(initialSessionId);
-  const [messages, setMessages] = useState<CavAiMessage[]>(initialMessages);
-  const [loadingMessages, setLoadingMessages] = useState(
-    Boolean(initialSessionId && !initialSessionCacheMessageMap.has(initialSessionId))
-  );
+  const [sessions, setSessions] = useState<CavAiSessionSummary[]>([]);
+  const [sessionId, setSessionId] = useState(explicitInitialSessionId);
+  const [messages, setMessages] = useState<CavAiMessage[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(Boolean(explicitInitialSessionId));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [sessionQuery, setSessionQuery] = useState("");
@@ -3599,19 +3594,13 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [guestAuthBusy, setGuestAuthBusy] = useState(false);
   const [guestAuthError, setGuestAuthError] = useState("");
   const [guestAuthDismissed, setGuestAuthDismissed] = useState(false);
-  const [planBoot] = useState(() => readBootClientPlanBootstrap());
-  const [bootProfile] = useState(() => readBootClientProfileState());
-  const bootAuthenticatedHint = planBoot.authenticatedHint || hasBootProfileSignal(bootProfile);
-  const bootProfileUsername = s(bootProfile?.username).toLowerCase();
-  const [accountInitialFallback, setAccountInitialFallback] = useState(() => s(bootProfile?.initials));
-  const [accountProfileUsername, setAccountProfileUsername] = useState(() => bootProfileUsername);
-  const [accountProfileAvatar, setAccountProfileAvatar] = useState(() => s(bootProfile?.avatarImage));
-  const [accountProfileTone, setAccountProfileTone] = useState(() => s(bootProfile?.avatarTone).toLowerCase() || "lime");
-  const [accountProfilePublicEnabled, setAccountProfilePublicEnabled] = useState<boolean | null>(
-    () => (typeof bootProfile?.publicProfileEnabled === "boolean" ? bootProfile.publicProfileEnabled : null)
-  );
-  const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">(() => planBoot.planId);
-  const [isAuthenticated, setIsAuthenticated] = useState(() => bootAuthenticatedHint);
+  const [accountInitialFallback, setAccountInitialFallback] = useState("");
+  const [accountProfileUsername, setAccountProfileUsername] = useState("");
+  const [accountProfileAvatar, setAccountProfileAvatar] = useState("");
+  const [accountProfileTone, setAccountProfileTone] = useState("lime");
+  const [accountProfilePublicEnabled, setAccountProfilePublicEnabled] = useState<boolean | null>(null);
+  const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">("free");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authProbeReady, setAuthProbeReady] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -3620,7 +3609,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [chatsExpanded, setChatsExpanded] = useState(true);
   const [images, setImages] = useState<CavAiImageAttachment[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<CavAiUploadedFileAttachment[]>([]);
-  const [modelOptions, setModelOptions] = useState<CavAiModelOption[]>(() => centerPlanModelOptions(planBoot.planId));
+  const [modelOptions, setModelOptions] = useState<CavAiModelOption[]>(() => centerPlanModelOptions("free"));
   const [audioModelOptions, setAudioModelOptions] = useState<CavAiModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState(CAVAI_AUTO_MODEL_ID);
   const [researchMode, setResearchMode] = useState(false);
@@ -3657,7 +3646,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [selectedAudioModel, setSelectedAudioModel] = useState("auto");
   const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>("medium");
   const [availableReasoningLevels, setAvailableReasoningLevels] = useState<ReasoningLevel[]>(
-    () => reasoningLevelsForPlan(planBoot.planId)
+    () => reasoningLevelsForPlan("free")
   );
   const [openHeaderModelMenu, setOpenHeaderModelMenu] = useState(false);
   const [openComposerMenu, setOpenComposerMenu] = useState<ComposerMenu>(null);
@@ -3695,8 +3684,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const inlineEditInputRef = useRef<HTMLTextAreaElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const [profileIdentity, setProfileIdentity] = useState<CavAiIdentityInput>(() => ({
-    fullName: s(bootProfile?.fullName),
-    username: bootProfileUsername,
+    fullName: "",
+    username: "",
   }));
   const [heroLine, setHeroLine] = useState(CAVAI_SAFE_FALLBACK_LINE);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -3728,8 +3717,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const agentModeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const headerModelMenuRef = useRef<HTMLDivElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
-  const activeSessionIdRef = useRef(initialSessionId);
-  const sessionMessageCacheRef = useRef<Map<string, CavAiMessage[]>>(new Map(initialSessionCacheMessageMap));
+  const activeSessionIdRef = useRef(explicitInitialSessionId);
+  const sessionMessageCacheRef = useRef<Map<string, CavAiMessage[]>>(new Map());
   const sessionMessageRequestRef = useRef<Map<string, Promise<CavAiMessage[]>>>(new Map());
   const preloadedIconSrcRef = useRef<Set<string>>(new Set());
   const warmSessionsKeyRef = useRef("");
@@ -3792,8 +3781,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     setAudioModelOptions([]);
     setAvailableReasoningLevels(guestPreviewReasoningLevels);
     setSessions([]);
+    sessionMessageCacheRef.current = new Map();
+    sessionMessageRequestRef.current.clear();
     activeSessionIdRef.current = "";
     setSessionId("");
+    setLoadingMessages(false);
     setMessages([]);
     setError("");
     setCavCloudAttachItems([]);
@@ -3855,7 +3847,19 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   useLayoutEffect(() => {
     const boot = readBootClientPlanBootstrap();
     const bootProfileState = readBootClientProfileState();
+    const bootProfileUsername = s(bootProfileState?.username).toLowerCase();
     const nextAuthenticatedHint = boot.authenticatedHint || hasBootProfileSignal(bootProfileState);
+    setAccountInitialFallback(s(bootProfileState?.initials));
+    setAccountProfileUsername(bootProfileUsername);
+    setAccountProfileAvatar(s(bootProfileState?.avatarImage));
+    setAccountProfileTone(s(bootProfileState?.avatarTone).toLowerCase() || "lime");
+    setAccountProfilePublicEnabled(
+      typeof bootProfileState?.publicProfileEnabled === "boolean" ? bootProfileState.publicProfileEnabled : null
+    );
+    setProfileIdentity({
+      fullName: s(bootProfileState?.fullName),
+      username: bootProfileUsername,
+    });
     setAccountPlanId(boot.planId);
     setModelOptions(centerPlanModelOptions(boot.planId));
     setAvailableReasoningLevels(reasoningLevelsForPlan(boot.planId));
@@ -4124,6 +4128,47 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       // Best effort only.
     }
   }, [isGuestPreviewMode, sessionId, sessionScopeKey, sessions]);
+
+  const clearUnavailableSession = useCallback((staleSessionId: string) => {
+    const normalized = s(staleSessionId);
+    if (!normalized) return;
+
+    const nextSessions = sessions.filter((row) => row.id !== normalized);
+    sessionMessageRequestRef.current.delete(normalized);
+    sessionMessageCacheRef.current = new Map(
+      Array.from(sessionMessageCacheRef.current.entries()).filter(([id]) => id !== normalized)
+    );
+    setSessions(nextSessions);
+
+    const activeSessionId = s(activeSessionIdRef.current);
+    if (activeSessionId !== normalized) {
+      setError("");
+      scheduleSessionCachePersist({ sessions: nextSessions });
+      return;
+    }
+
+    const nextActiveSessionId = s(nextSessions[0]?.id);
+    const nextCachedMessages = nextActiveSessionId
+      ? sessionMessageCacheRef.current.get(nextActiveSessionId) || null
+      : null;
+    activeSessionIdRef.current = nextActiveSessionId;
+    setSessionId(nextActiveSessionId);
+    setLoadingMessages(Boolean(nextActiveSessionId && !nextCachedMessages));
+    if (!nextActiveSessionId) {
+      setMessages([]);
+    } else {
+      if (nextCachedMessages) setMessages(nextCachedMessages);
+      else {
+        const summary = nextSessions.find((row) => row.id === nextActiveSessionId) || null;
+        setMessages(buildSyntheticThreadFromSessionSummary(summary));
+      }
+    }
+    setError("");
+    scheduleSessionCachePersist({
+      sessions: nextSessions,
+      activeSessionId: nextActiveSessionId,
+    });
+  }, [scheduleSessionCachePersist, sessions]);
 
   const overlayEmptyHeadline = "Hi there";
   const overlayEmptySubline = "How can I assist you?";
@@ -4944,6 +4989,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
           applyUnauthenticatedCenterState();
           return [];
         }
+        if (isSessionUnavailableLikeResponse(res.status, body)) {
+          clearUnavailableSession(normalized);
+          return [];
+        }
         emitGuardDecisionFromPayload(body);
         throw new Error(s((body as { message?: unknown }).message) || CENTER_LOAD_MESSAGES_FAILED_MESSAGE);
       }
@@ -4969,7 +5018,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         sessionMessageRequestRef.current.delete(normalized);
       }
     }
-  }, [applyUnauthenticatedCenterState, authProbeReady, isGuestPreviewMode, scheduleSessionCachePersist, sessions]);
+  }, [applyUnauthenticatedCenterState, authProbeReady, clearUnavailableSession, isGuestPreviewMode, scheduleSessionCachePersist, sessions]);
 
   const loadMessages = useCallback(async (nextSessionId: string) => {
     const normalized = s(nextSessionId);
@@ -9537,6 +9586,16 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         message?: string;
       }>;
       if (!res.ok || !body.ok || !body.session) {
+        if (isAuthRequiredLikeResponse(res.status, body)) {
+          applyUnauthenticatedCenterState();
+          closeSessionActionModal();
+          return;
+        }
+        if (isSessionUnavailableLikeResponse(res.status, body)) {
+          clearUnavailableSession(sessionActionModal.session.id);
+          closeSessionActionModal();
+          return;
+        }
         emitGuardDecisionFromPayload(body);
         throw new Error(s((body as { message?: unknown }).message) || "Failed to rename chat.");
       }
@@ -9548,7 +9607,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       setError(err instanceof Error ? err.message : "Failed to rename chat.");
       setSessionActionBusy(false);
     }
-  }, [closeSessionActionModal, renameDraftTitle, sessionActionModal]);
+  }, [applyUnauthenticatedCenterState, clearUnavailableSession, closeSessionActionModal, renameDraftTitle, sessionActionModal]);
 
   const onDeleteSession = useCallback(async () => {
     if (!sessionActionModal || sessionActionModal.type !== "delete") return;
@@ -9568,6 +9627,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       }
       activeSessionIdRef.current = nextActiveSessionId;
       setSessionId(nextActiveSessionId);
+      setLoadingMessages(false);
       if (!nextActiveSessionId) {
         setMessages([]);
       } else {
@@ -9597,6 +9657,16 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       });
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ message?: string }>;
       if (!res.ok || !body.ok) {
+        if (isAuthRequiredLikeResponse(res.status, body)) {
+          applyUnauthenticatedCenterState();
+          closeSessionActionModal();
+          return;
+        }
+        if (isSessionUnavailableLikeResponse(res.status, body)) {
+          clearUnavailableSession(doomedSessionId);
+          closeSessionActionModal();
+          return;
+        }
         emitGuardDecisionFromPayload(body);
         throw new Error(s((body as { message?: unknown }).message) || "Failed to delete chat.");
       }
@@ -9604,6 +9674,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       if (s(sessionId) === doomedSessionId) {
         activeSessionIdRef.current = "";
         setSessionId("");
+        setLoadingMessages(false);
         setMessages([]);
       }
       closeSessionActionModal();
@@ -9612,7 +9683,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       setError(err instanceof Error ? err.message : "Failed to delete chat.");
       setSessionActionBusy(false);
     }
-  }, [closeSessionActionModal, isGuestPreviewMode, loadSessions, scheduleSessionCachePersist, sessionActionModal, sessionId, sessions]);
+  }, [applyUnauthenticatedCenterState, clearUnavailableSession, closeSessionActionModal, isGuestPreviewMode, loadSessions, scheduleSessionCachePersist, sessionActionModal, sessionId, sessions]);
 
   const onShareSession = useCallback(async () => {
     if (!sessionActionModal || sessionActionModal.type !== "share") return;
@@ -9640,6 +9711,16 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         message?: string;
       }>;
       if (!res.ok || !body.ok) {
+        if (isAuthRequiredLikeResponse(res.status, body)) {
+          applyUnauthenticatedCenterState();
+          closeSessionActionModal();
+          return;
+        }
+        if (isSessionUnavailableLikeResponse(res.status, body)) {
+          clearUnavailableSession(sessionActionModal.session.id);
+          closeSessionActionModal();
+          return;
+        }
         emitGuardDecisionFromPayload(body);
         throw new Error(s((body as { message?: unknown }).message) || "Failed to share chat.");
       }
@@ -9652,7 +9733,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       setError(err instanceof Error ? err.message : "Failed to share chat.");
       setSessionActionBusy(false);
     }
-  }, [sessionActionModal, shareMode, shareTargetIdentity]);
+  }, [applyUnauthenticatedCenterState, clearUnavailableSession, closeSessionActionModal, sessionActionModal, shareMode, shareTargetIdentity]);
 
   const onCopyShareUrl = useCallback(async () => {
     const url = s(shareResultUrl);

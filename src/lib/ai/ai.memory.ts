@@ -677,22 +677,21 @@ export async function renameAiSessionForAccount(args: {
   }
   await getAiSessionForAccount({ accountId, sessionId });
   const prisma = await getPrismaClient();
-  const updated = await prisma.cavAiSession.update({
+  const updatedAt = new Date();
+  const result = await prisma.cavAiSession.updateMany({
     where: { id: sessionId },
     data: {
       title,
-      updatedAt: new Date(),
-    },
-    select: {
-      id: true,
-      title: true,
-      updatedAt: true,
+      updatedAt,
     },
   });
+  if (result.count < 1) {
+    throw new AiServiceError("SESSION_NOT_FOUND", "AI session was not found for this account scope.", 404);
+  }
   return {
-    id: updated.id,
-    title: updated.title,
-    updatedAt: updated.updatedAt.toISOString(),
+    id: sessionId,
+    title,
+    updatedAt: updatedAt.toISOString(),
   };
 }
 
@@ -707,9 +706,12 @@ export async function deleteAiSessionForAccount(args: {
   }
   await getAiSessionForAccount({ accountId, sessionId });
   const prisma = await getPrismaClient();
-  await prisma.cavAiSession.delete({
+  const result = await prisma.cavAiSession.deleteMany({
     where: { id: sessionId },
   });
+  if (result.count < 1) {
+    throw new AiServiceError("SESSION_NOT_FOUND", "AI session was not found for this account scope.", 404);
+  }
 }
 
 export async function rewindAiSessionFromMessage(args: {
@@ -809,6 +811,7 @@ export async function listAiSessionMessages(args: {
     sessionId,
   });
 
+  // Query by sessionId so legacy rows with drifted message.accountId still hydrate history.
   const rows = (
     await getAuthPool().query<AiMessageDbRow>(
       `SELECT
