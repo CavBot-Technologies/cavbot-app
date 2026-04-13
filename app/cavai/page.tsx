@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { CAVAI_CANONICAL_ORIGIN } from "@/lib/cavai/url";
 import CavAiPageClient from "./CavAiPageClient";
 
 const CAVAI_MARKETING_TITLE = "CavAi • Smart, Structured AI for Operators";
@@ -11,9 +12,13 @@ export const metadata: Metadata = {
     absolute: CAVAI_MARKETING_TITLE,
   },
   description: CAVAI_MARKETING_DESCRIPTION,
+  alternates: {
+    canonical: CAVAI_CANONICAL_ORIGIN,
+  },
   openGraph: {
     title: CAVAI_MARKETING_TITLE,
     description: CAVAI_MARKETING_DESCRIPTION,
+    url: CAVAI_CANONICAL_ORIGIN,
   },
   twitter: {
     title: CAVAI_MARKETING_TITLE,

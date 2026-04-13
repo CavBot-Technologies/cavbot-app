@@ -41,6 +41,7 @@ import { resolveUploadFileIcon } from "@/lib/cavai/uploadFileIcons";
 import { readBootClientProfileState } from "@/lib/clientAuthBootstrap";
 import { publishClientPlan, readBootClientPlanBootstrap, subscribeClientPlan } from "@/lib/clientPlan";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
+import { buildCanonicalCavAiUrl } from "@/lib/cavai/url";
 import styles from "./CavAiWorkspace.module.css";
 
 export type AiCenterSurface = "general" | "workspace" | "console" | "cavcloud" | "cavsafe" | "cavpad" | "cavcode";
@@ -3448,16 +3449,13 @@ function buildCavAiSurfaceUrl(args: {
     }
     return `/cavcode?${qp.toString()}`;
   }
-
-  const qp = new URLSearchParams();
-  qp.set("surface", args.surface);
-  if (s(args.contextLabel)) qp.set("context", s(args.contextLabel));
-  if (s(args.workspaceId)) qp.set("workspaceId", s(args.workspaceId));
-  if (Number.isFinite(Number(args.projectId)) && Number(args.projectId) > 0) {
-    qp.set("projectId", String(Math.trunc(Number(args.projectId))));
-  }
-  if (s(args.origin)) qp.set("origin", s(args.origin));
-  return `/cavai?${qp.toString()}`;
+  return buildCanonicalCavAiUrl({
+    surface: args.surface,
+    contextLabel: args.contextLabel,
+    workspaceId: args.workspaceId,
+    projectId: args.projectId,
+    origin: args.origin,
+  });
 }
 
 function withSessionInCavAiHref(href: string, nextSessionId?: string | null): string {

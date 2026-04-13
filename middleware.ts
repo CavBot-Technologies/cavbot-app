@@ -8,6 +8,11 @@ import {
   RESERVED_ROUTE_SLUGS,
 } from "@/lib/username";
 import { isUnsafePathname, sanitizeQueryParamValue } from "@/lib/security/userInput";
+import {
+  buildCanonicalCavAiUrlFromSearchParams,
+  buildCavAiPageSearchParamsFromRoot,
+  isCavAiCanonicalHost,
+} from "@/lib/cavai/url";
 
 /**
  * CavBot Launch Middleware (Next.js App Router)
@@ -233,6 +238,30 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(sanitizedUrl, 308);
     }
     return badRequestResponse();
+  }
+
+  const aiHostEnabled = process.env.NODE_ENV === "production";
+  const onCavAiCanonicalHost = aiHostEnabled && isCavAiCanonicalHost(req.nextUrl.hostname);
+
+  if (aiHostEnabled && (pathname === "/cavai" || pathname === "/cavai/")) {
+    const target = onCavAiCanonicalHost
+      ? req.nextUrl.clone()
+      : new URL(buildCanonicalCavAiUrlFromSearchParams(req.nextUrl.searchParams));
+    if (onCavAiCanonicalHost) {
+      target.pathname = "/";
+      const canonicalParams = new URL(buildCanonicalCavAiUrlFromSearchParams(req.nextUrl.searchParams)).search;
+      target.search = canonicalParams;
+    }
+    return NextResponse.redirect(target, 308);
+  }
+
+  if (onCavAiCanonicalHost && pathname === "/") {
+    const rewriteUrl = req.nextUrl.clone();
+    rewriteUrl.pathname = "/cavai";
+    const params = buildCavAiPageSearchParamsFromRoot(req.nextUrl.searchParams);
+    const query = params.toString();
+    rewriteUrl.search = query ? `?${query}` : "";
+    return NextResponse.rewrite(rewriteUrl);
   }
 
   // ------------------------------------------------------------
