@@ -11824,7 +11824,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         <section
           className={[
             styles.centerMain,
-            showDesktopGuestAuthPanel ? styles.centerMainWithGuestAuth : "",
             imageStudioMobileLayoutActive ? styles.centerMainImageStudioMobile : "",
           ].filter(Boolean).join(" ")}
           aria-label="CavAi chat workspace"
@@ -12064,7 +12063,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
             </section>
           ) : null}
 
-          {showDesktopGuestAuthPanel ? renderGuestAuthPanel({ docked: true }) : null}
+          {showDesktopGuestAuthPanel ? renderGuestAuthPanel() : null}
 
           <section
             ref={threadRef}
