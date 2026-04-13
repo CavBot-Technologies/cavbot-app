@@ -29,3 +29,27 @@ test("CavAi image studio uses a relaxed scrollable layout on small screens", () 
   assert.equal(css.includes(".centerMainImageStudioMobile .centerComposer {"), true);
   assert.equal(css.includes("border-top: 0;"), true);
 });
+
+test("CavAi image studio keeps mobile presets above the prompt and removes slab wrappers", () => {
+  const source = read("components/cavai/CavAiCenterWorkspace.tsx");
+  const css = read("components/cavai/CavAiWorkspace.module.css");
+
+  assert.equal(
+    source.includes("const imageStudioPresetPanel = canUseCreateImage && !overlay && (composerQuickMode === \"create_image\" || composerQuickMode === \"edit_image\") ? ("),
+    true
+  );
+  assert.equal(source.includes("{!imageStudioMobileLayoutActive ? imageStudioPresetPanel : null}"), true);
+  assert.equal(source.includes("<div className={styles.centerImageStudioMobileShelfWrap}>{imageStudioPresetPanel}</div>"), true);
+
+  assert.equal(css.includes(".centerImageStudioMobileShelfWrap {"), true);
+  assert.equal(
+    css.includes(".imageStudioModePanel {\n  border: 0;\n  border-radius: 0;\n  background: transparent;\n  padding: 0;"),
+    true
+  );
+  assert.equal(
+    css.includes(".imageStudioPresetShelf {\n  border: 0;\n  border-radius: 0;\n  background: transparent;\n  padding: 0;"),
+    true
+  );
+  assert.equal(css.includes(".imageStudioModal {\n    padding: 9px;"), true);
+  assert.equal(css.includes(".imageStudioModePanel,\n  .imageStudioPresetShelf,\n  .imageStudioModal {"), false);
+});

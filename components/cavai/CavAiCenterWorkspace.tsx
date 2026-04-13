@@ -10359,6 +10359,138 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     return menuNode;
   }, [floatingComposerMenuStyle, openComposerMenu, shouldFloatComposerMenu, shouldPortalComposerMenu]);
 
+  const imageStudioPresetPanel = canUseCreateImage && !overlay && (composerQuickMode === "create_image" || composerQuickMode === "edit_image") ? (
+    <section className={styles.imageStudioModePanel} aria-label="Image Studio presets">
+      {composerQuickMode === "edit_image" && images[0] ? (
+        <div className={styles.imageStudioSourcePreview}>
+          <Image
+            src={images[0].dataUrl}
+            alt=""
+            width={52}
+            height={52}
+            unoptimized
+            className={styles.imageStudioSourcePreviewImage}
+          />
+          <div className={styles.imageStudioSourcePreviewMeta}>
+            <span className={styles.imageStudioSourcePreviewTitle}>Edit source ready</span>
+            <span className={styles.imageStudioSourcePreviewText}>{images[0].name}</span>
+          </div>
+        </div>
+      ) : null}
+
+      <div className={styles.imageStudioPresetShelf}>
+        <div className={[styles.imageStudioPresetShelfHead, styles.imageStudioPresetShelfHeadNoTitle].join(" ")}>
+          <div className={styles.imageStudioPresetShelfNav}>
+            <button
+              type="button"
+              className={styles.imageStudioPresetShelfNavBtn}
+              aria-label="Scroll presets left"
+              onClick={() => scrollImageStudioPresetRail("left")}
+            >
+              <span
+                className={[styles.imageStudioPresetShelfNavGlyph, styles.imageStudioPresetShelfNavGlyphLeft].join(" ")}
+                aria-hidden="true"
+              />
+            </button>
+            <button
+              type="button"
+              className={styles.imageStudioPresetShelfNavBtn}
+              aria-label="Scroll presets right"
+              onClick={() => scrollImageStudioPresetRail("right")}
+            >
+              <span
+                className={[styles.imageStudioPresetShelfNavGlyph, styles.imageStudioPresetShelfNavGlyphRight].join(" ")}
+                aria-hidden="true"
+              />
+            </button>
+          </div>
+        </div>
+        <div className={styles.imageStudioPresetRail} ref={imageStudioPresetRailRef}>
+          <button
+            type="button"
+            className={[
+              styles.imageStudioEditTile,
+              !canUseEditImage ? styles.imageStudioEditTileLocked : "",
+            ].filter(Boolean).join(" ")}
+            onClick={() => {
+              if (!canUseEditImage) return;
+              onImageStudioQuickAction("edit");
+            }}
+            aria-disabled={!canUseEditImage}
+            title={!canUseEditImage ? "Upgrade to Premium+" : undefined}
+          >
+            <span className={styles.imageStudioEditTileMedia} aria-hidden="true">
+              <Image
+                src="/icons/cavpad/upload-svgrepo-com.svg"
+                alt=""
+                width={28}
+                height={28}
+                unoptimized
+                className={styles.imageStudioEditTileUploadIcon}
+              />
+            </span>
+            <span className={styles.imageStudioEditTileMeta}>
+              <span className={styles.imageStudioEditTileTitle}>Edit image</span>
+              <span className={styles.imageStudioEditTileText}>Upload or import to transform.</span>
+            </span>
+          </button>
+          {imageStudioPresets.map((preset) => {
+            const isOn = selectedImagePresetId === preset.id;
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                className={[
+                  styles.imageStudioPresetCard,
+                  isOn ? styles.imageStudioPresetCardOn : "",
+                  preset.locked ? styles.imageStudioPresetCardLocked : "",
+                ].filter(Boolean).join(" ")}
+                onClick={() => applyImageStudioPreset(preset)}
+              >
+                <span className={styles.imageStudioPresetMedia}>
+                  {preset.thumbnailUrl ? (
+                    <Image
+                      src={preset.thumbnailUrl}
+                      alt={preset.label}
+                      fill
+                      sizes="(max-width: 620px) 124px, 136px"
+                      unoptimized
+                      className={[
+                        styles.imageStudioPresetThumb,
+                        preset.slug === "realistic-tattoo" ? styles.imageStudioPresetThumbTattooFocus : "",
+                      ].filter(Boolean).join(" ")}
+                    />
+                  ) : (
+                    <span className={styles.imageStudioPresetThumbPlaceholder} aria-hidden="true" />
+                  )}
+                  {preset.locked ? (
+                    <span className={styles.imageStudioPresetLockOverlay} aria-hidden="true">
+                      <span className={styles.imageStudioPresetLockBadge}>
+                        <Image
+                          src="/icons/app/block-svgrepo-com.svg"
+                          alt=""
+                          width={14}
+                          height={14}
+                          unoptimized
+                          className={styles.imageStudioPresetLockBadgeIcon}
+                        />
+                      </span>
+                      <span className={styles.imageStudioPresetLockTooltip}>Premium+ required</span>
+                    </span>
+                  ) : null}
+                </span>
+                <span className={styles.imageStudioPresetMeta}>
+                  <span className={styles.imageStudioPresetLabel}>{preset.label}</span>
+                  {preset.subtitle ? <span className={styles.imageStudioPresetSubtitle}>{preset.subtitle}</span> : null}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  ) : null;
+
   const composerContent = (
     <>
       <div className={styles.centerComposerInputShell}>
@@ -11199,137 +11331,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         </div>
       ) : null}
 
-      {canUseCreateImage && !overlay && (composerQuickMode === "create_image" || composerQuickMode === "edit_image") ? (
-        <section className={styles.imageStudioModePanel} aria-label="Image Studio presets">
-          {composerQuickMode === "edit_image" && images[0] ? (
-            <div className={styles.imageStudioSourcePreview}>
-              <Image
-                src={images[0].dataUrl}
-                alt=""
-                width={52}
-                height={52}
-                unoptimized
-                className={styles.imageStudioSourcePreviewImage}
-              />
-              <div className={styles.imageStudioSourcePreviewMeta}>
-                <span className={styles.imageStudioSourcePreviewTitle}>Edit source ready</span>
-                <span className={styles.imageStudioSourcePreviewText}>{images[0].name}</span>
-              </div>
-            </div>
-          ) : null}
-
-          <div className={styles.imageStudioPresetShelf}>
-            <div className={[styles.imageStudioPresetShelfHead, styles.imageStudioPresetShelfHeadNoTitle].join(" ")}>
-              <div className={styles.imageStudioPresetShelfNav}>
-                <button
-                  type="button"
-                  className={styles.imageStudioPresetShelfNavBtn}
-                  aria-label="Scroll presets left"
-                  onClick={() => scrollImageStudioPresetRail("left")}
-                >
-                  <span
-                    className={[styles.imageStudioPresetShelfNavGlyph, styles.imageStudioPresetShelfNavGlyphLeft].join(" ")}
-                    aria-hidden="true"
-                  />
-                </button>
-                <button
-                  type="button"
-                  className={styles.imageStudioPresetShelfNavBtn}
-                  aria-label="Scroll presets right"
-                  onClick={() => scrollImageStudioPresetRail("right")}
-                >
-                  <span
-                    className={[styles.imageStudioPresetShelfNavGlyph, styles.imageStudioPresetShelfNavGlyphRight].join(" ")}
-                    aria-hidden="true"
-                  />
-                </button>
-              </div>
-            </div>
-            <div className={styles.imageStudioPresetRail} ref={imageStudioPresetRailRef}>
-              <button
-                type="button"
-                className={[
-                  styles.imageStudioEditTile,
-                  !canUseEditImage ? styles.imageStudioEditTileLocked : "",
-                ].filter(Boolean).join(" ")}
-                onClick={() => {
-                  if (!canUseEditImage) return;
-                  onImageStudioQuickAction("edit");
-                }}
-                aria-disabled={!canUseEditImage}
-                title={!canUseEditImage ? "Upgrade to Premium+" : undefined}
-              >
-                <span className={styles.imageStudioEditTileMedia} aria-hidden="true">
-                  <Image
-                    src="/icons/cavpad/upload-svgrepo-com.svg"
-                    alt=""
-                    width={28}
-                    height={28}
-                    unoptimized
-                    className={styles.imageStudioEditTileUploadIcon}
-                  />
-                </span>
-                <span className={styles.imageStudioEditTileMeta}>
-                  <span className={styles.imageStudioEditTileTitle}>Edit image</span>
-                  <span className={styles.imageStudioEditTileText}>Upload or import to transform.</span>
-                </span>
-              </button>
-              {imageStudioPresets.map((preset) => {
-                const isOn = selectedImagePresetId === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    className={[
-                      styles.imageStudioPresetCard,
-                      isOn ? styles.imageStudioPresetCardOn : "",
-                      preset.locked ? styles.imageStudioPresetCardLocked : "",
-                    ].filter(Boolean).join(" ")}
-                    onClick={() => applyImageStudioPreset(preset)}
-                  >
-                    <span className={styles.imageStudioPresetMedia}>
-                      {preset.thumbnailUrl ? (
-                        <Image
-                          src={preset.thumbnailUrl}
-                          alt={preset.label}
-                          fill
-                          sizes="(max-width: 620px) 124px, 136px"
-                          unoptimized
-                          className={[
-                            styles.imageStudioPresetThumb,
-                            preset.slug === "realistic-tattoo" ? styles.imageStudioPresetThumbTattooFocus : "",
-                          ].filter(Boolean).join(" ")}
-                        />
-                      ) : (
-                        <span className={styles.imageStudioPresetThumbPlaceholder} aria-hidden="true" />
-                      )}
-                      {preset.locked ? (
-                        <span className={styles.imageStudioPresetLockOverlay} aria-hidden="true">
-                          <span className={styles.imageStudioPresetLockBadge}>
-                            <Image
-                              src="/icons/app/block-svgrepo-com.svg"
-                              alt=""
-                              width={14}
-                              height={14}
-                              unoptimized
-                              className={styles.imageStudioPresetLockBadgeIcon}
-                            />
-                          </span>
-                          <span className={styles.imageStudioPresetLockTooltip}>Premium+ required</span>
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className={styles.imageStudioPresetMeta}>
-                      <span className={styles.imageStudioPresetLabel}>{preset.label}</span>
-                      {preset.subtitle ? <span className={styles.imageStudioPresetSubtitle}>{preset.subtitle}</span> : null}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-      ) : null}
+      {!imageStudioMobileLayoutActive ? imageStudioPresetPanel : null}
 
       <input
         ref={imageInputRef}
@@ -13578,6 +13580,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                 </div>
               </section>
             </div>
+          ) : null}
+
+          {imageStudioMobileLayoutActive ? (
+            <div className={styles.centerImageStudioMobileShelfWrap}>{imageStudioPresetPanel}</div>
           ) : null}
 
           {showInlineError ? (
