@@ -9,11 +9,11 @@ function read(relPath: string) {
   return readFileSync(path.join(repoRoot, relPath), "utf8");
 }
 
-test("auth session bootstrap uses strict requireSession validation", () => {
-  const source = read("app/api/auth/session/route.ts");
+test("auth me bootstrap uses strict session validation and degrades to signed-out bootstrap on auth failure", () => {
+  const source = read("app/api/auth/me/route.ts");
 
   assert.match(source, /requireSession,/);
-  assert.match(source, /let sess: CavbotSession \| null = await getSession\(req\)\.catch\(\(\) => null\);/);
   assert.match(source, /sess = await requireSession\(req\);/);
   assert.doesNotMatch(source, /const sess: CavbotSession \| null = await getSession\(req\);/);
+  assert.match(source, /return json\(\{ ok: true, authenticated: false, signedOut: true, error: error\.code \}, 200\);/);
 });

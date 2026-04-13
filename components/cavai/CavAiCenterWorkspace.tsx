@@ -420,6 +420,11 @@ type ApiEnvelope<T> =
       error?: string;
       message?: string;
       guardDecision?: unknown;
+      degraded?: boolean;
+      unavailable?: boolean;
+      retryable?: boolean;
+      indeterminate?: boolean;
+      signedOut?: boolean;
     };
 
 type CenterConfig = {
@@ -582,11 +587,30 @@ const SESSION_MESSAGE_PREFETCH_COUNT = 10;
 const RECENT_FILES_EMPTY_HINT = "No recent files yet. Add a file and it will appear here.";
 const CENTER_LOAD_SESSIONS_FAILED_MESSAGE = "Failed to load sessions.";
 const CENTER_LOAD_MESSAGES_FAILED_MESSAGE = "Failed to load messages.";
+const PASSIVE_CENTER_UNAVAILABLE_ERRORS = new Set([
+  "SERVICE_UNAVAILABLE",
+  "AI_SESSIONS_UNAVAILABLE",
+  "AI_SESSION_MESSAGES_UNAVAILABLE",
+  "SESSION_HISTORY_UNAVAILABLE",
+]);
 
 function isCenterLoadFailureMessage(value: unknown): boolean {
   const normalized = s(value).toLowerCase();
   if (!normalized) return false;
   return normalized.includes("failed to load sessions") || normalized.includes("failed to load messages");
+}
+
+function isPassiveCenterUnavailablePayload(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const payload = value as {
+    unavailable?: unknown;
+    degraded?: unknown;
+    retryable?: unknown;
+    error?: unknown;
+  };
+  if (payload.unavailable === true) return true;
+  if (payload.degraded === true && payload.retryable === true) return true;
+  return PASSIVE_CENTER_UNAVAILABLE_ERRORS.has(s(payload.error).toUpperCase());
 }
 const CAVAI_GUEST_SESSION_CACHE_STORAGE_PREFIX = "cavai_center_guest_session_cache_v1";
 const CAVAI_GUEST_SESSION_CACHE_MAX_SESSIONS = 60;
@@ -4682,6 +4706,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ sessions?: CavAiSessionSummary[] }>;
       if (!res.ok || !body.ok) {
         emitGuardDecisionFromPayload(body);
+        if (isPassiveCenterUnavailablePayload(body)) return true;
         throw new Error(s((body as { message?: unknown }).message) || CENTER_LOAD_SESSIONS_FAILED_MESSAGE);
       }
       setError("");
@@ -4778,6 +4803,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ messages?: CavAiMessage[] }>;
       if (!res.ok || !body.ok) {
         emitGuardDecisionFromPayload(body);
+        if (isPassiveCenterUnavailablePayload(body)) {
+          const cachedRows = sessionMessageCacheRef.current.get(normalized);
+          if (cachedRows) return cachedRows;
+          const summary = sessions.find((item) => item.id === normalized) || null;
+          return buildSyntheticThreadFromSessionSummary(summary);
+        }
         throw new Error(s((body as { message?: unknown }).message) || CENTER_LOAD_MESSAGES_FAILED_MESSAGE);
       }
       const rows = Array.isArray(body.messages) ? body.messages : [];
@@ -5382,6 +5413,9 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         const body = (await res.json().catch(() => ({}))) as {
           ok?: boolean;
           authenticated?: boolean;
+          degraded?: boolean;
+          indeterminate?: boolean;
+          signedOut?: boolean;
           user?: {
             displayName?: unknown;
             username?: unknown;
@@ -5396,7 +5430,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
           };
         };
         if (cancelled) return;
-        if (!res.ok || body.ok !== true || body.authenticated !== true) {
+        const authIndeterminate = body.indeterminate === true;
+        const signedOut = body.signedOut === true || res.status === 401 || res.status === 403;
+        if (authIndeterminate) {
+          return;
+        }
+        if (signedOut || !res.ok || body.ok !== true || body.authenticated !== true) {
           setIsAuthenticated(false);
           setAccountProfilePublicEnabled(null);
           setAccountProfileAvatar("");
@@ -5422,9 +5461,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         const authPlanId = normalizePlanId(body.account?.tierEffective ?? body.account?.tier);
         setAccountPlanId((prev) => (planTierRank(authPlanId) >= planTierRank(prev) ? authPlanId : prev));
       } catch {
-        if (!cancelled) {
-          setIsAuthenticated(false);
-        }
+        // Preserve the last known auth state on transient backend failures.
       } finally {
         if (!cancelled) {
           setAuthProbeReady(true);

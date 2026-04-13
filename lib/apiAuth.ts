@@ -75,6 +75,10 @@ export function isApiAuthError(e: unknown): e is ApiAuthError {
   return !!e && typeof e === "object" && e !== null && "status" in e && "code" in e;
 }
 
+function authBackendUnavailableError() {
+  return new ApiAuthError("AUTH_BACKEND_UNAVAILABLE", 503);
+}
+
 const SESSION_TTL_SECONDS = 60 * 60 * 8; // 8 hours
 const CLOUDFLARE_PBKDF2_ITER_LIMIT = 100_000;
 
@@ -650,9 +654,10 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
 
         sess.accountId = String(active.accountId);
         sess.memberRole = active.role;
-      } catch {
+      } catch (error) {
+        if (error instanceof ApiAuthError) throw error;
         if (process.env.NODE_ENV !== "production") return sess;
-        throw new ApiAuthError("UNAUTHORIZED", 401);
+        throw authBackendUnavailableError();
       }
     }
 
@@ -664,7 +669,7 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
       if (process.env.NODE_ENV !== "production") {
         return sess;
       }
-      throw new ApiAuthError("UNAUTHORIZED", 401);
+      throw authBackendUnavailableError();
     }
 
     if (!auth) {
@@ -674,6 +679,7 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
         if (await userHasOAuthIdentity(pool, userId)) return sess;
       } catch {
         if (process.env.NODE_ENV !== "production") return sess;
+        throw authBackendUnavailableError();
       }
 
       if (process.env.NODE_ENV !== "production") return sess;
@@ -707,7 +713,7 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
     } catch (error) {
       if (error instanceof ApiAuthError) throw error;
       if (process.env.NODE_ENV !== "production") return sess;
-      throw new ApiAuthError("UNAUTHORIZED", 401);
+      throw authBackendUnavailableError();
     }
   }
 

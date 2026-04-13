@@ -7,6 +7,7 @@ import {
 import { getAiSessionForAccount, listAiSessionMessages } from "@/src/lib/ai/ai.memory";
 import { requireAiRequestContext } from "@/src/lib/ai/ai.guard";
 import { resolveAiExecutionPolicy } from "@/src/lib/ai/ai.policy";
+import { buildPassiveAiUnavailablePayload, isPassiveAiReadUnavailableError } from "@/src/lib/ai/ai.route-response";
 import { AiServiceError } from "@/src/lib/ai/ai.types";
 
 export const runtime = "nodejs";
@@ -125,6 +126,18 @@ export async function GET(
           ...(process.env.NODE_ENV !== "production" ? { details: error.details } : {}),
         },
         error.status
+      );
+    }
+    if (isPassiveAiReadUnavailableError(error)) {
+      return json(
+        {
+          ...buildPassiveAiUnavailablePayload(
+            "AI_SESSION_MESSAGES_UNAVAILABLE",
+            "AI session messages are temporarily unavailable."
+          ),
+          requestId,
+        },
+        503
       );
     }
     const message = error instanceof Error ? error.message : "Server error";

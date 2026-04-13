@@ -1,7 +1,7 @@
 // app/api/auth/me/route.ts
 import { NextResponse } from "next/server";
 
-import { getSession, isApiAuthError } from "@/lib/apiAuth";
+import { getSession, requireSession, isApiAuthError } from "@/lib/apiAuth";
 import type { CavbotSession } from "@/lib/apiAuth";
 import {
   clearExpiredTrialSeat,
@@ -182,16 +182,72 @@ function buildFallbackAccountFromMembership(args: {
   };
 }
 
+function buildDegradedAuthMePayloadFromSession(sess: CavbotSession) {
+  if (sess.systemRole === "system") {
+    return {
+      ok: true,
+      authenticated: true,
+      degraded: true,
+      indeterminate: true,
+      session: sess,
+    } as const;
+  }
+
+  const userId = String(sess?.sub || "").trim();
+  if (!userId) {
+    return {
+      ok: true,
+      authenticated: false,
+      degraded: true,
+      indeterminate: true,
+    } as const;
+  }
+
+  const membership = fallbackMembershipFromSession(sess);
+  const user = buildFallbackUser(userId, sess);
+  const initials = deriveInitials(user.displayName, user.username);
+  const account = buildFallbackAccountFromMembership({
+    sess,
+    membership,
+    entitledSubscription: null,
+  });
+
+  return {
+    ok: true,
+    authenticated: true,
+    degraded: true,
+    indeterminate: true,
+    session: sess,
+    user: {
+      ...user,
+      initials,
+    },
+    account,
+    membership,
+    policy: {
+      ...DEFAULT_CAVCLOUD_COLLAB_POLICY,
+      allowArcadeCollaboratorAccess: false,
+    },
+  } as const;
+}
+
 export async function GET(req: Request) {
+  let sess: CavbotSession | null = await getSession(req).catch(() => null);
+
   try {
     const pool = getAuthPool();
-    const sess: CavbotSession | null = await getSession(req);
     let degraded = false;
 
-    // Not logged in -> always 200
-    if (!sess) return json({ ok: true, authenticated: false }, 200);
+    try {
+      sess = await requireSession(req);
+    } catch (error) {
+      if (isApiAuthError(error) && (error.status === 401 || error.status === 403)) {
+        return json({ ok: true, authenticated: false, signedOut: true, error: error.code }, 200);
+      }
+      throw error;
+    }
 
-    // System sessions (internal tooling)
+    // Not logged in -> always 200
     if (sess.systemRole === "system") {
       return json({ ok: true, authenticated: true, degraded, session: sess }, 200);
     }
@@ -199,7 +255,7 @@ export async function GET(req: Request) {
     const userId = String(sess?.sub || "").trim();
     const accountId = sess?.accountId ? String(sess.accountId).trim() : null;
 
-    if (!userId) return json({ ok: true, authenticated: false }, 200);
+    if (!userId) return json({ ok: true, authenticated: false, signedOut: true }, 200);
 
     let user: AuthUser | null = null;
     let userLookupFailed = false;
@@ -211,7 +267,7 @@ export async function GET(req: Request) {
     }
 
     if (!user) {
-      if (!userLookupFailed) return json({ ok: true, authenticated: false }, 200);
+      if (!userLookupFailed) return json({ ok: true, authenticated: false, signedOut: true }, 200);
       user = buildFallbackUser(userId, sess);
     }
 
@@ -244,7 +300,7 @@ export async function GET(req: Request) {
           ? fallbackMembershipFromSession(sess)
           : null;
 
-      if (!membership) return json({ ok: true, authenticated: false }, 200);
+      if (!membership) return json({ ok: true, authenticated: false, signedOut: true }, 200);
 
       await clearExpiredTrialSeat(pool, accountId).catch(() => {
         degraded = true;
@@ -264,7 +320,7 @@ export async function GET(req: Request) {
       ]);
 
       if (!accountRecord) {
-        if (!accountLookupFailed) return json({ ok: true, authenticated: false }, 200);
+        if (!accountLookupFailed) return json({ ok: true, authenticated: false, signedOut: true }, 200);
         accountWithComputed = buildFallbackAccountFromMembership({
           sess,
           membership,
@@ -310,7 +366,30 @@ export async function GET(req: Request) {
       200
     );
   } catch (error) {
-    if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
-    return json({ ok: true, authenticated: false }, 200);
+    if (isApiAuthError(error) && (error.status === 401 || error.status === 403)) {
+      return json({ ok: true, authenticated: false, signedOut: true, error: error.code }, 200);
+    }
+    if (sess) {
+      const payload = buildDegradedAuthMePayloadFromSession(sess);
+      return json(
+        isApiAuthError(error)
+          ? {
+              ...payload,
+              error: error.code,
+            }
+          : payload,
+        200
+      );
+    }
+    return json(
+      {
+        ok: true,
+        authenticated: false,
+        degraded: true,
+        indeterminate: true,
+        ...(isApiAuthError(error) ? { error: error.code } : {}),
+      },
+      200
+    );
   }
 }

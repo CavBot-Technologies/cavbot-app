@@ -560,6 +560,9 @@ export default function AppShell({
   const [authPlanVerified, setAuthPlanVerified] = useState(false);
   const [sessionAuthenticated, setSessionAuthenticated] = useState(false);
   const [, setPlanResolveError] = useState<string>("");
+  const authRefreshRequestIdRef = useRef(0);
+  const authRefreshInFlightRef = useRef<Promise<void> | null>(null);
+  const authRefreshLastAtRef = useRef(0);
 
 
   // ===== Trial state (only affects the widget display) =====
@@ -1287,6 +1290,8 @@ export default function AppShell({
    * - Trial state uses explicit flags OR computed from endsAt
    */
   const refreshAuthAndPlan = useCallback(async (signal?: AbortSignal) => {
+    const requestId = authRefreshRequestIdRef.current + 1;
+    authRefreshRequestIdRef.current = requestId;
     try {
       setPlanResolveError("");
       const res = await fetch("/api/auth/me", {
@@ -1296,7 +1301,13 @@ export default function AppShell({
       });
 
       const data = await res.json().catch(() => ({}));
-      if (signal?.aborted) return;
+      if (signal?.aborted || requestId !== authRefreshRequestIdRef.current) return;
+      if (data?.indeterminate === true) {
+        setAuthPlanVerified(true);
+        setPlanResolved(true);
+        setPlanResolveError("");
+        return;
+      }
       setAuthPlanVerified(true);
       setSessionAuthenticated(Boolean(res.ok && data?.authenticated));
 
@@ -1370,22 +1381,50 @@ export default function AppShell({
         ts: Date.now(),
       });
     } catch {
-      if (signal?.aborted) return;
-      setAuthPlanVerified(false);
-      setSessionAuthenticated(false);
+      if (signal?.aborted || requestId !== authRefreshRequestIdRef.current) return;
       const cached = readShellPlanSnapshot();
       if (cached) {
         setPlanTier(cached.planTier);
         setMemberRole(cached.memberRole);
         setTrialActive(cached.trialActive);
         setTrialDaysLeft(cached.trialDaysLeft);
+        setAuthPlanVerified(true);
         setPlanResolved(true);
         setPlanResolveError("");
         return;
       }
+      if (sessionAuthenticated || memberRole || bootSnapshot) {
+        setAuthPlanVerified(true);
+        setPlanResolved(true);
+        setPlanResolveError("");
+        return;
+      }
+      setAuthPlanVerified(false);
       setPlanResolveError("Unable to verify current plan.");
     }
-  }, []);
+  }, [bootSnapshot, memberRole, sessionAuthenticated]);
+
+  const requestAuthRefresh = useCallback((options?: { force?: boolean }) => {
+    const force = options?.force === true;
+    const now = Date.now();
+
+    if (!force) {
+      if (authRefreshInFlightRef.current) return authRefreshInFlightRef.current;
+      if (authRefreshLastAtRef.current && now - authRefreshLastAtRef.current < 8_000) {
+        return Promise.resolve();
+      }
+    }
+
+    const refreshPromise = refreshAuthAndPlan();
+    authRefreshInFlightRef.current = refreshPromise;
+    void refreshPromise.finally(() => {
+      if (authRefreshInFlightRef.current === refreshPromise) {
+        authRefreshInFlightRef.current = null;
+      }
+      authRefreshLastAtRef.current = Date.now();
+    });
+    return refreshPromise;
+  }, [refreshAuthAndPlan]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -1399,13 +1438,32 @@ export default function AppShell({
 
   useEffect(() => {
     const onRefresh = () => {
-      void refreshAuthAndPlan();
+      void requestAuthRefresh({ force: true });
     };
     window.addEventListener("cb:auth:refresh", onRefresh as EventListener);
     return () => {
       window.removeEventListener("cb:auth:refresh", onRefresh as EventListener);
     };
-  }, [refreshAuthAndPlan]);
+  }, [requestAuthRefresh]);
+
+  useEffect(() => {
+    const syncAuth = () => {
+      void requestAuthRefresh();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      syncAuth();
+    };
+
+    window.addEventListener("pageshow", syncAuth);
+    window.addEventListener("focus", syncAuth);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pageshow", syncAuth);
+      window.removeEventListener("focus", syncAuth);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [requestAuthRefresh]);
 
 
   // Persist + publish range changes (NO URL WRITE)
