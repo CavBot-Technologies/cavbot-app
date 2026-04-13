@@ -8538,11 +8538,6 @@
     padding-top: 28px;
   }
 
-  .centerMainImageStudioMobile .centerEmptyTitle,
-  .centerMainImageStudioMobile .centerEmptyText {
-    display: none;
-  }
-
   .centerMainImageStudioMobile .centerComposer {
     border-top: 0;
     padding: 14px 11px calc(18px + env(safe-area-inset-bottom));

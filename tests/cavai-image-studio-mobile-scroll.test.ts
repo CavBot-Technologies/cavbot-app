@@ -24,9 +24,6 @@ test("CavAi image studio uses a relaxed scrollable layout on small screens", () 
   assert.equal(css.includes("justify-content: flex-start;"), true);
   assert.equal(css.includes(".centerMainImageStudioMobile .centerEmptyState {"), true);
   assert.equal(css.includes("padding-top: 28px;"), true);
-  assert.equal(css.includes(".centerMainImageStudioMobile .centerEmptyTitle,"), true);
-  assert.equal(css.includes(".centerMainImageStudioMobile .centerEmptyText {"), true);
-  assert.equal(css.includes("display: none;"), true);
   assert.equal(css.includes(".centerMainImageStudioMobile .imageStudioModePanel {"), true);
   assert.equal(css.includes(".centerMainImageStudioMobile .imageStudioPresetShelf {"), true);
   assert.equal(css.includes(".centerMainImageStudioMobile .centerComposer {"), true);
