@@ -3456,6 +3456,10 @@
   background: rgba(1, 5, 18, 0.9);
 }
 
+.centerMainWithGuestAuth {
+  padding-right: clamp(344px, 31vw, 430px);
+}
+
 .centerMainHeader {
   box-sizing: border-box;
   height: 56px;
@@ -3864,6 +3868,15 @@
   z-index: 12080;
 }
 
+.centerGuestAuthPanelDocked {
+  position: absolute;
+  top: calc(56px + 16px);
+  right: clamp(16px, 1.8vw, 24px);
+  bottom: 18px;
+  width: min(392px, calc(100% - 32px));
+  max-height: calc(100% - 90px);
+}
+
 .centerGuestAuthPanelHead {
   min-height: 52px;
   padding: 14px 14px 12px;
@@ -3936,6 +3949,8 @@
   padding: 15px 14px 16px;
   text-align: center;
   justify-items: center;
+  min-height: 0;
+  overflow: auto;
 }
 
 .centerGuestAuthTitle {

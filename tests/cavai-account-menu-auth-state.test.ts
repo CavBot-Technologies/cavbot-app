@@ -7,14 +7,17 @@ function read(rel: string): string {
   return fs.readFileSync(path.resolve(rel), "utf8");
 }
 
-test("center workspace restores the signed-out footer account state", () => {
+test("center workspace restores the signed-out footer account state and reopens the desktop auth dock", () => {
   const source = read("components/cavai/CavAiCenterWorkspace.tsx");
 
   assert.equal(source.includes('const guestAccountLabel = "Not logged in";'), true);
+  assert.equal(source.includes("const showDesktopGuestAuthPanel = !overlay && !isPhoneLayout && isGuestPreviewMode && accountMenuOpen;"), true);
   assert.equal(source.includes("aria-label={guestAccountLabel}"), true);
   assert.equal(source.includes("title={guestAccountLabel}"), true);
   assert.equal(source.includes("<span className={styles.centerSidebarActionText}>{guestAccountLabel}</span>"), true);
-  assert.equal(source.includes('aria-label="Sign in or create an account"'), true);
+  assert.equal(source.includes("const renderGuestAuthPanel = (opts?: { docked?: boolean }) => ("), true);
+  assert.equal(source.includes("{accountMenuOpen && isPhoneLayout ? renderGuestAuthPanel() : null}"), true);
+  assert.equal(source.includes("{showDesktopGuestAuthPanel ? renderGuestAuthPanel({ docked: true }) : null}"), true);
 });
 
 test("center workspace account menu always resolves to a public or private profile label", () => {
@@ -38,4 +41,13 @@ test("center workspace account menu items keep hover fills without borders", () 
   assert.equal(source.includes("border-color: rgba(255, 120, 120, 0.45);"), false);
   assert.equal(source.includes(".centerHeaderAccountMenuItem:hover {\n  background: rgba(78, 168, 255, 0.06);\n}"), true);
   assert.equal(source.includes(".centerHeaderAccountMenuItemDanger:hover {\n  background: rgba(255, 120, 120, 0.08);\n}"), true);
+});
+
+test("center workspace styles the signed-out auth panel as a desktop right-side dock", () => {
+  const source = read("components/cavai/CavAiWorkspace.module.css");
+
+  assert.equal(source.includes(".centerMainWithGuestAuth {\n  padding-right: clamp(344px, 31vw, 430px);\n}"), true);
+  assert.equal(source.includes(".centerGuestAuthPanelDocked {\n  position: absolute;"), true);
+  assert.equal(source.includes("top: calc(56px + 16px);"), true);
+  assert.equal(source.includes("width: min(392px, calc(100% - 32px));"), true);
 });
