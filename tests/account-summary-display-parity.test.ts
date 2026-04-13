@@ -29,3 +29,11 @@ test("app shell and CavAi center both consume the same canonical account-summary
   assert.match(cavaiSource, /const accountPlanLabel = useMemo\(\(\) => resolveAccountPlanLabel\(\{/);
   assert.doesNotMatch(cavaiSource, /function toPlanTierLabel/);
 });
+
+test("shared sidebar account plan label is not forced to uppercase", () => {
+  const source = read("app/globals.css");
+
+  assert.match(source, /\.cb-side-account-plan\{/);
+  assert.doesNotMatch(source, /\.cb-side-account-plan\{[^}]*text-transform:\s*uppercase;/);
+  assert.match(source, /\.cb-side-account-plan\{[^}]*text-transform:\s*none;/);
+});

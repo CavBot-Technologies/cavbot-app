@@ -2144,7 +2144,7 @@ html body :is(
   font-size: 10px;
   font-weight: 780;
   letter-spacing: 0.12em;
-  text-transform: uppercase;
+  text-transform: none;
   color: rgba(197,206,231,0.74);
   text-align: left;
 }
@@ -2224,7 +2224,7 @@ html body :is(
   font-size: 10px;
   font-weight: 780;
   letter-spacing: 0.12em;
-  text-transform: uppercase;
+  text-transform: none;
   color: rgba(197,206,231,0.74);
   text-align: left;
 }
