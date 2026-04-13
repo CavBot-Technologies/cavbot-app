@@ -1,0 +1,163 @@
+.wrapper {
+  position: absolute;
+  left: 50%;
+  pointer-events: none;
+}
+
+.sphere {
+  --orb-scale: 1;
+  --orb-blur: 1px;
+  --orb-brightness: 1;
+  --orb-saturate: 1;
+  --orb-contrast: 1;
+  --orb-overlay-opacity: 0.46;
+  --orb-detail-opacity: 0.62;
+  --orb-speed-multiplier: 1;
+  --orb-volume: 0.12;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  isolation: isolate;
+  transform: translateZ(0) scale(var(--orb-scale));
+  filter:
+    brightness(var(--orb-brightness))
+    saturate(var(--orb-saturate))
+    contrast(var(--orb-contrast));
+  animation: orbFloat calc(11s / var(--orb-speed-multiplier)) ease-in-out infinite;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  transform-origin: center;
+  will-change: transform, filter, opacity, background-position;
+  mask-image: url("/icons/app/cavai-sphere.svg");
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-image: url("/icons/app/cavai-sphere.svg");
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+}
+
+.layerBase {
+  background:
+    radial-gradient(circle at 36% 28%, rgba(238, 248, 255, 0.98) 0%, rgba(222, 245, 255, 0.96) 18%, rgba(78, 168, 255, 0.92) 46%, rgba(19, 37, 82, 0.9) 78%, rgba(12, 16, 37, 0.82) 100%),
+    conic-gradient(from 218deg at 50% 52%, #4ea8ff 0deg, #b9c85a 104deg, #8b5cff 235deg, #4ea8ff 360deg);
+  animation: orbDrift calc(15.5s / var(--orb-speed-multiplier)) linear infinite;
+}
+
+.layerAccent {
+  opacity: var(--orb-overlay-opacity);
+  background:
+    radial-gradient(circle at 69% 30%, rgba(244, 251, 255, 0.9) 0%, rgba(244, 251, 255, 0.18) 19%, transparent 42%),
+    radial-gradient(circle at 32% 73%, rgba(185, 200, 90, 0.62) 0%, rgba(185, 200, 90, 0.14) 20%, transparent 48%),
+    radial-gradient(circle at 76% 74%, rgba(139, 92, 255, 0.74) 0%, rgba(139, 92, 255, 0.12) 24%, transparent 52%),
+    linear-gradient(135deg, rgba(78, 168, 255, 0.74) 0%, rgba(185, 200, 90, 0.28) 42%, rgba(139, 92, 255, 0.44) 100%);
+  mix-blend-mode: screen;
+  filter: blur(var(--orb-blur));
+  animation:
+    orbPulse calc(6.2s / var(--orb-speed-multiplier)) ease-in-out infinite alternate,
+    orbCounterDrift calc(10.8s / var(--orb-speed-multiplier)) linear infinite;
+}
+
+.layerSweep {
+  opacity: calc(0.2 + (var(--orb-overlay-opacity) * 0.64));
+  background:
+    linear-gradient(
+      104deg,
+      transparent 12%,
+      rgba(238, 248, 255, 0) 32%,
+      rgba(238, 248, 255, 0.82) 48%,
+      rgba(185, 200, 90, 0.54) 56%,
+      rgba(139, 92, 255, 0.22) 64%,
+      transparent 80%
+    );
+  background-size: 190% 190%;
+  background-position: 120% 50%;
+  mix-blend-mode: screen;
+  animation: orbSweep calc(4.7s / var(--orb-speed-multiplier)) cubic-bezier(0.33, 0, 0.22, 1) infinite;
+}
+
+.layerDetail {
+  opacity: var(--orb-detail-opacity);
+  background:
+    radial-gradient(circle at 49% 46%, rgba(248, 251, 255, 0.78) 0%, rgba(248, 251, 255, 0.08) 24%, transparent 52%),
+    radial-gradient(circle at 55% 58%, rgba(78, 168, 255, 0.34) 0%, transparent 44%),
+    conic-gradient(from 12deg at 48% 52%, rgba(238, 248, 255, 0.24) 0deg, rgba(78, 168, 255, 0.08) 120deg, rgba(139, 92, 255, 0.24) 220deg, rgba(185, 200, 90, 0.2) 320deg, rgba(238, 248, 255, 0.24) 360deg);
+  mix-blend-mode: screen;
+  animation: orbPulse calc(8.4s / var(--orb-speed-multiplier)) ease-in-out infinite;
+}
+
+@keyframes orbFloat {
+  0%,
+  100% {
+    transform: translate3d(0, -1px, 0) scale(var(--orb-scale));
+  }
+
+  50% {
+    transform: translate3d(0, 2px, 0) scale(calc(var(--orb-scale) + 0.016 + (var(--orb-volume) * 0.02)));
+  }
+}
+
+@keyframes orbDrift {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+
+  50% {
+    transform: rotate(180deg) scale(calc(1.01 + (var(--orb-volume) * 0.02)));
+  }
+
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes orbCounterDrift {
+  0% {
+    transform: rotate(0deg) scale(1.02);
+  }
+
+  50% {
+    transform: rotate(-180deg) scale(calc(1.04 + (var(--orb-volume) * 0.03)));
+  }
+
+  100% {
+    transform: rotate(-360deg) scale(1.02);
+  }
+}
+
+@keyframes orbSweep {
+  0% {
+    background-position: 132% 50%;
+    transform: translateX(6%);
+  }
+
+  100% {
+    background-position: -36% 50%;
+    transform: translateX(-6%);
+  }
+}
+
+@keyframes orbPulse {
+  0%,
+  100% {
+    transform: scale(0.99);
+  }
+
+  50% {
+    transform: scale(calc(1.03 + (var(--orb-volume) * 0.045)));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sphere,
+  .layerBase,
+  .layerAccent,
+  .layerSweep,
+  .layerDetail {
+    animation: none;
+  }
+}

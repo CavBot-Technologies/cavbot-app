@@ -4134,6 +4134,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const hasInlineEdit = Boolean(inlineEditDraft);
   const isEmptyThread = !messages.length && !loadingMessages && !hasPendingPrompt && !hasInlineEdit;
   const showVoiceOrb = voiceOrbState !== "idle";
+  const showOverlayGreeting = !(overlay && isEmptyThread && showVoiceOrb);
   const threadInnerClassName = [styles.centerThreadInner, isEmptyThread ? styles.centerThreadInnerEmpty : styles.centerThreadInnerChat]
     .filter(Boolean)
     .join(" ");
@@ -11966,24 +11967,28 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                       </div>
                     </div>
                   ) : null}
-                  <h2 className={emptyTitleClassName}>
-                    {overlay ? (
-                      <span className={styles.centerEmptyTitleOverlayLead}>{emptyHeadline}</span>
-                    ) : (
-                      emptyHeadline
-                    )}
-                  </h2>
-                  {emptySubline ? (
-                    <p className={emptySublineClassName}>
-                      {overlay ? (
-                        <span className={styles.centerEmptyTextOverlayLine}>
-                          <span className={styles.centerEmptyTextOverlayPrompt}>{emptySubline}</span>
-                          <span className={styles.centerEmptyTextOverlayCursor} aria-hidden="true" />
-                        </span>
-                      ) : (
-                        emptySubline
-                      )}
-                    </p>
+                  {showOverlayGreeting ? (
+                    <>
+                      <h2 className={emptyTitleClassName}>
+                        {overlay ? (
+                          <span className={styles.centerEmptyTitleOverlayLead}>{emptyHeadline}</span>
+                        ) : (
+                          emptyHeadline
+                        )}
+                      </h2>
+                      {emptySubline ? (
+                        <p className={emptySublineClassName}>
+                          {overlay ? (
+                            <span className={styles.centerEmptyTextOverlayLine}>
+                              <span className={styles.centerEmptyTextOverlayPrompt}>{emptySubline}</span>
+                              <span className={styles.centerEmptyTextOverlayCursor} aria-hidden="true" />
+                            </span>
+                          ) : (
+                            emptySubline
+                          )}
+                        </p>
+                      ) : null}
+                    </>
                   ) : null}
                   {centerComposerInThread ? <div className={styles.centerInlineComposer}>{composerContent}</div> : null}
                 </div>

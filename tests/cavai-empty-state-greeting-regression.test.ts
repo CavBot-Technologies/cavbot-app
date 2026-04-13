@@ -15,10 +15,12 @@ test("CavAi overlay empty state uses refined greeting treatment", () => {
 
   assert.match(center, /const overlayEmptyHeadline = "Hi there";/);
   assert.match(center, /const overlayEmptySubline = "How can I assist you\?";/);
+  assert.match(center, /const showOverlayGreeting = !\(overlay && isEmptyThread && showVoiceOrb\);/);
   assert.match(center, /overlay \? styles\.centerEmptyStateOverlay : ""/);
   assert.match(center, /styles\.centerEmptyTitleOverlayLead/);
   assert.match(center, /styles\.centerEmptyTextOverlayPrompt/);
   assert.match(center, /styles\.centerEmptyTextOverlayCursor/);
+  assert.match(center, /\{showOverlayGreeting \? \(/);
 
   assert.match(css, /\.centerEmptyStateOverlay \{/);
   assert.match(css, /\.centerEmptyTitleOverlayLead \{/);

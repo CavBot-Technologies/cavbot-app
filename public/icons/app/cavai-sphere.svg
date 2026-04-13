@@ -1,0 +1,51 @@
+<svg width="320" height="320" viewBox="0 0 320 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <clipPath id="sphere-clip">
+      <circle cx="160" cy="160" r="112"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#sphere-clip)">
+    <circle cx="160" cy="160" r="112" fill="white" fill-opacity="0.16"/>
+    <path d="M63 110C94 94 129 86 160 86C198 86 235 97 266 118" stroke="white" stroke-opacity="0.92" stroke-width="5.5" stroke-linecap="round"/>
+    <path d="M56 143C92 127 128 120 160 120C199 120 232 130 273 150" stroke="white" stroke-opacity="0.9" stroke-width="5.5" stroke-linecap="round"/>
+    <path d="M52 178C88 162 125 155 160 155C203 155 241 166 276 189" stroke="white" stroke-opacity="0.88" stroke-width="5.5" stroke-linecap="round"/>
+    <path d="M63 213C95 198 130 192 160 192C196 192 231 200 264 218" stroke="white" stroke-opacity="0.9" stroke-width="5.5" stroke-linecap="round"/>
+    <path d="M86 244C112 232 136 227 160 227C189 227 213 233 235 245" stroke="white" stroke-opacity="0.84" stroke-width="5.5" stroke-linecap="round"/>
+    <path d="M116 56C98 85 89 120 89 160C89 203 99 240 119 268" stroke="white" stroke-opacity="0.88" stroke-width="5" stroke-linecap="round"/>
+    <path d="M148 49C137 82 132 118 132 160C132 205 138 242 149 271" stroke="white" stroke-opacity="0.94" stroke-width="5" stroke-linecap="round"/>
+    <path d="M175 49C185 80 190 117 190 160C190 205 184 241 172 270" stroke="white" stroke-opacity="0.94" stroke-width="5" stroke-linecap="round"/>
+    <path d="M205 57C223 87 232 122 232 160C232 199 223 235 204 265" stroke="white" stroke-opacity="0.88" stroke-width="5" stroke-linecap="round"/>
+    <path d="M69 120C99 102 136 94 171 96C205 98 236 109 261 132" stroke="white" stroke-opacity="0.46" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M57 196C88 177 126 170 162 171C202 172 238 184 268 207" stroke="white" stroke-opacity="0.46" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M101 64C126 54 149 50 173 52C203 54 230 66 252 86" stroke="white" stroke-opacity="0.4" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M84 236C108 224 134 218 160 219C190 220 217 228 238 240" stroke="white" stroke-opacity="0.4" stroke-width="2.5" stroke-linecap="round"/>
+    <circle cx="114" cy="98" r="4.4" fill="white"/>
+    <circle cx="141" cy="89" r="4.2" fill="white"/>
+    <circle cx="170" cy="88" r="4.2" fill="white"/>
+    <circle cx="197" cy="93" r="4.2" fill="white"/>
+    <circle cx="222" cy="103" r="4.2" fill="white"/>
+    <circle cx="95" cy="131" r="4.2" fill="white"/>
+    <circle cx="123" cy="123" r="4.1" fill="white"/>
+    <circle cx="151" cy="119" r="4.1" fill="white"/>
+    <circle cx="180" cy="120" r="4.1" fill="white"/>
+    <circle cx="208" cy="126" r="4.1" fill="white"/>
+    <circle cx="233" cy="138" r="4.1" fill="white"/>
+    <circle cx="88" cy="167" r="4.1" fill="white"/>
+    <circle cx="116" cy="158" r="4.1" fill="white"/>
+    <circle cx="145" cy="154" r="4" fill="white"/>
+    <circle cx="174" cy="154" r="4" fill="white"/>
+    <circle cx="203" cy="159" r="4.1" fill="white"/>
+    <circle cx="231" cy="169" r="4.1" fill="white"/>
+    <circle cx="96" cy="203" r="4.1" fill="white"/>
+    <circle cx="124" cy="196" r="4.1" fill="white"/>
+    <circle cx="153" cy="193" r="4" fill="white"/>
+    <circle cx="181" cy="194" r="4" fill="white"/>
+    <circle cx="210" cy="200" r="4.1" fill="white"/>
+    <circle cx="234" cy="210" r="4.1" fill="white"/>
+    <circle cx="116" cy="232" r="4.1" fill="white"/>
+    <circle cx="142" cy="226" r="4.1" fill="white"/>
+    <circle cx="169" cy="226" r="4.1" fill="white"/>
+    <circle cx="196" cy="229" r="4.1" fill="white"/>
+    <circle cx="219" cy="236" r="4.1" fill="white"/>
+  </g>
+</svg>
