@@ -117,6 +117,11 @@ function normalizeRole(value: string | null | undefined): Role {
   return "MEMBER";
 }
 
+function resolveIssuedSessionVersion(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
 
 const DEFAULT_PBKDF2_ITERS = Number(process.env.CAVBOT_PBKDF2_ITERS || 310_000);
 
@@ -443,6 +448,7 @@ export async function POST(req: Request) {
       userId: user.id,
       accountId: active.accountId,
       memberRole,
+      sessionVersion: resolveIssuedSessionVersion(userAuth.sessionVersion),
     });
 
 

@@ -14,6 +14,7 @@ import {
 import type { CavbotSession } from "@/lib/apiAuth";
 import {
   compareMembershipPriority,
+  findUserAuth,
   findMembershipsForUser,
   findSessionMembership,
   findUserByEmail,
@@ -69,6 +70,11 @@ function normalizeRole(value: string | null | undefined): Role {
   if (normalized === "OWNER") return "OWNER";
   if (normalized === "ADMIN") return "ADMIN";
   return "MEMBER";
+}
+
+function resolveIssuedSessionVersion(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
 }
 
 
@@ -258,11 +264,13 @@ export async function GET(req: Request) {
       },
       200
     );
-    if (promotedMembership) {
+    const sharedSessionCookieEnabled = Boolean(sessionCookieOptions(req).domain);
+    if (promotedMembership || sharedSessionCookieEnabled) {
       const token = await createUserSession({
-        userId: promotedMembership.userId,
-        accountId: promotedMembership.accountId,
-        memberRole: normalizeRole(promotedMembership.role),
+        userId: effectiveMembership.userId,
+        accountId: effectiveMembership.accountId,
+        memberRole: normalizeRole(effectiveMembership.role),
+        sessionVersion: resolveIssuedSessionVersion(sess.sv),
       });
       return attachUserSessionCookie(req, response, token);
     }
@@ -335,10 +343,12 @@ export async function POST(req: Request) {
     if (!active) return json({ ok: false, error: "user_not_found_or_no_membership" }, 404);
 
     const memberRole = normalizeRole(active.role);
+    const userAuth = await findUserAuth(pool, user.id).catch(() => null);
     const token = await createUserSession({
       userId: user.id,
       accountId: active.accountId,
       memberRole,
+      sessionVersion: resolveIssuedSessionVersion(userAuth?.sessionVersion),
     });
 
     const res = json({ ok: true, mode: "user", accountId: active.accountId, memberRole }, 200);

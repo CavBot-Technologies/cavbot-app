@@ -114,6 +114,11 @@ function verifyTotp(code: string, secretB32: string): boolean {
   return candidates.includes(c);
 }
 
+function resolveIssuedSessionVersion(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
 /* =========================
    API
    ========================= */
@@ -202,10 +207,12 @@ export async function POST(req: NextRequest) {
 
     // Mint real session cookie
     const memberRole = normalizeRole(active.role);
+    const userAuth = await findUserAuth(pool, user.id).catch(() => null);
     const sessionToken = await createUserSession({
       userId: user.id,
       accountId: active.accountId,
       memberRole,
+      sessionVersion: resolveIssuedSessionVersion(userAuth?.sessionVersion),
     });
 
     const res = json({ ok: true, accountId: active.accountId, memberRole }, 200);

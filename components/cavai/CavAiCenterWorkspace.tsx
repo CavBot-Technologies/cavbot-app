@@ -38,8 +38,9 @@ import { inferCenterActionFromPrompt } from "@/src/lib/ai/ai.center-routing";
 import { emitGuardDecisionFromPayload, readGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
 import { resolveUploadFileIcon } from "@/lib/cavai/uploadFileIcons";
-import { readBootClientProfileState } from "@/lib/clientAuthBootstrap";
+import { readBootClientPlanState, readBootClientProfileState } from "@/lib/clientAuthBootstrap";
 import { publishClientPlan, readBootClientPlanBootstrap, subscribeClientPlan } from "@/lib/clientPlan";
+import { resolveAccountDisplayName, resolveAccountPlanLabel } from "@/lib/profileIdentity";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 import { buildCanonicalCavAiUrl } from "@/lib/cavai/url";
 import styles from "./CavAiWorkspace.module.css";
@@ -933,13 +934,6 @@ function maxImageAttachmentsForPlan(planId: "free" | "premium" | "premium_plus")
   if (planId === "premium_plus") return MAX_IMAGE_ATTACHMENTS_PREMIUM_PLUS;
   if (planId === "premium") return MAX_IMAGE_ATTACHMENTS_PREMIUM;
   return 2;
-}
-
-function toPlanTierLabel(value: unknown): "FREE TIER" | "PREMIUM PLAN" | "PREMIUM+" {
-  const plan = normalizePlanId(value);
-  if (plan === "premium_plus") return "PREMIUM+";
-  if (plan === "premium") return "PREMIUM PLAN";
-  return "FREE TIER";
 }
 
 function planTierRank(plan: "free" | "premium" | "premium_plus"): number {
@@ -3597,6 +3591,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [accountProfileAvatar, setAccountProfileAvatar] = useState("");
   const [accountProfileTone, setAccountProfileTone] = useState("lime");
   const [accountProfilePublicEnabled, setAccountProfilePublicEnabled] = useState<boolean | null>(null);
+  const [accountTrialActive, setAccountTrialActive] = useState(false);
+  const [accountTrialDaysLeft, setAccountTrialDaysLeft] = useState(0);
   const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">("free");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authProbeReady, setAuthProbeReady] = useState(false);
@@ -3775,6 +3771,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     setAccountProfileUsername("");
     setAccountInitialFallback("");
     setAccountProfileTone("lime");
+    setAccountTrialActive(false);
+    setAccountTrialDaysLeft(0);
     setAccountPlanId("free");
     publishClientPlan({ planId: "free" });
     setModelOptions(guestPreviewModelOptions);
@@ -3846,9 +3844,9 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
   useLayoutEffect(() => {
     const boot = readBootClientPlanBootstrap();
+    const bootPlanState = readBootClientPlanState();
     const bootProfileState = readBootClientProfileState();
     const bootProfileUsername = s(bootProfileState?.username).toLowerCase();
-    const nextAuthenticatedHint = boot.authenticatedHint || hasBootProfileSignal(bootProfileState);
     setAccountInitialFallback(s(bootProfileState?.initials));
     setAccountProfileUsername(bootProfileUsername);
     setAccountProfileAvatar(s(bootProfileState?.avatarImage));
@@ -3861,17 +3859,18 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       username: bootProfileUsername,
     });
     setAccountPlanId(boot.planId);
+    setAccountTrialActive(Boolean(bootPlanState?.trialActive));
+    setAccountTrialDaysLeft(Number(bootPlanState?.trialDaysLeft || 0));
     setModelOptions(centerPlanModelOptions(boot.planId));
     setAvailableReasoningLevels(reasoningLevelsForPlan(boot.planId));
-    if (nextAuthenticatedHint) {
-      setIsAuthenticated(true);
-    }
   }, []);
 
   useEffect(() => {
     return subscribeClientPlan((planId) => {
+      const bootPlanState = readBootClientPlanState();
       setAccountPlanId(planId);
-      setIsAuthenticated(true);
+      setAccountTrialActive(Boolean(bootPlanState?.trialActive));
+      setAccountTrialDaysLeft(Number(bootPlanState?.trialDaysLeft || 0));
     });
   }, []);
 
@@ -4207,6 +4206,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     .join(" ");
   const showSignedOutMobileLegal = !overlay && isPhoneLayout && authProbeReady && isGuestPreviewMode && isEmptyThread;
   const showDesktopGuestAuthPanel = !overlay && !isPhoneLayout && isGuestPreviewMode && accountMenuOpen;
+  const showAuthenticatedAccountUi = authProbeReady && isAuthenticated;
   const installedAgentIdSet = useMemo(
     () => new Set(installedAgentIds.map((id) => s(id).toLowerCase())),
     [installedAgentIds]
@@ -4710,13 +4710,18 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const accountChipBackground = useMemo(() => resolveAccountToneBackground(accountProfileTone), [accountProfileTone]);
   const accountChipInk = useMemo(() => resolveAccountToneInk(accountProfileTone), [accountProfileTone]);
   const accountNameLabel = useMemo(() => {
-    const fullName = s(profileIdentity.fullName);
-    if (fullName) return fullName;
-    const username = normalizeInitialUsernameSource(s(accountProfileUsername || profileIdentity.username));
-    if (username) return `@${username}`;
-    return "CavBot Account";
+    return resolveAccountDisplayName({
+      fullName: profileIdentity.fullName,
+      displayName: profileIdentity.fullName,
+      username: accountProfileUsername || profileIdentity.username,
+      fallbackLabel: "CavBot",
+    });
   }, [accountProfileUsername, profileIdentity.fullName, profileIdentity.username]);
-  const accountPlanLabel = useMemo(() => toPlanTierLabel(accountPlanId), [accountPlanId]);
+  const accountPlanLabel = useMemo(() => resolveAccountPlanLabel({
+    planId: accountPlanId,
+    trialActive: accountTrialActive,
+    trialDaysLeft: accountTrialDaysLeft,
+  }), [accountPlanId, accountTrialActive, accountTrialDaysLeft]);
   const publicProfileHref = useMemo(() => {
     return buildCanonicalPublicProfileHref(accountProfileUsername);
   }, [accountProfileUsername]);
@@ -5628,6 +5633,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         account?: {
           tier?: unknown;
           tierEffective?: unknown;
+          trialActive?: unknown;
+          trialDaysLeft?: unknown;
         };
       };
       if (isCancelled?.()) return false;
@@ -5663,8 +5670,18 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       }
       const authPlanId = normalizePlanId(body.account?.tierEffective ?? body.account?.tier);
       setAccountPlanId(authPlanId);
+      const authTrialActive = Boolean(body.account?.trialActive);
+      const authTrialDaysLeftRaw = Number(body.account?.trialDaysLeft);
+      const authTrialDaysLeft =
+        authTrialActive && Number.isFinite(authTrialDaysLeftRaw) && authTrialDaysLeftRaw > 0
+          ? Math.max(0, Math.trunc(authTrialDaysLeftRaw))
+          : 0;
+      setAccountTrialActive(authTrialDaysLeft > 0);
+      setAccountTrialDaysLeft(authTrialDaysLeft);
       publishClientPlan({
         planId: authPlanId,
+        trialActive: authTrialDaysLeft > 0,
+        trialDaysLeft: authTrialDaysLeft,
         preserveStrongerCached: true,
       });
       return true;
@@ -5733,7 +5750,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (!shouldWarm || !isAuthenticated) return;
+    if (!shouldWarm || !authProbeReady || !isAuthenticated) return;
     if (guestSessionSyncAttemptedRef.current) return;
     if (!hasPendingGuestSessionSyncInStorage() && !hasGuestSessionCacheSnapshotsInStorage()) return;
     guestSessionSyncAttemptedRef.current = true;
@@ -5745,7 +5762,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       }
       void loadSessions();
     })();
-  }, [isAuthenticated, loadSessions, shouldWarm, syncGuestSessionCacheToAccount]);
+  }, [authProbeReady, isAuthenticated, loadSessions, shouldWarm, syncGuestSessionCacheToAccount]);
 
   useEffect(() => {
     if (!shouldWarm) return;
@@ -11726,7 +11743,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                     {accountMenuOpen && isPhoneLayout ? renderGuestAuthPanel() : null}
                   </div>
                   ) : null
-                ) : (
+                ) : showAuthenticatedAccountUi ? (
                   <div className={styles.centerHeaderAccountWrap} ref={accountMenuRef}>
                     <button
                       type="button"
@@ -11794,7 +11811,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                       </div>
                     ) : null}
                   </div>
-                )}
+                ) : null}
               </div>
             ) : null}
           </aside>
@@ -11973,7 +11990,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                         >
                           Log in
                         </button>
-                      ) : (
+                      ) : showAuthenticatedAccountUi ? (
                         <button
                           type="button"
                           className={styles.centerHeaderAccountBtn}
@@ -12007,7 +12024,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                             )}
                           </span>
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   ) : null}
                 </>

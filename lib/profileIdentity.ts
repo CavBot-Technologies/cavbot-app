@@ -1,4 +1,5 @@
 import { normalizeUsername } from "@/lib/username";
+import { resolvePlanIdFromTier } from "@/lib/plans";
 
 function s(value: unknown) {
   return String(value ?? "").trim();
@@ -67,6 +68,41 @@ export function normalizeCavbotFounderProfile<T extends {
     displayName: CAVBOT_FOUNDER_DISPLAY_NAME,
     fullName: CAVBOT_FOUNDER_DISPLAY_NAME,
   };
+}
+
+export function resolveAccountDisplayName(input: {
+  username?: unknown;
+  displayName?: unknown;
+  fullName?: unknown;
+  fallbackLabel?: unknown;
+}) {
+  const normalized = normalizeCavbotFounderProfile({
+    username: input.username,
+    displayName: input.displayName,
+    fullName: input.fullName,
+  });
+  const full = s(normalized.fullName || normalized.displayName);
+  if (full) return full;
+  const handle = s(normalized.username || input.username).replace(/^@+/, "");
+  if (handle) return `@${handle}`;
+  return s(input.fallbackLabel) || "CavBot";
+}
+
+export function resolveAccountPlanLabel(input: {
+  planId?: unknown;
+  planTier?: unknown;
+  trialActive?: unknown;
+  trialDaysLeft?: unknown;
+}) {
+  const trialActive = Boolean(input.trialActive);
+  const trialDaysLeft = Number(input.trialDaysLeft);
+  const planId = resolvePlanIdFromTier(input.planId || input.planTier || "free");
+  if (trialActive && Number.isFinite(trialDaysLeft) && trialDaysLeft > 0 && planId !== "premium_plus") {
+    return "Free Trial";
+  }
+  if (planId === "premium_plus") return "Premium+";
+  if (planId === "premium") return "Premium";
+  return "Free";
 }
 
 export function hasMeaningfulProfileName(value: unknown) {

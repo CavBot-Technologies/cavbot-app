@@ -128,6 +128,36 @@ function normalizeOriginValue(raw: string): string | null {
   }
 }
 
+function normalizeHostValue(raw: string): string {
+  return String(raw || "")
+    .trim()
+    .split(",")[0]
+    .trim()
+    .replace(/:\d+$/, "")
+    .toLowerCase();
+}
+
+function hostnameFromOriginValue(raw: string): string {
+  const normalized = normalizeOriginValue(raw);
+  if (!normalized) return normalizeHostValue(raw);
+  try {
+    return normalizeHostValue(new URL(normalized).hostname);
+  } catch {
+    return normalizeHostValue(raw);
+  }
+}
+
+function normalizeCookieDomainValue(raw: string): string {
+  return normalizeHostValue(raw).replace(/^\.+/, "");
+}
+
+function inferFirstPartyCookieDomain(host: string): string {
+  const normalizedHost = normalizeHostValue(host);
+  if (!normalizedHost || isLocalhostHost(normalizedHost)) return "";
+  if (normalizedHost === "cavbot.io" || normalizedHost.endsWith(".cavbot.io")) return "cavbot.io";
+  return "";
+}
+
 function inferRequestOrigin(req: Request): string {
   const origin = String(req.headers.get("origin") || "").trim();
   if (origin) return origin;
@@ -159,6 +189,7 @@ export function getAppOrigin() {
 
 export function getAllowedOrigins(): string[] {
   const primary = getAppOrigin();
+  const firstPartyDomain = resolveSessionCookieDomain();
 
   const raw = env("ALLOWED_ORIGINS");
   const list = raw
@@ -178,7 +209,22 @@ export function getAllowedOrigins(): string[] {
           "http://127.0.0.1:3001",
         ];
 
-  return Array.from(new Set([primary, ...list, ...devDefaults]));
+  const firstPartyOrigins = firstPartyDomain
+    ? [
+        `https://${firstPartyDomain}`,
+        `https://www.${firstPartyDomain}`,
+        `https://app.${firstPartyDomain}`,
+        `https://ai.${firstPartyDomain}`,
+        env("CAVAI_URL"),
+        env("NEXT_PUBLIC_CAVAI_URL"),
+        env("NEXT_PUBLIC_CAVAI_ORIGIN"),
+        env("AUTH_REDIRECT_BASE_URL"),
+      ]
+        .map((candidate) => normalizeOriginValue(candidate))
+        .filter(Boolean) as string[]
+    : [];
+
+  return Array.from(new Set([primary, ...list, ...firstPartyOrigins, ...devDefaults]));
 }
 
 /* ==========================
@@ -525,9 +571,24 @@ function isLocalhostHost(host: string) {
   return h.includes("localhost") || h.startsWith("127.0.0.1") || h.startsWith("0.0.0.0");
 }
 
+export function resolveSessionCookieDomain(req?: Request) {
+  const explicit = normalizeCookieDomainValue(env("CAVBOT_SESSION_COOKIE_DOMAIN"));
+  if (explicit) return explicit;
+
+  const requestHost = normalizeHostValue(
+    req ? String(req.headers.get("x-forwarded-host") || req.headers.get("host") || "") : ""
+  );
+  const requestDerived = inferFirstPartyCookieDomain(requestHost);
+  if (requestDerived) return requestDerived;
+
+  const appHost = hostnameFromOriginValue(getAppOrigin());
+  return inferFirstPartyCookieDomain(appHost);
+}
+
 export function sessionCookieOptions(req?: Request) {
   const prod = isProd();
   let secure = prod;
+  const cookieDomain = resolveSessionCookieDomain(req);
 
   if (!prod) {
     secure = false;
@@ -545,6 +606,7 @@ export function sessionCookieOptions(req?: Request) {
     httpOnly: true as const,
     sameSite: "lax" as const,
     secure,
+    ...(cookieDomain ? { domain: cookieDomain } : {}),
     path: "/",
     maxAge: SESSION_TTL_SECONDS,
   };

@@ -84,6 +84,18 @@ function deriveInitials(displayName?: string | null, username?: string | null) {
   return "C";
 }
 
+function normalizeMemberRole(value: unknown): "OWNER" | "ADMIN" | "MEMBER" {
+  const role = String(value || "").trim().toUpperCase();
+  if (role === "OWNER") return "OWNER";
+  if (role === "ADMIN") return "ADMIN";
+  return "MEMBER";
+}
+
+function resolveIssuedSessionVersion(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
 /** Returns { trialActive, tierEffective, daysLeft } */
 type MembershipRecord = {
   role: string;
@@ -359,6 +371,8 @@ export async function GET(req: Request) {
       ...normalizedUser,
       initials,
     };
+    const sharedSessionCookieEnabled = Boolean(sessionCookieOptions(req).domain);
+    const shouldRefreshSharedSessionCookie = Boolean(promotedMembershipRecord) || sharedSessionCookieEnabled;
     const response = json(
       {
         ok: true,
@@ -382,15 +396,12 @@ export async function GET(req: Request) {
       },
       200
     );
-    if (promotedMembershipRecord) {
+    if (shouldRefreshSharedSessionCookie) {
       const token = await createUserSession({
-        userId: promotedMembershipRecord.userId,
-        accountId: promotedMembershipRecord.accountId,
-        memberRole: String(promotedMembershipRecord.role).toUpperCase() === "OWNER"
-          ? "OWNER"
-          : String(promotedMembershipRecord.role).toUpperCase() === "ADMIN"
-            ? "ADMIN"
-            : "MEMBER",
+        userId: membership.userId,
+        accountId: membership.accountId,
+        memberRole: normalizeMemberRole(membership.role),
+        sessionVersion: resolveIssuedSessionVersion(sess.sv),
       });
       return attachUserSessionCookie(req, response, token);
     }
