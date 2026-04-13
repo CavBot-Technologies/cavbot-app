@@ -16,11 +16,12 @@ test("CavAi voice orb uses Three.js shader geometry and both voice surfaces moun
   const code = read("components/cavai/CavAiCodeWorkspace.tsx");
 
   assert.match(pkg, /"three": "\^[^"]+"/);
+  assert.match(pkg, /"@types\/three": "\^[^"]+"/);
 
   assert.match(orb, /new THREE\.IcosahedronGeometry\(1, 64\)/);
   assert.match(orb, /new THREE\.ShaderMaterial\(/);
   assert.match(orb, /new THREE\.PointLight\(/);
-  assert.match(orb, /function readRms\(analyser: AnalyserNode, data: Uint8Array\)/);
+  assert.match(orb, /function readRms\(analyser: AnalyserNode, data: Uint8Array<ArrayBuffer>\)/);
 
   assert.match(center, /import CavAiVoiceOrb, \{ type CavAiVoiceOrbMode \} from "@\/components\/cavai\/CavAiVoiceOrb";/);
   assert.match(center, /setVoiceOrbState\("listening"\);/);

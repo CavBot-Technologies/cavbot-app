@@ -181,7 +181,7 @@ function modeToStateValue(mode: CavAiVoiceOrbMode) {
   return 0;
 }
 
-function readRms(analyser: AnalyserNode, data: Uint8Array) {
+function readRms(analyser: AnalyserNode, data: Uint8Array<ArrayBuffer>) {
   analyser.getByteTimeDomainData(data);
   let total = 0;
   for (let index = 0; index < data.length; index += 1) {
@@ -202,7 +202,7 @@ export default function CavAiVoiceOrb({
 }: CavAiVoiceOrbProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const analyserDataRef = useRef<Uint8Array | null>(null);
+  const analyserDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const orbMaterialRef = useRef<THREE.ShaderMaterial | null>(null);
@@ -426,7 +426,7 @@ export default function CavAiVoiceOrb({
         analyser.smoothingTimeConstant = 0.78;
         source.connect(analyser);
         analyserRef.current = analyser;
-        analyserDataRef.current = new Uint8Array(analyser.fftSize);
+        analyserDataRef.current = new Uint8Array(new ArrayBuffer(analyser.fftSize));
       } catch {
         cleanup();
       }
