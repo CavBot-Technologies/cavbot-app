@@ -4152,6 +4152,13 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const sidebarCollapsedActive = !isPhoneLayout && sidebarCollapsed;
   const hasExistingThread = Boolean(sessionId || messages.length || currentSession || hasInlineEdit);
   const centerComposerInThread = !overlay && isEmptyThread && !isPhoneLayout;
+  const emptyStateClassName = [
+    styles.centerEmptyState,
+    centerComposerInThread ? styles.centerEmptyStateWithComposer : "",
+    overlay ? styles.centerEmptyStateOverlay : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   const showSignedOutMobileLegal = !overlay && isPhoneLayout && authProbeReady && isGuestPreviewMode && isEmptyThread;
   const installedAgentIdSet = useMemo(
     () => new Set(installedAgentIds.map((id) => s(id).toLowerCase())),
@@ -11950,12 +11957,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
             <div className={threadInnerClassName}>
               {isEmptyThread ? (
                 <div
-                  className={[
-                    styles.centerEmptyState,
-                    centerComposerInThread ? styles.centerEmptyStateWithComposer : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
+                  className={emptyStateClassName}
                 >
                   {!overlay ? (
                     <div className={styles.centerEmptyBadgeWrap}>
@@ -11964,8 +11966,25 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                       </div>
                     </div>
                   ) : null}
-                  <h2 className={emptyTitleClassName}>{emptyHeadline}</h2>
-                  {emptySubline ? <p className={emptySublineClassName}>{emptySubline}</p> : null}
+                  <h2 className={emptyTitleClassName}>
+                    {overlay ? (
+                      <span className={styles.centerEmptyTitleOverlayLead}>{emptyHeadline}</span>
+                    ) : (
+                      emptyHeadline
+                    )}
+                  </h2>
+                  {emptySubline ? (
+                    <p className={emptySublineClassName}>
+                      {overlay ? (
+                        <span className={styles.centerEmptyTextOverlayLine}>
+                          <span className={styles.centerEmptyTextOverlayPrompt}>{emptySubline}</span>
+                          <span className={styles.centerEmptyTextOverlayCursor} aria-hidden="true" />
+                        </span>
+                      ) : (
+                        emptySubline
+                      )}
+                    </p>
+                  ) : null}
                   {centerComposerInThread ? <div className={styles.centerInlineComposer}>{composerContent}</div> : null}
                 </div>
               ) : null}

@@ -4225,6 +4225,12 @@
   gap: 12px;
 }
 
+.centerEmptyStateOverlay {
+  max-width: 430px;
+  padding: 10px 18px;
+  gap: 10px;
+}
+
 .centerEmptyStateWithComposer {
   width: min(860px, 100%);
   max-width: min(860px, 100%);
@@ -4247,10 +4253,12 @@
 .centerEmptyTitleOverlay {
   text-align: center;
   margin-inline: auto;
-  max-width: 22ch;
-  font-size: clamp(15px, 1.25vw, 20px);
-  line-height: 1.24;
-  font-weight: 720;
+  max-width: 13ch;
+  font-size: clamp(18px, 1.65vw, 24px);
+  line-height: 1.08;
+  font-weight: 680;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
 }
 
 .centerEmptyTitleWorkspace {
@@ -4269,8 +4277,72 @@
 }
 
 .centerEmptyTextOverlay {
-  font-size: 12px;
-  line-height: 1.42;
+  margin-inline: auto;
+  max-width: 28ch;
+  font-size: 13px;
+  line-height: 1.48;
+  letter-spacing: -0.012em;
+  color: rgba(220, 228, 247, 0.8);
+  text-wrap: balance;
+}
+
+.centerEmptyTitleOverlayLead {
+  display: inline-block;
+  animation: centerEmptyGreetingReveal 420ms cubic-bezier(0.2, 0.9, 0.24, 1) both;
+}
+
+.centerEmptyTextOverlayLine {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.centerEmptyTextOverlayPrompt {
+  display: inline-block;
+  animation: centerEmptyGreetingReveal 520ms cubic-bezier(0.2, 0.9, 0.24, 1) 80ms both;
+}
+
+.centerEmptyTextOverlayCursor {
+  width: 2px;
+  height: 0.92em;
+  border-radius: 999px;
+  background: rgba(247, 251, 255, 0.72);
+  animation:
+    centerEmptyGreetingReveal 520ms cubic-bezier(0.2, 0.9, 0.24, 1) 120ms both,
+    centerEmptyGreetingCursor 1.08s ease-in-out 640ms infinite;
+}
+
+@keyframes centerEmptyGreetingReveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes centerEmptyGreetingCursor {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .centerEmptyTitleOverlayLead,
+  .centerEmptyTextOverlayPrompt,
+  .centerEmptyTextOverlayCursor {
+    animation: none;
+  }
 }
 
 .centerGuestMobilePrompt,
