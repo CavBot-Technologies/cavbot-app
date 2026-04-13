@@ -36,4 +36,5 @@ test("shared sidebar account plan label is not forced to uppercase", () => {
   assert.match(source, /\.cb-side-account-plan\{/);
   assert.doesNotMatch(source, /\.cb-side-account-plan\{[^}]*text-transform:\s*uppercase;/);
   assert.match(source, /\.cb-side-account-plan\{[^}]*text-transform:\s*none;/);
+  assert.match(source, /\.cb-side-account-plan\{[^}]*font-weight:\s*430;/);
 });
