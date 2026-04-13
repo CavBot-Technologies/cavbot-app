@@ -8495,6 +8495,46 @@
     overflow: hidden;
   }
 
+  .centerMainImageStudioMobile {
+    display: block;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .centerMainImageStudioMobile .centerThread {
+    overflow: visible;
+    padding: 22px 11px 8px;
+  }
+
+  .centerMainImageStudioMobile .centerThreadInner {
+    min-height: auto;
+  }
+
+  .centerMainImageStudioMobile .centerThreadInnerEmpty {
+    justify-content: flex-start;
+  }
+
+  .centerMainImageStudioMobile .centerEmptyState {
+    padding-top: 28px;
+  }
+
+  .centerMainImageStudioMobile .centerComposer {
+    padding: 14px 11px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .centerMainImageStudioMobile .imageStudioModePanel {
+    margin-top: 10px;
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .centerMainImageStudioMobile .imageStudioPresetShelf {
+    margin-top: 16px;
+    padding: 11px;
+    border-radius: 14px;
+  }
+
   .centerComposerInput {
     min-height: 70px;
     max-height: 150px;

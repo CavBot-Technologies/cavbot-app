@@ -9985,6 +9985,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     return styles.centerWebResearchGlyphDeepResearch;
   }, [activeToolbarQuickMode]);
   const imageComposerModeActive = composerQuickMode === "create_image" || composerQuickMode === "edit_image";
+  const imageStudioMobileLayoutActive = !overlay && isPhoneLayout && imageComposerModeActive;
   const lockImageStudioPromptLine = imageComposerModeActive && Boolean(selectedImagePresetActivationLine);
   const lockedImageStudioPromptPrefix = lockImageStudioPromptLine
     ? `${selectedImagePresetActivationLine}\n`
@@ -11821,6 +11822,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
           className={[
             styles.centerMain,
             showDesktopGuestAuthPanel ? styles.centerMainWithGuestAuth : "",
+            imageStudioMobileLayoutActive ? styles.centerMainImageStudioMobile : "",
           ].filter(Boolean).join(" ")}
           aria-label="CavAi chat workspace"
         >
