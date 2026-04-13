@@ -2,6 +2,7 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
 
 export type AccountDisciplineStatus = "ACTIVE" | "SUSPENDED" | "REVOKED";
@@ -33,8 +34,6 @@ type RawAccountDisciplineRow = {
   note: string | null;
   updatedAt: Date | string | null;
 };
-
-let tableReady = false;
 
 function s(value: unknown) {
   return String(value ?? "").trim();
@@ -80,60 +79,51 @@ function normalizeRow(row: RawAccountDisciplineRow | null | undefined): AccountD
   };
 }
 
-async function ensureAccountDisciplineTable() {
-  if (tableReady) return;
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "AdminAccountDiscipline" (
-      "accountId" TEXT PRIMARY KEY,
-      "status" VARCHAR(24) NOT NULL DEFAULT 'ACTIVE',
-      "violationCount" INTEGER NOT NULL DEFAULT 0,
-      "suspendedUntil" TIMESTAMPTZ,
-      "suspendedAt" TIMESTAMPTZ,
-      "suspendedByStaffId" TEXT,
-      "suspensionDays" INTEGER,
-      "revokedAt" TIMESTAMPTZ,
-      "revokedByStaffId" TEXT,
-      "note" TEXT,
-      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS "AdminAccountDiscipline_status_updatedAt_idx"
-    ON "AdminAccountDiscipline"("status", "updatedAt");
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS "AdminAccountDiscipline_suspendedUntil_idx"
-    ON "AdminAccountDiscipline"("suspendedUntil");
-  `);
-
-  tableReady = true;
-}
-
 async function readAccountDisciplineRow(accountId: string) {
-  await ensureAccountDisciplineTable();
+  try {
+    const rows = await prisma.$queryRaw<RawAccountDisciplineRow[]>(
+      Prisma.sql`
+        SELECT
+          "accountId",
+          "status",
+          "violationCount",
+          "suspendedUntil",
+          "suspendedAt",
+          "suspendedByStaffId",
+          "suspensionDays",
+          "revokedAt",
+          "revokedByStaffId",
+          "note",
+          "updatedAt"
+        FROM "AdminAccountDiscipline"
+        WHERE "accountId" = ${accountId}
+        LIMIT 1
+      `,
+    );
 
-  const rows = await prisma.$queryRaw<RawAccountDisciplineRow[]>(
-    Prisma.sql`
-      SELECT
-        "accountId",
-        "status",
-        "violationCount",
-        "suspendedUntil",
-        "suspendedAt",
-        "suspendedByStaffId",
-        "suspensionDays",
-        "revokedAt",
-        "revokedByStaffId",
-        "note",
-        "updatedAt"
-      FROM "AdminAccountDiscipline"
-      WHERE "accountId" = ${accountId}
-      LIMIT 1
-    `,
-  );
-
-  return normalizeRow(rows[0]);
+    return normalizeRow(rows[0]);
+  } catch (error) {
+    if (
+      isSchemaMismatchError(error, {
+        tables: ["AdminAccountDiscipline"],
+        columns: [
+          "status",
+          "violationCount",
+          "suspendedUntil",
+          "suspendedAt",
+          "suspendedByStaffId",
+          "suspensionDays",
+          "revokedAt",
+          "revokedByStaffId",
+          "note",
+          "updatedAt",
+        ],
+      })
+    ) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 export async function getAccountDisciplineState(accountIdInput: string): Promise<AccountDisciplineState | null> {
@@ -147,20 +137,14 @@ export async function getAccountDisciplineState(accountIdInput: string): Promise
   const suspendedUntilMs = new Date(current.suspendedUntilISO).getTime();
   if (!Number.isFinite(suspendedUntilMs) || suspendedUntilMs > Date.now()) return current;
 
-  await ensureAccountDisciplineTable();
-  await prisma.$executeRaw(
-    Prisma.sql`
-      UPDATE "AdminAccountDiscipline"
-      SET
-        "status" = 'ACTIVE',
-        "suspendedUntil" = NULL,
-        "suspendedAt" = NULL,
-        "suspendedByStaffId" = NULL,
-        "suspensionDays" = NULL,
-        "updatedAt" = CURRENT_TIMESTAMP
-      WHERE "accountId" = ${accountId}
-    `,
-  );
-
-  return readAccountDisciplineRow(accountId);
+  // Auth reads must fail open on expired suspensions until the admin discipline
+  // management surface is fully wired in this deploy.
+  return {
+    ...current,
+    status: "ACTIVE",
+    suspendedUntilISO: null,
+    suspendedAtISO: null,
+    suspendedByStaffId: null,
+    suspensionDays: null,
+  };
 }
