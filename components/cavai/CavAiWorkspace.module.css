@@ -3457,7 +3457,14 @@
 }
 
 .centerMainWithGuestAuth {
+  --center-guest-auth-dock-offset: clamp(320px, 28vw, 384px);
   padding-right: clamp(320px, 28vw, 384px);
+  padding-right: var(--center-guest-auth-dock-offset);
+}
+
+.centerMainWithGuestAuth .centerMainHeader {
+  margin-right: calc(-1 * var(--center-guest-auth-dock-offset));
+  padding-right: calc(14px + var(--center-guest-auth-dock-offset));
 }
 
 .centerMainHeader {
@@ -8286,7 +8293,9 @@
   }
 
   .centerMainWithGuestAuth {
+    --center-guest-auth-dock-offset: clamp(304px, 40vw, 336px);
     padding-right: clamp(304px, 40vw, 336px);
+    padding-right: var(--center-guest-auth-dock-offset);
   }
 }
 
@@ -8441,6 +8450,7 @@
   }
 
   .centerMainWithGuestAuth {
+    --center-guest-auth-dock-offset: 0px;
     padding-right: 0;
   }
 
