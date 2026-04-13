@@ -935,11 +935,11 @@ function maxImageAttachmentsForPlan(planId: "free" | "premium" | "premium_plus")
   return 2;
 }
 
-function toPlanTierLabel(value: unknown): "Free" | "Premium" | "Premium+" {
+function toPlanTierLabel(value: unknown): "FREE TIER" | "PREMIUM PLAN" | "PREMIUM+" {
   const plan = normalizePlanId(value);
-  if (plan === "premium_plus") return "Premium+";
-  if (plan === "premium") return "Premium";
-  return "Free";
+  if (plan === "premium_plus") return "PREMIUM+";
+  if (plan === "premium") return "PREMIUM PLAN";
+  return "FREE TIER";
 }
 
 function planTierRank(plan: "free" | "premium" | "premium_plus"): number {
@@ -3723,6 +3723,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const appliedInitialSessionIdRef = useRef<string | null>(null);
   const warmedModelsRef = useRef(false);
   const warmedAuthProfileRef = useRef(false);
+  const confirmedAuthenticatedUserRef = useRef(false);
   const reasoningTickerRef = useRef<number | null>(null);
   const [agentRegistrySnapshot, setAgentRegistrySnapshot] = useState<AgentRegistrySnapshot>({
     ...EMPTY_AGENT_REGISTRY_SNAPSHOT,
@@ -3767,6 +3768,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, []);
 
   const applyUnauthenticatedCenterState = useCallback(() => {
+    confirmedAuthenticatedUserRef.current = false;
     setIsAuthenticated(false);
     setAccountProfilePublicEnabled(null);
     setAccountProfileAvatar("");
@@ -4711,14 +4713,16 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     const fullName = s(profileIdentity.fullName);
     if (fullName) return fullName;
     const username = normalizeInitialUsernameSource(s(accountProfileUsername || profileIdentity.username));
-    if (username) return `${username.slice(0, 1).toUpperCase()}${username.slice(1)}`;
-    return "CavBot Operator";
+    if (username) return `@${username}`;
+    return "CavBot Account";
   }, [accountProfileUsername, profileIdentity.fullName, profileIdentity.username]);
   const accountPlanLabel = useMemo(() => toPlanTierLabel(accountPlanId), [accountPlanId]);
   const publicProfileHref = useMemo(() => {
     return buildCanonicalPublicProfileHref(accountProfileUsername);
   }, [accountProfileUsername]);
-  const guestAccountLabel = "Not logged in";
+  const guestAccountNameLabel = "CavBot Operator";
+  const guestAccountPromptLabel = "Log in or create an account";
+  const guestAccountLabel = `${guestAccountNameLabel} · ${guestAccountPromptLabel}`;
   const profileMenuLabel = useMemo(() => (accountProfilePublicEnabled ? "Public Profile" : "Private Profile"), [accountProfilePublicEnabled]);
   const clearReasoningTicker = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -5610,6 +5614,9 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       const body = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         authenticated?: boolean;
+        session?: {
+          systemRole?: unknown;
+        } | null;
         user?: {
           displayName?: unknown;
           username?: unknown;
@@ -5624,17 +5631,23 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         };
       };
       if (isCancelled?.()) return false;
+      const systemRole = s(body.session?.systemRole).toLowerCase();
+      const hasUserPayload = Boolean(body.user && typeof body.user === "object");
       const shouldApplyGuestFallback = isAuthRequiredLikeResponse(res.status, body)
-        || (res.ok && body.ok === true && body.authenticated === false);
+        || (res.ok && body.ok === true && body.authenticated === false)
+        || (res.ok && body.ok === true && body.authenticated === true && (systemRole === "system" || !hasUserPayload));
       if (shouldApplyGuestFallback) {
         applyUnauthenticatedCenterState();
         return false;
       }
       if (!res.ok || body.ok !== true || body.authenticated !== true) {
-        // Keep account history visible until the backend explicitly proves the viewer is signed out.
-        setIsAuthenticated(true);
+        if (!confirmedAuthenticatedUserRef.current) {
+          applyUnauthenticatedCenterState();
+          return false;
+        }
         return false;
       }
+      confirmedAuthenticatedUserRef.current = true;
       setIsAuthenticated(true);
       setAccountProfileUsername(s(body.user?.username).toLowerCase());
       setAccountInitialFallback(s(body.user?.initials));
@@ -5657,8 +5670,9 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       return true;
     } catch {
       if (isCancelled?.()) return false;
-      // A transient auth probe failure should not dump the user into guest preview and blank history.
-      setIsAuthenticated(true);
+      if (!confirmedAuthenticatedUserRef.current) {
+        applyUnauthenticatedCenterState();
+      }
       return false;
     } finally {
       if (!isCancelled?.()) {
@@ -11704,7 +11718,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                       >
                         <span className={styles.centerHeaderAccountInitials}>C</span>
                       </span>
-                      <span className={styles.centerSidebarActionText}>{guestAccountLabel}</span>
+                      <span className={styles.centerSidebarAccountMeta}>
+                        <span className={styles.centerSidebarAccountName}>{guestAccountNameLabel}</span>
+                        <span className={styles.centerSidebarAccountPlan}>{guestAccountPromptLabel}</span>
+                      </span>
                     </button>
                     {accountMenuOpen && isPhoneLayout ? renderGuestAuthPanel() : null}
                   </div>

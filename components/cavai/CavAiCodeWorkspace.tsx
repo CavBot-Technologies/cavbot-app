@@ -2100,6 +2100,9 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       const body = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         authenticated?: boolean;
+        session?: {
+          systemRole?: unknown;
+        } | null;
         user?: {
           displayName?: unknown;
           username?: unknown;
@@ -2109,8 +2112,10 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
           tierEffective?: unknown;
         };
       };
+      const systemRole = s(body.session?.systemRole).toLowerCase();
+      const hasUserPayload = Boolean(body.user && typeof body.user === "object");
       if (isCancelled?.()) return false;
-      if (!res.ok || body.ok !== true || body.authenticated !== true) {
+      if (!res.ok || body.ok !== true || body.authenticated !== true || systemRole === "system" || !hasUserPayload) {
         applyUnauthenticatedCodeState();
         return false;
       }
