@@ -58,8 +58,12 @@ test("center workspace account menu items keep hover fills without borders", () 
 test("center workspace styles the signed-out auth panel as a desktop right-side dock", () => {
   const source = read("components/cavai/CavAiWorkspace.module.css");
 
-  assert.equal(source.includes(".centerMainWithGuestAuth {\n  padding-right: clamp(344px, 31vw, 430px);\n}"), true);
+  assert.equal(source.includes(".centerMainWithGuestAuth {\n  padding-right: clamp(320px, 28vw, 384px);\n}"), true);
   assert.equal(source.includes(".centerGuestAuthPanelDocked {\n  position: absolute;"), true);
-  assert.equal(source.includes("top: calc(56px + 16px);"), true);
-  assert.equal(source.includes("width: min(392px, calc(100% - 32px));"), true);
+  assert.equal(source.includes("top: calc(56px + 14px);"), true);
+  assert.equal(source.includes("bottom: auto;"), true);
+  assert.equal(source.includes("width: min(336px, calc(100% - 24px));"), true);
+  assert.equal(source.includes("align-content: start;"), true);
+  assert.equal(source.includes(".centerGuestAuthProviderBtn {\n  width: 100%;\n  min-height: 40px;"), true);
+  assert.equal(source.includes(".centerGuestAuthInput,\n.centerGuestAuthEmailValue {\n  width: 100%;\n  min-height: 40px;"), true);
 });
