@@ -1,6 +1,11 @@
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import { readImageHistory } from "@/lib/cavai/imageStudio.server";
 import { requireAiRequestContext } from "@/src/lib/ai/ai.guard";
+import {
+  buildPassiveAiAuthRequiredPayload,
+  isPassiveAiAuthRequiredError,
+  readPassiveAiAuthErrorCode,
+} from "@/src/lib/ai/ai.route-response";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,6 +65,9 @@ export async function GET(req: Request) {
       );
     }
   } catch (err) {
+    if (isPassiveAiAuthRequiredError(err)) {
+      return jsonNoStore(buildPassiveAiAuthRequiredPayload(readPassiveAiAuthErrorCode(err)), 200);
+    }
     return cavcloudErrorResponse(err, "Failed to load Image Studio history.");
   }
 }

@@ -6,6 +6,11 @@ import {
 } from "@/lib/apiAuth";
 import { getAiSessionForAccount, listAiSessionMessages } from "@/src/lib/ai/ai.memory";
 import { requireAiRequestContext } from "@/src/lib/ai/ai.guard";
+import {
+  buildPassiveAiAuthRequiredPayload,
+  isPassiveAiAuthRequiredError,
+  readPassiveAiAuthErrorCode,
+} from "@/src/lib/ai/ai.route-response";
 import { resolveAiExecutionPolicy } from "@/src/lib/ai/ai.policy";
 import { AiServiceError } from "@/src/lib/ai/ai.types";
 
@@ -106,6 +111,9 @@ export async function GET(
       200
     );
   } catch (error) {
+    if (isPassiveAiAuthRequiredError(error)) {
+      return json(buildPassiveAiAuthRequiredPayload(readPassiveAiAuthErrorCode(error)), 200);
+    }
     if (isApiAuthError(error)) {
       return json({ ok: false, requestId, error: error.code }, error.status);
     }

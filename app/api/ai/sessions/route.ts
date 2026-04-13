@@ -8,6 +8,11 @@ import { hasRequestIntegrityHeader } from "@/lib/security/requestIntegrity";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
 import { createAiSession, listAiSessions } from "@/src/lib/ai/ai.memory";
 import { requireAiRequestContext } from "@/src/lib/ai/ai.guard";
+import {
+  buildPassiveAiAuthRequiredPayload,
+  isPassiveAiAuthRequiredError,
+  readPassiveAiAuthErrorCode,
+} from "@/src/lib/ai/ai.route-response";
 import { resolveAiExecutionPolicy } from "@/src/lib/ai/ai.policy";
 import { AI_CENTER_SURFACE_SCHEMA, AiServiceError } from "@/src/lib/ai/ai.types";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -124,6 +129,9 @@ export async function GET(req: NextRequest) {
       200
     );
   } catch (error) {
+    if (isPassiveAiAuthRequiredError(error)) {
+      return json(buildPassiveAiAuthRequiredPayload(readPassiveAiAuthErrorCode(error)), 200);
+    }
     if (isApiAuthError(error)) return json({ ok: false, requestId, error: error.code }, error.status);
     if (error instanceof AiServiceError) {
       const details = error.details;

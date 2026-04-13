@@ -3,6 +3,11 @@ import { hasRequestIntegrityHeader } from "@/lib/security/requestIntegrity";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { requireAiRequestContext } from "@/src/lib/ai/ai.guard";
 import {
+  buildPassiveAiAuthRequiredPayload,
+  isPassiveAiAuthRequiredError,
+  readPassiveAiAuthErrorCode,
+} from "@/src/lib/ai/ai.route-response";
+import {
   DEFAULT_CAVEN_SETTINGS,
   getCavenSettings,
   parseCavenSettingsPatch,
@@ -86,6 +91,9 @@ export async function GET(req: Request) {
     };
     return jsonNoStore(degraded ? { ...baseResponse, degraded: true } : baseResponse, 200);
   } catch (err) {
+    if (isPassiveAiAuthRequiredError(err)) {
+      return jsonNoStore(buildPassiveAiAuthRequiredPayload(readPassiveAiAuthErrorCode(err)), 200);
+    }
     return cavcloudErrorResponse(err, "Failed to load Caven settings.");
   }
 }

@@ -3,6 +3,7 @@ import "server-only";
 import pg from "pg";
 
 import { getAuthPool, newDbId, withAuthTransaction } from "@/lib/authDb";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { embedAlibabaQwenText, rerankAlibabaQwenDocuments } from "@/src/lib/ai/providers/alibaba-qwen";
 import { AiServiceError, type AiCenterSurface, type CavAiReasoningLevel } from "@/src/lib/ai/ai.types";
 
@@ -21,6 +22,32 @@ const GENERIC_SESSION_TITLE_KEYS = new Set([
   "new chat",
   "cavai chat",
 ]);
+
+function isAiMessageFeedbackSchemaMismatch(error: unknown) {
+  return isSchemaMismatchError(error, {
+    tables: ["CavAiMessageFeedback"],
+    columns: [
+      "accountId",
+      "messageId",
+      "userId",
+      "reaction",
+      "copyCount",
+      "shareCount",
+      "retryCount",
+      "updatedAt",
+    ],
+    fields: [
+      "accountId",
+      "messageId",
+      "userId",
+      "reaction",
+      "copyCount",
+      "shareCount",
+      "retryCount",
+      "updatedAt",
+    ],
+  });
+}
 
 function s(value: unknown): string {
   return String(value ?? "").trim();
@@ -836,30 +863,38 @@ export async function listAiSessionMessages(args: {
 
   const feedbackByMessageId = new Map<string, AiMessageFeedbackState>();
   if (userId && rows.length) {
-    const feedbackRows = (
-      await getAuthPool().query<AiFeedbackDbRow>(
-        `SELECT
-            "messageId",
-            "reaction",
-            "copyCount",
-            "shareCount",
-            "retryCount",
-            "updatedAt"
-          FROM "CavAiMessageFeedback"
-          WHERE "accountId" = $1
-            AND "userId" = $2
-            AND "messageId" = ANY($3::text[])`,
-        [accountId, userId, rows.map((row) => row.id)]
-      )
-    ).rows;
-    for (const row of feedbackRows) {
-      feedbackByMessageId.set(row.messageId, {
-        reaction: toFeedbackReaction(row.reaction),
-        copyCount: Math.max(0, Math.trunc(Number(row.copyCount || 0))),
-        shareCount: Math.max(0, Math.trunc(Number(row.shareCount || 0))),
-        retryCount: Math.max(0, Math.trunc(Number(row.retryCount || 0))),
-        updatedAt: toIso(row.updatedAt),
-      });
+    try {
+      const feedbackRows = (
+        await getAuthPool().query<AiFeedbackDbRow>(
+          `SELECT
+              "messageId",
+              "reaction",
+              "copyCount",
+              "shareCount",
+              "retryCount",
+              "updatedAt"
+            FROM "CavAiMessageFeedback"
+            WHERE "accountId" = $1
+              AND "userId" = $2
+              AND "messageId" = ANY($3::text[])`,
+          [accountId, userId, rows.map((row) => row.id)]
+        )
+      ).rows;
+      for (const row of feedbackRows) {
+        feedbackByMessageId.set(row.messageId, {
+          reaction: toFeedbackReaction(row.reaction),
+          copyCount: Math.max(0, Math.trunc(Number(row.copyCount || 0))),
+          shareCount: Math.max(0, Math.trunc(Number(row.shareCount || 0))),
+          retryCount: Math.max(0, Math.trunc(Number(row.retryCount || 0))),
+          updatedAt: toIso(row.updatedAt),
+        });
+      }
+    } catch (error) {
+      // Feedback is optional session metadata. Do not fail history hydration if that schema
+      // is still rolling out or a best-effort feedback read flakes.
+      if (!isAiMessageFeedbackSchemaMismatch(error) && process.env.NODE_ENV !== "production") {
+        console.error("[cavai] session feedback hydration failed", error);
+      }
     }
   }
 

@@ -7,6 +7,11 @@ import { hasRequestIntegrityHeader } from "@/lib/security/requestIntegrity";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
 import { requireAiRequestContext } from "@/src/lib/ai/ai.guard";
 import {
+  buildPassiveAiAuthRequiredPayload,
+  isPassiveAiAuthRequiredError,
+  readPassiveAiAuthErrorCode,
+} from "@/src/lib/ai/ai.route-response";
+import {
   resolveAiExecutionPolicy,
   resolveVisibleModelCatalogForContext,
   resolveVisibleModelCatalogForPlan,
@@ -216,6 +221,9 @@ export async function GET(req: NextRequest) {
       200
     );
   } catch (error) {
+    if (isPassiveAiAuthRequiredError(error)) {
+      return json(buildPassiveAiAuthRequiredPayload(readPassiveAiAuthErrorCode(error)), 200);
+    }
     if (isApiAuthError(error)) {
       return json({ ok: false, requestId, error: error.code }, error.status);
     }
