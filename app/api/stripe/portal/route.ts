@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
 
     return json({ ok: true, url: portal.url }, 200);
   } catch (e) {
+    console.error("[billing/portal] failed", e);
     if (isApiAuthError(e)) return json({ ok: false, error: e.code, message: e.message }, e.status);
     return json({ ok: false, error: "PORTAL_FAILED", message: "Failed to open billing portal." }, 500);
   }

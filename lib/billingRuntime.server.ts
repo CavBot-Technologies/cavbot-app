@@ -330,6 +330,54 @@ export async function ensureBillingStripeCustomerBinding(
   return result.rows[0] ? mapBillingAccount(result.rows[0]) : null;
 }
 
+export async function clearPendingDowngradeState(
+  accountId: string,
+  queryable: Queryable = getAuthPool(),
+): Promise<void> {
+  await queryable.query(
+    `UPDATE "Account"
+     SET "pendingDowngradePlanId" = NULL,
+         "pendingDowngradeBilling" = NULL,
+         "pendingDowngradeAt" = NULL,
+         "pendingDowngradeEffectiveAt" = NULL,
+         "pendingDowngradeAppliesAtRenewal" = true,
+         "updatedAt" = NOW()
+     WHERE "id" = $1`,
+    [accountId],
+  );
+}
+
+export async function setPendingDowngradeState(
+  accountId: string,
+  args: {
+    planId: string;
+    billing: BillingCycle;
+    scheduledAt: Date;
+    effectiveAt: Date | null;
+    appliesAtRenewal?: boolean;
+  },
+  queryable: Queryable = getAuthPool(),
+): Promise<void> {
+  await queryable.query(
+    `UPDATE "Account"
+     SET "pendingDowngradePlanId" = $2,
+         "pendingDowngradeBilling" = $3,
+         "pendingDowngradeAt" = $4,
+         "pendingDowngradeEffectiveAt" = $5,
+         "pendingDowngradeAppliesAtRenewal" = $6,
+         "updatedAt" = NOW()
+     WHERE "id" = $1`,
+    [
+      accountId,
+      String(args.planId || "").trim() || null,
+      String(args.billing || "").trim() || null,
+      args.scheduledAt,
+      args.effectiveAt,
+      args.appliesAtRenewal ?? true,
+    ],
+  );
+}
+
 export async function listBillingInvoiceAuditRows(
   accountId: string,
   limit = 50,

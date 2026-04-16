@@ -16,6 +16,8 @@ test("billing ancillary routes avoid Prisma runtime imports on request paths", (
     "app/api/billing/invoices/route.ts",
     "app/api/billing/invoices/[invoiceId]/download/route.ts",
     "app/api/billing/checkout/route.ts",
+    "app/api/billing/upgrade/route.ts",
+    "app/api/billing/downgrade/route.ts",
     "app/api/billing/checkout-embedded/route.ts",
     "app/api/stripe/checkout/route.ts",
     "app/api/stripe/portal/route.ts",
@@ -30,7 +32,9 @@ test("billing ancillary routes avoid Prisma runtime imports on request paths", (
       `${relPath} should not import the Prisma runtime client`,
     );
     assert.equal(
-      source.includes('from "@/lib/billingRuntime.server"') || source.includes('from "@/lib/authDb"'),
+      source.includes('from "@/lib/billingRuntime.server"')
+        || source.includes('from "@/lib/authDb"')
+        || source.includes('from "@/lib/billingFlow.server"'),
       true,
       `${relPath} should use runtime-safe billing/auth helpers`,
     );
@@ -99,4 +103,20 @@ test("billing read routes degrade ancillary data instead of surfacing 500s on ru
   assert.equal(paymentMethodSource.includes("return json(pmEmpty(), 200);"), true);
   assert.equal(invoicesSource.includes("degraded: true"), true);
   assert.equal(downloadSource.includes('error: "SERVICE_UNAVAILABLE"'), true);
+});
+
+test("billing upgrade routes share one authoritative backend and do not reference dead Stripe cancel pages", () => {
+  const checkoutRoute = read("app/api/billing/checkout/route.ts");
+  const upgradeRoute = read("app/api/billing/upgrade/route.ts");
+  const legacyStripeRoute = read("app/api/stripe/checkout/route.ts");
+  const sharedFlow = read("lib/billingFlow.server.ts");
+
+  assert.equal(checkoutRoute.includes("beginBillingUpgrade"), true);
+  assert.equal(upgradeRoute.includes("beginBillingUpgrade"), true);
+  assert.equal(legacyStripeRoute.includes("beginBillingUpgrade"), true);
+  assert.equal(sharedFlow.includes("/billing/failed?canceled=1"), true);
+
+  assert.equal(checkoutRoute.includes("/billing/cancel"), false);
+  assert.equal(upgradeRoute.includes("/billing/cancel"), false);
+  assert.equal(legacyStripeRoute.includes("/billing/cancel"), false);
 });

@@ -51,6 +51,7 @@ test("billing plan resolver preserves paid current plan during an active trial w
 
 test("billing summary and billing actions share the effective plan resolver", () => {
   const summaryRoute = read("app/api/billing/summary/route.ts");
+  const sharedFlow = read("lib/billingFlow.server.ts");
   const upgradeRoute = read("app/api/billing/upgrade/route.ts");
   const downgradeRoute = read("app/api/billing/downgrade/route.ts");
   const upgradePage = read("app/settings/upgrade/page.tsx");
@@ -60,10 +61,24 @@ test("billing summary and billing actions share the effective plan resolver", ()
   assert.equal(summaryRoute.includes("planSource: planResolution.planSource"), true);
   assert.equal(summaryRoute.includes("authoritative: planResolution.authoritative"), true);
 
-  assert.equal(upgradeRoute.includes("resolveBillingPlanResolution({"), true);
-  assert.equal(downgradeRoute.includes("resolveBillingPlanResolution({"), true);
+  assert.equal(sharedFlow.includes("resolveBillingPlanResolution({"), true);
+  assert.equal(upgradeRoute.includes("beginBillingUpgrade"), true);
+  assert.equal(downgradeRoute.includes("scheduleBillingDowngrade"), true);
   assert.equal(upgradePage.includes("resolveBillingPlanResolution({"), true);
   assert.equal(downgradePage.includes("resolveBillingPlanResolution({"), true);
+});
+
+test("billing pages call the shared billing backend directly instead of self-fetching their own API routes", () => {
+  const upgradePage = read("app/settings/upgrade/page.tsx");
+  const downgradePage = read("app/settings/downgrade/page.tsx");
+
+  assert.equal(upgradePage.includes("buildRequestFromCurrentContext"), true);
+  assert.equal(upgradePage.includes("beginBillingUpgrade({"), true);
+  assert.equal(upgradePage.includes('/api/billing/checkout'), false);
+
+  assert.equal(downgradePage.includes("buildRequestFromCurrentContext"), true);
+  assert.equal(downgradePage.includes("scheduleBillingDowngrade({"), true);
+  assert.equal(downgradePage.includes('/api/billing/downgrade'), false);
 });
 
 test("billing client ignores non-authoritative fallback summaries and does not write shell snapshot state", () => {
@@ -73,6 +88,17 @@ test("billing client ignores non-authoritative fallback summaries and does not w
   assert.equal(source.includes("(!billingSummaryResolved ? bootPlanId : null)"), true);
   assert.equal(source.includes('label: billingSummaryResolved ? "Plan unavailable" : "Loading..."'), true);
   assert.equal(source.includes("globalThis.__cbLocalStore.setItem("), false);
+});
+
+test("billing client uses hosted checkout plus the Stripe billing portal instead of mounting Stripe Elements in settings", () => {
+  const source = read("app/settings/sections/BillingClient.tsx");
+
+  assert.equal(source.includes("/api/stripe/portal"), true);
+  assert.equal(source.includes("Manage billing"), true);
+  assert.equal(source.includes("CardNumberElement"), false);
+  assert.equal(source.includes("confirmCardSetup"), false);
+  assert.equal(source.includes("NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY"), false);
+  assert.equal(source.includes("<Elements"), false);
 });
 
 test("billing runtime infers annual cycle from a legacy year-long subscription window", () => {

@@ -2,11 +2,11 @@
 import "./upgrade.css";
 
 import { unstable_noStore as noStore } from "next/cache";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import AppShell from "@/components/AppShell";
-import { getAppOrigin } from "@/lib/apiAuth";
+import { beginBillingUpgrade, publicBillingError } from "@/lib/billingFlow.server";
+import { buildRequestFromCurrentContext } from "@/lib/billingRequestContext.server";
 import { readWorkspace } from "@/lib/workspaceStore.server";
 import { PLANS, resolvePlanIdFromTier, parseBillingCycle } from "@/lib/plans";
 import { resolveBillingPlanResolution } from "@/lib/billingPlan.server";
@@ -112,61 +112,29 @@ function readProrationHint(current: PlanId, target: PlanId, billing: BillingCycl
   return "Upgrade activates immediately.";
 }
 
-/* ==========================
- STRIPE CHECKOUT (OFFICIAL)
- - DO NOT hardcode checkout.stripe.com URLs
- - We mint a fresh Checkout Session per click (correct, scalable)
-========================== */
-
-function getBaseUrlFromHeaders(): string {
-  const h = headers();
-  const fallback = new URL(getAppOrigin());
-  const host = h.get("x-forwarded-host") || h.get("host") || fallback.host;
-  const proto = h.get("x-forwarded-proto") || fallback.protocol.replace(/:$/, "");
-  return `${proto}://${host}`;
-}
-
-type CheckoutResponse = {
-  ok?: boolean;
-  url?: string;
-  message?: string;
-  error?: string;
-};
-
 async function startCheckoutAction(formData: FormData) {
   "use server";
 
   const targetPlan = String(formData.get("targetPlan") || "").trim();
   const billing = String(formData.get("billing") || "").trim();
 
-  const h = headers();
-  const cookie = h.get("cookie") || "";
-  const baseUrl = getBaseUrlFromHeaders();
-
-  // IMPORTANT: this endpoint must CREATE a new Checkout Session and return { ok:true, url }
-  const res = await fetch(`${baseUrl}/api/billing/checkout`, {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      "content-type": "application/json",
-      cookie,
-    },
-    body: JSON.stringify({
+  try {
+    const request = await buildRequestFromCurrentContext("/settings/upgrade", "POST");
+    const result = await beginBillingUpgrade({
+      request,
       targetPlan,
       billing,
-    }),
-  });
-
-  const data = (await res.json().catch(() => ({}))) as CheckoutResponse;
-
-  if (!res.ok || !data?.ok || !data?.url) {
-    const msg = String(data?.message || data?.error || "Unable to start checkout.");
+    });
+    redirect(String(result.url));
+  } catch (error) {
+    const issue = publicBillingError(error, {
+      code: "CHECKOUT_FAILED",
+      message: "Unable to start checkout.",
+    });
     redirect(
-      `/settings/upgrade?plan=${encodeURIComponent(targetPlan)}&billing=${encodeURIComponent(billing)}&error=${encodeURIComponent(msg)}`
+      `/settings/upgrade?plan=${encodeURIComponent(targetPlan)}&billing=${encodeURIComponent(billing)}&error=${encodeURIComponent(issue.message)}`
     );
   }
-
-  redirect(String(data.url));
 }
 
 export default async function UpgradeCheckoutPage({ searchParams }: PageProps) {
@@ -203,6 +171,7 @@ export default async function UpgradeCheckoutPage({ searchParams }: PageProps) {
   const billing: BillingCycle = normalizeBillingCycle(sp?.billing);
   const isAnnual = billing === "annual";
   const billingParam = isAnnual ? "annual" : "monthly";
+  const errorMessage = safeStr(sp?.error);
 
   const requestedPlan = normalizePlanFromQuery(safeStr(sp?.plan));
   const selectedPlan: PlanId = requestedPlan === "free" ? "premium" : requestedPlan;
@@ -256,6 +225,7 @@ export default async function UpgradeCheckoutPage({ searchParams }: PageProps) {
               <h1 className="upgrade-h1">Checkout</h1>
 
               <p className="upgrade-sub">{securityLine()}</p>
+              {errorMessage ? <p className="upgrade-note">{errorMessage}</p> : null}
               <br />
               <br />
             </div>

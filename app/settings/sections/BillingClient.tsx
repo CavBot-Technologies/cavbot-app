@@ -5,20 +5,6 @@
 import Image from "next/image";
 import * as React from "react";
 import "./billing.css";
-
-
-import { loadStripe, type Stripe } from "@stripe/stripe-js";
-import {
-  Elements,
-  CardNumberElement,
-  CardExpiryElement,
-  CardCvcElement,
-  useElements,
-  useStripe,
-} from "@stripe/react-stripe-js";
-
-
-import { COUNTRY_NAME_BY_CODE } from "@/geo/countries";
 import {
   readBootClientPlanBootstrap,
   subscribeClientPlan,
@@ -140,7 +126,6 @@ type PaymentMethodSummary = {
 
 
 type ApiErrorPayload = Record<string, unknown> & { ok?: boolean; message?: string; error?: string };
-type SetupIntentResponse = { ok: true; clientSecret: string };
 
 
 async function apiJSON<T>(url: string, init?: RequestInit): Promise<T> {
@@ -276,27 +261,16 @@ function DownloadIcon() {
 }
 
 
-/* =========================
- STRIPE ELEMENTS WRAPPER
-========================= */
-
-
-const pk = String(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "").trim();
-const stripePromise: Promise<Stripe | null> | null = pk ? loadStripe(pk) : null;
-
-
 function usePrettyNull(v: string | null | undefined, fallback: string) {
   const s = String(v || "").trim();
   return s ? s : fallback;
 }
-
 
 function buildPeriodEndLabel(planId: PlanId, isoEnd: string | null | undefined) {
   if (isoEnd) return fmtDate(isoEnd);
   if (planId === "free") return "Never";
   return "—";
 }
-
 
 function buildBillingEmailLabel(planId: PlanId, email: string | null | undefined) {
   const s = String(email || "").trim();
@@ -309,16 +283,9 @@ function safePlanLimit(planId: PlanId, key: "seats" | "websites") {
   return typeof value === "number" ? value : null;
 }
 
-
-/* =========================
- CARD BRAND ICONS
-========================= */
-
-
 function BrandMark({ brand }: { brand: string }) {
   const b = String(brand || "").toLowerCase().trim();
   if (!b) return null;
-
 
   if (b.includes("visa")) {
     return (
@@ -341,7 +308,6 @@ function BrandMark({ brand }: { brand: string }) {
     );
   }
 
-
   if (b.includes("mastercard") || b.includes("master")) {
     return (
       <span className="sx-cardBrand" aria-hidden="true" title="Mastercard">
@@ -353,7 +319,6 @@ function BrandMark({ brand }: { brand: string }) {
       </span>
     );
   }
-
 
   if (b.includes("amex") || b.includes("american")) {
     return (
@@ -377,328 +342,7 @@ function BrandMark({ brand }: { brand: string }) {
     );
   }
 
-
   return null;
-}
-
-
-/* =========================
- CARD DETAILS FORM
-========================= */
-
-
-function CardDetailsForm(props: {
-  busy: boolean;
-  onBusy: (b: boolean) => void;
-  onToast: (msg: string, tone?: Tone) => void;
-
-
-  // After a successful save, we want:
-  // - instant CavCard update (no extra GET)
-  // - then refresh summary/invoices in parent (billing state)
-  onPmUpdated: (pm: PaymentMethodSummary) => void;
-  onSaved: () => Promise<void>;
-
-
-  cardName: string;
-  setCardName: (s: string) => void;
-
-
-  billing1: string;
-  setBilling1: (s: string) => void;
-  billing2: string;
-  setBilling2: (s: string) => void;
-  billingCity: string;
-  setBillingCity: (s: string) => void;
-  billingRegion: string;
-  setBillingRegion: (s: string) => void;
-  billingPostal: string;
-  setBillingPostal: (s: string) => void;
-  billingCountry: string;
-  setBillingCountry: (s: string) => void;
-}) {
-  const stripe = useStripe();
-  const elements = useElements();
-
-
-  function makeIdem() {
-    try {
-      type CryptoWithUUID = Crypto & { randomUUID?: () => string };
-      const c = (globalThis as typeof globalThis & { crypto?: CryptoWithUUID }).crypto;
-      if (c?.randomUUID) return c.randomUUID();
-    } catch {}
-    return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  }
-
-
-  const submit = async () => {
-    if (props.busy) return;
-
-
-    if (!stripePromise || !pk) {
-      props.onToast("Missing publishable key. Add NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY and restart.", "bad");
-      return;
-    }
-    if (!stripe || !elements) {
-      props.onToast("Card UI not ready yet. Refresh and try again.", "watch");
-      return;
-    }
-
-
-    const cardNumber = elements.getElement(CardNumberElement);
-    if (!cardNumber) {
-      props.onToast("Card fields not mounted.", "bad");
-      return;
-    }
-
-
-    props.onBusy(true);
-    try {
-      const idem = makeIdem();
-
-
-      // Step 1: create SetupIntent (server)
-      const si = await apiJSON<SetupIntentResponse>("/api/billing/payment-method", {
-        method: "POST",
-        headers: { "x-idempotency-key": `pm_setup_${idem}` },
-        body: JSON.stringify({
-          name: props.cardName,
-          address: {
-            line1: props.billing1,
-            line2: props.billing2,
-            city: props.billingCity,
-            state: props.billingRegion,
-            postal_code: props.billingPostal,
-            country: props.billingCountry,
-          },
-        }),
-      });
-
-
-      // Step 2: confirm setup with Stripe Elements
-      const result = await stripe.confirmCardSetup(si.clientSecret, {
-        payment_method: {
-          card: cardNumber,
-          billing_details: {
-            name: props.cardName || undefined,
-            address: {
-              line1: props.billing1 || undefined,
-              line2: props.billing2 || undefined,
-              city: props.billingCity || undefined,
-              state: props.billingRegion || undefined,
-              postal_code: props.billingPostal || undefined,
-              country: props.billingCountry || undefined,
-            },
-          },
-        },
-      });
-
-
-      // Must check error first
-      const confirmed = result as {
-        error?: { message?: string };
-        setupIntent?: { id?: string };
-        setupIntentId?: string;
-      };
-      if (confirmed.error) {
-        props.onToast(confirmed.error.message || "Card could not be saved.", "bad");
-        return;
-      }
-
-
-      // Step 3: finalize default PM (server) + return fresh payload for instant CavCard update
-      const setupIntentId = confirmed.setupIntent?.id || confirmed.setupIntentId || "";
-
-
-      if (setupIntentId) {
-        const pmRes = await apiJSON<PaymentMethodSummary>("/api/billing/payment-method", {
-          method: "POST",
-          headers: { "x-idempotency-key": `pm_finalize_${idem}` },
-          body: JSON.stringify({ setupIntentId }),
-        });
-
-
-        props.onPmUpdated(pmRes);
-        if (pmRes?.billingName) props.setCardName(String(pmRes.billingName));
-      }
-
-
-      props.onToast("Card details saved.", "good");
-      await props.onSaved();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      props.onToast(message || "Failed to save card.", "bad");
-    } finally {
-      props.onBusy(false);
-    }
-  };
-
-
-  return (
-    <>
-      <br />
-      <br />
-      <div className="sx-cardDetails" aria-label="Card details">
-        <div className="sx-cardDetailsHead">
-          <div>
-            <div className="sx-kicker">Card details</div>
-            <div className="sx-cardSub">Select default payment method.</div>
-          </div>
-
-          <button
-            className={`sx-btn sx-btnPrimary sx-btnToneLinked sx-cardSaveTop ${props.busy ? "is-disabled" : ""}`}
-            type="button"
-            onClick={submit}
-            disabled={props.busy}
-          >
-            Save card
-          </button>
-        </div>
-
-
-        <div className="sx-divider sx-billDivider" aria-hidden="true" />
-
-        <div className="sx-cardFormWide">
-          <div className="sx-cardFormCol">
-            <div className="sx-field">
-              <label className="sx-label">Name on card</label>
-              <input
-                className="sx-input"
-                value={props.cardName}
-                onChange={(e) => props.setCardName(e.target.value)}
-                placeholder="Full name"
-                autoComplete="cc-name"
-              />
-            </div>
-
-
-            <br />
-            <div className="sx-field">
-              <label className="sx-label">Card number</label>
-              <div className="sx-stripeBox">
-                <CardNumberElement options={{ showIcon: true }} />
-              </div>
-            </div>
-
-
-            <br />
-            <div className="sx-cardMiniRow">
-              <div className="sx-field">
-                <label className="sx-label">CVV</label>
-                <div className="sx-stripeBox">
-                  <CardCvcElement />
-                </div>
-              </div>
-
-
-              <div className="sx-field">
-                <label className="sx-label">Expiry</label>
-                <div className="sx-stripeBox">
-                  <CardExpiryElement />
-                </div>
-              </div>
-            </div>
-          </div>
-
-
-          <div className="sx-cardFormCol">
-            <div className="sx-field">
-              <label className="sx-label">Billing address</label>
-              <input
-                className="sx-input"
-                value={props.billing1}
-                onChange={(e) => props.setBilling1(e.target.value)}
-                placeholder="Street address"
-                autoComplete="address-line1"
-              />
-            </div>
-
-
-            <br />
-            <div className="sx-field">
-              <label className="sx-label">Apt / suite</label>
-              <input
-                className="sx-input"
-                value={props.billing2}
-                onChange={(e) => props.setBilling2(e.target.value)}
-                placeholder="Unit / suite (optional)"
-                autoComplete="address-line2"
-              />
-            </div>
-
-
-            <br />
-            <div className="sx-cardMiniRow">
-              <div className="sx-field">
-                <label className="sx-label">City</label>
-                <input
-                  className="sx-input"
-                  value={props.billingCity}
-                  onChange={(e) => props.setBillingCity(e.target.value)}
-                  placeholder="City"
-                  autoComplete="address-level2"
-                />
-              </div>
-
-
-              <div className="sx-field">
-                <label className="sx-label">Region</label>
-                <input
-                  className="sx-input"
-                  value={props.billingRegion}
-                  onChange={(e) => props.setBillingRegion(e.target.value)}
-                  placeholder="State"
-                  autoComplete="address-level1"
-                />
-              </div>
-            </div>
-
-
-            <br />
-            <div className="sx-cardMiniRow">
-              <div className="sx-field">
-                <label className="sx-label">Postal</label>
-                <input
-                  className="sx-input"
-                  value={props.billingPostal}
-                  onChange={(e) => props.setBillingPostal(e.target.value)}
-                  placeholder="Postal"
-                  autoComplete="postal-code"
-                />
-              </div>
-
-
-              <div className="sx-field">
-                <label className="sx-label">Country</label>
-                <select
-                  className="sx-select"
-                  value={props.billingCountry}
-                  onChange={(e) => props.setBillingCountry(e.target.value)}
-                  aria-label="Country"
-                >
-                  {Array.from(COUNTRY_NAME_BY_CODE.entries()).map(([code, name]) => (
-                    <option key={code} value={code}>
-                      {name} ({code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="sx-cardSaveRow sx-cardSaveRow--mobile">
-          <button
-            className={`sx-btn sx-btnPrimary sx-btnToneLinked ${props.busy ? "is-disabled" : ""}`}
-            type="button"
-            onClick={submit}
-            disabled={props.busy}
-          >
-            Save card
-          </button>
-        </div>
-      </div>
-    </>
-  );
 }
 
 
@@ -737,15 +381,6 @@ function BillingClientInner() {
   const [busy, setBusy] = React.useState(false);
   const [toast, setToast] = React.useState<{ tone: Tone; msg: string } | null>(null);
   const toastTimer = React.useRef<number | null>(null);
-
-
-  const [cardName, setCardName] = React.useState("");
-  const [billing1, setBilling1] = React.useState("");
-  const [billing2, setBilling2] = React.useState("");
-  const [billingCity, setBillingCity] = React.useState("");
-  const [billingRegion, setBillingRegion] = React.useState("");
-  const [billingPostal, setBillingPostal] = React.useState("");
-  const [billingCountry, setBillingCountry] = React.useState("US");
 
 
   const [cardFlipped, setCardFlipped] = React.useState(false);
@@ -880,6 +515,25 @@ function BillingClientInner() {
 
   const billingEmailLabel = buildBillingEmailLabel(planDetailPlanId, summary?.account?.billingEmail || null);
   const periodEndLabel = buildPeriodEndLabel(planDetailPlanId, summary?.subscription?.currentPeriodEnd || null);
+  const billingProfileReady = Boolean(summary?.account?.stripeCustomerId);
+
+  async function openBillingPortal() {
+    if (busy || !billingProfileReady) return;
+
+    setBusy(true);
+    try {
+      const portal = await apiJSON<{ ok: true; url: string }>("/api/stripe/portal", {
+        method: "POST",
+      });
+      if (!portal?.url) throw new Error("Billing portal unavailable.");
+      window.location.assign(String(portal.url));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      pushToast(message || "Unable to open billing portal.", "bad");
+    } finally {
+      setBusy(false);
+    }
+  }
 
 
   function actionForPlan(pid: PlanId): { kind: "current" | "upgrade" | "downgrade" | "disabled"; href?: string; label?: string } {
@@ -908,10 +562,20 @@ function BillingClientInner() {
   }, [invoices, invFilter]);
 
 
-  const digitalName = usePrettyNull(pm?.billingName || cardName, "CARDHOLDER NAME");
+  const digitalName = usePrettyNull(pm?.billingName, "CARDHOLDER NAME");
   const digitalBrand = String(pm?.brand || "").trim();
   const digitalExp =
     pm?.expMonth && pm?.expYear ? `${String(pm.expMonth).padStart(2, "0")}/${String(pm.expYear).slice(-2)}` : "11/34";
+  const paymentMethodLabel = pm?.hasPaymentMethod
+    ? `${usePrettyNull(pm.brand, "Card").toUpperCase()} ending in ${usePrettyNull(pm.last4, "0008")}`
+    : billingProfileReady
+    ? "No default payment method on file yet."
+    : "Payment method is created during your first paid upgrade.";
+  const paymentMethodMeta = pm?.hasPaymentMethod
+    ? `Manage cards, invoices, and billing address in the secure Stripe billing portal.`
+    : billingProfileReady
+    ? "Open the billing portal to add or replace the default payment method."
+    : "Upgrade on a paid plan first, then Stripe will provision the billing profile automatically.";
 
 
   return (
@@ -1148,50 +812,46 @@ function BillingClientInner() {
 
 
           <div className="sx-cardDetailsSpan">
-            <Elements
-              stripe={stripePromise}
-              options={{
-                appearance: {
-                  theme: "night",
-                  variables: {
-                    colorPrimary: "#b9c85a",
-                    colorText: "rgba(234,240,255,0.92)",
-                    colorBackground: "rgba(0,0,0,0.0)",
-                    colorDanger: "rgba(255,120,120,1)",
-                    fontFamily: "system-ui, -apple-system, Segoe UI, Inter, Arial",
-                    borderRadius: "14px",
-                  },
-                },
-              }}
-            >
-              <CardDetailsForm
-                busy={busy}
-                onBusy={setBusy}
-                onToast={pushToast}
-                onPmUpdated={(nextPm) => {
-                  setPm(nextPm);
-                  if (nextPm?.billingName) setCardName(String(nextPm.billingName));
-                }}
-                onSaved={async () => {
-                  await refresh();
-                  await refreshInvoices();
-                }}
-                cardName={cardName}
-                setCardName={setCardName}
-                billing1={billing1}
-                setBilling1={setBilling1}
-                billing2={billing2}
-                setBilling2={setBilling2}
-                billingCity={billingCity}
-                setBillingCity={setBillingCity}
-                billingRegion={billingRegion}
-                setBillingRegion={setBillingRegion}
-                billingPostal={billingPostal}
-                setBillingPostal={setBillingPostal}
-                billingCountry={billingCountry}
-                setBillingCountry={setBillingCountry}
-              />
-            </Elements>
+            <br />
+            <br />
+            <div className="sx-cardDetails" aria-label="Billing portal">
+              <div className="sx-cardDetailsHead">
+                <div>
+                  <div className="sx-kicker">Payment method</div>
+                  <div className="sx-cardSub">{paymentMethodLabel}</div>
+                </div>
+
+                <button
+                  className={`sx-btn sx-btnPrimary sx-btnToneLinked sx-cardSaveTop ${busy || !billingProfileReady ? "is-disabled" : ""}`}
+                  type="button"
+                  onClick={() => {
+                    void openBillingPortal();
+                  }}
+                  disabled={busy || !billingProfileReady}
+                >
+                  Manage billing
+                </button>
+              </div>
+
+              <div className="sx-divider sx-billDivider" aria-hidden="true" />
+
+              <div className="sx-billMini">{paymentMethodMeta}</div>
+
+              {billingProfileReady ? (
+                <div className="sx-cardSaveRow">
+                  <button
+                    className={`sx-btn sx-btnPrimary sx-btnToneLinked ${busy ? "is-disabled" : ""}`}
+                    type="button"
+                    onClick={() => {
+                      void openBillingPortal();
+                    }}
+                    disabled={busy}
+                  >
+                    Open billing portal
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
 
@@ -1338,27 +998,5 @@ function BillingClientInner() {
 
 
 export default function BillingClient() {
-  if (!pk) {
-    return (
-      <section className="sx-panel" aria-label="Billing settings">
-        <header className="sx-panelHead">
-          <div>
-            <h2 className="sx-h2">Billing</h2>
-            <p className="sx-sub">Plan, subscription status, payment method, and invoices.</p>
-          </div>
-          <span className="sx-badge sx-badgeBill">Setup</span>
-        </header>
-
-
-        <div className="sx-body">
-          <div className="sx-billError">
-            Missing <b>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</b>. Add it to <b>.env.local</b> and restart <b>npm run dev</b>.
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-
   return <BillingClientInner />;
 }

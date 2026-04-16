@@ -2,11 +2,11 @@
 import "./downgrade.css";
 
 import { unstable_noStore as noStore } from "next/cache";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import AppShell from "@/components/AppShell";
-import { getAppOrigin } from "@/lib/apiAuth";
+import { publicBillingError, scheduleBillingDowngrade } from "@/lib/billingFlow.server";
+import { buildRequestFromCurrentContext } from "@/lib/billingRequestContext.server";
 import { readWorkspace } from "@/lib/workspaceStore.server";
 import { PLANS, resolvePlanIdFromTier, parseBillingCycle } from "@/lib/plans";
 import { resolveBillingPlanResolution } from "@/lib/billingPlan.server";
@@ -165,56 +165,31 @@ function readRenewalHint(ws: DowngradeWorkspaceData | null) {
   }
 }
 
-/* ==========================
-  STRIPE DOWNGRADE (OFFICIAL)
-  - No fake UI
-  - Schedule downgrade via /api/billing/downgrade
-  - Stripe proration/renewal behavior handled by Stripe + webhook
-========================== */
-
-function getBaseUrlFromHeaders(): string {
-  const h = headers();
-  const fallback = new URL(getAppOrigin());
-  const host = h.get("x-forwarded-host") || h.get("host") || fallback.host;
-  const proto = h.get("x-forwarded-proto") || fallback.protocol.replace(/:$/, "");
-  return `${proto}://${host}`;
-}
-
 async function startDowngradeAction(formData: FormData) {
   "use server";
 
   const targetPlan = String(formData.get("targetPlan") || "").trim();
   const billing = String(formData.get("billing") || "").trim();
 
-  const h = headers();
-  const cookie = h.get("cookie") || "";
-  const baseUrl = getBaseUrlFromHeaders();
-
-  const res = await fetch(`${baseUrl}/api/billing/downgrade`, {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      "content-type": "application/json",
-      cookie,
-    },
-    body: JSON.stringify({
+  try {
+    const request = await buildRequestFromCurrentContext("/settings/downgrade", "POST");
+    const result = await scheduleBillingDowngrade({
+      request,
       targetPlan,
       billing,
-    }),
-  });
-
-  const data = await res.json().catch(() => null);
-
-  if (!res.ok || !data?.ok) {
-    const msg = String(data?.message || data?.error || "Unable to schedule downgrade.");
+    });
+    redirect(String(result.url));
+  } catch (error) {
+    const issue = publicBillingError(error, {
+      code: "BILLING_DOWNGRADE_FAILED",
+      message: "Unable to schedule downgrade.",
+    });
     redirect(
       `/settings/downgrade?plan=${encodeURIComponent(targetPlan)}&billing=${encodeURIComponent(billing)}&error=${encodeURIComponent(
-        msg
+        issue.message
       )}`
     );
   }
-
-  redirect(`/settings?tab=billing`);
 }
 
 export default async function DowngradePage({ searchParams }: PageProps) {
@@ -242,6 +217,7 @@ export default async function DowngradePage({ searchParams }: PageProps) {
   const billing: BillingCycle = normalizeBillingCycle(sp?.billing);
   const isAnnual = billing === "annual";
   const billingParam = isAnnual ? "annual" : "monthly";
+  const errorMessage = safeStr(sp?.error);
 
   const requestedTarget = normalizeDowngradeTargetFromQuery(safeStr(sp?.plan));
   const targetPlan = allowedDowngradeTarget(currentPlanId, requestedTarget);
@@ -290,6 +266,7 @@ export default async function DowngradePage({ searchParams }: PageProps) {
               <h1 className="upgrade-h1">Downgrade</h1>
 
               <p className="upgrade-sub">{securityLine()}</p>
+              {errorMessage ? <p className="upgrade-note">{errorMessage}</p> : null}
               <br />
               <br />
             </div>
