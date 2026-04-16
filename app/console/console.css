@@ -749,7 +749,12 @@
   overflow:hidden;
 }
 
-.cb-console .cb-card-hero{ border-color: rgba(255,255,255,0.08);}
+.cb-console .cb-card-hero{
+  border-color: rgba(255,255,255,0.08);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
 .cb-console .cb-card-chart{ border-color: rgba(139,92,255,0.18); }
 
 .cb-console .cb-card-danger{
@@ -969,7 +974,7 @@
   display:grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
-  padding: 24px 18px 14px;
+  padding: 24px 18px 0;
 }
 
 @media (max-width: 1320px){
@@ -977,6 +982,15 @@
 }
 @media (max-width: 560px){
   .cb-console .cb-hero-metrics{ grid-template-columns: 1fr; }
+}
+
+.cb-console .cb-hero-body{
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 0;
+  padding-bottom: 18px;
 }
 
 .cb-console .cb-metric{
@@ -1377,11 +1391,11 @@
 
 /* ---------- hero insights ---------- */
 .cb-console .cb-divider-hero{
-  margin: 0 18px 16px;
+  margin: 32px 0;
 }
 
 .cb-console .cb-insights{
-  padding: 0 18px 18px;
+  padding: 0 18px;
   display:grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
@@ -1400,6 +1414,8 @@
   background: rgba(0,0,0,0.10);
   padding: 12px 12px;
   min-width:0;
+  display: flex;
+  flex-direction: column;
 }
 .cb-console .cb-insight-k{
   font-size: 10px;
@@ -1420,12 +1436,12 @@
   white-space: nowrap;
 }
 .cb-console .cb-insight-s{
-  margin-top: 6px;
+  margin-top: 16px;
   font-size: 10px;
   color: rgba(197,206,231,0.78);
-  white-space: nowrap;
-  overflow:hidden;
-  text-overflow: ellipsis;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- A11y Snapshot ---------- */

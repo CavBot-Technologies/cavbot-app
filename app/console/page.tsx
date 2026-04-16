@@ -1189,80 +1189,79 @@ export default async function ConsolePage({ searchParams }: PageProps) {
                   </div>
                 </div>
 
-                <ul className="cb-hero-metrics" aria-label="Primary metrics">
-                  <li className="cb-metric">
-                    <div className="cb-metric-k">Sessions</div>
-                    <div className="cb-metric-v">{fmtInt(metrics!.sessions30d)}</div>
-                    <div className="cb-metric-s">Under Guard: {fmtInt(metrics!.sessionsUnderGuard30d)}</div>
-                  </li>
+                <div className="cb-hero-body">
+                  <ul className="cb-hero-metrics" aria-label="Primary metrics">
+                    <li className="cb-metric">
+                      <div className="cb-metric-k">Sessions</div>
+                      <div className="cb-metric-v">{fmtInt(metrics!.sessions30d)}</div>
+                      <div className="cb-metric-s">Under Guard: {fmtInt(metrics!.sessionsUnderGuard30d)}</div>
+                    </li>
 
-                  <li className="cb-metric">
-                    <div className="cb-metric-k">Unique Visitors</div>
-                    <div className="cb-metric-v">{fmtInt(metrics!.uniqueVisitors30d)}</div>
-                    <div className="cb-metric-s">Routes monitored: {fmtInt(metrics!.routesMonitored)}</div>
-                  </li>
+                    <li className="cb-metric">
+                      <div className="cb-metric-k">Unique Visitors</div>
+                      <div className="cb-metric-v">{fmtInt(metrics!.uniqueVisitors30d)}</div>
+                      <div className="cb-metric-s">Routes monitored: {fmtInt(metrics!.routesMonitored)}</div>
+                    </li>
 
-                  <li className="cb-metric">
-                    <div className="cb-metric-k">JS Errors</div>
-                    <div className="cb-metric-v">{fmtInt(metrics!.jsErrors30d)}</div>
-                    <div className="cb-metric-s">API Errors: {fmtInt(metrics!.apiErrors30d)}</div>
-                  </li>
+                    <li className="cb-metric">
+                      <div className="cb-metric-k">JS Errors</div>
+                      <div className="cb-metric-v">{fmtInt(metrics!.jsErrors30d)}</div>
+                      <div className="cb-metric-s">API Errors: {fmtInt(metrics!.apiErrors30d)}</div>
+                    </li>
 
-                  <li className="cb-metric">
-                    <div className="cb-metric-k">404 Views</div>
-                    <div className="cb-metric-v">{fmtInt(metrics!.views40430d)}</div>
-                    <div className="cb-metric-s">Recovery rate: {fmtPct(metrics!.recoveryRate404)}</div>
-                  </li>
-                </ul>
+                    <li className="cb-metric">
+                      <div className="cb-metric-k">404 Views</div>
+                      <div className="cb-metric-v">{fmtInt(metrics!.views40430d)}</div>
+                      <div className="cb-metric-s">Recovery rate: {fmtPct(metrics!.recoveryRate404)}</div>
+                    </li>
+                  </ul>
 
-                <div className="cb-divider cb-divider-hero" />
-                <br />
-                <br />
+                  <div className="cb-divider cb-divider-hero" />
 
-                <ul className="cb-insights" aria-label="Guardian insights">
-                  <li className="cb-insight">
-                    <div className="cb-insight-k">Under Guard</div>
-                    <div className="cb-insight-v">
-                      {fmtPct((n(metrics!.sessionsUnderGuard30d) / Math.max(1, n(metrics!.sessions30d))) * 100, 0)}
-                    </div>
-                    <br /> <div className="cb-insight-s">Covered sessions</div>
-                  </li>
+                  <ul className="cb-insights" aria-label="Guardian insights">
+                    <li className="cb-insight">
+                      <div className="cb-insight-k">Under Guard</div>
+                      <div className="cb-insight-v">
+                        {fmtPct((n(metrics!.sessionsUnderGuard30d) / Math.max(1, n(metrics!.sessions30d))) * 100, 0)}
+                      </div>
+                      <div className="cb-insight-s">Covered sessions</div>
+                    </li>
 
-                  <li className="cb-insight">
-                    <div className="cb-insight-k">Error Load</div>
-                    <div className="cb-insight-v">{fmtInt(n(metrics!.jsErrors30d) + n(metrics!.apiErrors30d))}</div>
-                    <br /> <div className="cb-insight-s">JS + API errors</div>
-                  </li>
+                    <li className="cb-insight">
+                      <div className="cb-insight-k">Error Load</div>
+                      <div className="cb-insight-v">{fmtInt(n(metrics!.jsErrors30d) + n(metrics!.apiErrors30d))}</div>
+                      <div className="cb-insight-s">JS + API errors</div>
+                    </li>
 
-                  <li className="cb-insight">
-                    <div className="cb-insight-k">404 Recovery</div>
-                    <div className="cb-insight-v">{fmtPct(metrics!.recoveryRate404, 0)}</div>
-                    <br /> <div className="cb-insight-s">Recovery rate</div>
-                  </li>
+                    <li className="cb-insight">
+                      <div className="cb-insight-k">404 Recovery</div>
+                      <div className="cb-insight-v">{fmtPct(metrics!.recoveryRate404, 0)}</div>
+                      <div className="cb-insight-s">Recovery rate</div>
+                    </li>
 
-                  <li className="cb-insight">
-                    <div className="cb-insight-k">Primary Risk</div>
-                    <div className="cb-insight-v">
-                      {n(metrics!.unstableLayoutPages) > 0
-                        ? "Layout"
-                        : n(metrics!.slowPagesCount) > 0
-                        ? "Speed"
-                        : n(metrics!.piiRiskPercent ?? 0) >= 20
-                        ? "PII"
-                        : "Clean"}
-                    </div>
-                    <br />
-                    <div className="cb-insight-s">
-                      {n(metrics!.unstableLayoutPages) > 0
-                        ? `${fmtInt(metrics!.unstableLayoutPages)} unstable routes`
-                        : n(metrics!.slowPagesCount) > 0
-                        ? `${fmtInt(metrics!.slowPagesCount)} slow routes`
-                        : n(metrics!.piiRiskPercent ?? 0) >= 20
-                        ? `PII risk ${fmtPct(metrics!.piiRiskPercent, 0)}`
-                        : "No active risk flags"}
-                    </div>
-                  </li>
-                </ul>
+                    <li className="cb-insight">
+                      <div className="cb-insight-k">Primary Risk</div>
+                      <div className="cb-insight-v">
+                        {n(metrics!.unstableLayoutPages) > 0
+                          ? "Layout"
+                          : n(metrics!.slowPagesCount) > 0
+                          ? "Speed"
+                          : n(metrics!.piiRiskPercent ?? 0) >= 20
+                          ? "PII"
+                          : "Clean"}
+                      </div>
+                      <div className="cb-insight-s">
+                        {n(metrics!.unstableLayoutPages) > 0
+                          ? `${fmtInt(metrics!.unstableLayoutPages)} unstable routes`
+                          : n(metrics!.slowPagesCount) > 0
+                          ? `${fmtInt(metrics!.slowPagesCount)} slow routes`
+                          : n(metrics!.piiRiskPercent ?? 0) >= 20
+                          ? `PII risk ${fmtPct(metrics!.piiRiskPercent, 0)}`
+                          : "No active risk flags"}
+                      </div>
+                    </li>
+                  </ul>
+                </div>
               </div>
 
               <div className="cb-card">
