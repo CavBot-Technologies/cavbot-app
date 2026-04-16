@@ -666,6 +666,12 @@ export async function getSession(req: Request): Promise<CavbotSession | null> {
   }
 }
 
+function canFailOpenAuthenticatedRead(req: Request) {
+  if (process.env.NODE_ENV !== "production") return true;
+  const method = String(req.method || "GET").trim().toUpperCase();
+  return method === "GET" || method === "HEAD" || method === "OPTIONS";
+}
+
 export async function requireSession(req: Request): Promise<CavbotSession> {
   assertWriteOrigin(req);
 
@@ -687,7 +693,7 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
         sess.memberRole = active.role;
       } catch (error) {
         if (error instanceof ApiAuthError) throw error;
-        if (process.env.NODE_ENV !== "production") return sess;
+        if (canFailOpenAuthenticatedRead(req)) return sess;
         throw authBackendUnavailableError();
       }
     }
@@ -697,9 +703,7 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
     try {
       auth = await findUserAuth(pool, userId);
     } catch {
-      if (process.env.NODE_ENV !== "production") {
-        return sess;
-      }
+      if (canFailOpenAuthenticatedRead(req)) return sess;
       throw authBackendUnavailableError();
     }
 
@@ -709,7 +713,7 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
       try {
         if (await userHasOAuthIdentity(pool, userId)) return sess;
       } catch {
-        if (process.env.NODE_ENV !== "production") return sess;
+        if (canFailOpenAuthenticatedRead(req)) return sess;
         throw authBackendUnavailableError();
       }
 
@@ -742,7 +746,7 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
       }
     } catch (error) {
       if (error instanceof ApiAuthError) throw error;
-      if (process.env.NODE_ENV !== "production") return sess;
+      if (canFailOpenAuthenticatedRead(req)) return sess;
       throw authBackendUnavailableError();
     }
   }

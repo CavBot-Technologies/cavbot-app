@@ -47,7 +47,9 @@ test("requireSession distinguishes auth-store outages from real auth failure", (
   const source = read("lib/apiAuth.ts");
 
   assert.match(source, /function authBackendUnavailableError\(\)/);
+  assert.match(source, /function canFailOpenAuthenticatedRead\(req: Request\)/);
   assert.match(source, /new ApiAuthError\("AUTH_BACKEND_UNAVAILABLE", 503\)/);
+  assert.match(source, /if \(canFailOpenAuthenticatedRead\(req\)\) return sess;/);
   assert.match(source, /if \(error instanceof ApiAuthError\) throw error;/);
   assert.match(source, /throw authBackendUnavailableError\(\);/);
 });
