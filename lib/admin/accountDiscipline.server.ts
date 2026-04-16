@@ -2,7 +2,7 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 
-import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
+import { isSoftTableAccessError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
 
 export type AccountDisciplineStatus = "ACTIVE" | "SUSPENDED" | "REVOKED";
@@ -103,23 +103,7 @@ async function readAccountDisciplineRow(accountId: string) {
 
     return normalizeRow(rows[0]);
   } catch (error) {
-    if (
-      isSchemaMismatchError(error, {
-        tables: ["AdminAccountDiscipline"],
-        columns: [
-          "status",
-          "violationCount",
-          "suspendedUntil",
-          "suspendedAt",
-          "suspendedByStaffId",
-          "suspensionDays",
-          "revokedAt",
-          "revokedByStaffId",
-          "note",
-          "updatedAt",
-        ],
-      })
-    ) {
+    if (isSoftTableAccessError(error, ["AdminAccountDiscipline"])) {
       return null;
     }
     throw error;

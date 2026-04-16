@@ -93,3 +93,24 @@ export function isSchemaMismatchError(
     isMissingFieldError(err, opts.fields || [])
   );
 }
+
+export function isSoftTableAccessError(err: unknown, hints: string[] = []) {
+  const prismaCode = prismaCodeFor(err);
+  const dbCode = dbCodeFor(err);
+  const message = messageFor(err);
+
+  if (isMissingTableError(err, hints)) return true;
+  if (dbCode === "42501" || dbCode === "25006") return true;
+  if (prismaCode === "P2010" && (dbCode === "42501" || dbCode === "25006")) return true;
+
+  const mentionsAccessFailure =
+    message.includes("permission denied") ||
+    message.includes("insufficient privilege") ||
+    message.includes("read-only transaction") ||
+    message.includes("readonly transaction") ||
+    (message.includes("cannot execute") && message.includes("read-only"));
+
+  if (!mentionsAccessFailure) return false;
+  if (!hints.length) return true;
+  return hints.some((hint) => messageIncludesHint(message, hint));
+}
