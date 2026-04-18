@@ -5,7 +5,18 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  Suspense,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { CavPadDock } from "./CavPad";
 import type { CavPadSite } from "./CavPad";
 import { CavGuardModal } from "./CavGuardModal";
@@ -84,6 +95,24 @@ type PlanSnapshot = {
   trialDaysLeft: number;
   ts: number;
 };
+
+type AppShellPlanContextValue = {
+  planTier: PlanTier;
+  planResolved: boolean;
+  memberRole: MemberRole;
+  trialActive: boolean;
+};
+
+const AppShellPlanContext = createContext<AppShellPlanContextValue>({
+  planTier: "FREE",
+  planResolved: false,
+  memberRole: null,
+  trialActive: false,
+});
+
+export function useAppShellPlan() {
+  return useContext(AppShellPlanContext);
+}
 
 const SHELL_PLAN_SNAPSHOT_KEY = "cb_shell_plan_snapshot_v1";
 const PLAN_CONTEXT_KEY = "cb_plan_context_v1";
@@ -2302,27 +2331,35 @@ export default function AppShell({
     };
   }, [handlePassiveAuthLoss, notifOpen, notifUnreadOnly, notificationsOwnerAllowed]);
 
+  const shellPlanContextValue = useMemo<AppShellPlanContextValue>(() => ({
+    planTier,
+    planResolved,
+    memberRole,
+    trialActive,
+  }), [planTier, planResolved, memberRole, trialActive]);
+
   // Hydration safety valve: keep shell purely client-rendered after mount.
   if (!clientMounted) {
     return null;
   }
 
   return (
-    <div
-      className={`cb-shell${isCavbotPage ? " cb-route-cavbot" : ""}`}
-      data-cavbot-page-type="console"
-      data-shell-subtitle={subtitle || undefined}
-    >
-      <Suspense fallback={null}>
-        <SearchParamsBridge onChange={setSearchParamsSerialized} />
-      </Suspense>
-      {/* incoming toast */}
-      {notifToast ? (
-        <div className="cb-notif-toast" data-tone={notifToast.tone} role="status" aria-live="polite">
-          <div className="cb-notif-toast-title">{notifToast.title}</div>
-          {notifToast.body ? <div className="cb-notif-toast-sub">{notifToast.body}</div> : null}
-        </div>
-      ) : null}
+    <AppShellPlanContext.Provider value={shellPlanContextValue}>
+      <div
+        className={`cb-shell${isCavbotPage ? " cb-route-cavbot" : ""}`}
+        data-cavbot-page-type="console"
+        data-shell-subtitle={subtitle || undefined}
+      >
+        <Suspense fallback={null}>
+          <SearchParamsBridge onChange={setSearchParamsSerialized} />
+        </Suspense>
+        {/* incoming toast */}
+        {notifToast ? (
+          <div className="cb-notif-toast" data-tone={notifToast.tone} role="status" aria-live="polite">
+            <div className="cb-notif-toast-title">{notifToast.title}</div>
+            {notifToast.body ? <div className="cb-notif-toast-sub">{notifToast.body}</div> : null}
+          </div>
+        ) : null}
       <CavGuardModal
         open={cavGuardModalOpen}
         decision={cavGuardDecision}
@@ -2931,6 +2968,7 @@ export default function AppShell({
         </main>
       </div>
     </div>
+    </AppShellPlanContext.Provider>
   );
 }
 
