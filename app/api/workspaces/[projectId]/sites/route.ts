@@ -2,14 +2,17 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
+import { Prisma, SiteAllowedOriginMatchType } from "@prisma/client";
 import { randomBytes } from "crypto";
-import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { requireSession, requireAccountContext, requireAccountRole, isApiAuthError } from "@/lib/apiAuth";
 import { auditLogWrite } from "@/lib/audit";
 import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
+import { registerWorkerSite } from "@/lib/cavbotApi.server";
 
 // Plan system enforcement
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { resolvePlanIdFromTier, getPlanLimits } from "@/lib/plans";
+import { getCavbotAppOrigins } from "@/lib/security/embedAppOrigins";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -85,6 +88,11 @@ function hostLabel(origin: string) {
   return new URL(origin).hostname.replace(/^www\./, "");
 }
 
+function normalizeNotes(input: string) {
+  const notes = String(input || "").trim().slice(0, 160);
+  return notes || null;
+}
+
 function baseSlugFromOrigin(origin: string) {
   const host = new URL(origin).hostname.replace(/^www\./, "").toLowerCase();
   return host
@@ -123,6 +131,69 @@ type CreatedSite = {
   createdAt: Date;
 };
 
+function isWorkspaceSiteSchemaOutOfDate(error: unknown) {
+  return isSchemaMismatchError(error, {
+    tables: ["Site", "SiteAllowedOrigin", "ProjectNotice", "Project"],
+    columns: ["notes", "topSiteId", "origin", "slug", "projectId", "siteId"],
+    fields: ["siteAllowedOrigin", "projectNotice"],
+  });
+}
+
+async function createDefaultAllowedOrigins(siteId: string, origin: string) {
+  const allowedOrigins = new Set<string>([origin]);
+  for (const appOrigin of getCavbotAppOrigins()) {
+    allowedOrigins.add(appOrigin);
+  }
+
+  await prisma.siteAllowedOrigin.createMany({
+    data: Array.from(allowedOrigins).map((allowedOrigin) => ({
+      siteId,
+      origin: allowedOrigin,
+      matchType: SiteAllowedOriginMatchType.EXACT,
+    })),
+    skipDuplicates: true,
+  });
+}
+
+async function rollbackCreatedSiteSetup(args: {
+  projectId: number;
+  siteId: string;
+  autoPinned: boolean;
+}) {
+  await prisma.$transaction(async (tx) => {
+    if (args.autoPinned) {
+      await tx.project.updateMany({
+        where: {
+          id: args.projectId,
+          topSiteId: args.siteId,
+        },
+        data: { topSiteId: null },
+      });
+    }
+
+    await tx.site.delete({
+      where: { id: args.siteId },
+    });
+  }).catch(() => null);
+}
+
+async function createProjectNoticeBestEffort(projectId: number, origin: string) {
+  try {
+    await prisma.projectNotice.create({
+      data: {
+        projectId,
+        tone: "GOOD",
+        title: "Website added",
+        body: `${origin} is now under this workspace.`,
+      },
+    });
+  } catch (error) {
+    if (!isWorkspaceSiteSchemaOutOfDate(error)) {
+      console.error("[workspace-sites] project notice write failed", error);
+    }
+  }
+}
+
 export async function GET(req: Request, ctx: unknown) {
   try {
     const sess = await requireSession(req);
@@ -155,6 +226,7 @@ export async function POST(req: Request, ctx: unknown) {
   try {
     const sess = await requireSession(req);
     requireAccountContext(sess);
+    requireAccountRole(sess, ["OWNER", "ADMIN"]);
 
     const params = await getParams(ctx);
     const projectId = parseProjectId(params?.projectId || "");
@@ -185,6 +257,7 @@ export async function POST(req: Request, ctx: unknown) {
 
     const originRaw = (body?.origin || "").trim();
     const labelRaw = (body?.label || "").trim();
+    const notes = normalizeNotes(body?.notes || "");
 
     let origin: string;
     try {
@@ -228,6 +301,8 @@ export async function POST(req: Request, ctx: unknown) {
           }
         }
 
+        const replacingPinnedInactiveSite = Boolean(existingByOrigin && !existingByOrigin.isActive && project.topSiteId === existingByOrigin.id);
+
         if (existingByOrigin && !existingByOrigin.isActive) {
           // You previously soft-deleted it somewhere — purge it for real (privacy)
           if (project.topSiteId === existingByOrigin.id) {
@@ -249,7 +324,7 @@ export async function POST(req: Request, ctx: unknown) {
         let site: CreatedSite;
         try {
           site = await tx.site.create({
-            data: { projectId: project.id, origin, label, slug },
+            data: { projectId: project.id, origin, label, slug, notes },
             select: { id: true, origin: true, label: true, createdAt: true },
           });
         } catch (e: unknown) {
@@ -260,7 +335,7 @@ export async function POST(req: Request, ctx: unknown) {
               `${baseSlug}-${randomBytes(2).toString("hex")}`
             );
             site = await tx.site.create({
-              data: { projectId: project.id, origin, label, slug: retrySlug.slice(0, 80) },
+              data: { projectId: project.id, origin, label, slug: retrySlug.slice(0, 80), notes },
               select: { id: true, origin: true, label: true, createdAt: true },
             });
           } else {
@@ -269,24 +344,16 @@ export async function POST(req: Request, ctx: unknown) {
         }
 
         // 5) Pin first site automatically
-        const pinned = project.topSiteId || site.id;
-        if (!project.topSiteId) {
+        const shouldAutoPin = !project.topSiteId || replacingPinnedInactiveSite;
+        const pinned = shouldAutoPin ? site.id : project.topSiteId;
+        if (shouldAutoPin) {
           await tx.project.update({
             where: { id: project.id },
             data: { topSiteId: site.id },
           });
         }
 
-        await tx.projectNotice.create({
-          data: {
-            projectId: project.id,
-            tone: "GOOD",
-            title: "Website added",
-            body: `${origin} is now under this workspace.`,
-          },
-        });
-
-        return { conflict: false as const, site, topSiteId: pinned };
+        return { conflict: false as const, site, topSiteId: pinned, autoPinned: shouldAutoPin };
       });
 
       if ("limitBlocked" in result && result.limitBlocked) {
@@ -309,6 +376,39 @@ export async function POST(req: Request, ctx: unknown) {
       if ("conflict" in result && result.conflict) {
         return json({ error: "SITE_EXISTS", site: result.site }, 409);
       }
+
+      try {
+        await createDefaultAllowedOrigins(result.site.id, result.site.origin);
+        await registerWorkerSite(project.id, result.site.origin, result.site.label);
+      } catch (error) {
+        await rollbackCreatedSiteSetup({
+          projectId: project.id,
+          siteId: result.site.id,
+          autoPinned: result.autoPinned,
+        });
+
+        if (isWorkspaceSiteSchemaOutOfDate(error)) {
+          return json(
+            {
+              error: "DB_SCHEMA_OUT_OF_DATE",
+              message: "Website setup is temporarily unavailable while workspace schema updates finish.",
+            },
+            409
+          );
+        }
+
+        const status = Number((error as { status?: unknown })?.status);
+        return json(
+          {
+            error: "SITE_WIRING_FAILED",
+            message: "CavBot could not finish wiring this website for tracking. Please try again in a moment.",
+            detail: error instanceof Error ? error.message : undefined,
+          },
+          Number.isFinite(status) && status >= 400 && status < 600 ? status : 502
+        );
+      }
+
+      await createProjectNoticeBestEffort(project.id, result.site.origin);
 
       if (sess.accountId) {
         await auditLogWrite({
@@ -345,10 +445,41 @@ export async function POST(req: Request, ctx: unknown) {
         );
       }
 
-      return json({ error: "SERVER_ERROR" }, 500);
+      if (isWorkspaceSiteSchemaOutOfDate(e)) {
+        return json(
+          {
+            error: "DB_SCHEMA_OUT_OF_DATE",
+            message: "Website setup is temporarily unavailable while workspace schema updates finish.",
+          },
+          409
+        );
+      }
+
+      return json(
+        {
+          error: "SITE_CREATE_FAILED",
+          message: "CavBot could not add this website right now. Please try again.",
+        },
+        500
+      );
     }
   } catch (e) {
     if (isApiAuthError(e)) return json({ error: e.code }, e.status);
-    return json({ error: "SERVER_ERROR" }, 500);
+    if (isWorkspaceSiteSchemaOutOfDate(e)) {
+      return json(
+        {
+          error: "DB_SCHEMA_OUT_OF_DATE",
+          message: "Website setup is temporarily unavailable while workspace schema updates finish.",
+        },
+        409
+      );
+    }
+    return json(
+      {
+        error: "SITE_CREATE_FAILED",
+        message: "CavBot could not add this website right now. Please try again.",
+      },
+      500
+    );
   }
 }

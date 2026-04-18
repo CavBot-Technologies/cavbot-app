@@ -2,7 +2,7 @@
 "use client";
 
 
-import AppShell from "@/components/AppShell";
+import AppShell, { useAppShellPlan } from "@/components/AppShell";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -200,7 +200,6 @@ function strongerWorkspacePlanId(currentPlanId: PlanId, candidatePlanId?: PlanId
     ? candidatePlanId
     : currentPlanId;
 }
-
 function resolveWorkspacePlanId(detail?: WorkspacePlanDetail | null) {
   return resolvePlanIdFromTier(detail?.planKey || detail?.planLabel || detail?.planTier || "free");
 }
@@ -389,6 +388,40 @@ function originToLabel(origin: string) {
   } catch {
     return origin;
   }
+}
+
+function formatAddSiteErrorMessage(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+
+  if (raw.includes("SITE_EXISTS") || raw.includes("UNIQUE_CONSTRAINT")) {
+    return "That website already exists in this workspace.";
+  }
+  if (raw.includes("PLAN_SITE_LIMIT")) {
+    return "You’ve reached the website limit for this workspace plan.";
+  }
+  if (raw.includes("BAD_ORIGIN")) {
+    return "Enter a valid website origin.";
+  }
+  if (raw.includes("BAD_PROJECT")) {
+    return "No workspace is selected. Create or choose a workspace first.";
+  }
+  if (raw.includes("FORBIDDEN")) {
+    return "Only workspace owners and admins can add websites.";
+  }
+  if (raw.includes("UNAUTHENTICATED")) {
+    return "Your session expired. Sign in again and try adding the website.";
+  }
+  if (raw.includes("DB_SCHEMA_OUT_OF_DATE")) {
+    return "Website setup is temporarily unavailable while workspace updates finish.";
+  }
+  if (raw.includes("SITE_WIRING_FAILED")) {
+    return "CavBot could not finish wiring this website for tracking. Please try again in a moment.";
+  }
+  if (raw.includes("SITE_CREATE_FAILED") || raw.includes("SERVER_ERROR")) {
+    return "CavBot could not add this website right now. Please try again.";
+  }
+
+  return raw || "Failed to add website.";
 }
 
 
@@ -1699,7 +1732,7 @@ function CommandDeckPageInner() {
   async function onAddSiteRequested(payload: { origin: string; label: string; notes?: string }) {
     if (!activeProjectId) {
       pushToast("No workspace available. Create a workspace first.", "bad");
-      return;
+      throw new Error("No workspace available. Create a workspace first.");
     }
 
 
@@ -1734,12 +1767,11 @@ function CommandDeckPageInner() {
 
       if (sitesKey) void mutate(sitesKey);
     } catch (error) {
-      const errMessage = error instanceof Error ? error.message : "";
-      if (String(errMessage || "").includes("SITE_EXISTS")) {
-        pushToast("That website already exists in this workspace.", "watch");
-        return;
-      }
-      pushToast(errMessage || "Failed to add website.", "bad");
+      const rawMessage = error instanceof Error ? error.message : String(error ?? "");
+      const userMessage = formatAddSiteErrorMessage(error);
+      const tone = rawMessage.includes("SITE_EXISTS") || rawMessage.includes("UNIQUE_CONSTRAINT") ? "watch" : "bad";
+      pushToast(userMessage, tone);
+      throw new Error(userMessage);
     }
   }
 
@@ -1849,42 +1881,12 @@ function CommandDeckPageInner() {
         <div className="cb-home">
           <div className="cb-workspace-console">
             {/* Welcome header (top of page) */}
-            <header className="cb-welcome" aria-label="Welcome">
-              <div className="cb-welcome-title">
-                Hi,{" "}
-                <span className="cb-welcome-nameWrap">
-                  <Link
-                    href="/settings?tab=account#sx-theme-switcher"
-                    data-cb-route-intent="/settings?tab=account#sx-theme-switcher"
-                    data-cb-perf-source="workspace-welcome-theme-link"
-                    aria-label="Open theme color switcher"
-                    style={{ textDecoration: "none" }}
-                  >
-                    <span className="cb-welcome-name" style={{ color: welcomeAccentColor }}>
-                      {welcomeName || cachedName || "there"}
-                    </span>
-                  </Link>
-                  {welcomeShowsPremiumPlus ? (
-                    <span
-                      className="cb-welcome-verifiedBadge"
-                      role="img"
-                      aria-label="Premium plus verified account"
-                      title="Premium+ verified"
-                    >
-                      <svg
-                        className="cb-welcome-verifiedIcon"
-                        viewBox="0 0 16 16"
-                        aria-hidden="true"
-                        focusable="false"
-                      >
-                        <path d="M4 8.35 6.5 10.8 12.05 5.2" />
-                      </svg>
-                    </span>
-                  ) : null}
-                </span>
-              </div>
-              <div className="cb-welcome-sub">Welcome back to your command center!</div>
-            </header>
+            <WorkspaceWelcomeHeader
+              welcomeName={welcomeName || cachedName || "there"}
+              welcomeAccentColor={welcomeAccentColor}
+              fallbackPlanId={planId}
+              fallbackPlanLabel={workspacePlanLabel}
+            />
 
 
            {/* ===== GRID ===== */}
@@ -2377,6 +2379,60 @@ function planTierLabelFromAccount(account?: AccountContext | null) {
   if (raw.includes("enterprise")) return "PREMIUM+";
   if (raw.includes("premium") || raw.includes("pro") || raw.includes("paid")) return "PREMIUM";
   return "FREE";
+}
+
+function WorkspaceWelcomeHeader(props: {
+  welcomeName: string;
+  welcomeAccentColor: string;
+  fallbackPlanId: PlanId;
+  fallbackPlanLabel: string;
+}) {
+  const shellPlan = useAppShellPlan();
+  const shellPlanId = resolvePlanIdFromTier(shellPlan.planTier);
+  const fallbackPlanId = resolvePlanIdFromTier(props.fallbackPlanId || props.fallbackPlanLabel || "free");
+  const showWelcomeVerifiedBadge =
+    shellPlanId === "premium_plus" ||
+    fallbackPlanId === "premium_plus" ||
+    resolvePlanIdFromTier(props.fallbackPlanLabel) === "premium_plus";
+
+  return (
+    <header className="cb-welcome" aria-label="Welcome">
+      <div className="cb-welcome-title">
+        Hi,{" "}
+        <span className="cb-welcome-nameWrap">
+          <Link
+            href="/settings?tab=account#sx-theme-switcher"
+            data-cb-route-intent="/settings?tab=account#sx-theme-switcher"
+            data-cb-perf-source="workspace-welcome-theme-link"
+            aria-label="Open theme color switcher"
+            style={{ textDecoration: "none" }}
+          >
+            <span className="cb-welcome-name" style={{ color: props.welcomeAccentColor }}>
+              {props.welcomeName}
+            </span>
+          </Link>
+          {showWelcomeVerifiedBadge ? (
+            <span
+              className="cb-welcome-verifiedBadge"
+              role="img"
+              aria-label="Premium plus verified account"
+              title="Premium+ verified"
+            >
+              <svg
+                className="cb-welcome-verifiedIcon"
+                viewBox="0 0 16 16"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path d="M4 8.35 6.5 10.8 12.05 5.2" />
+              </svg>
+            </span>
+          ) : null}
+        </span>
+      </div>
+      <div className="cb-welcome-sub">Welcome back to your command center!</div>
+    </header>
+  );
 }
 
 type ProfileInfo = {
