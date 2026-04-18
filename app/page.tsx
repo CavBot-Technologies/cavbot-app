@@ -403,7 +403,7 @@ function formatAddSiteErrorMessage(error: unknown) {
     return "Enter a valid website origin.";
   }
   if (raw.includes("BAD_PROJECT")) {
-    return "No workspace is selected. Create or choose a workspace first.";
+    return "CavBot is preparing your command center. Please try adding the website again.";
   }
   if (raw.includes("FORBIDDEN")) {
     return "Only workspace owners and admins can add websites.";
@@ -1730,16 +1730,29 @@ function CommandDeckPageInner() {
 
 
   async function onAddSiteRequested(payload: { origin: string; label: string; notes?: string }) {
-    if (!activeProjectId) {
-      pushToast("No workspace available. Create a workspace first.", "bad");
-      throw new Error("No workspace available. Create a workspace first.");
+    let projectId = activeProjectId;
+
+    if (!projectId) {
+      try {
+        const { next } = await loadProjects();
+        if (next) {
+          projectId = next;
+          await refreshWorkspace(next, "refresh");
+        }
+      } catch {}
+    }
+
+    if (!projectId) {
+      const message = "CavBot is preparing your command center. Please try adding the website again.";
+      pushToast(message, "bad");
+      throw new Error(message);
     }
 
 
     try {
     const data = await apiJSON<{
       site: { id: string; origin: string; label: string; createdAt: string | number };
-    }>(`/api/workspaces/${activeProjectId}/sites`, {
+    }>(`/api/workspaces/${projectId}/sites`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -1762,7 +1775,7 @@ function CommandDeckPageInner() {
       if (sitesKey) void mutate(sitesKey);
 
 
-      await loadSitesForProject(activeProjectId, "siteAdded");
+      await loadSitesForProject(projectId, "siteAdded");
 
 
       if (sitesKey) void mutate(sitesKey);

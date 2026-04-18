@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext } from "@/lib/apiAuth";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { ensureActiveWorkspaceProject } from "@/lib/workspaceProjects.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,7 +86,10 @@ async function resolveProjectId(req: NextRequest, sess: WorkspaceSession, bodyPr
     orderBy: { id: "asc" },
   });
 
-  return first?.id ?? null;
+  if (first?.id) return first.id;
+
+  const ensured = await ensureActiveWorkspaceProject(sess.accountId!);
+  return ensured.id;
 }
 
 function emptyPayload(): WorkspacePayload {

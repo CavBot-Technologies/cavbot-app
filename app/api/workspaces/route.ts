@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { ensureActiveWorkspaceProject } from "@/lib/workspaceProjects.server";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -87,6 +88,7 @@ async function listWorkspaces(req: NextRequest, includeInactive: boolean) {
   // MUST be NextRequest so requireSession can read cookies reliably
   const sess = await requireSession(req);
   requireAccountContext(sess);
+  await ensureActiveWorkspaceProject(sess.accountId!);
 
   // Read cookie (httpOnly) to tell the client what the server thinks is active
   const activeCookie = req.cookies.get("cb_pid")?.value;
