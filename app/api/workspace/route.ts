@@ -1,10 +1,16 @@
 // app/api/workspace/route.ts
 import "server-only";
+
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession, requireAccountContext } from "@/lib/apiAuth";
-import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
+import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import {
+  classifyWorkspaceBootstrapError,
+  findAccountWorkspaceProject,
+  resolveAccountWorkspaceProject,
+} from "@/lib/workspaceProjects.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,8 +25,8 @@ type WorkspaceSite = {
 
 type WorkspacePayload = {
   ok: true;
-  projectId: number;          // 0 when no project exists yet
-  hasWorkspace: boolean;      // false when no project exists yet
+  projectId: number;
+  hasWorkspace: boolean;
   hasSites: boolean;
   sites: WorkspaceSite[];
   topSiteId: string;
@@ -34,11 +40,32 @@ const NO_STORE_HEADERS: Record<string, string> = {
   Vary: "Cookie",
 };
 
-function json<T>(payload: T, init?: number | ResponseInit) {
+const PROJECT_SUMMARY_SELECT = {
+  id: true,
+  topSiteId: true,
+} as const;
+
+type WorkspaceSession = { accountId?: string | null };
+
+function requestIdFrom(req: NextRequest) {
+  const incoming =
+    req.headers.get("x-request-id") ||
+    req.headers.get("x-vercel-id") ||
+    req.headers.get("cf-ray");
+  return (incoming && incoming.trim()) || crypto.randomUUID();
+}
+
+function withBaseHeaders(headers?: HeadersInit, rid?: string) {
+  const base: Record<string, string> = { ...NO_STORE_HEADERS };
+  if (rid) base["x-cavbot-request-id"] = rid;
+  return { ...(headers || {}), ...base };
+}
+
+function json<T>(payload: T, init?: number | ResponseInit, rid?: string) {
   const resInit: ResponseInit = typeof init === "number" ? { status: init } : init ?? {};
   return NextResponse.json(payload, {
     ...resInit,
-    headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS },
+    headers: withBaseHeaders(resInit.headers, rid),
   });
 }
 
@@ -48,44 +75,24 @@ function cookieKeyActive(projectId: number) {
 
 function parseProjectId(raw: string | null | undefined): number | null {
   const s = String(raw ?? "").trim();
-  if (!s) return null;
-  if (!/^\d+$/.test(s)) return null;
+  if (!s || !/^\d+$/.test(s)) return null;
   const n = Number(s);
   if (!Number.isFinite(n) || n <= 0) return null;
   return n;
 }
 
-function asHttpError(e: unknown) {
-  const msg = String((e as { message?: unknown })?.message || e);
-  if (msg === "UNAUTHORIZED" || msg === "NO_SESSION" || msg === "UNAUTHENTICATED") {
-    return { status: 401, payload: { ok: false, error: "UNAUTHENTICATED" } };
-  }
-  if (msg === "FORBIDDEN") return { status: 403, payload: { ok: false, error: "FORBIDDEN" } };
-  return { status: 500, payload: { ok: false, error: "WORKSPACE_FAILED" } };
+function parseRequestedProjectId(req: NextRequest, bodyProjectId?: unknown) {
+  return (
+    parseProjectId(req.nextUrl.searchParams.get("projectId")) ??
+    parseProjectId(bodyProjectId != null ? String(bodyProjectId) : null)
+  );
 }
 
-type WorkspaceSession = { accountId?: string | null };
-
-async function resolveProjectId(req: NextRequest, sess: WorkspaceSession, bodyProjectId?: unknown) {
-  const q = parseProjectId(req.nextUrl.searchParams.get("projectId"));
-  if (q) return q;
-
-  const b = parseProjectId(bodyProjectId != null ? String(bodyProjectId) : null);
-  if (b) return b;
-
-  const c1 = parseProjectId(req.cookies.get("cb_active_project_id")?.value || "");
-  if (c1) return c1;
-
-  const c2 = parseProjectId(req.cookies.get("cb_pid")?.value || "");
-  if (c2) return c2;
-
-  const first = await prisma.project.findFirst({
-    where: { accountId: sess.accountId! },
-    select: { id: true },
-    orderBy: { id: "asc" },
-  });
-
-  return first?.id ?? null;
+function parseFallbackProjectId(req: NextRequest) {
+  return (
+    parseProjectId(req.cookies.get("cb_active_project_id")?.value || "") ??
+    parseProjectId(req.cookies.get("cb_pid")?.value || "")
+  );
 }
 
 function emptyPayload(): WorkspacePayload {
@@ -100,46 +107,85 @@ function emptyPayload(): WorkspacePayload {
   };
 }
 
-function isWorkspaceSchemaMismatch(error: unknown) {
-  return isSchemaMismatchError(error, {
-    tables: ["Project", "Site"],
-    columns: [
-      "accountId",
-      "isActive",
-      "topSiteId",
-      "createdAt",
-      "label",
-      "origin",
-      "projectId",
-    ],
+function mapAuthError(e: unknown): { status: number; payload: Record<string, unknown> } {
+  if (isApiAuthError(e)) {
+    const status = e.status || 401;
+    const code = e.code || "UNAUTHORIZED";
+    if (status === 403) return { status, payload: { ok: false, error: "FORBIDDEN" } };
+    return { status, payload: { ok: false, error: code === "UNAUTHORIZED" ? "UNAUTHENTICATED" : code } };
+  }
+
+  return { status: 500, payload: { ok: false, error: "WORKSPACE_FAILED" } };
+}
+
+function workspaceBootstrapFailureResponse(
+  rid: string,
+  accountId: string | null | undefined,
+  error: unknown
+) {
+  const classified = classifyWorkspaceBootstrapError(error);
+  console.error("[workspace-bootstrap]", {
+    route: "/api/workspace",
+    requestId: rid,
+    accountId: accountId || null,
+    errorCode: classified.error,
+    detail: error instanceof Error ? error.message : String(error),
+  });
+  return json(
+    {
+      ok: false,
+      error: classified.error,
+      requestId: rid,
+      retryable: classified.retryable,
+    },
+    classified.status,
+    rid
+  );
+}
+
+async function resolveWorkspaceProjectForRead(req: NextRequest, sess: WorkspaceSession) {
+  return resolveAccountWorkspaceProject({
+    accountId: sess.accountId!,
+    select: PROJECT_SUMMARY_SELECT,
+    requestedProjectId: parseRequestedProjectId(req),
+    fallbackProjectId: parseFallbackProjectId(req),
+    ensureActive: true,
+  });
+}
+
+async function resolveWorkspaceProjectForMutation(
+  req: NextRequest,
+  sess: WorkspaceSession,
+  bodyProjectId?: unknown
+) {
+  const requestedProjectId = parseRequestedProjectId(req, bodyProjectId);
+  if (requestedProjectId) {
+    return findAccountWorkspaceProject({
+      accountId: sess.accountId!,
+      projectId: requestedProjectId,
+      select: PROJECT_SUMMARY_SELECT,
+    });
+  }
+
+  return resolveAccountWorkspaceProject({
+    accountId: sess.accountId!,
+    select: PROJECT_SUMMARY_SELECT,
+    fallbackProjectId: parseFallbackProjectId(req),
+    ensureActive: true,
   });
 }
 
 export async function GET(req: NextRequest) {
+  const rid = requestIdFrom(req);
+  let accountId: string | null = null;
+
   try {
     const sess = await requireSession(req);
     requireAccountContext(sess);
+    accountId = sess.accountId || null;
 
-    const requested = await resolveProjectId(req, sess);
-
-    // No projects exist yet for this account
-    if (!requested) return json(emptyPayload(), 200);
-
-    // If cookie/query points to a missing project, fall back to first project
-    let project = await prisma.project.findFirst({
-      where: { id: requested, accountId: sess.accountId! },
-      select: { id: true, topSiteId: true },
-    });
-
-    if (!project) {
-      project = await prisma.project.findFirst({
-        where: { accountId: sess.accountId! },
-        select: { id: true, topSiteId: true },
-        orderBy: { id: "asc" },
-      });
-    }
-
-    if (!project) return json(emptyPayload(), 200);
+    const project = await resolveWorkspaceProjectForRead(req, sess);
+    if (!project) return json(emptyPayload(), 200, rid);
 
     const rows = await prisma.site.findMany({
       where: { projectId: project.id, isActive: true },
@@ -147,25 +193,24 @@ export async function GET(req: NextRequest) {
       select: { id: true, label: true, origin: true, createdAt: true },
     });
 
-    const sites: WorkspaceSite[] = rows.map((r) => ({
-      id: r.id,
-      label: r.label,
-      origin: r.origin,
-      createdAt: r.createdAt.getTime(),
-      top: project.topSiteId ? r.id === project.topSiteId : false,
+    const sites: WorkspaceSite[] = rows.map((row) => ({
+      id: row.id,
+      label: row.label,
+      origin: row.origin,
+      createdAt: row.createdAt.getTime(),
+      top: project.topSiteId ? row.id === project.topSiteId : false,
     }));
 
     const hasSites = sites.length > 0;
-
     const firstId = sites[0]?.id || "";
-    const topIdRaw = String(project.topSiteId || "").trim();
-    const topOk = !!topIdRaw && sites.some((s) => s.id === topIdRaw);
+    const topSiteIdRaw = String(project.topSiteId || "").trim();
+    const hasTopSite = !!topSiteIdRaw && sites.some((site) => site.id === topSiteIdRaw);
 
-    const cookieVal = (req.cookies.get(cookieKeyActive(project.id))?.value || "").trim();
-    const activeOk = !!cookieVal && sites.some((s) => s.id === cookieVal);
+    const activeCookie = String(req.cookies.get(cookieKeyActive(project.id))?.value || "").trim();
+    const hasActiveCookie = !!activeCookie && sites.some((site) => site.id === activeCookie);
 
-    const activeSiteId = hasSites ? (activeOk ? cookieVal : topOk ? topIdRaw : firstId) : "";
-    const topSiteId = hasSites ? (topOk ? topIdRaw : activeSiteId || firstId) : "";
+    const activeSiteId = hasSites ? (hasActiveCookie ? activeCookie : hasTopSite ? topSiteIdRaw : firstId) : "";
+    const topSiteId = hasSites ? (hasTopSite ? topSiteIdRaw : activeSiteId || firstId) : "";
 
     return json(
       {
@@ -177,83 +222,77 @@ export async function GET(req: NextRequest) {
         topSiteId,
         activeSiteId,
       } satisfies WorkspacePayload,
-      200
+      200,
+      rid
     );
-  } catch (e: unknown) {
-    const { status, payload } = asHttpError(e);
-    if (status === 401 || status === 403) return json(payload, status);
-    if (isWorkspaceSchemaMismatch(e)) return json({ ...emptyPayload(), degraded: true }, 200);
-    return json({ ...emptyPayload(), degraded: true }, 200);
+  } catch (error: unknown) {
+    if (isApiAuthError(error)) {
+      const { status, payload } = mapAuthError(error);
+      return json({ ...payload, requestId: rid }, status, rid);
+    }
+    return workspaceBootstrapFailureResponse(rid, accountId, error);
   }
 }
 
 export async function POST(req: NextRequest) {
+  const rid = requestIdFrom(req);
+  let accountId: string | null = null;
+
   try {
     const sess = await requireSession(req);
     requireAccountContext(sess);
+    accountId = sess.accountId || null;
 
     const body = (await readSanitizedJson(req, null)) as
       | null
       | { projectId?: number | string; activeSiteId?: string };
 
-    const projectId = await resolveProjectId(req, sess, body?.projectId);
-    if (!projectId) return json(emptyPayload(), 200);
-
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, accountId: sess.accountId! },
-      select: { id: true },
-    });
-
-    if (!project) return json(emptyPayload(), 200);
+    const project = await resolveWorkspaceProjectForMutation(req, sess, body?.projectId);
+    if (!project) {
+      return json({ ok: false, error: "NOT_FOUND", requestId: rid }, 404, rid);
+    }
 
     const activeSiteId = String(body?.activeSiteId || "").trim();
-
     if (activeSiteId) {
       const site = await prisma.site.findFirst({
         where: { id: activeSiteId, projectId: project.id, isActive: true },
         select: { id: true },
       });
-      if (!site) return json({ ok: false, error: "SITE_NOT_FOUND" }, 404);
+      if (!site) return json({ ok: false, error: "SITE_NOT_FOUND", requestId: rid }, 404, rid);
     }
 
-    const res = json({ ok: true }, 200);
-
-    const secure = process.env.NODE_ENV === "production";
-
+    const res = json({ ok: true, requestId: rid }, 200, rid);
     res.cookies.set(cookieKeyActive(project.id), activeSiteId || "", {
       path: "/",
       sameSite: "lax",
-      secure,
+      secure: process.env.NODE_ENV === "production",
       httpOnly: true,
       maxAge: activeSiteId ? 60 * 60 * 24 * 30 : 0,
     });
 
     return res;
-  } catch (e: unknown) {
-    const { status, payload } = asHttpError(e);
-    if (status === 401 || status === 403) return json(payload, status);
-    if (isWorkspaceSchemaMismatch(e)) return json({ ...emptyPayload(), degraded: true }, 200);
-    return json({ ...emptyPayload(), degraded: true }, 200);
+  } catch (error: unknown) {
+    if (isApiAuthError(error)) {
+      const { status, payload } = mapAuthError(error);
+      return json({ ...payload, requestId: rid }, status, rid);
+    }
+    return workspaceBootstrapFailureResponse(rid, accountId, error);
   }
 }
 
 export async function DELETE(req: NextRequest) {
+  const rid = requestIdFrom(req);
+  let accountId: string | null = null;
+
   try {
     const sess = await requireSession(req);
     requireAccountContext(sess);
+    accountId = sess.accountId || null;
 
-    const projectId = await resolveProjectId(req, sess);
-    if (!projectId) return json({ ok: true }, 200);
+    const project = await resolveWorkspaceProjectForMutation(req, sess);
+    if (!project) return json({ ok: true, requestId: rid }, 200, rid);
 
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, accountId: sess.accountId! },
-      select: { id: true },
-    });
-
-    if (!project) return json({ ok: true }, 200);
-
-    const res = json({ ok: true }, 200);
-
+    const res = json({ ok: true, requestId: rid }, 200, rid);
     res.cookies.set(cookieKeyActive(project.id), "", {
       path: "/",
       sameSite: "lax",
@@ -263,17 +302,19 @@ export async function DELETE(req: NextRequest) {
     });
 
     return res;
-  } catch (e: unknown) {
-    const { status, payload } = asHttpError(e);
-    if (status === 401 || status === 403) return json(payload, status);
-    if (isWorkspaceSchemaMismatch(e)) return json({ ok: true, degraded: true }, 200);
-    return json({ ok: true, degraded: true }, 200);
+  } catch (error: unknown) {
+    if (isApiAuthError(error)) {
+      const { status, payload } = mapAuthError(error);
+      return json({ ...payload, requestId: rid }, status, rid);
+    }
+    return workspaceBootstrapFailureResponse(rid, accountId, error);
   }
 }
 
-export async function OPTIONS() {
+export async function OPTIONS(req: NextRequest) {
+  const rid = requestIdFrom(req);
   return new NextResponse(null, {
     status: 204,
-    headers: { ...NO_STORE_HEADERS, Allow: "GET,POST,DELETE,OPTIONS" },
+    headers: withBaseHeaders({ Allow: "GET,POST,DELETE,OPTIONS" }, rid),
   });
 }

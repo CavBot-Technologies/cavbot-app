@@ -11,12 +11,15 @@ test("command center workspace site route keeps secure site wiring parity", () =
   const source = read("app/api/workspaces/[projectId]/sites/route.ts");
 
   assert.equal(source.includes("requireAccountRole(sess, [\"OWNER\", \"ADMIN\"])"), true);
+  assert.equal(source.includes("assertWorkerSiteRegistrationConfig()"), true);
   assert.equal(source.includes("registerWorkerSite(project.id, result.site.origin, result.site.label)"), true);
   assert.equal(source.includes("siteAllowedOrigin.createMany"), true);
   assert.equal(source.includes("getCavbotAppOrigins()"), true);
   assert.equal(source.includes("skipDuplicates: true"), true);
   assert.equal(source.includes("createProjectNoticeBestEffort"), true);
   assert.equal(source.includes("rollbackCreatedSiteSetup"), true);
+  assert.equal(source.includes("SITE_WIRING_CONFIG_INVALID"), true);
+  assert.equal(source.includes("DB_PERMISSION_DENIED"), true);
 });
 
 test("command center add-site UI rethrows friendly errors so modal feedback stays visible", () => {
@@ -25,4 +28,54 @@ test("command center add-site UI rethrows friendly errors so modal feedback stay
   assert.equal(source.includes("function formatAddSiteErrorMessage"), true);
   assert.equal(source.includes("throw new Error(userMessage);"), true);
   assert.equal(source.includes("CavBot could not finish wiring this website for tracking."), true);
+  assert.equal(source.includes("WORKSPACE_BOOTSTRAP_FAILED"), true);
+  assert.equal(source.includes("DB_PERMISSION_DENIED"), true);
+  assert.equal(source.includes("SITE_WIRING_CONFIG_INVALID"), true);
+  assert.equal(source.includes("Reference:"), true);
+});
+
+test("workspace APIs auto-bootstrap the backing project so users never have to create one manually", () => {
+  const listRoute = read("app/api/workspaces/route.ts");
+  const stateRoute = read("app/api/workspace/route.ts");
+  const helper = read("lib/workspaceProjects.server.ts");
+
+  assert.equal(helper.includes("export async function ensureActiveWorkspaceProject"), true);
+  assert.equal(helper.includes("export async function resolveAccountWorkspaceProject"), true);
+  assert.equal(listRoute.includes("resolveAccountWorkspaceProject"), true);
+  assert.equal(stateRoute.includes("resolveWorkspaceProjectForRead"), true);
+});
+
+test("workspace bootstrap no longer degrades to empty success payloads on critical failures", () => {
+  const listRoute = read("app/api/workspaces/route.ts");
+  const stateRoute = read("app/api/workspace/route.ts");
+  const helper = read("lib/workspaceProjects.server.ts");
+
+  assert.equal(listRoute.includes("degradedWorkspacesResponse"), false);
+  assert.equal(listRoute.includes("degraded: true"), false);
+  assert.equal(stateRoute.includes("degraded: true"), false);
+  assert.equal(helper.includes("DB_PERMISSION_DENIED"), true);
+  assert.equal(helper.includes("WORKSPACE_BOOTSTRAP_FAILED"), true);
+  assert.equal(stateRoute.includes("workspaceBootstrapFailureResponse"), true);
+});
+
+test("workspace selection routes never fall back to project 1 and stay ownership-safe", () => {
+  const selectionRoute = read("app/api/workspaces/selection/route.ts");
+  const selectProjectRoute = read("app/api/workspaces/select-project/route.ts");
+
+  assert.doesNotMatch(selectionRoute, /\?\?\s*1/);
+  assert.equal(selectionRoute.includes("PROJECT_NOT_FOUND"), true);
+  assert.equal(selectionRoute.includes("resolveAccountWorkspaceProject"), true);
+  assert.equal(selectProjectRoute.includes("findAccountWorkspaceProject"), true);
+});
+
+test("command center add-site flow retries bootstrap but surfaces real bootstrap failures", () => {
+  const source = read("app/page.tsx");
+
+  assert.equal(source.includes('const { next } = await loadProjects();'), true);
+  assert.equal(source.includes('await refreshWorkspace(next, "refresh");'), true);
+  assert.equal(source.includes("Workspace bootstrap returned no active project."), true);
+  assert.equal(
+    source.includes("CavBot is preparing your command center. Please try adding the website again."),
+    false,
+  );
 });

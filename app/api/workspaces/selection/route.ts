@@ -1,8 +1,10 @@
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { findAccountWorkspaceProject, resolveAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,11 +22,25 @@ const KEY_TOP_SITE_ORIGIN_PREFIX = "cb_top_site_origin__";
 const KEY_ACTIVE_SITE_ID_PREFIX = "cb_active_site_id__";
 
 type WorkspaceSelectionPayload = Record<string, unknown>;
-function json(payload: WorkspaceSelectionPayload, init?: number | ResponseInit) {
+function requestIdFrom(req: NextRequest) {
+  const incoming =
+    req.headers.get("x-request-id") ||
+    req.headers.get("x-vercel-id") ||
+    req.headers.get("cf-ray");
+  return (incoming && incoming.trim()) || crypto.randomUUID();
+}
+
+function withBaseHeaders(headers?: HeadersInit, rid?: string) {
+  const base: Record<string, string> = { ...NO_STORE_HEADERS };
+  if (rid) base["x-cavbot-request-id"] = rid;
+  return { ...(headers || {}), ...base };
+}
+
+function json(payload: WorkspaceSelectionPayload, init?: number | ResponseInit, rid?: string) {
   const resInit: ResponseInit = typeof init === "number" ? { status: init } : init ?? {};
   return NextResponse.json(payload, {
     ...resInit,
-    headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS },
+    headers: withBaseHeaders(resInit.headers, rid),
   });
 }
 
@@ -97,23 +113,34 @@ type WorkspaceSelectionBody = {
 };
 
 export async function POST(req: NextRequest) {
+  const rid = requestIdFrom(req);
+
   try {
     const session = await requireSession(req);
     requireAccountContext(session);
 
     const body = (await readSanitizedJson(req, ({}))) as WorkspaceSelectionBody;
 
-    const projectId =
-      parseProjectId(body?.projectId) ??
-      parseProjectId(req.cookies.get(KEY_ACTIVE_PROJECT_ID)?.value) ??
-      1;
+    const requestedProjectId = parseProjectId(body?.projectId);
+    const project = requestedProjectId
+      ? await findAccountWorkspaceProject({
+          accountId: session.accountId!,
+          projectId: requestedProjectId,
+          select: { id: true },
+        })
+      : await resolveAccountWorkspaceProject({
+          accountId: session.accountId!,
+          select: { id: true },
+          requestedProjectId: parseProjectId(req.cookies.get(KEY_ACTIVE_PROJECT_ID)?.value),
+          fallbackProjectId: parseProjectId(req.cookies.get("cb_pid")?.value),
+          ensureActive: true,
+        });
 
-    // Ensure project belongs to this account
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, accountId: session.accountId!, isActive: true },
-      select: { id: true },
-    });
-    if (!project) return json({ error: "PROJECT_NOT_FOUND" }, 404);
+    if (!project) {
+      return json({ error: "PROJECT_NOT_FOUND", requestId: rid }, 404, rid);
+    }
+
+    const projectId = project.id;
 
     const pidStr = String(projectId);
 
@@ -130,7 +157,7 @@ export async function POST(req: NextRequest) {
         where: { id: activeSiteId, projectId, isActive: true },
         select: { origin: true },
       });
-      if (!s) return json({ error: "ACTIVE_SITE_NOT_FOUND" }, 404);
+      if (!s) return json({ error: "ACTIVE_SITE_NOT_FOUND", requestId: rid }, 404, rid);
       activeSiteOrigin = s.origin;
     } else if (activeSiteOrigin) {
       // validate origin belongs to this project
@@ -138,7 +165,7 @@ export async function POST(req: NextRequest) {
         where: { projectId, isActive: true, origin: activeSiteOrigin },
         select: { id: true },
       });
-      if (!s) return json({ error: "ACTIVE_ORIGIN_NOT_FOUND" }, 404);
+      if (!s) return json({ error: "ACTIVE_ORIGIN_NOT_FOUND", requestId: rid }, 404, rid);
     }
 
     if (topSiteId) {
@@ -146,14 +173,14 @@ export async function POST(req: NextRequest) {
         where: { id: topSiteId, projectId, isActive: true },
         select: { origin: true },
       });
-      if (!s) return json({ error: "TOP_SITE_NOT_FOUND" }, 404);
+      if (!s) return json({ error: "TOP_SITE_NOT_FOUND", requestId: rid }, 404, rid);
       topSiteOrigin = s.origin;
     } else if (topSiteOrigin) {
       const s = await prisma.site.findFirst({
         where: { projectId, isActive: true, origin: topSiteOrigin },
         select: { id: true },
       });
-      if (!s) return json({ error: "TOP_ORIGIN_NOT_FOUND" }, 404);
+      if (!s) return json({ error: "TOP_ORIGIN_NOT_FOUND", requestId: rid }, 404, rid);
     }
 
     // Write cookies (Command Center -> Server context)
@@ -165,8 +192,10 @@ export async function POST(req: NextRequest) {
         activeSiteOrigin: activeSiteOrigin || undefined,
         topSiteId: topSiteId || undefined,
         topSiteOrigin: topSiteOrigin || undefined,
+        requestId: rid,
       },
-      200
+      200,
+      rid
     );
 
     setCookie(res, KEY_ACTIVE_PROJECT_ID, pidStr);
@@ -177,6 +206,6 @@ export async function POST(req: NextRequest) {
     return res;
   } catch (e: unknown) {
     const { status, payload } = toPublicError(e);
-    return json(payload, status);
+    return json({ ...payload, requestId: rid }, status, rid);
   }
 }

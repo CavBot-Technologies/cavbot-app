@@ -3,13 +3,19 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma, SiteAllowedOriginMatchType } from "@prisma/client";
+import crypto from "crypto";
 import { randomBytes } from "crypto";
 import { requireSession, requireAccountContext, requireAccountRole, isApiAuthError } from "@/lib/apiAuth";
 import { auditLogWrite } from "@/lib/audit";
-import { registerWorkerSite } from "@/lib/cavbotApi.server";
+import {
+  assertWorkerSiteRegistrationConfig,
+  CavBotApiConfigError,
+  CavBotApiError,
+  registerWorkerSite,
+} from "@/lib/cavbotApi.server";
 
 // Plan system enforcement
-import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
+import { isPermissionDeniedError, isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { resolvePlanIdFromTier, getPlanLimits } from "@/lib/plans";
 import { getCavbotAppOrigins } from "@/lib/security/embedAppOrigins";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -24,11 +30,25 @@ const NO_STORE_HEADERS: Record<string, string> = {
   Vary: "Cookie",
 };
 
-function json(data: unknown, init?: number | ResponseInit) {
+function requestIdFrom(req: Request) {
+  const incoming =
+    req.headers.get("x-request-id") ||
+    req.headers.get("x-vercel-id") ||
+    req.headers.get("cf-ray");
+  return (incoming && incoming.trim()) || crypto.randomUUID();
+}
+
+function withBaseHeaders(headers?: HeadersInit, rid?: string) {
+  const base: Record<string, string> = { ...NO_STORE_HEADERS };
+  if (rid) base["x-cavbot-request-id"] = rid;
+  return { ...(headers || {}), ...base };
+}
+
+function json(data: unknown, init?: number | ResponseInit, rid?: string) {
   const resInit: ResponseInit = typeof init === "number" ? { status: init } : init ?? {};
   return NextResponse.json(data, {
     ...resInit,
-    headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS },
+    headers: withBaseHeaders(resInit.headers, rid),
   });
 }
 
@@ -138,6 +158,114 @@ function isWorkspaceSiteSchemaOutOfDate(error: unknown) {
   });
 }
 
+function isWorkspaceSitePermissionDenied(error: unknown) {
+  return isPermissionDeniedError(error, ["Site", "SiteAllowedOrigin", "ProjectNotice", "Project"]);
+}
+
+function logWorkspaceSiteFailure(args: {
+  route: string;
+  requestId: string;
+  accountId?: string | null;
+  projectId?: number | null;
+  origin?: string | null;
+  errorCode: string;
+  error: unknown;
+  workerRequestId?: string;
+}) {
+  console.error("[workspace-sites]", {
+    route: args.route,
+    requestId: args.requestId,
+    workerRequestId: args.workerRequestId || null,
+    accountId: args.accountId || null,
+    projectId: args.projectId || null,
+    origin: args.origin || null,
+    errorCode: args.errorCode,
+    detail: args.error instanceof Error ? args.error.message : String(args.error),
+  });
+}
+
+function siteFailureResponse(args: {
+  route: string;
+  requestId: string;
+  accountId?: string | null;
+  projectId?: number | null;
+  origin?: string | null;
+  error: unknown;
+  phase: "create" | "wiring";
+}) {
+  const workerRequestId = args.error instanceof CavBotApiError ? args.error.requestId : undefined;
+
+  if (isWorkspaceSiteSchemaOutOfDate(args.error)) {
+    logWorkspaceSiteFailure({ ...args, errorCode: "DB_SCHEMA_OUT_OF_DATE", workerRequestId });
+    return json(
+      {
+        error: "DB_SCHEMA_OUT_OF_DATE",
+        message: "Website setup is temporarily unavailable while workspace schema updates finish.",
+        requestId: args.requestId,
+        retryable: false,
+      },
+      409,
+      args.requestId
+    );
+  }
+
+  if (isWorkspaceSitePermissionDenied(args.error)) {
+    logWorkspaceSiteFailure({ ...args, errorCode: "DB_PERMISSION_DENIED", workerRequestId });
+    return json(
+      {
+        error: "DB_PERMISSION_DENIED",
+        message: "Website setup is temporarily unavailable while workspace permissions are being repaired.",
+        requestId: args.requestId,
+        retryable: false,
+      },
+      503,
+      args.requestId
+    );
+  }
+
+  if (args.error instanceof CavBotApiConfigError || (args.error as { code?: unknown })?.code === "config_invalid") {
+    logWorkspaceSiteFailure({ ...args, errorCode: "SITE_WIRING_CONFIG_INVALID", workerRequestId });
+    return json(
+      {
+        error: "SITE_WIRING_CONFIG_INVALID",
+        message: "CavBot website wiring is temporarily unavailable while backend configuration is being repaired.",
+        requestId: args.requestId,
+        retryable: false,
+      },
+      500,
+      args.requestId
+    );
+  }
+
+  if (args.phase === "wiring") {
+    const status = Number((args.error as { status?: unknown })?.status);
+    logWorkspaceSiteFailure({ ...args, errorCode: "SITE_WIRING_FAILED", workerRequestId });
+    return json(
+      {
+        error: "SITE_WIRING_FAILED",
+        message: "CavBot could not finish wiring this website for tracking. Please try again in a moment.",
+        detail: args.error instanceof Error ? args.error.message : undefined,
+        requestId: args.requestId,
+        retryable: true,
+      },
+      Number.isFinite(status) && status >= 400 && status < 600 ? status : 502,
+      args.requestId
+    );
+  }
+
+  logWorkspaceSiteFailure({ ...args, errorCode: "SITE_CREATE_FAILED", workerRequestId });
+  return json(
+    {
+      error: "SITE_CREATE_FAILED",
+      message: "CavBot could not add this website right now. Please try again.",
+      requestId: args.requestId,
+      retryable: true,
+    },
+    500,
+    args.requestId
+  );
+}
+
 async function createDefaultAllowedOrigins(siteId: string, origin: string) {
   const allowedOrigins = new Set<string>([origin]);
   for (const appOrigin of getCavbotAppOrigins()) {
@@ -176,7 +304,7 @@ async function rollbackCreatedSiteSetup(args: {
   }).catch(() => null);
 }
 
-async function createProjectNoticeBestEffort(projectId: number, origin: string) {
+async function createProjectNoticeBestEffort(projectId: number, origin: string, requestId: string) {
   try {
     await prisma.projectNotice.create({
       data: {
@@ -188,25 +316,34 @@ async function createProjectNoticeBestEffort(projectId: number, origin: string) 
     });
   } catch (error) {
     if (!isWorkspaceSiteSchemaOutOfDate(error)) {
-      console.error("[workspace-sites] project notice write failed", error);
+      logWorkspaceSiteFailure({
+        route: "/api/workspaces/[projectId]/sites",
+        requestId,
+        projectId,
+        origin,
+        errorCode: "PROJECT_NOTICE_WRITE_FAILED",
+        error,
+      });
     }
   }
 }
 
 export async function GET(req: Request, ctx: unknown) {
+  const rid = requestIdFrom(req);
+
   try {
     const sess = await requireSession(req);
     requireAccountContext(sess);
 
     const params = await getParams(ctx);
     const projectId = parseProjectId(params?.projectId || "");
-    if (!projectId) return json({ error: "BAD_PROJECT" }, 400);
+    if (!projectId) return json({ error: "BAD_PROJECT", requestId: rid }, 400, rid);
 
     const project = await prisma.project.findFirst({
       where: { id: projectId, accountId: sess.accountId },
       select: { id: true, topSiteId: true },
     });
-    if (!project) return json({ error: "NOT_FOUND" }, 404);
+    if (!project) return json({ error: "NOT_FOUND", requestId: rid }, 404, rid);
 
     const sites = await prisma.site.findMany({
       where: { projectId: project.id, isActive: true },
@@ -214,14 +351,16 @@ export async function GET(req: Request, ctx: unknown) {
       select: { id: true, label: true, origin: true, createdAt: true },
     });
 
-    return json({ topSiteId: project.topSiteId, sites }, 200);
+    return json({ topSiteId: project.topSiteId, sites }, 200, rid);
   } catch (e) {
-    if (isApiAuthError(e)) return json({ error: e.code }, e.status);
-    return json({ error: "SERVER_ERROR" }, 500);
+    if (isApiAuthError(e)) return json({ error: e.code, requestId: rid }, e.status, rid);
+    return json({ error: "SERVER_ERROR", requestId: rid }, 500, rid);
   }
 }
 
 export async function POST(req: Request, ctx: unknown) {
+  const rid = requestIdFrom(req);
+
   try {
     const sess = await requireSession(req);
     requireAccountContext(sess);
@@ -229,14 +368,14 @@ export async function POST(req: Request, ctx: unknown) {
 
     const params = await getParams(ctx);
     const projectId = parseProjectId(params?.projectId || "");
-    if (!projectId) return json({ error: "BAD_PROJECT" }, 400);
+    if (!projectId) return json({ error: "BAD_PROJECT", requestId: rid }, 400, rid);
 
     // Load project
     const project = await prisma.project.findFirst({
       where: { id: projectId, accountId: sess.accountId },
       select: { id: true, topSiteId: true },
     });
-    if (!project) return json({ error: "NOT_FOUND" }, 404);
+    if (!project) return json({ error: "NOT_FOUND", requestId: rid }, 404, rid);
 
     // Load account tier (Plan enforcement source)
     const account = await prisma.account.findFirst({
@@ -262,13 +401,32 @@ export async function POST(req: Request, ctx: unknown) {
       origin = normalizeOrigin(originRaw);
     } catch (err) {
       return json(
-        { error: "BAD_ORIGIN", message: err instanceof Error ? err.message : "Invalid origin." },
-        400
+        {
+          error: "BAD_ORIGIN",
+          message: err instanceof Error ? err.message : "Invalid origin.",
+          requestId: rid,
+        },
+        400,
+        rid
       );
     }
 
     const label = (labelRaw || hostLabel(origin)).slice(0, 48);
     const baseSlug = baseSlugFromOrigin(origin);
+
+    try {
+      assertWorkerSiteRegistrationConfig();
+    } catch (error) {
+      return siteFailureResponse({
+        route: "/api/workspaces/[projectId]/sites",
+        requestId: rid,
+        accountId: sess.accountId,
+        projectId,
+        origin,
+        error,
+        phase: "wiring",
+      });
+    }
 
     try {
       const result = await prisma.$transaction(async (tx) => {
@@ -365,14 +523,16 @@ export async function POST(req: Request, ctx: unknown) {
             planId,
             current: result.current,
             limit: result.limit,
+            requestId: rid,
           },
-          403
+          403,
+          rid
         );
       }
 
       // conflict path
       if ("conflict" in result && result.conflict) {
-        return json({ error: "SITE_EXISTS", site: result.site }, 409);
+        return json({ error: "SITE_EXISTS", site: result.site, requestId: rid }, 409, rid);
       }
 
       try {
@@ -385,47 +545,49 @@ export async function POST(req: Request, ctx: unknown) {
           autoPinned: result.autoPinned,
         });
 
-        if (isWorkspaceSiteSchemaOutOfDate(error)) {
-          return json(
-            {
-              error: "DB_SCHEMA_OUT_OF_DATE",
-              message: "Website setup is temporarily unavailable while workspace schema updates finish.",
-            },
-            409
-          );
-        }
-
-        const status = Number((error as { status?: unknown })?.status);
-        return json(
-          {
-            error: "SITE_WIRING_FAILED",
-            message: "CavBot could not finish wiring this website for tracking. Please try again in a moment.",
-            detail: error instanceof Error ? error.message : undefined,
-          },
-          Number.isFinite(status) && status >= 400 && status < 600 ? status : 502
-        );
-      }
-
-      await createProjectNoticeBestEffort(project.id, result.site.origin);
-
-      if (sess.accountId) {
-        await auditLogWrite({
-          request: req,
-          action: "SITE_ADDED",
+        return siteFailureResponse({
+          route: "/api/workspaces/[projectId]/sites",
+          requestId: rid,
           accountId: sess.accountId,
-          operatorUserId: sess.sub,
-          targetType: "site",
-          targetId: result.site.id,
-          targetLabel: result.site.origin,
-          metaJson: {
-            origin: result.site.origin,
-            label: result.site.label,
-            projectId,
-          },
+          projectId,
+          origin: result.site.origin,
+          error,
+          phase: "wiring",
         });
       }
 
-      return json({ site: result.site, topSiteId: result.topSiteId }, 201);
+      await createProjectNoticeBestEffort(project.id, result.site.origin, rid);
+
+      if (sess.accountId) {
+        try {
+          await auditLogWrite({
+            request: req,
+            action: "SITE_ADDED",
+            accountId: sess.accountId,
+            operatorUserId: sess.sub,
+            targetType: "site",
+            targetId: result.site.id,
+            targetLabel: result.site.origin,
+            metaJson: {
+              origin: result.site.origin,
+              label: result.site.label,
+              projectId,
+            },
+          });
+        } catch (error) {
+          logWorkspaceSiteFailure({
+            route: "/api/workspaces/[projectId]/sites",
+            requestId: rid,
+            accountId: sess.accountId,
+            projectId,
+            origin: result.site.origin,
+            errorCode: "AUDIT_LOG_WRITE_FAILED",
+            error,
+          });
+        }
+      }
+
+      return json({ site: result.site, topSiteId: result.topSiteId }, 201, rid);
     } catch (e: unknown) {
       // If you still get P2002, return a correct message about what collided
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -438,46 +600,30 @@ export async function POST(req: Request, ctx: unknown) {
               Array.isArray(target) && target.includes("slug")
                 ? "Slug collision (projectId+slug). A site with a similar hostname slug already exists."
                 : "This site already exists in this workspace.",
+            requestId: rid,
           },
-          409
+          409,
+          rid
         );
       }
 
-      if (isWorkspaceSiteSchemaOutOfDate(e)) {
-        return json(
-          {
-            error: "DB_SCHEMA_OUT_OF_DATE",
-            message: "Website setup is temporarily unavailable while workspace schema updates finish.",
-          },
-          409
-        );
-      }
-
-      return json(
-        {
-          error: "SITE_CREATE_FAILED",
-          message: "CavBot could not add this website right now. Please try again.",
-        },
-        500
-      );
+      return siteFailureResponse({
+        route: "/api/workspaces/[projectId]/sites",
+        requestId: rid,
+        accountId: sess.accountId,
+        projectId,
+        origin,
+        error: e,
+        phase: "create",
+      });
     }
   } catch (e) {
-    if (isApiAuthError(e)) return json({ error: e.code }, e.status);
-    if (isWorkspaceSiteSchemaOutOfDate(e)) {
-      return json(
-        {
-          error: "DB_SCHEMA_OUT_OF_DATE",
-          message: "Website setup is temporarily unavailable while workspace schema updates finish.",
-        },
-        409
-      );
-    }
-    return json(
-      {
-        error: "SITE_CREATE_FAILED",
-        message: "CavBot could not add this website right now. Please try again.",
-      },
-      500
-    );
+    if (isApiAuthError(e)) return json({ error: e.code, requestId: rid }, e.status, rid);
+    return siteFailureResponse({
+      route: "/api/workspaces/[projectId]/sites",
+      requestId: rid,
+      error: e,
+      phase: "create",
+    });
   }
 }

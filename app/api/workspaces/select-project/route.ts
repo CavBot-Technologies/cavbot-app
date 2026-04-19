@@ -2,9 +2,9 @@
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { findAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -84,8 +84,9 @@ export async function POST(req: NextRequest) {
     }
 
     // VERIFY: project must belong to this session's account
-    const project = await prisma.project.findFirst({
-      where: { id: pid, accountId: sess.accountId },
+    const project = await findAccountWorkspaceProject({
+      accountId: sess.accountId!,
+      projectId: pid,
       select: { id: true },
     });
 

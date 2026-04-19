@@ -274,38 +274,135 @@ function originToLabel(origin: string) {
   }
 }
 
+const ADD_SITE_ERROR_CODES = [
+  "SITE_EXISTS",
+  "UNIQUE_CONSTRAINT",
+  "PLAN_SITE_LIMIT",
+  "BAD_ORIGIN",
+  "BAD_PROJECT",
+  "FORBIDDEN",
+  "UNAUTHENTICATED",
+  "DB_SCHEMA_OUT_OF_DATE",
+  "DB_PERMISSION_DENIED",
+  "WORKSPACE_BOOTSTRAP_FAILED",
+  "SITE_WIRING_CONFIG_INVALID",
+  "SITE_WIRING_FAILED",
+  "SITE_CREATE_FAILED",
+  "SERVER_ERROR",
+] as const;
+
+class ApiRequestError extends Error {
+  status?: number;
+  code?: string;
+  requestId?: string;
+  retryable?: boolean;
+
+  constructor(
+    message: string,
+    options?: {
+      status?: number;
+      code?: string;
+      requestId?: string;
+      retryable?: boolean;
+    }
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = options?.status;
+    this.code = options?.code;
+    this.requestId = options?.requestId;
+    this.retryable = options?.retryable;
+  }
+}
+
+function getAddSiteErrorCode(error: unknown) {
+  if (error instanceof ApiRequestError && error.code) return error.code;
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  return ADD_SITE_ERROR_CODES.find((code) => raw.includes(code)) || "";
+}
+
+function getAddSiteRequestId(error: unknown) {
+  if (error instanceof ApiRequestError && error.requestId) return error.requestId;
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  const match = raw.match(/\[requestId:([^\]]+)\]/i);
+  return match?.[1]?.trim() || "";
+}
+
+function withAddSiteErrorContext(message: string, error: unknown, code?: string) {
+  const details: string[] = [];
+  const stableCode = code || getAddSiteErrorCode(error);
+  const requestId = getAddSiteRequestId(error);
+  if (stableCode) details.push(`Code: ${stableCode}.`);
+  if (requestId) details.push(`Reference: ${requestId}.`);
+  return details.length ? `${message} ${details.join(" ")}` : message;
+}
+
 function formatAddSiteErrorMessage(error: unknown) {
   const raw = error instanceof Error ? error.message : String(error ?? "");
+  const code = getAddSiteErrorCode(error);
 
-  if (raw.includes("SITE_EXISTS") || raw.includes("UNIQUE_CONSTRAINT")) {
-    return "That website already exists in this workspace.";
+  if (code === "SITE_EXISTS" || code === "UNIQUE_CONSTRAINT" || raw.includes("SITE_EXISTS") || raw.includes("UNIQUE_CONSTRAINT")) {
+    return withAddSiteErrorContext("That website already exists in this workspace.", error, code);
   }
-  if (raw.includes("PLAN_SITE_LIMIT")) {
-    return "You’ve reached the website limit for this workspace plan.";
+  if (code === "PLAN_SITE_LIMIT" || raw.includes("PLAN_SITE_LIMIT")) {
+    return withAddSiteErrorContext("You’ve reached the website limit for this workspace plan.", error, code);
   }
-  if (raw.includes("BAD_ORIGIN")) {
-    return "Enter a valid website origin.";
+  if (code === "BAD_ORIGIN" || raw.includes("BAD_ORIGIN")) {
+    return withAddSiteErrorContext("Enter a valid website origin.", error, code);
   }
-  if (raw.includes("BAD_PROJECT")) {
-    return "No workspace is selected. Create or choose a workspace first.";
+  if (code === "BAD_PROJECT" || raw.includes("BAD_PROJECT")) {
+    return withAddSiteErrorContext(
+      "CavBot could not resolve the active workspace for this website. Reload the command center and try again.",
+      error,
+      code
+    );
   }
-  if (raw.includes("FORBIDDEN")) {
-    return "Only workspace owners and admins can add websites.";
+  if (code === "FORBIDDEN" || raw.includes("FORBIDDEN")) {
+    return withAddSiteErrorContext("Only workspace owners and admins can add websites.", error, code);
   }
-  if (raw.includes("UNAUTHENTICATED")) {
-    return "Your session expired. Sign in again and try adding the website.";
+  if (code === "UNAUTHENTICATED" || raw.includes("UNAUTHENTICATED")) {
+    return withAddSiteErrorContext("Your session expired. Sign in again and try adding the website.", error, code);
   }
-  if (raw.includes("DB_SCHEMA_OUT_OF_DATE")) {
-    return "Website setup is temporarily unavailable while workspace updates finish.";
+  if (code === "DB_SCHEMA_OUT_OF_DATE" || raw.includes("DB_SCHEMA_OUT_OF_DATE")) {
+    return withAddSiteErrorContext(
+      "Website setup is temporarily unavailable while workspace updates finish.",
+      error,
+      code
+    );
   }
-  if (raw.includes("SITE_WIRING_FAILED")) {
-    return "CavBot could not finish wiring this website for tracking. Please try again in a moment.";
+  if (code === "DB_PERMISSION_DENIED" || raw.includes("DB_PERMISSION_DENIED")) {
+    return withAddSiteErrorContext(
+      "Website setup is temporarily unavailable while workspace permissions are being repaired.",
+      error,
+      code
+    );
   }
-  if (raw.includes("SITE_CREATE_FAILED") || raw.includes("SERVER_ERROR")) {
-    return "CavBot could not add this website right now. Please try again.";
+  if (code === "WORKSPACE_BOOTSTRAP_FAILED" || raw.includes("WORKSPACE_BOOTSTRAP_FAILED")) {
+    return withAddSiteErrorContext(
+      "CavBot could not finish preparing your workspace. Reload the command center and try again.",
+      error,
+      code
+    );
+  }
+  if (code === "SITE_WIRING_CONFIG_INVALID" || raw.includes("SITE_WIRING_CONFIG_INVALID")) {
+    return withAddSiteErrorContext(
+      "CavBot website wiring is temporarily unavailable while backend configuration is being repaired.",
+      error,
+      code
+    );
+  }
+  if (code === "SITE_WIRING_FAILED" || raw.includes("SITE_WIRING_FAILED")) {
+    return withAddSiteErrorContext(
+      "CavBot could not finish wiring this website for tracking. Please try again in a moment.",
+      error,
+      code
+    );
+  }
+  if (code === "SITE_CREATE_FAILED" || code === "SERVER_ERROR" || raw.includes("SITE_CREATE_FAILED") || raw.includes("SERVER_ERROR")) {
+    return withAddSiteErrorContext("CavBot could not add this website right now. Please try again.", error, code);
   }
 
-  return raw || "Failed to add website.";
+  return withAddSiteErrorContext(raw || "Failed to add website.", error, code);
 }
 
 
@@ -516,7 +613,7 @@ async function apiJSON<T>(url: string, init?: RequestInit): Promise<T> {
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err ?? "Unknown error");
-      lastFetchError = new Error(`FETCH_FAILED for ${url}: ${message}`);
+      lastFetchError = new ApiRequestError(`FETCH_FAILED for ${url}: ${message}`);
       if (attempt === 0) {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 180));
         continue;
@@ -545,18 +642,32 @@ async function apiJSON<T>(url: string, init?: RequestInit): Promise<T> {
       }
 
       const detail = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : null;
-      const msg =
-        (detail && (String(detail.error || detail.message))) || `Request failed (${res.status})`;
-      throw new Error(msg);
+      const code = detail && typeof detail.error === "string" ? detail.error : undefined;
+      const requestId =
+        (detail && typeof detail.requestId === "string" ? detail.requestId : undefined) ||
+        res.headers.get("x-cavbot-request-id") ||
+        res.headers.get("x-request-id") ||
+        undefined;
+      const message =
+        (detail && typeof detail.message === "string" && detail.message) ||
+        code ||
+        `Request failed (${res.status})`;
+
+      throw new ApiRequestError(message, {
+        status: res.status,
+        code,
+        requestId,
+        retryable: Boolean(detail?.retryable),
+      });
     }
 
     if (!isJSON) {
-      throw new Error(`Expected JSON from ${url} but got: ${ct || "unknown"}`);
+      throw new ApiRequestError(`Expected JSON from ${url} but got: ${ct || "unknown"}`);
     }
 
     return data as T;
   }
-  throw lastFetchError || new Error(`REQUEST_RETRY_EXHAUSTED for ${url}`);
+  throw lastFetchError || new ApiRequestError(`REQUEST_RETRY_EXHAUSTED for ${url}`);
 }
 
 
@@ -1108,19 +1219,44 @@ function CommandDeckPageInner() {
 
 
   async function loadProjects() {
-    const data = await apiJSON<{ projects: Project[] }>("/api/workspaces", {
+    const data = await apiJSON<{
+      projects?: Project[];
+      activeProjectId?: number | null;
+      degraded?: boolean;
+      requestId?: string;
+    }>("/api/workspaces", {
       method: "GET",
     });
 
+    if (data.degraded) {
+      throw new ApiRequestError("Workspace bootstrap returned a degraded response.", {
+        code: "WORKSPACE_BOOTSTRAP_FAILED",
+        requestId: typeof data.requestId === "string" ? data.requestId : undefined,
+        retryable: false,
+      });
+    }
 
     const list = Array.isArray(data.projects) ? data.projects : [];
+    if (!list.length) {
+      throw new ApiRequestError("Workspace bootstrap returned no active project.", {
+        code: "WORKSPACE_BOOTSTRAP_FAILED",
+        requestId: typeof data.requestId === "string" ? data.requestId : undefined,
+        retryable: true,
+      });
+    }
+
     setProjects(list);
 
-
     let next: number | null = null;
+    const serverActiveProjectId =
+      typeof data.activeProjectId === "number" && list.some((p) => p.id === data.activeProjectId)
+        ? data.activeProjectId
+        : null;
+    if (serverActiveProjectId) next = serverActiveProjectId;
+
     try {
       const stored = Number((globalThis.__cbLocalStore.getItem(storageKeyActiveProjectId()) || "").trim());
-      if (Number.isFinite(stored) && list.some((p) => p.id === stored)) next = stored;
+      if (!next && Number.isFinite(stored) && list.some((p) => p.id === stored)) next = stored;
     } catch {}
 
 
@@ -1584,19 +1720,29 @@ function CommandDeckPageInner() {
 
 
   async function onAddSiteRequested(payload: { origin: string; label: string; notes?: string }) {
-    if (!activeProjectId) {
-      pushToast("No workspace available. Create a workspace first.", "bad");
-      throw new Error("No workspace available. Create a workspace first.");
-    }
-
-
     try {
-    const data = await apiJSON<{
-      site: { id: string; origin: string; label: string; createdAt: string | number };
-    }>(`/api/workspaces/${activeProjectId}/sites`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
+      let projectId = activeProjectId;
+
+      if (!projectId) {
+        const { next } = await loadProjects();
+        if (next) {
+          projectId = next;
+          await refreshWorkspace(next, "refresh");
+        }
+      }
+
+      if (!projectId) {
+        throw new ApiRequestError("Workspace bootstrap returned no active project.", {
+          code: "WORKSPACE_BOOTSTRAP_FAILED",
+        });
+      }
+
+      const data = await apiJSON<{
+        site: { id: string; origin: string; label: string; createdAt: string | number };
+      }>(`/api/workspaces/${projectId}/sites`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
 
 
       const s = data?.site;
@@ -1616,14 +1762,14 @@ function CommandDeckPageInner() {
       if (sitesKey) void mutate(sitesKey);
 
 
-      await loadSitesForProject(activeProjectId, "siteAdded");
+      await loadSitesForProject(projectId, "siteAdded");
 
 
       if (sitesKey) void mutate(sitesKey);
     } catch (error) {
-      const rawMessage = error instanceof Error ? error.message : String(error ?? "");
+      const errorCode = getAddSiteErrorCode(error);
       const userMessage = formatAddSiteErrorMessage(error);
-      const tone = rawMessage.includes("SITE_EXISTS") || rawMessage.includes("UNIQUE_CONSTRAINT") ? "watch" : "bad";
+      const tone = errorCode === "SITE_EXISTS" || errorCode === "UNIQUE_CONSTRAINT" ? "watch" : "bad";
       pushToast(userMessage, tone);
       throw new Error(userMessage);
     }
