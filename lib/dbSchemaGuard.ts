@@ -94,14 +94,15 @@ export function isSchemaMismatchError(
   );
 }
 
-export function isSoftTableAccessError(err: unknown, hints: string[] = []) {
+export function isPermissionDeniedError(err: unknown, hints: string[] = []) {
   const prismaCode = prismaCodeFor(err);
   const dbCode = dbCodeFor(err);
   const message = messageFor(err);
 
-  if (isMissingTableError(err, hints)) return true;
-  if (dbCode === "42501" || dbCode === "25006") return true;
-  if (prismaCode === "P2010" && (dbCode === "42501" || dbCode === "25006")) return true;
+  const hasPermissionCode =
+    dbCode === "42501" ||
+    dbCode === "25006" ||
+    (prismaCode === "P2010" && (dbCode === "42501" || dbCode === "25006"));
 
   const mentionsAccessFailure =
     message.includes("permission denied") ||
@@ -110,7 +111,12 @@ export function isSoftTableAccessError(err: unknown, hints: string[] = []) {
     message.includes("readonly transaction") ||
     (message.includes("cannot execute") && message.includes("read-only"));
 
-  if (!mentionsAccessFailure) return false;
-  if (!hints.length) return true;
+  if (!hasPermissionCode && !mentionsAccessFailure) return false;
+  if (!hints.length || hasPermissionCode) return true;
   return hints.some((hint) => messageIncludesHint(message, hint));
+}
+
+export function isSoftTableAccessError(err: unknown, hints: string[] = []) {
+  if (isMissingTableError(err, hints)) return true;
+  return isPermissionDeniedError(err, hints);
 }

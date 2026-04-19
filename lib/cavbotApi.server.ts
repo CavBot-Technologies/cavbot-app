@@ -44,6 +44,13 @@ export class CavBotApiError extends Error {
   }
 }
 
+export class CavBotApiConfigError extends CavBotApiError {
+  constructor(message: string, requestId?: string) {
+    super(message, 500, "config_invalid", requestId);
+    this.name = "CavBotApiConfigError";
+  }
+}
+
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 let _cachedEnv: CavBotEnv | null = null;
@@ -76,7 +83,7 @@ export function getEnv(): CavBotEnv {
 
   const baseUrlRaw = env("CAVBOT_API_BASE_URL") || env("CAVBOT_API_URL");
   if (!baseUrlRaw) {
-    throw new Error("Missing env vars: CAVBOT_API_BASE_URL or CAVBOT_API_URL.");
+    throw new CavBotApiConfigError("Missing env vars: CAVBOT_API_BASE_URL or CAVBOT_API_URL.");
   }
 
   const secretKey = env("CAVBOT_SECRET_KEY") || env("CAVBOT_PROJECT_KEY") || "";
@@ -185,11 +192,15 @@ function buildHeaders(opts?: {
   const adminToken = (opts?.adminToken ?? envv.adminToken) || "";
 
   if (requireAdmin && !adminToken) {
-    throw new Error("Missing env var: CAVBOT_ADMIN_TOKEN (required for admin/dashboard endpoints).");
+    throw new CavBotApiConfigError(
+      "Missing env var: CAVBOT_ADMIN_TOKEN (required for admin/dashboard endpoints)."
+    );
   }
 
   if (requireProjectKey && !projectKey) {
-    throw new Error("Missing project key (CAVBOT_PROJECT_KEY/CAVBOT_SECRET_KEY or per-request projectKey override).");
+    throw new CavBotApiConfigError(
+      "Missing project key (CAVBOT_PROJECT_KEY/CAVBOT_SECRET_KEY or per-request projectKey override)."
+    );
   }
 
   const headers: Record<string, string> = {
@@ -210,6 +221,20 @@ function buildHeaders(opts?: {
   headers["X-Request-Id"] = opts?.requestId || `cav_${Date.now()}_${randomHex(8)}`;
 
   return headers;
+}
+
+export function assertWorkerSiteRegistrationConfig() {
+  const envv = getEnv();
+  if (!envv.baseUrl) {
+    throw new CavBotApiConfigError("Missing env vars: CAVBOT_API_BASE_URL or CAVBOT_API_URL.");
+  }
+  if (!envv.adminToken) {
+    throw new CavBotApiConfigError(
+      "Missing env var: CAVBOT_ADMIN_TOKEN (required for admin/dashboard endpoints)."
+    );
+  }
+
+  return envv;
 }
 
 /* =========================
@@ -307,7 +332,7 @@ export async function getProjectSummaryForTenant(input: {
    ========================= */
 
 export async function registerWorkerSite(projectId: string | number, origin: string, label: string) {
-  const { baseUrl } = getEnv();
+  const { baseUrl } = assertWorkerSiteRegistrationConfig();
 
   const safeOrigin = normalizeOrigin(origin);
   const safeLabel = normalizeLabel(label);
@@ -337,7 +362,7 @@ export async function updateWorkerSite(
   projectId: string | number,
   params: { origin: string; newOrigin?: string; label?: string; isActive?: boolean }
 ) {
-  const { baseUrl } = getEnv();
+  const { baseUrl } = assertWorkerSiteRegistrationConfig();
 
   const payload = {
     origin: normalizeOrigin(params.origin),

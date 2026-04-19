@@ -2,6 +2,7 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { createHash, randomBytes } from "crypto";
+import { isPermissionDeniedError, isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
 
 const DEFAULT_PROJECT_NAME = "Primary Project";
@@ -46,6 +47,47 @@ async function makeUniqueDefaultProjectSlug(accountId: string) {
   return `${DEFAULT_PROJECT_SLUG}-${randomBytes(2).toString("hex")}`;
 }
 
+const WORKSPACE_BOOTSTRAP_SCHEMA_HINTS: {
+  tables: string[];
+  columns: string[];
+  fields: string[];
+} = {
+  tables: ["Project", "Site", "SiteAllowedOrigin", "ProjectNotice"],
+  columns: [
+    "accountId",
+    "isActive",
+    "topSiteId",
+    "retentionDays",
+    "region",
+    "serverKeyHash",
+    "serverKeyLast4",
+  ],
+  fields: ["project", "site", "siteAllowedOrigin", "projectNotice"],
+};
+
+const WORKSPACE_BOOTSTRAP_ACCESS_HINTS = ["Project", "Site", "SiteAllowedOrigin", "ProjectNotice"];
+
+export type WorkspaceBootstrapErrorCode =
+  | "DB_SCHEMA_OUT_OF_DATE"
+  | "DB_PERMISSION_DENIED"
+  | "WORKSPACE_BOOTSTRAP_FAILED";
+
+export function classifyWorkspaceBootstrapError(error: unknown): {
+  error: WorkspaceBootstrapErrorCode;
+  status: number;
+  retryable: boolean;
+} {
+  if (isPermissionDeniedError(error, WORKSPACE_BOOTSTRAP_ACCESS_HINTS)) {
+    return { error: "DB_PERMISSION_DENIED", status: 503, retryable: false };
+  }
+
+  if (isSchemaMismatchError(error, WORKSPACE_BOOTSTRAP_SCHEMA_HINTS)) {
+    return { error: "DB_SCHEMA_OUT_OF_DATE", status: 409, retryable: false };
+  }
+
+  return { error: "WORKSPACE_BOOTSTRAP_FAILED", status: 503, retryable: true };
+}
+
 export async function ensureActiveWorkspaceProject(accountId: string) {
   const existing = await findFirstActiveWorkspaceProject(accountId);
   if (existing) return existing;
@@ -72,4 +114,69 @@ export async function ensureActiveWorkspaceProject(accountId: string) {
     }
     throw error;
   }
+}
+
+export async function findAccountWorkspaceProject<T extends Prisma.ProjectSelect>(args: {
+  accountId: string;
+  projectId: number | null | undefined;
+  select: T;
+  includeInactive?: boolean;
+}) {
+  if (!args.projectId) return null;
+
+  return prisma.project.findFirst({
+    where: {
+      id: args.projectId,
+      accountId: args.accountId,
+      ...(args.includeInactive ? {} : { isActive: true }),
+    },
+    select: args.select,
+  }) as Promise<Prisma.ProjectGetPayload<{ select: T }> | null>;
+}
+
+export async function resolveAccountWorkspaceProject<T extends Prisma.ProjectSelect>(args: {
+  accountId: string;
+  select: T;
+  requestedProjectId?: number | null;
+  fallbackProjectId?: number | null;
+  includeInactive?: boolean;
+  ensureActive?: boolean;
+}) {
+  const candidateIds = Array.from(
+    new Set(
+      [args.requestedProjectId, args.fallbackProjectId].filter(
+        (value): value is number => Number.isInteger(value) && Number(value) > 0
+      )
+    )
+  );
+
+  for (const projectId of candidateIds) {
+    const ownedProject = await findAccountWorkspaceProject({
+      accountId: args.accountId,
+      projectId,
+      select: args.select,
+      includeInactive: args.includeInactive,
+    });
+    if (ownedProject) return ownedProject;
+  }
+
+  const firstProject = (await prisma.project.findFirst({
+    where: {
+      accountId: args.accountId,
+      ...(args.includeInactive ? {} : { isActive: true }),
+    },
+    orderBy: { createdAt: "asc" },
+    select: args.select,
+  })) as Prisma.ProjectGetPayload<{ select: T }> | null;
+
+  if (firstProject) return firstProject;
+  if (args.ensureActive === false) return null;
+
+  const ensured = await ensureActiveWorkspaceProject(args.accountId);
+  return findAccountWorkspaceProject({
+    accountId: args.accountId,
+    projectId: ensured.id,
+    select: args.select,
+    includeInactive: args.includeInactive,
+  });
 }

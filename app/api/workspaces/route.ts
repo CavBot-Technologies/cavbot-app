@@ -3,9 +3,11 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
-import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { readSanitizedJson } from "@/lib/security/userInput";
-import { ensureActiveWorkspaceProject } from "@/lib/workspaceProjects.server";
+import {
+  classifyWorkspaceBootstrapError,
+  resolveAccountWorkspaceProject,
+} from "@/lib/workspaceProjects.server";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -84,19 +86,24 @@ function parseProjectId(v: string | undefined | null): number | null {
   return n;
 }
 
-async function listWorkspaces(req: NextRequest, includeInactive: boolean) {
-  // MUST be NextRequest so requireSession can read cookies reliably
-  const sess = await requireSession(req);
-  requireAccountContext(sess);
-  await ensureActiveWorkspaceProject(sess.accountId!);
-
-  // Read cookie (httpOnly) to tell the client what the server thinks is active
-  const activeCookie = req.cookies.get("cb_pid")?.value;
-  const activeProjectId = parseProjectId(activeCookie);
+async function listWorkspaces(
+  req: NextRequest,
+  accountId: string,
+  includeInactive: boolean
+) {
+  const activeProject = await resolveAccountWorkspaceProject({
+    accountId,
+    select: { id: true },
+    requestedProjectId: parseProjectId(req.cookies.get("cb_active_project_id")?.value),
+    fallbackProjectId: parseProjectId(req.cookies.get("cb_pid")?.value),
+    includeInactive: false,
+    ensureActive: true,
+  });
+  const activeProjectId = activeProject?.id ?? null;
 
   const projects = await prisma.project.findMany({
     where: {
-      accountId: sess.accountId!, // requireAccountContext guarantees this
+      accountId,
       ...(includeInactive ? {} : { isActive: true }),
     },
     orderBy: { id: "asc" },
@@ -154,9 +161,28 @@ function methodNotAllowed(rid: string) {
   );
 }
 
-function degradedWorkspacesResponse(req: NextRequest, rid: string) {
-  const activeProjectId = parseProjectId(req.cookies.get("cb_pid")?.value || "");
-  return json({ projects: [], activeProjectId, degraded: true, requestId: rid }, 200, rid);
+function workspaceBootstrapFailureResponse(
+  rid: string,
+  accountId: string | null | undefined,
+  error: unknown
+) {
+  const classified = classifyWorkspaceBootstrapError(error);
+  console.error("[workspace-bootstrap]", {
+    route: "/api/workspaces",
+    requestId: rid,
+    accountId: accountId || null,
+    errorCode: classified.error,
+    detail: error instanceof Error ? error.message : String(error),
+  });
+  return json(
+    {
+      error: classified.error,
+      requestId: rid,
+      retryable: classified.retryable,
+    },
+    classified.status,
+    rid
+  );
 }
 
 /**
@@ -182,24 +208,21 @@ export async function OPTIONS(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   const rid = requestIdFrom(req);
+  let accountId: string | null = null;
   try {
+    const sess = await requireSession(req);
+    requireAccountContext(sess);
+    accountId = sess.accountId || null;
+
     const includeInactive = includeInactiveFromQuery(req);
-    const out = await listWorkspaces(req, includeInactive);
+    const out = await listWorkspaces(req, accountId!, includeInactive);
     return json(out, 200, rid);
   } catch (e) {
     if (isApiAuthError(e)) {
       const { status, payload } = mapError(e);
       return json({ ...payload, requestId: rid }, status, rid);
     }
-    if (
-      isSchemaMismatchError(e, {
-        tables: ["Project", "Site"],
-        columns: ["topSiteId", "retentionDays", "region", "isActive"],
-      })
-    ) {
-      return degradedWorkspacesResponse(req, rid);
-    }
-    return degradedWorkspacesResponse(req, rid);
+    return workspaceBootstrapFailureResponse(rid, accountId, e);
   }
 }
 
@@ -210,26 +233,23 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   const rid = requestIdFrom(req);
+  let accountId: string | null = null;
   try {
+    const sess = await requireSession(req);
+    requireAccountContext(sess);
+    accountId = sess.accountId || null;
+
     const body = (await safeJsonBody<ListWorkspacesBody>(req)) || {};
     const includeInactive = Boolean(body.includeInactive) || includeInactiveFromQuery(req);
 
-    const out = await listWorkspaces(req, includeInactive);
+    const out = await listWorkspaces(req, accountId!, includeInactive);
     return json(out, 200, rid);
   } catch (e) {
     if (isApiAuthError(e)) {
       const { status, payload } = mapError(e);
       return json({ ...payload, requestId: rid }, status, rid);
     }
-    if (
-      isSchemaMismatchError(e, {
-        tables: ["Project", "Site"],
-        columns: ["topSiteId", "retentionDays", "region", "isActive"],
-      })
-    ) {
-      return degradedWorkspacesResponse(req, rid);
-    }
-    return degradedWorkspacesResponse(req, rid);
+    return workspaceBootstrapFailureResponse(rid, accountId, e);
   }
 }
 
