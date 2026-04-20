@@ -14,6 +14,7 @@ import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import {
   createApiKeyRecord,
+  findSiteForAccount,
   findSiteForProject,
   listApiKeysForProject,
 } from "@/lib/settings/apiKeysRuntime.server";
@@ -58,6 +59,27 @@ function toType(raw: unknown): ApiKeyType {
   return "PUBLISHABLE";
 }
 
+function safeSerializeKeyList(
+  keys: Awaited<ReturnType<typeof listApiKeysForProject>>,
+  type: ApiKeyType,
+  includeActiveValue = false,
+) {
+  return keys
+    .filter((key) => key.type === type)
+    .flatMap((key) => {
+      try {
+        return [serializeApiKey(key, { includeValue: includeActiveValue && key.status === "ACTIVE" })];
+      } catch (error) {
+        console.error("[settings/api-keys] serialize failed", {
+          keyId: key.id,
+          keyType: key.type,
+          detail: error instanceof Error ? error.message : String(error),
+        });
+        return [];
+      }
+    });
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await requireSettingsOwnerResilientSession(req);
@@ -83,14 +105,18 @@ export async function GET(req: NextRequest) {
       return json(emptyPayload, 200);
     }
 
-    const keys = await listApiKeysForProject(workspace.projectId);
+    let keys: Awaited<ReturnType<typeof listApiKeysForProject>> = [];
+    try {
+      keys = await listApiKeysForProject(workspace.projectId);
+    } catch (error) {
+      console.error("[settings/api-keys] project key lookup failed", {
+        projectId: workspace.projectId,
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    }
 
-    const publishableKeys = keys
-      .filter((key) => key.type === "PUBLISHABLE")
-      .map((key) => serializeApiKey(key, { includeValue: key.status === "ACTIVE" }));
-    const secretKeys = keys
-      .filter((key) => key.type === "SECRET")
-      .map((key) => serializeApiKey(key));
+    const publishableKeys = safeSerializeKeyList(keys, "PUBLISHABLE", true);
+    const secretKeys = safeSerializeKeyList(keys, "SECRET");
 
     const siteRecord = workspace.activeSite;
     const allowedOrigins = workspace.allowedOrigins;
@@ -128,34 +154,53 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const body = (await readSanitizedJson(req, null)) as ApiKeyCreateBody | null;
     const session = await requireSettingsOwnerResilientSession(req);
     const workspaceHints = readApiKeyWorkspaceCookieHints(req);
-    const workspace = await resolveApiKeyWorkspace({
+    let workspace = await resolveApiKeyWorkspace({
       accountId: session.accountId,
       ...workspaceHints,
     });
-    if (!workspace) return json({ ok: false, error: "PROJECT_NOT_FOUND" }, 404);
-
-    const body = (await readSanitizedJson(req, null)) as ApiKeyCreateBody | null;
 
     const type = toType(body?.type);
     let siteId: string | null = null;
+    let projectId: number | null = workspace?.projectId ?? null;
     const bodySiteId = String(body?.siteId ?? "").trim();
     if (bodySiteId) {
-      const site = await findSiteForProject({
-        siteId: bodySiteId,
-        projectId: workspace.projectId,
-      });
+      const site =
+        (projectId
+          ? await findSiteForProject({
+              siteId: bodySiteId,
+              projectId,
+            })
+          : null) ??
+        (await findSiteForAccount({
+          siteId: bodySiteId,
+          accountId: session.accountId,
+        }));
       if (!site) return json({ ok: false, error: "SITE_NOT_FOUND" }, 404);
       siteId = site.id;
-    } else if (workspace.activeSite?.id) {
+      projectId = site.projectId;
+      if (!workspace && projectId) {
+        workspace = {
+          projectId,
+          sites: [{ id: site.id, origin: site.origin }],
+          activeSite: { id: site.id, origin: site.origin },
+          allowedOrigins: [site.origin],
+        };
+      }
+    } else if (workspace?.activeSite?.id) {
       siteId = workspace.activeSite.id;
     }
+    if (!projectId && workspace?.projectId) {
+      projectId = workspace.projectId;
+    }
+    if (!projectId) return json({ ok: false, error: "PROJECT_NOT_FOUND" }, 404);
 
     const insert = buildApiKeyInsertData({
       type,
       accountId: session.accountId!,
-      projectId: workspace.projectId,
+      projectId,
       siteId,
       name: String(body?.name || "").trim() || null,
       scopes: Array.isArray(body?.scopes) ? body.scopes : undefined,
@@ -180,7 +225,7 @@ export async function POST(req: NextRequest) {
           last4: created.last4,
           scopes: created.scopes,
           siteId: created.siteId,
-          projectId: created.projectId,
+          projectId: created.projectId ?? projectId,
         },
       });
     }

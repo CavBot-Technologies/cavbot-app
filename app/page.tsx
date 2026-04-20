@@ -686,6 +686,32 @@ async function persistActiveProjectCookie(projectId: number) {
   } catch {}
 }
 
+async function persistWorkspaceSelection(input: {
+  projectId: number;
+  activeSiteId?: string;
+  activeSiteOrigin?: string;
+  topSiteId?: string;
+  topSiteOrigin?: string;
+}) {
+  if (!Number.isFinite(input.projectId) || input.projectId <= 0) return;
+
+  try {
+    await fetch("/api/workspaces/selection", {
+      method: "POST",
+      credentials: "include",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        projectId: input.projectId,
+        activeSiteId: input.activeSiteId || undefined,
+        activeSiteOrigin: input.activeSiteOrigin || undefined,
+        topSiteId: input.topSiteId || undefined,
+        topSiteOrigin: input.topSiteOrigin || undefined,
+      }),
+    });
+  } catch {}
+}
+
 
 export default function CommandDeckPage() {
   return <CommandDeckPageInner />;
@@ -1348,6 +1374,14 @@ function CommandDeckPageInner() {
       activeSiteId: nextActive || "",
       activeOrigin,
     });
+
+    void persistWorkspaceSelection({
+      projectId,
+      topSiteId: nextTop || "",
+      topSiteOrigin: topOrigin,
+      activeSiteId: nextActive || "",
+      activeSiteOrigin: activeOrigin,
+    });
   }
 
 
@@ -1495,6 +1529,14 @@ function CommandDeckPageInner() {
         })
       );
     } catch {}
+
+    void persistWorkspaceSelection({
+      projectId: activeProjectId,
+      activeSiteId: nextSiteId,
+      activeSiteOrigin: s.origin,
+      topSiteId,
+      topSiteOrigin: (sites.find((site) => site.id === topSiteId)?.origin || "").trim(),
+    });
 
 
     pushToast("Site context updated.", "good");
@@ -1736,6 +1778,7 @@ function CommandDeckPageInner() {
 
       const data = await apiJSON<{
         site: { id: string; origin: string; label: string; createdAt: string | number };
+        topSiteId?: string | null;
       }>(`/api/workspaces/${projectId}/sites`, {
         method: "POST",
         body: JSON.stringify(payload),
@@ -1754,6 +1797,14 @@ function CommandDeckPageInner() {
 
 
       pushToast("Website added.", "good");
+
+      await persistWorkspaceSelection({
+        projectId,
+        activeSiteId: s.id,
+        activeSiteOrigin: s.origin,
+        topSiteId: (data.topSiteId || s.id || "").trim(),
+        topSiteOrigin: s.origin,
+      });
 
 
       if (sitesKey) void mutate(sitesKey);

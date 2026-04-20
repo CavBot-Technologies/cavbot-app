@@ -1,8 +1,11 @@
 import "server-only";
-import { cookies } from "next/headers";
-import { headers } from "next/headers";
-import { prisma } from "@/lib/prisma"; // adjust if your prisma import differs
+
+import type { Prisma } from "@prisma/client";
+import { cookies, headers } from "next/headers";
 import { getAppOrigin, getSession } from "@/lib/apiAuth";
+import { getAuthPool } from "@/lib/authDb";
+import { resolveAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
+import { findAccountTier, listActiveWorkspaceSites } from "@/lib/workspaceSites.server";
 
 type SiteDTO = {
   id: string;
@@ -12,34 +15,51 @@ type SiteDTO = {
   notes?: string;
 };
 
+type WorkspaceActiveSite = {
+  id: string;
+  origin: string;
+  label?: string;
+};
+
 export type WorkspacePayload = {
   projectId: number;
-  sites: SiteDTO[];      // resolved from DB in readWorkspace()
-  topSiteId: string;     // resolved
-  activeSiteId: string;  // resolved
-
-  // Optional convenience fields used by UI pages that want account context.
-  // These are additive and won't break older callers.
+  sites: SiteDTO[];
+  topSiteId: string;
+  activeSiteId: string;
   account?: { id?: string; tier?: string | null; projectId?: string | number | null };
   workspace?: {
-    // Some pages treat `workspace` as a container for selection pointers.
     activeSiteOrigin?: string | null;
     account?: { id?: string; tier?: string | null; projectId?: string | number | null };
   };
   tier?: string | null;
-
-  // Optional cookie pointers (useful for pages that want origin without re-deriving).
   activeSiteOrigin?: string;
   topSiteOrigin?: string;
+  activeSite?: WorkspaceActiveSite;
+};
+
+type CookieProjectPointers = {
+  requestedProjectId: number;
+  requestedProjectIdStr: string;
+  fallbackProjectId: number | null;
+};
+
+type ProjectPointer = {
+  id: number;
+  topSiteId: string | null;
+};
+
+type RawProjectPointerRow = {
+  id: number | string;
+  topSiteId: string | null;
 };
 
 const KEY_ACTIVE_PROJECT_ID = "cb_active_project_id";
-
+const KEY_LEGACY_PROJECT_ID = "cb_pid";
 const KEY_ACTIVE_SITE_ORIGIN_PREFIX = "cb_active_site_origin__";
 const KEY_TOP_SITE_ORIGIN_PREFIX = "cb_top_site_origin__";
-const KEY_ACTIVE_SITE_ID_PREFIX = "cb_active_site_id__"; // optional
+const KEY_ACTIVE_SITE_ID_PREFIX = "cb_active_site_id__";
 
-function safeDecode(v: string): string {
+function safeDecode(v: string) {
   try {
     return decodeURIComponent(v);
   } catch {
@@ -47,48 +67,73 @@ function safeDecode(v: string): string {
   }
 }
 
-function cookieGetDecoded(key: string): string {
-  const jar = cookies();
+function parseProjectId(raw: string | null | undefined) {
+  const value = String(raw || "").trim();
+  if (!value || !/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function asProjectPointer(row: RawProjectPointerRow | null | undefined): ProjectPointer | null {
+  if (!row) return null;
+  const id = Number(row.id);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  return {
+    id,
+    topSiteId: row.topSiteId ? String(row.topSiteId).trim() : null,
+  };
+}
+
+async function getCookieStore() {
+  return await cookies();
+}
+
+async function cookieGetDecoded(key: string) {
+  const jar = await getCookieStore();
   const raw = (jar.get(key)?.value ?? "").trim();
   return safeDecode(raw).trim();
 }
 
-function getActiveProjectIdFromCookies(): { projectId: number; projectIdStr: string } {
-  const jar = cookies();
-  const projectIdStr = (jar.get(KEY_ACTIVE_PROJECT_ID)?.value ?? "1").trim() || "1";
-  const projectId = Number.parseInt(projectIdStr, 10) || 1;
-  return { projectId, projectIdStr };
+async function getActiveProjectPointersFromCookies(): Promise<CookieProjectPointers> {
+  const jar = await getCookieStore();
+  const requestedProjectId =
+    parseProjectId(jar.get(KEY_ACTIVE_PROJECT_ID)?.value) ??
+    parseProjectId(jar.get(KEY_LEGACY_PROJECT_ID)?.value) ??
+    1;
+  return {
+    requestedProjectId,
+    requestedProjectIdStr: String(requestedProjectId),
+    fallbackProjectId: parseProjectId(jar.get(KEY_LEGACY_PROJECT_ID)?.value),
+  };
 }
 
-function cookieSetOrDelete(key: string, value: string) {
-  const jar = cookies();
-  const v = (value ?? "").trim();
-
-  if (!v) {
+async function cookieSetOrDelete(key: string, value: string) {
+  const jar = await getCookieStore();
+  const normalized = String(value ?? "").trim();
+  if (!normalized) {
     jar.delete(key);
     return;
   }
 
-  jar.set(key, encodeURIComponent(v), {
+  jar.set(key, encodeURIComponent(normalized), {
     path: "/",
     sameSite: "lax",
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 24 * 30, // 30 days
+    maxAge: 60 * 60 * 24 * 30,
   });
 }
 
 async function inferAccountIdFromSessionCookie(): Promise<string | null> {
   try {
-    const h = headers();
-    const cookie = String(h.get("cookie") || "").trim();
+    const headerStore = await headers();
+    const cookie = String(headerStore.get("cookie") || "").trim();
     if (!cookie) return null;
 
     const fallback = new URL(getAppOrigin());
-    const host = String(h.get("x-forwarded-host") || h.get("host") || fallback.host).trim();
-    const proto = String(h.get("x-forwarded-proto") || fallback.protocol.replace(/:$/, "")).trim() || "http";
+    const host = String(headerStore.get("x-forwarded-host") || headerStore.get("host") || fallback.host).trim();
+    const proto = String(headerStore.get("x-forwarded-proto") || fallback.protocol.replace(/:$/, "")).trim() || "http";
 
-    // getSession() reads cookies from the Request headers.
     const req = new Request(`${proto}://${host}/_workspace`, {
       headers: {
         cookie,
@@ -97,135 +142,107 @@ async function inferAccountIdFromSessionCookie(): Promise<string | null> {
     });
 
     const sess = await getSession(req);
-    const accountId = sess?.systemRole === "user" ? String(sess?.accountId || "").trim() : "";
+    const accountId = sess?.systemRole === "user" ? String(sess.accountId || "").trim() : "";
     return accountId || null;
   } catch {
     return null;
   }
 }
 
-async function resolveProjectIdForAccount(
-  cookieProjectId: number,
-  accountId?: string
-): Promise<{ projectId: number; topSiteIdFromProject: string }> {
-  // If no login/account context provided, keep old behavior.
-  if (!accountId) {
-    const project = await prisma.project.findUnique({
-      where: { id: cookieProjectId },
-      select: { id: true, topSiteId: true },
-    });
-
-    return {
-      projectId: project?.id ?? cookieProjectId,
-      topSiteIdFromProject: project?.topSiteId ?? "",
-    };
-  }
-
-  // 1) Try cookie projectId within this account
-  const exact = await prisma.project.findFirst({
-    where: { id: cookieProjectId, accountId, isActive: true },
-    select: { id: true, topSiteId: true },
-  });
-
-  if (exact) {
-    return { projectId: exact.id, topSiteIdFromProject: exact.topSiteId ?? "" };
-  }
-
-  // 2) Fall back to first active project in this account
-  const fallback = await prisma.project.findFirst({
-    where: { accountId, isActive: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true, topSiteId: true },
-  });
-
-  if (!fallback) {
-    // If the account has no active projects, keep cookie id (caller may error elsewhere)
-    return { projectId: cookieProjectId, topSiteIdFromProject: "" };
-  }
-
-  return { projectId: fallback.id, topSiteIdFromProject: fallback.topSiteId ?? "" };
+async function findProjectPointer(projectId: number) {
+  const result = await getAuthPool().query<RawProjectPointerRow>(
+    `SELECT "id", "topSiteId"
+     FROM "Project"
+     WHERE "id" = $1
+     LIMIT 1`,
+    [projectId],
+  );
+  return asProjectPointer(result.rows[0]);
 }
 
-/**
- * READ (Server): DB is source of truth.
- * Cookies provide per-project "pointers" to choose active/top site.
- *
- *command-centerUpdated for login/multi-tenant:
- * - Pass { accountId } to enforce ownership + prevent leakage.
- * - Repairs cb_active_project_id if it points outside the account.
- */
-export async function readWorkspace(opts?: { accountId?: string }): Promise<WorkspacePayload> {
-  const { projectId: cookieProjectId, projectIdStr: cookieProjectIdStr } = getActiveProjectIdFromCookies();
-  const accountId = opts?.accountId || (await inferAccountIdFromSessionCookie()) || undefined;
-
-  // Resolve a projectId that is valid for this account (if provided)
-  const resolved = await resolveProjectIdForAccount(cookieProjectId, accountId);
-  const projectId = resolved.projectId;
-  const projectIdStr = String(projectId);
-
-  // If cookie project differs (wrong tenant / stale), repair it
-  if (projectIdStr !== cookieProjectIdStr) {
-    cookieSetOrDelete(KEY_ACTIVE_PROJECT_ID, projectIdStr);
+async function resolveProjectPointerForAccount(
+  requestedProjectId: number,
+  fallbackProjectId: number | null,
+  accountId?: string,
+) {
+  if (!accountId) {
+    return (await findProjectPointer(requestedProjectId)) ?? { id: requestedProjectId, topSiteId: null };
   }
 
-  // Read pointers for *resolved* project
-  const activeSiteOrigin = cookieGetDecoded(`${KEY_ACTIVE_SITE_ORIGIN_PREFIX}${projectIdStr}`);
-  const topSiteOrigin = cookieGetDecoded(`${KEY_TOP_SITE_ORIGIN_PREFIX}${projectIdStr}`);
-  const activeSiteIdHint = cookieGetDecoded(`${KEY_ACTIVE_SITE_ID_PREFIX}${projectIdStr}`);
-
-  // 1) Pull sites from DB (source of truth) — account-scoped when accountId exists
-  const dbSites = await prisma.site.findMany({
-    where: accountId
-      ? { projectId, isActive: true, project: { accountId, isActive: true } }
-      : { projectId, isActive: true },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, label: true, origin: true, createdAt: true, notes: true },
+  const project = await resolveAccountWorkspaceProject({
+    accountId,
+    select: { id: true, topSiteId: true } satisfies Prisma.ProjectSelect,
+    requestedProjectId,
+    fallbackProjectId,
+    ensureActive: true,
   });
 
-  const sites: SiteDTO[] = dbSites.map((s) => ({
-    id: s.id,
-    label: s.label,
-    origin: s.origin,
-    createdAt: s.createdAt instanceof Date ? s.createdAt.getTime() : Number(s.createdAt),
-    notes: s.notes ?? undefined,
+  if (!project) {
+    return { id: requestedProjectId, topSiteId: null };
+  }
+
+  return {
+    id: Number(project.id),
+    topSiteId: project.topSiteId ? String(project.topSiteId).trim() : null,
+  };
+}
+
+export async function readWorkspace(opts?: { accountId?: string }): Promise<WorkspacePayload> {
+  const projectPointers = await getActiveProjectPointersFromCookies();
+  const accountId = opts?.accountId || (await inferAccountIdFromSessionCookie()) || undefined;
+
+  const resolvedProject = await resolveProjectPointerForAccount(
+    projectPointers.requestedProjectId,
+    projectPointers.fallbackProjectId,
+    accountId,
+  );
+
+  const projectId = resolvedProject.id;
+  const projectIdStr = String(projectId);
+
+  if (projectIdStr !== projectPointers.requestedProjectIdStr) {
+    try {
+      await cookieSetOrDelete(KEY_ACTIVE_PROJECT_ID, projectIdStr);
+      await cookieSetOrDelete(KEY_LEGACY_PROJECT_ID, projectIdStr);
+    } catch {}
+  }
+
+  const activeSiteOriginHint = await cookieGetDecoded(`${KEY_ACTIVE_SITE_ORIGIN_PREFIX}${projectIdStr}`);
+  const topSiteOriginHint = await cookieGetDecoded(`${KEY_TOP_SITE_ORIGIN_PREFIX}${projectIdStr}`);
+  const activeSiteIdHint = await cookieGetDecoded(`${KEY_ACTIVE_SITE_ID_PREFIX}${projectIdStr}`);
+
+  const rows = await listActiveWorkspaceSites(projectId, "desc");
+  const sites: SiteDTO[] = rows.map((row) => ({
+    id: row.id,
+    label: row.label,
+    origin: row.origin,
+    createdAt: row.createdAt.getTime(),
+    notes: row.notes ?? undefined,
   }));
 
-  // 2) Resolve topSiteId (prefer Project.topSiteId; fall back to origin pointer)
-  let topSiteId = (resolved.topSiteIdFromProject ?? "").trim();
+  const firstSite = sites[0] ?? null;
+  const topSiteByProject = resolvedProject.topSiteId
+    ? sites.find((site) => site.id === resolvedProject.topSiteId) ?? null
+    : null;
+  const topSiteByOrigin = !topSiteByProject && topSiteOriginHint
+    ? sites.find((site) => site.origin === topSiteOriginHint) ?? null
+    : null;
+  const topSite = topSiteByProject || topSiteByOrigin || firstSite;
 
-  // Validate topSiteId is actually in current active sites
-  if (topSiteId && !sites.some((s) => s.id === topSiteId)) {
-    topSiteId = "";
-  }
+  const activeSiteById = activeSiteIdHint
+    ? sites.find((site) => site.id === activeSiteIdHint) ?? null
+    : null;
+  const activeSiteByOrigin = !activeSiteById && activeSiteOriginHint
+    ? sites.find((site) => site.origin === activeSiteOriginHint) ?? null
+    : null;
+  const activeSite = activeSiteById || activeSiteByOrigin || topSite || firstSite;
 
-  if (!topSiteId && topSiteOrigin) {
-    const match = sites.find((s) => s.origin === topSiteOrigin);
-    if (match) topSiteId = match.id;
-  }
+  const topSiteId = topSite?.id ?? "";
+  const activeSiteId = activeSite?.id ?? "";
+  const topSiteOrigin = topSite?.origin ?? "";
+  const activeSiteOrigin = activeSite?.origin ?? topSiteOrigin;
 
-  // 3) Resolve activeSiteId (prefer explicit id hint; else origin; else top; else first)
-  let activeSiteId = "";
-  if (activeSiteIdHint && sites.some((s) => s.id === activeSiteIdHint)) {
-    activeSiteId = activeSiteIdHint;
-  } else if (activeSiteOrigin) {
-    const match = sites.find((s) => s.origin === activeSiteOrigin);
-    if (match) activeSiteId = match.id;
-  } else if (topSiteId) {
-    activeSiteId = topSiteId;
-  } else {
-    activeSiteId = sites[0]?.id ?? "";
-  }
-
-  // Attach account tier when we have account context (used by /plan and billing UI).
-  const acct =
-    accountId
-      ? await prisma.account.findUnique({
-          where: { id: accountId },
-          select: { id: true, tier: true },
-        })
-      : null;
-
-  const tierStr = acct?.tier ? String(acct.tier) : null;
+  const tierStr = accountId ? await findAccountTier(accountId) : null;
 
   return {
     projectId,
@@ -234,36 +251,35 @@ export async function readWorkspace(opts?: { accountId?: string }): Promise<Work
     activeSiteId,
     activeSiteOrigin: activeSiteOrigin || undefined,
     topSiteOrigin: topSiteOrigin || undefined,
-    account: acct ? { id: acct.id, tier: tierStr } : undefined,
-    workspace: acct
-      ? { activeSiteOrigin: activeSiteOrigin || null, account: { id: acct.id, tier: tierStr } }
+    activeSite: activeSite
+      ? {
+          id: activeSite.id,
+          origin: activeSite.origin,
+          label: activeSite.label,
+        }
+      : undefined,
+    account: accountId ? { id: accountId, tier: tierStr, projectId } : undefined,
+    workspace: accountId
+      ? { activeSiteOrigin: activeSiteOrigin || null, account: { id: accountId, tier: tierStr, projectId } }
       : { activeSiteOrigin: activeSiteOrigin || null },
     tier: tierStr,
   };
 }
 
-/**
- * WRITE (Server): write cookie pointers for the *current project*.
- * This does NOT write sites to cookies (DB is source of truth).
- */
-export function writeWorkspace(payload: WorkspacePayload) {
+export async function writeWorkspace(payload: WorkspacePayload) {
   const projectIdStr = String(payload?.projectId ?? 1).trim() || "1";
-
-  // Always keep active project cookie in sync
-  cookieSetOrDelete(KEY_ACTIVE_PROJECT_ID, projectIdStr);
-
   const sites = Array.isArray(payload?.sites) ? payload.sites : [];
+  const byId = new Map<string, SiteDTO>();
+  for (const site of sites) byId.set(site.id, site);
+
   const topSiteId = String(payload?.topSiteId ?? "").trim();
   const activeSiteId = String(payload?.activeSiteId ?? "").trim();
-
-  const byId = new Map<string, SiteDTO>();
-  for (const s of sites) byId.set(s.id, s);
-
   const topOrigin = topSiteId ? (byId.get(topSiteId)?.origin ?? "") : "";
   const activeOrigin = activeSiteId ? (byId.get(activeSiteId)?.origin ?? "") : "";
 
-  // Per-project pointers (these match what readWorkspace() reads)
-  cookieSetOrDelete(`${KEY_TOP_SITE_ORIGIN_PREFIX}${projectIdStr}`, topOrigin);
-  cookieSetOrDelete(`${KEY_ACTIVE_SITE_ORIGIN_PREFIX}${projectIdStr}`, activeOrigin);
-  cookieSetOrDelete(`${KEY_ACTIVE_SITE_ID_PREFIX}${projectIdStr}`, activeSiteId);
+  await cookieSetOrDelete(KEY_ACTIVE_PROJECT_ID, projectIdStr);
+  await cookieSetOrDelete(KEY_LEGACY_PROJECT_ID, projectIdStr);
+  await cookieSetOrDelete(`${KEY_TOP_SITE_ORIGIN_PREFIX}${projectIdStr}`, topOrigin);
+  await cookieSetOrDelete(`${KEY_ACTIVE_SITE_ORIGIN_PREFIX}${projectIdStr}`, activeOrigin);
+  await cookieSetOrDelete(`${KEY_ACTIVE_SITE_ID_PREFIX}${projectIdStr}`, activeSiteId);
 }

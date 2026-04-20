@@ -1,11 +1,10 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
-import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
-import { readWorkspace } from "@/lib/workspaceStore.server";
-import { EmbedInstallKind } from "@prisma/client";
+import { requireSettingsOwnerResilientSession } from "@/lib/settings/ownerAuth.server";
+import { findSiteForAccount } from "@/lib/settings/apiKeysRuntime.server";
+import { listSiteInstallState } from "@/lib/settings/installStateRuntime.server";
 
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
@@ -46,32 +45,24 @@ type InstallStateResponse = {
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireSettingsOwnerSession(req);
+    const session = await requireSettingsOwnerResilientSession(req);
 
-    const url = new URL(req.url);
-    const siteId = (url.searchParams.get("siteId") || "").trim();
+    const siteId = (req.nextUrl.searchParams.get("siteId") || "").trim();
     if (!siteId) {
       return json({ ok: false, error: "SITE_REQUIRED" }, 400);
     }
 
-    const workspace = await readWorkspace({ accountId: session.accountId });
-    const projectId = workspace.projectId;
-
-    const site = await prisma.site.findFirst({
-      where: { id: siteId, projectId, isActive: true },
-      select: { id: true, origin: true },
+    const site = await findSiteForAccount({
+      siteId,
+      accountId: session.accountId,
     });
     if (!site) {
       return json({ ok: false, error: "SITE_NOT_FOUND" }, 404);
     }
 
-    const installs = await prisma.embedInstall.findMany({
-      where: {
-        siteId,
-        accountId: session.accountId,
-        kind: { in: [EmbedInstallKind.WIDGET, EmbedInstallKind.ARCADE] },
-      },
-      orderBy: { lastSeenAt: "desc" },
+    const installs = await listSiteInstallState({
+      accountId: session.accountId,
+      siteId: site.id,
     });
 
     const installsPayload = installs.map((install) => ({
@@ -88,14 +79,14 @@ export async function GET(req: NextRequest) {
     const hasInstall = (widgetType: string, style: string) =>
       installs.some(
         (item) =>
-          item.kind === EmbedInstallKind.WIDGET &&
+          item.kind === "WIDGET" &&
           item.widgetType === widgetType &&
           item.style === style &&
-          item.status === "ACTIVE"
+          item.status === "ACTIVE",
       );
+
     const arcadeDetected = installs.some(
-      (item) =>
-        item.kind === EmbedInstallKind.ARCADE && item.status === "ACTIVE"
+      (item) => item.kind === "ARCADE" && item.status === "ACTIVE",
     );
 
     const payload: InstallStateResponse = {

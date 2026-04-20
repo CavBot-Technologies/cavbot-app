@@ -30,6 +30,7 @@ type ResolveApiKeyWorkspaceArgs = {
 
 type RawProjectRow = {
   id: number | string;
+  topSiteId: string | null;
 };
 
 type RawSiteRow = {
@@ -97,9 +98,10 @@ export async function resolveApiKeyWorkspace(args: ResolveApiKeyWorkspaceArgs): 
       : null;
 
   let projectId = 0;
+  let resolvedTopSiteId = "";
   if (preferredProjectId) {
     const preferredProject = await pool.query<RawProjectRow>(
-      `SELECT "id"
+      `SELECT "id", "topSiteId"
        FROM "Project"
        WHERE "accountId" = $1
          AND "id" = $2
@@ -108,11 +110,12 @@ export async function resolveApiKeyWorkspace(args: ResolveApiKeyWorkspaceArgs): 
       [accountId, preferredProjectId],
     );
     projectId = asNumber(preferredProject.rows[0]?.id);
+    resolvedTopSiteId = String(preferredProject.rows[0]?.topSiteId || "").trim();
   }
 
   if (!projectId) {
     const projectResult = await pool.query<RawProjectRow>(
-      `SELECT "id"
+      `SELECT "id", "topSiteId"
        FROM "Project"
        WHERE "accountId" = $1
          AND "isActive" = TRUE
@@ -121,6 +124,7 @@ export async function resolveApiKeyWorkspace(args: ResolveApiKeyWorkspaceArgs): 
       [accountId],
     );
     projectId = asNumber(projectResult.rows[0]?.id);
+    resolvedTopSiteId = String(projectResult.rows[0]?.topSiteId || "").trim();
   }
 
   if (!projectId) return null;
@@ -151,9 +155,12 @@ export async function resolveApiKeyWorkspace(args: ResolveApiKeyWorkspaceArgs): 
   const hintedOriginSite = !requestedSite && !hintedSite && activeSiteOriginHint
     ? sites.find((site) => site.origin === activeSiteOriginHint) ?? null
     : null;
+  const topSite = !requestedSite && !hintedSite && !hintedOriginSite && resolvedTopSiteId
+    ? sites.find((site) => site.id === resolvedTopSiteId) ?? null
+    : null;
   const activeSite = requestedSiteId
     ? requestedSite
-    : requestedSite || hintedSite || hintedOriginSite || sites[0] || null;
+    : requestedSite || hintedSite || hintedOriginSite || topSite || sites[0] || null;
 
   const originSet = new Set<string>();
   if (activeSite?.origin) originSet.add(activeSite.origin);

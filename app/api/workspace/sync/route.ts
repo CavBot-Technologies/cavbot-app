@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       activeSiteId: hasSites ? activeCandidate : "",
     };
 
-    writeWorkspace(payload);
+    await writeWorkspace(payload);
 
     return NextResponse.json(
       {
