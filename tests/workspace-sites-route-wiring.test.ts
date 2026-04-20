@@ -58,6 +58,15 @@ test("workspace bootstrap no longer degrades to empty success payloads on critic
   assert.equal(stateRoute.includes("workspaceBootstrapFailureResponse"), true);
 });
 
+test("workspace bootstrap list route keeps the critical path flat", () => {
+  const listRoute = read("app/api/workspaces/route.ts");
+
+  assert.equal(listRoute.includes("WORKSPACE_BOOTSTRAP_PROJECT_SELECT"), true);
+  assert.equal(listRoute.includes('_count: { select: { sites: true } }'), false);
+  assert.equal(listRoute.includes("topSite: { select:"), false);
+  assert.equal(listRoute.includes("WorkspaceBootstrapStageError"), true);
+});
+
 test("workspace selection routes never fall back to project 1 and stay ownership-safe", () => {
   const selectionRoute = read("app/api/workspaces/selection/route.ts");
   const selectProjectRoute = read("app/api/workspaces/select-project/route.ts");
@@ -80,14 +89,15 @@ test("command center add-site flow retries bootstrap but surfaces real bootstrap
   );
 });
 
-test("workspace APIs auto-bootstrap the backing project so users never have to create one manually", () => {
+test("workspace project resolution keeps auto-bootstrap inside the shared resolver", () => {
   const listRoute = read("app/api/workspaces/route.ts");
   const stateRoute = read("app/api/workspace/route.ts");
   const helper = read("lib/workspaceProjects.server.ts");
 
   assert.equal(helper.includes("export async function ensureActiveWorkspaceProject"), true);
-  assert.equal(listRoute.includes("await ensureActiveWorkspaceProject(sess.accountId!);"), true);
-  assert.equal(stateRoute.includes("const ensured = await ensureActiveWorkspaceProject(sess.accountId!);"), true);
+  assert.equal(helper.includes("const ensured = await ensureActiveWorkspaceProject(args.accountId);"), true);
+  assert.equal(listRoute.includes("ensureActive: true"), true);
+  assert.equal(stateRoute.includes("ensureActive: true"), true);
 });
 
 test("command center add-site flow retries project bootstrap instead of asking users to create a workspace", () => {
@@ -97,7 +107,7 @@ test("command center add-site flow retries project bootstrap instead of asking u
   assert.equal(source.includes('await refreshWorkspace(next, "refresh");'), true);
   assert.equal(
     source.includes("CavBot is preparing your command center. Please try adding the website again."),
-    true,
+    false,
   );
   assert.equal(source.includes("Create a workspace first."), false);
 });

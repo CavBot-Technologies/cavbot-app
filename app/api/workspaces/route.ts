@@ -30,6 +30,28 @@ type ApiErrorCode =
   | "SERVER_ERROR"
   | "METHOD_NOT_ALLOWED";
 
+const WORKSPACE_BOOTSTRAP_PROJECT_SELECT = {
+  id: true,
+  name: true,
+  slug: true,
+  region: true,
+  retentionDays: true,
+  topSiteId: true,
+  createdAt: true,
+} as const;
+
+class WorkspaceBootstrapStageError extends Error {
+  stage: "resolve_active_project" | "list_projects";
+  cause: unknown;
+
+  constructor(stage: "resolve_active_project" | "list_projects", cause: unknown) {
+    super(`Workspace bootstrap failed during ${stage}.`);
+    this.name = "WorkspaceBootstrapStageError";
+    this.stage = stage;
+    this.cause = cause;
+  }
+}
+
 function requestIdFrom(req: NextRequest) {
   // Prefer upstream-provided id (load balancer / proxy), else generate.
   const incoming =
@@ -91,34 +113,44 @@ async function listWorkspaces(
   accountId: string,
   includeInactive: boolean
 ) {
-  const activeProject = await resolveAccountWorkspaceProject({
-    accountId,
-    select: { id: true },
-    requestedProjectId: parseProjectId(req.cookies.get("cb_active_project_id")?.value),
-    fallbackProjectId: parseProjectId(req.cookies.get("cb_pid")?.value),
-    includeInactive: false,
-    ensureActive: true,
-  });
+  let activeProject: { id: number } | null = null;
+  try {
+    activeProject = await resolveAccountWorkspaceProject({
+      accountId,
+      select: { id: true },
+      requestedProjectId: parseProjectId(req.cookies.get("cb_active_project_id")?.value),
+      fallbackProjectId: parseProjectId(req.cookies.get("cb_pid")?.value),
+      includeInactive: false,
+      ensureActive: true,
+    });
+  } catch (error) {
+    throw new WorkspaceBootstrapStageError("resolve_active_project", error);
+  }
   const activeProjectId = activeProject?.id ?? null;
 
-  const projects = await prisma.project.findMany({
-    where: {
-      accountId,
-      ...(includeInactive ? {} : { isActive: true }),
-    },
-    orderBy: { id: "asc" },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      region: true,
-      retentionDays: true,
-      topSiteId: true,
-      createdAt: true,
-      _count: { select: { sites: true } },
-      topSite: { select: { id: true, origin: true, label: true } },
-    },
-  });
+  let projects: Array<{
+    id: number;
+    name: string | null;
+    slug: string;
+    region: string;
+    retentionDays: number;
+    topSiteId: string | null;
+    createdAt: Date;
+  }> = [];
+  try {
+    // Keep workspace bootstrap flat and minimal.
+    // Route/site metadata is loaded on follow-up reads after the active project is known.
+    projects = await prisma.project.findMany({
+      where: {
+        accountId,
+        ...(includeInactive ? {} : { isActive: true }),
+      },
+      orderBy: { id: "asc" },
+      select: WORKSPACE_BOOTSTRAP_PROJECT_SELECT,
+    });
+  } catch (error) {
+    throw new WorkspaceBootstrapStageError("list_projects", error);
+  }
 
   // Return JSON-safe timestamps (clean client hydration)
   const out = projects.map((p) => ({
@@ -128,8 +160,6 @@ async function listWorkspaces(
     region: p.region,
     retentionDays: p.retentionDays,
     topSiteId: p.topSiteId,
-    topSite: p.topSite ? { id: p.topSite.id, origin: p.topSite.origin, label: p.topSite.label } : null,
-    sitesCount: p._count.sites,
     createdAt: p.createdAt.toISOString(),
   }));
 
@@ -166,13 +196,16 @@ function workspaceBootstrapFailureResponse(
   accountId: string | null | undefined,
   error: unknown
 ) {
-  const classified = classifyWorkspaceBootstrapError(error);
+  const stage = error instanceof WorkspaceBootstrapStageError ? error.stage : null;
+  const sourceError = error instanceof WorkspaceBootstrapStageError ? error.cause : error;
+  const classified = classifyWorkspaceBootstrapError(sourceError);
   console.error("[workspace-bootstrap]", {
     route: "/api/workspaces",
+    stage,
     requestId: rid,
     accountId: accountId || null,
     errorCode: classified.error,
-    detail: error instanceof Error ? error.message : String(error),
+    detail: sourceError instanceof Error ? sourceError.message : String(sourceError),
   });
   return json(
     {
