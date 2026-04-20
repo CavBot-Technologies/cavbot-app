@@ -2,7 +2,7 @@
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { requireLowRiskWriteSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { findAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
 
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
   const rid = requestIdFrom(req);
 
   try {
-    const sess = await requireSession(req);
+    const sess = await requireLowRiskWriteSession(req);
     requireAccountContext(sess);
 
     const ct = req.headers.get("content-type") || "";

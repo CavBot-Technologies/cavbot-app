@@ -1,4 +1,4 @@
-import { requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
+import { requireAccountContext, requireLowRiskWriteSession, requireSession, requireUser } from "@/lib/apiAuth";
 import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
 import { getCavPadSettings, updateCavPadSettings } from "@/lib/cavpad/server";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -70,7 +70,7 @@ export async function GET(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const sess = await requireSession(req);
+    const sess = await requireLowRiskWriteSession(req);
     requireUser(sess);
     requireAccountContext(sess);
 

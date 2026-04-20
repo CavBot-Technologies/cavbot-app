@@ -1,7 +1,7 @@
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { requireLowRiskWriteSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import {
   findActiveWorkspaceSite,
@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
   const rid = requestIdFrom(req);
 
   try {
-    const session = await requireSession(req);
+    const session = await requireLowRiskWriteSession(req);
     requireAccountContext(session);
 
     const body = (await readSanitizedJson(req, ({}))) as WorkspaceSelectionBody;

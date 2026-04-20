@@ -1,9 +1,9 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
-import { getMonthlyScanUsage, getProjectScanStatus } from "@/lib/scanner";
+import { findAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
+import { getWorkspaceProjectScanStatus, getWorkspaceScanUsage } from "@/lib/workspaceScans.server";
 
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
@@ -47,16 +47,17 @@ export async function GET(req: NextRequest, ctx: unknown) {
     const projectId = parseProjectId(params.projectId);
     if (!projectId) return json({ error: "BAD_PROJECT" }, 400);
 
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, accountId },
+    const project = await findAccountWorkspaceProject({
+      accountId,
+      projectId,
       select: { id: true },
     });
     if (!project) {
-      const usage = await getMonthlyScanUsage(accountId);
+      const usage = await getWorkspaceScanUsage(accountId);
       return json({ ok: true, status: { usage, lastJob: null } }, 200);
     }
 
-    const status = await getProjectScanStatus(projectId, accountId);
+    const status = await getWorkspaceProjectScanStatus(projectId, accountId);
     return json({ ok: true, status }, 200);
   } catch (error) {
     if (isApiAuthError(error)) return json({ error: error.code }, error.status);

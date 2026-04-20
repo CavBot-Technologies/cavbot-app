@@ -1,6 +1,7 @@
 // app/api/auth/oauth/github/start/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
+import { getAppOrigin } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,8 +24,8 @@ function normalizeMode(mode: string | null) {
 }
 
 // Always uses the actual domain your app is running on
-function appBase(req: NextRequest) {
-  return req.nextUrl.origin.replace(/\/+$/, "");
+function appBase() {
+  return getAppOrigin().replace(/\/+$/, "");
 }
 
 // Prevent open-redirect bugs (security: only allow internal paths)
@@ -38,7 +39,7 @@ function safeNextPath(input: string | null) {
 }
 
 function authRedirect(req: NextRequest, mode: "signup" | "login", error: string) {
-  const url = new URL("/auth", appBase(req));
+  const url = new URL("/auth", appBase());
   url.searchParams.set("mode", mode);
   url.searchParams.set("error", error);
   const res = NextResponse.redirect(url.toString());
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
     const state = randomBytes(24).toString("hex");
 
     // Callback MUST match the exact GitHub OAuth callback URL you registered
-    const callback = `${appBase(req)}/api/auth/oauth/github/callback`;
+    const callback = `${appBase()}/api/auth/oauth/github/callback`;
 
     // Optional redirect target after login
     // Example: /api/auth/oauth/github/start?next=/console

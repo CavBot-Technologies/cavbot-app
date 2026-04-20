@@ -666,6 +666,17 @@ export async function getSession(req: Request): Promise<CavbotSession | null> {
   }
 }
 
+// Low-risk write routes such as UI preference sync and active-project cookie updates
+// may proceed from a valid signed session token even when the auth backend is
+// temporarily unavailable. Route handlers must still enforce their own account
+// ownership checks after calling this helper.
+export async function requireLowRiskWriteSession(req: Request): Promise<CavbotSession> {
+  assertWriteOrigin(req);
+  const sess = await getSession(req);
+  if (!sess) throw new ApiAuthError("UNAUTHORIZED", 401);
+  return sess;
+}
+
 function canFailOpenAuthenticatedRead(req: Request) {
   if (process.env.NODE_ENV !== "production") return true;
   const method = String(req.method || "GET").trim().toUpperCase();

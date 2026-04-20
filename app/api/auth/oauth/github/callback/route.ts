@@ -9,7 +9,7 @@ import {
   hasMeaningfulProfileName,
   normalizeProviderDisplayName,
 } from "@/lib/profileIdentity";
-import { createUserSession, isApiAuthError, sessionCookieOptions } from "@/lib/apiAuth";
+import { createUserSession, getAppOrigin, isApiAuthError, sessionCookieOptions } from "@/lib/apiAuth";
 import { auditLogWrite } from "@/lib/audit";
 import { createHash, randomBytes } from "crypto";
 import { sendSignupWelcomeEmail } from "@/lib/signupWelcomeEmail.server";
@@ -37,8 +37,8 @@ function mustEnv(name: string) {
   return v;
 }
 
-function appBase(req: NextRequest) {
-  return req.nextUrl.origin.replace(/\/+$/, "");
+function appBase() {
+  return getAppOrigin().replace(/\/+$/, "");
 }
 
 function normalizeMode(mode: string | null | undefined) {
@@ -61,7 +61,7 @@ function safeNextPath(input: string | null) {
 
 function redirectTo(req: NextRequest, path: string) {
   const p = path.startsWith("/") ? path : `/${path}`;
-  return withNoStore(NextResponse.redirect(`${appBase(req)}${p}`));
+  return withNoStore(NextResponse.redirect(`${appBase()}${p}`));
 }
 
 function clearCookie(res: NextResponse, name: string) {
@@ -425,7 +425,7 @@ export async function GET(req: NextRequest) {
     });
 
     // 6) Redirect to safe next location
-    const res = withNoStore(NextResponse.redirect(`${appBase(req)}${safeNext}`));
+    const res = withNoStore(NextResponse.redirect(`${appBase()}${safeNext}`));
 
     // clear oauth cookies
     clearCookie(res, "cb_oauth_state");

@@ -10,6 +10,7 @@ import {
 } from "@/lib/profileIdentity";
 import {
   createUserSession,
+  getAppOrigin,
   isApiAuthError,
   sessionCookieOptions,
 } from "@/lib/apiAuth";
@@ -48,8 +49,8 @@ function mustEnv(name: string) {
   return v;
 }
 
-function appBase(req: NextRequest) {
-  return req.nextUrl.origin.replace(/\/+$/, "");
+function appBase() {
+  return getAppOrigin().replace(/\/+$/, "");
 }
 
 function normalizeMode(mode: string | null | undefined) {
@@ -63,7 +64,7 @@ function withNoStore(res: NextResponse) {
 
 function redirectTo(req: NextRequest, path: string) {
   const p = path.startsWith("/") ? path : `/${path}`;
-  return withNoStore(NextResponse.redirect(`${appBase(req)}${p}`));
+  return withNoStore(NextResponse.redirect(`${appBase()}${p}`));
 }
 
 function normalizeEmail(x: unknown) {
@@ -117,10 +118,10 @@ function clearCookie(res: NextResponse, name: string) {
   });
 }
 
-async function exchangeCodeForToken(req: NextRequest, code: string) {
+async function exchangeCodeForToken(code: string) {
   const client_id = mustEnv("GOOGLE_CLIENT_ID");
   const client_secret = mustEnv("GOOGLE_CLIENT_SECRET");
-  const redirect_uri = `${appBase(req)}/api/auth/oauth/google/callback`;
+  const redirect_uri = `${appBase()}/api/auth/oauth/google/callback`;
 
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -177,7 +178,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 1) Exchange code -> token
-    const { accessToken } = await exchangeCodeForToken(req, code);
+    const { accessToken } = await exchangeCodeForToken(code);
 
     // 2) Fetch user identity (OpenID Connect)
     const profile = await fetchGoogleUserinfo(accessToken);
@@ -400,7 +401,7 @@ export async function GET(req: NextRequest) {
     });
 
     // 5) Redirect to next destination
-    const res = withNoStore(NextResponse.redirect(`${appBase(req)}${safeNext}`));
+    const res = withNoStore(NextResponse.redirect(`${appBase()}${safeNext}`));
 
     // Clear oauth cookies
     clearCookie(res, "cb_google_oauth_state");

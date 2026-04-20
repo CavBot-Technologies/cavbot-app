@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
+import { getAppOrigin } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,12 +31,12 @@ function safeNextPath(input: string | null) {
   return raw;
 }
 
-function appBase(req: NextRequest) {
-  return req.nextUrl.origin.replace(/\/+$/, "");
+function appBase() {
+  return getAppOrigin().replace(/\/+$/, "");
 }
 
 function authRedirect(req: NextRequest, mode: "signup" | "login", error: string) {
-  const url = new URL("/auth", appBase(req));
+  const url = new URL("/auth", appBase());
   url.searchParams.set("mode", mode);
   url.searchParams.set("error", error);
   const res = NextResponse.redirect(url.toString());
@@ -55,7 +56,7 @@ export async function GET(req: NextRequest) {
     const state = randomBytes(24).toString("hex");
 
     // Must match current origin
-    const callback = `${appBase(req)}/api/auth/oauth/google/callback`;
+    const callback = `${appBase()}/api/auth/oauth/google/callback`;
 
     // Optional: where to send them AFTER login
     // Example usage: /api/auth/oauth/google/start?next=/console

@@ -1,9 +1,9 @@
 // app/api/workspaces/[projectId]/guardrails/route.ts
 import { NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { findAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
+import { ensureWorkspaceProjectGuardrails } from "@/lib/workspaceGuardrails.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -50,58 +50,6 @@ function pickBooleanPatch(patch: unknown) {
   return data;
 }
 
-function isGuardrailsUniqueConflict(err: unknown): boolean {
-  if (err instanceof Prisma.PrismaClientKnownRequestError) return err.code === "P2002";
-  const code = String((err as { code?: unknown })?.code || "");
-  return code === "P2002";
-}
-
-async function ensureGuardrailsRow(
-  projectId: number,
-  patch?: Partial<Record<GuardrailKey, boolean>>
-) {
-  const data = (patch || {}) as Record<string, boolean>;
-  const hasPatch = Object.keys(data).length > 0;
-
-  if (hasPatch) {
-    const updated = await prisma.projectGuardrails.updateMany({
-      where: { projectId },
-      data,
-    });
-    if (updated.count > 0) {
-      return prisma.projectGuardrails.findUniqueOrThrow({
-        where: { projectId },
-      });
-    }
-  } else {
-    const existing = await prisma.projectGuardrails.findUnique({
-      where: { projectId },
-    });
-    if (existing) return existing;
-  }
-
-  try {
-    return await prisma.projectGuardrails.create({
-      data: { projectId, ...(hasPatch ? data : {}) },
-    });
-  } catch (err) {
-    if (!isGuardrailsUniqueConflict(err)) throw err;
-
-    if (hasPatch) {
-      return prisma.projectGuardrails.update({
-        where: { projectId },
-        data,
-      });
-    }
-
-    const existing = await prisma.projectGuardrails.findUnique({
-      where: { projectId },
-    });
-    if (existing) return existing;
-    throw err;
-  }
-}
-
 // Next 15+ params can be a Promise — always await it safely
 async function getParams(ctx: unknown): Promise<{ projectId?: string }> {
   const params = typeof ctx === "object" && ctx !== null ? (ctx as { params?: { projectId?: string } }).params ?? {} : {};
@@ -117,13 +65,14 @@ export async function GET(req: Request, ctx: unknown) {
     const projectId = parseProjectId(params?.projectId || "");
     if (!projectId) return json({ error: "BAD_PROJECT" }, 400);
 
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, accountId: sess.accountId },
+    const project = await findAccountWorkspaceProject({
+      accountId: sess.accountId!,
+      projectId,
       select: { id: true },
     });
     if (!project) return json({ error: "NOT_FOUND" }, 404);
 
-    const guardrails = await ensureGuardrailsRow(project.id);
+    const guardrails = await ensureWorkspaceProjectGuardrails(project.id);
 
     return json({ guardrails }, 200);
   } catch (e: unknown) {
@@ -141,8 +90,9 @@ export async function PATCH(req: Request, ctx: unknown) {
     const projectId = parseProjectId(params?.projectId || "");
     if (!projectId) return json({ error: "BAD_PROJECT" }, 400);
 
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, accountId: sess.accountId },
+    const project = await findAccountWorkspaceProject({
+      accountId: sess.accountId!,
+      projectId,
       select: { id: true },
     });
     if (!project) return json({ error: "NOT_FOUND" }, 404);
@@ -152,7 +102,7 @@ export async function PATCH(req: Request, ctx: unknown) {
 
     if (Object.keys(data).length === 0) return json({ error: "NO_CHANGES" }, 400);
 
-    const guardrails = await ensureGuardrailsRow(project.id, data);
+    const guardrails = await ensureWorkspaceProjectGuardrails(project.id, data);
 
     return json({ guardrails }, 200);
   } catch (e: unknown) {
