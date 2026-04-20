@@ -11,6 +11,7 @@ test("command center workspace site route keeps secure site wiring parity", () =
   const source = read("app/api/workspaces/[projectId]/sites/route.ts");
   const helper = read("lib/workspaceSites.server.ts");
 
+  assert.equal(source.includes("requireLowRiskWriteSession"), true);
   assert.equal(source.includes("requireAccountRole(sess, [\"OWNER\", \"ADMIN\"])"), true);
   assert.equal(source.includes("assertWorkerSiteRegistrationConfig()"), true);
   assert.equal(source.includes("registerWorkerSite(project.id, result.site.origin, result.site.label)"), true);

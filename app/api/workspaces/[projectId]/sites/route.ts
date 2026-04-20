@@ -2,7 +2,13 @@
 
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { requireSession, requireAccountContext, requireAccountRole, isApiAuthError } from "@/lib/apiAuth";
+import {
+  requireLowRiskWriteSession,
+  requireSession,
+  requireAccountContext,
+  requireAccountRole,
+  isApiAuthError,
+} from "@/lib/apiAuth";
 import { auditLogWrite } from "@/lib/audit";
 import {
   assertWorkerSiteRegistrationConfig,
@@ -286,7 +292,7 @@ export async function POST(req: Request, ctx: unknown) {
   const rid = requestIdFrom(req);
 
   try {
-    const sess = await requireSession(req);
+    const sess = await requireLowRiskWriteSession(req);
     requireAccountContext(sess);
     requireAccountRole(sess, ["OWNER", "ADMIN"]);
 
