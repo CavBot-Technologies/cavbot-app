@@ -24,6 +24,7 @@ type RawWorkspaceSiteRow = {
   id: string;
   label: string;
   origin: string;
+  notes: string | null;
   createdAt: Date | string;
 };
 
@@ -59,6 +60,7 @@ export type WorkspaceSiteRecord = {
   id: string;
   label: string;
   origin: string;
+  notes?: string;
   createdAt: Date;
 };
 
@@ -141,6 +143,7 @@ function normalizeSiteRow(row: RawWorkspaceSiteRow): WorkspaceSiteRecord {
     id: String(row.id),
     label: String(row.label),
     origin: String(row.origin),
+    notes: row.notes == null ? undefined : String(row.notes),
     createdAt: toDate(row.createdAt),
   };
 }
@@ -184,7 +187,7 @@ export async function findOwnedWorkspaceProjectForSites(accountId: string, proje
 
 export async function listActiveWorkspaceSites(projectId: number, order: "asc" | "desc" = "desc") {
   const result = await getAuthPool().query<RawWorkspaceSiteRow>(
-    `SELECT "id", "label", "origin", "createdAt"
+    `SELECT "id", "label", "origin", "notes", "createdAt"
      FROM "Site"
      WHERE "projectId" = $1
        AND "isActive" = true
