@@ -1,10 +1,7 @@
 // app/api/workspaces/[projectId]/sites/route.ts
 
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { Prisma, SiteAllowedOriginMatchType } from "@prisma/client";
 import crypto from "crypto";
-import { randomBytes } from "crypto";
 import { requireSession, requireAccountContext, requireAccountRole, isApiAuthError } from "@/lib/apiAuth";
 import { auditLogWrite } from "@/lib/audit";
 import {
@@ -13,6 +10,15 @@ import {
   CavBotApiError,
   registerWorkerSite,
 } from "@/lib/cavbotApi.server";
+import {
+  createDefaultAllowedOriginsForSite,
+  createProjectNotice,
+  createWorkspaceSite,
+  findAccountTier,
+  findOwnedWorkspaceProjectForSites,
+  listActiveWorkspaceSites,
+  rollbackCreatedWorkspaceSite,
+} from "@/lib/workspaceSites.server";
 
 // Plan system enforcement
 import { isPermissionDeniedError, isSchemaMismatchError } from "@/lib/dbSchemaGuard";
@@ -119,36 +125,6 @@ function baseSlugFromOrigin(origin: string) {
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
 }
-
-async function makeUniqueSlug(tx: Prisma.TransactionClient, projectId: number, base: string): Promise<string> {
-  // quick path
-  const existing = await tx.site.findFirst({
-    where: { projectId, slug: base },
-    select: { id: true },
-  });
-  if (!existing) return base;
-
-  // try numeric suffixes first (clean + predictable)
-  for (let i = 2; i <= 25; i++) {
-    const candidate = `${base}-${i}`.slice(0, 80);
-    const hit = await tx.site.findFirst({
-      where: { projectId, slug: candidate },
-      select: { id: true },
-    });
-    if (!hit) return candidate;
-  }
-
-  // fallback: short random suffix (race-safe)
-  const suffix = randomBytes(3).toString("hex"); // 6 chars
-  return `${base}-${suffix}`.slice(0, 80);
-}
-
-type CreatedSite = {
-  id: string;
-  origin: string;
-  label: string;
-  createdAt: Date;
-};
 
 function isWorkspaceSiteSchemaOutOfDate(error: unknown) {
   return isSchemaMismatchError(error, {
@@ -266,54 +242,9 @@ function siteFailureResponse(args: {
   );
 }
 
-async function createDefaultAllowedOrigins(siteId: string, origin: string) {
-  const allowedOrigins = new Set<string>([origin]);
-  for (const appOrigin of getCavbotAppOrigins()) {
-    allowedOrigins.add(appOrigin);
-  }
-
-  await prisma.siteAllowedOrigin.createMany({
-    data: Array.from(allowedOrigins).map((allowedOrigin) => ({
-      siteId,
-      origin: allowedOrigin,
-      matchType: SiteAllowedOriginMatchType.EXACT,
-    })),
-    skipDuplicates: true,
-  });
-}
-
-async function rollbackCreatedSiteSetup(args: {
-  projectId: number;
-  siteId: string;
-  autoPinned: boolean;
-}) {
-  await prisma.$transaction(async (tx) => {
-    if (args.autoPinned) {
-      await tx.project.updateMany({
-        where: {
-          id: args.projectId,
-          topSiteId: args.siteId,
-        },
-        data: { topSiteId: null },
-      });
-    }
-
-    await tx.site.delete({
-      where: { id: args.siteId },
-    });
-  }).catch(() => null);
-}
-
 async function createProjectNoticeBestEffort(projectId: number, origin: string, requestId: string) {
   try {
-    await prisma.projectNotice.create({
-      data: {
-        projectId,
-        tone: "GOOD",
-        title: "Website added",
-        body: `${origin} is now under this workspace.`,
-      },
-    });
+    await createProjectNotice(projectId, origin);
   } catch (error) {
     if (!isWorkspaceSiteSchemaOutOfDate(error)) {
       logWorkspaceSiteFailure({
@@ -339,17 +270,10 @@ export async function GET(req: Request, ctx: unknown) {
     const projectId = parseProjectId(params?.projectId || "");
     if (!projectId) return json({ error: "BAD_PROJECT", requestId: rid }, 400, rid);
 
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, accountId: sess.accountId },
-      select: { id: true, topSiteId: true },
-    });
+    const project = await findOwnedWorkspaceProjectForSites(sess.accountId, projectId);
     if (!project) return json({ error: "NOT_FOUND", requestId: rid }, 404, rid);
 
-    const sites = await prisma.site.findMany({
-      where: { projectId: project.id, isActive: true },
-      orderBy: { createdAt: "asc" },
-      select: { id: true, label: true, origin: true, createdAt: true },
-    });
+    const sites = await listActiveWorkspaceSites(project.id, "asc");
 
     return json({ topSiteId: project.topSiteId, sites }, 200, rid);
   } catch (e) {
@@ -371,19 +295,13 @@ export async function POST(req: Request, ctx: unknown) {
     if (!projectId) return json({ error: "BAD_PROJECT", requestId: rid }, 400, rid);
 
     // Load project
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, accountId: sess.accountId },
-      select: { id: true, topSiteId: true },
-    });
+    const project = await findOwnedWorkspaceProjectForSites(sess.accountId, projectId);
     if (!project) return json({ error: "NOT_FOUND", requestId: rid }, 404, rid);
 
     // Load account tier (Plan enforcement source)
-    const account = await prisma.account.findFirst({
-      where: { id: sess.accountId },
-      select: { tier: true },
-    });
+    const accountTier = await findAccountTier(sess.accountId);
 
-    const planId = resolvePlanIdFromTier(account?.tier || "FREE");
+    const planId = resolvePlanIdFromTier(accountTier || "FREE");
     const limits = getPlanLimits(planId);
 
     const body = (await readSanitizedJson(req, null)) as null | {
@@ -429,90 +347,17 @@ export async function POST(req: Request, ctx: unknown) {
     }
 
     try {
-      const result = await prisma.$transaction(async (tx) => {
-        // 1) If a row exists for this exact origin (even if inactive), handle it
-        const existingByOrigin = await tx.site.findFirst({
-          where: { projectId: project.id, origin },
-          select: { id: true, origin: true, label: true, isActive: true },
-        });
-
-        if (existingByOrigin?.isActive) {
-          // It genuinely exists
-          return { conflict: true as const, site: existingByOrigin };
-        }
-
-        // 2) ENFORCE PLAN WEBSITE LIMIT (only when creating a *new* active site)
-        // IMPORTANT: this is inside the transaction so it’s race-safe.
-        if (limits.websites !== "unlimited") {
-          const activeCount = await tx.site.count({
-            where: { projectId: project.id, isActive: true },
-          });
-
-          if (activeCount >= limits.websites) {
-            return {
-              limitBlocked: true as const,
-              current: activeCount,
-              limit: limits.websites,
-            };
-          }
-        }
-
-        const replacingPinnedInactiveSite = Boolean(existingByOrigin && !existingByOrigin.isActive && project.topSiteId === existingByOrigin.id);
-
-        if (existingByOrigin && !existingByOrigin.isActive) {
-          // You previously soft-deleted it somewhere — purge it for real (privacy)
-          if (project.topSiteId === existingByOrigin.id) {
-            await tx.project.update({
-              where: { id: project.id },
-              data: { topSiteId: null },
-            });
-          }
-
-          await tx.apiKey.deleteMany({ where: { siteId: existingByOrigin.id } });
-          await tx.scanJob.deleteMany({ where: { siteId: existingByOrigin.id } });
-          await tx.site.delete({ where: { id: existingByOrigin.id } });
-        }
-
-        // 3) Compute a slug that won't collide
-        const slug = await makeUniqueSlug(tx, project.id, baseSlug);
-
-        // 4) Create site (retry once if a race hits P2002 on slug)
-        let site: CreatedSite;
-        try {
-          site = await tx.site.create({
-            data: { projectId: project.id, origin, label, slug, notes },
-            select: { id: true, origin: true, label: true, createdAt: true },
-          });
-        } catch (e: unknown) {
-          if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-            const retrySlug = await makeUniqueSlug(
-              tx,
-              project.id,
-              `${baseSlug}-${randomBytes(2).toString("hex")}`
-            );
-            site = await tx.site.create({
-              data: { projectId: project.id, origin, label, slug: retrySlug.slice(0, 80), notes },
-              select: { id: true, origin: true, label: true, createdAt: true },
-            });
-          } else {
-            throw e;
-          }
-        }
-
-        // 5) Pin first site automatically
-        const shouldAutoPin = !project.topSiteId || replacingPinnedInactiveSite;
-        const pinned = shouldAutoPin ? site.id : project.topSiteId;
-        if (shouldAutoPin) {
-          await tx.project.update({
-            where: { id: project.id },
-            data: { topSiteId: site.id },
-          });
-        }
-
-        return { conflict: false as const, site, topSiteId: pinned, autoPinned: shouldAutoPin };
+      const result = await createWorkspaceSite({
+        projectId: project.id,
+        accountId: sess.accountId,
+        origin,
+        label,
+        notes,
+        baseSlug,
+        siteLimit: limits.websites === "unlimited" ? null : limits.websites,
       });
 
-      if ("limitBlocked" in result && result.limitBlocked) {
+      if ("limitBlocked" in result) {
         return json(
           {
             error: "PLAN_SITE_LIMIT",
@@ -531,15 +376,18 @@ export async function POST(req: Request, ctx: unknown) {
       }
 
       // conflict path
-      if ("conflict" in result && result.conflict) {
+      if (result.conflict) {
         return json({ error: "SITE_EXISTS", site: result.site, requestId: rid }, 409, rid);
       }
 
       try {
-        await createDefaultAllowedOrigins(result.site.id, result.site.origin);
+        await createDefaultAllowedOriginsForSite(result.site.id, [
+          result.site.origin,
+          ...getCavbotAppOrigins(),
+        ]);
         await registerWorkerSite(project.id, result.site.origin, result.site.label);
       } catch (error) {
-        await rollbackCreatedSiteSetup({
+        await rollbackCreatedWorkspaceSite({
           projectId: project.id,
           siteId: result.site.id,
           autoPinned: result.autoPinned,
@@ -589,24 +437,6 @@ export async function POST(req: Request, ctx: unknown) {
 
       return json({ site: result.site, topSiteId: result.topSiteId }, 201, rid);
     } catch (e: unknown) {
-      // If you still get P2002, return a correct message about what collided
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-        const target = (e.meta as Record<string, unknown> | undefined)?.target;
-        return json(
-          {
-            error: "UNIQUE_CONSTRAINT",
-            target: target || null,
-            message:
-              Array.isArray(target) && target.includes("slug")
-                ? "Slug collision (projectId+slug). A site with a similar hostname slug already exists."
-                : "This site already exists in this workspace.",
-            requestId: rid,
-          },
-          409,
-          rid
-        );
-      }
-
       return siteFailureResponse({
         route: "/api/workspaces/[projectId]/sites",
         requestId: rid,

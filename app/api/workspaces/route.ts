@@ -1,11 +1,11 @@
 // app/api/workspaces/route.ts
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import {
   classifyWorkspaceBootstrapError,
+  listAccountWorkspaceProjects,
   resolveAccountWorkspaceProject,
 } from "@/lib/workspaceProjects.server";
 import crypto from "crypto";
@@ -29,16 +29,6 @@ type ApiErrorCode =
   | "BAD_REQUEST"
   | "SERVER_ERROR"
   | "METHOD_NOT_ALLOWED";
-
-const WORKSPACE_BOOTSTRAP_PROJECT_SELECT = {
-  id: true,
-  name: true,
-  slug: true,
-  region: true,
-  retentionDays: true,
-  topSiteId: true,
-  createdAt: true,
-} as const;
 
 class WorkspaceBootstrapStageError extends Error {
   stage: "resolve_active_project" | "list_projects";
@@ -140,14 +130,7 @@ async function listWorkspaces(
   try {
     // Keep workspace bootstrap flat and minimal.
     // Route/site metadata is loaded on follow-up reads after the active project is known.
-    projects = await prisma.project.findMany({
-      where: {
-        accountId,
-        ...(includeInactive ? {} : { isActive: true }),
-      },
-      orderBy: { id: "asc" },
-      select: WORKSPACE_BOOTSTRAP_PROJECT_SELECT,
-    });
+    projects = await listAccountWorkspaceProjects(accountId, includeInactive);
   } catch (error) {
     throw new WorkspaceBootstrapStageError("list_projects", error);
   }

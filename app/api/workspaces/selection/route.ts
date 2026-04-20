@@ -1,9 +1,12 @@
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import {
+  findActiveWorkspaceSite,
+  findActiveWorkspaceSiteByOrigin,
+} from "@/lib/workspaceSites.server";
 import { findAccountWorkspaceProject, resolveAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
 
 export const dynamic = "force-dynamic";
@@ -153,33 +156,21 @@ export async function POST(req: NextRequest) {
 
     // Resolve origins from DB if IDs provided (this is the key fix)
     if (activeSiteId) {
-      const s = await prisma.site.findFirst({
-        where: { id: activeSiteId, projectId, isActive: true },
-        select: { origin: true },
-      });
+      const s = await findActiveWorkspaceSite(projectId, activeSiteId);
       if (!s) return json({ error: "ACTIVE_SITE_NOT_FOUND", requestId: rid }, 404, rid);
       activeSiteOrigin = s.origin;
     } else if (activeSiteOrigin) {
       // validate origin belongs to this project
-      const s = await prisma.site.findFirst({
-        where: { projectId, isActive: true, origin: activeSiteOrigin },
-        select: { id: true },
-      });
+      const s = await findActiveWorkspaceSiteByOrigin(projectId, activeSiteOrigin);
       if (!s) return json({ error: "ACTIVE_ORIGIN_NOT_FOUND", requestId: rid }, 404, rid);
     }
 
     if (topSiteId) {
-      const s = await prisma.site.findFirst({
-        where: { id: topSiteId, projectId, isActive: true },
-        select: { origin: true },
-      });
+      const s = await findActiveWorkspaceSite(projectId, topSiteId);
       if (!s) return json({ error: "TOP_SITE_NOT_FOUND", requestId: rid }, 404, rid);
       topSiteOrigin = s.origin;
     } else if (topSiteOrigin) {
-      const s = await prisma.site.findFirst({
-        where: { projectId, isActive: true, origin: topSiteOrigin },
-        select: { id: true },
-      });
+      const s = await findActiveWorkspaceSiteByOrigin(projectId, topSiteOrigin);
       if (!s) return json({ error: "TOP_ORIGIN_NOT_FOUND", requestId: rid }, 404, rid);
     }
 

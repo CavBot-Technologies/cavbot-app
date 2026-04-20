@@ -3,9 +3,12 @@ import "server-only";
 
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import {
+  findActiveWorkspaceSite,
+  listActiveWorkspaceSites,
+} from "@/lib/workspaceSites.server";
 import {
   classifyWorkspaceBootstrapError,
   findAccountWorkspaceProject,
@@ -187,11 +190,7 @@ export async function GET(req: NextRequest) {
     const project = await resolveWorkspaceProjectForRead(req, sess);
     if (!project) return json(emptyPayload(), 200, rid);
 
-    const rows = await prisma.site.findMany({
-      where: { projectId: project.id, isActive: true },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, label: true, origin: true, createdAt: true },
-    });
+    const rows = await listActiveWorkspaceSites(project.id);
 
     const sites: WorkspaceSite[] = rows.map((row) => ({
       id: row.id,
@@ -254,10 +253,7 @@ export async function POST(req: NextRequest) {
 
     const activeSiteId = String(body?.activeSiteId || "").trim();
     if (activeSiteId) {
-      const site = await prisma.site.findFirst({
-        where: { id: activeSiteId, projectId: project.id, isActive: true },
-        select: { id: true },
-      });
+      const site = await findActiveWorkspaceSite(project.id, activeSiteId);
       if (!site) return json({ ok: false, error: "SITE_NOT_FOUND", requestId: rid }, 404, rid);
     }
 
