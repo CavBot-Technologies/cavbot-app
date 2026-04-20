@@ -36,6 +36,20 @@ type RawAccountTierRow = {
   tier: string | null;
 };
 
+type RawOwnedProjectDeletionRow = {
+  id: number | string;
+  accountId: string;
+  topSiteId: string | null;
+  retentionDays: number | string | null;
+};
+
+type RawWorkspaceDeletionRow = {
+  siteId: string;
+  origin: string | null;
+  requestedAt: Date | string | null;
+  purgeScheduledAt: Date | string | null;
+};
+
 export type WorkspaceProjectSiteSummary = {
   id: number;
   topSiteId: string | null;
@@ -46,6 +60,30 @@ export type WorkspaceSiteRecord = {
   label: string;
   origin: string;
   createdAt: Date;
+};
+
+export type WorkspaceRemovedSiteRecord = {
+  siteId: string;
+  origin: string;
+  removedAt: Date;
+  purgeAt: Date;
+};
+
+export type WorkspaceSiteRemovalMode = "SAFE" | "DESTRUCTIVE";
+
+export type WorkspaceSiteRemovalResult = {
+  siteId: string;
+  origin: string;
+  label: string;
+  nextTopSiteId: string | null;
+  retentionDays: number;
+  purgeScheduledAt: Date | null;
+};
+
+export type WorkspaceSiteRestoreResult = {
+  siteId: string;
+  origin: string;
+  restoredAt: Date;
 };
 
 export type WorkspaceSiteWriteResult =
@@ -72,6 +110,14 @@ function toInt(value: unknown) {
 
 function toDate(value: Date | string) {
   return value instanceof Date ? value : new Date(value);
+}
+
+const DEFAULT_SITE_RETENTION_DAYS = 30;
+
+function retentionDateFromNow(retentionDays = DEFAULT_SITE_RETENTION_DAYS) {
+  const when = new Date();
+  when.setUTCDate(when.getUTCDate() + (Number.isFinite(retentionDays) ? retentionDays : DEFAULT_SITE_RETENTION_DAYS));
+  return when;
 }
 
 async function queryOne<T extends pg.QueryResultRow>(
@@ -146,6 +192,37 @@ export async function listActiveWorkspaceSites(projectId: number, order: "asc" |
     [projectId]
   );
   return result.rows.map(normalizeSiteRow);
+}
+
+export async function listRemovedWorkspaceSites(projectId: number) {
+  const result = await getAuthPool().query<RawWorkspaceDeletionRow>(
+    `SELECT
+       "siteId",
+       "origin",
+       "requestedAt",
+       "purgeScheduledAt"
+     FROM "SiteDeletion"
+     WHERE "projectId" = $1
+       AND "status" = 'SCHEDULED'::"SiteDeletionStatus"
+       AND "purgeScheduledAt" > NOW()
+     ORDER BY "purgeScheduledAt" ASC`,
+    [projectId]
+  );
+
+  return result.rows
+    .map((row) => {
+      const origin = String(row.origin || "").trim();
+      const removedAt = row.requestedAt ? toDate(row.requestedAt) : null;
+      const purgeAt = row.purgeScheduledAt ? toDate(row.purgeScheduledAt) : null;
+      if (!origin || !removedAt || !purgeAt) return null;
+      return {
+        siteId: String(row.siteId),
+        origin,
+        removedAt,
+        purgeAt,
+      } satisfies WorkspaceRemovedSiteRecord;
+    })
+    .filter((row): row is WorkspaceRemovedSiteRecord => Boolean(row));
 }
 
 export async function findActiveWorkspaceSite(projectId: number, siteId: string) {
@@ -461,7 +538,12 @@ export async function rollbackCreatedWorkspaceSite(args: {
   }).catch(() => null);
 }
 
-export async function createProjectNotice(projectId: number, origin: string) {
+export async function createProjectNoticeEntry(args: {
+  projectId: number;
+  tone: "GOOD" | "WATCH" | "BAD";
+  title: string;
+  body: string;
+}) {
   await getAuthPool().query(
     `INSERT INTO "ProjectNotice" (
        "id",
@@ -471,7 +553,256 @@ export async function createProjectNotice(projectId: number, origin: string) {
        "body",
        "createdAt"
      )
-     VALUES ($1, $2, 'GOOD'::"NoticeTone", $3, $4, NOW())`,
-    [newDbId(), projectId, "Website added", `${origin} is now under this workspace.`]
+     VALUES ($1, $2, $3::"NoticeTone", $4, $5, NOW())`,
+    [newDbId(), args.projectId, args.tone, args.title, args.body]
   );
+}
+
+export async function createProjectNotice(projectId: number, origin: string) {
+  await createProjectNoticeEntry({
+    projectId,
+    tone: "GOOD",
+    title: "Website added",
+    body: `${origin} is now under this workspace.`,
+  });
+}
+
+export async function removeWorkspaceSite(args: {
+  projectId: number;
+  accountId: string;
+  siteId: string;
+  mode: WorkspaceSiteRemovalMode;
+  operatorUserId: string | null;
+}) {
+  return withAuthTransaction<WorkspaceSiteRemovalResult>(async (tx) => {
+    const project = await queryOne<RawOwnedProjectDeletionRow>(
+      tx,
+      `SELECT "id", "accountId", "topSiteId", "retentionDays"
+       FROM "Project"
+       WHERE "id" = $1
+         AND "accountId" = $2
+       LIMIT 1
+       FOR UPDATE`,
+      [args.projectId, args.accountId]
+    );
+    if (!project) {
+      throw new Error("PROJECT_NOT_FOUND");
+    }
+
+    const site = await queryOne<RawWorkspaceSiteRow>(
+      tx,
+      `SELECT "id", "label", "origin", "createdAt"
+       FROM "Site"
+       WHERE "id" = $1
+         AND "projectId" = $2
+         AND "isActive" = true
+       LIMIT 1
+       FOR UPDATE`,
+      [args.siteId, args.projectId]
+    );
+    if (!site) {
+      throw new Error("SITE_NOT_FOUND");
+    }
+
+    await tx.query(
+      `UPDATE "Site"
+       SET "isActive" = false,
+           "status" = 'SUSPENDED'::"SiteStatus",
+           "updatedAt" = NOW()
+       WHERE "id" = $1`,
+      [args.siteId]
+    );
+
+    const projectTopSiteId = project.topSiteId == null ? null : String(project.topSiteId);
+    let nextTopSiteId = projectTopSiteId;
+    if (projectTopSiteId === args.siteId) {
+      const nextTop = await queryOne<{ id: string }>(
+        tx,
+        `SELECT "id"
+         FROM "Site"
+         WHERE "projectId" = $1
+           AND "isActive" = true
+           AND "id" <> $2
+         ORDER BY "createdAt" ASC
+         LIMIT 1`,
+        [args.projectId, args.siteId]
+      );
+      nextTopSiteId = nextTop?.id ? String(nextTop.id) : null;
+      await tx.query(
+        `UPDATE "Project"
+         SET "topSiteId" = $2,
+             "updatedAt" = NOW()
+         WHERE "id" = $1`,
+        [args.projectId, nextTopSiteId]
+      );
+    }
+
+    const retentionDays = Math.max(1, toInt(project.retentionDays) || DEFAULT_SITE_RETENTION_DAYS);
+    const now = new Date();
+    const purgeScheduledAt = args.mode === "SAFE" ? retentionDateFromNow(retentionDays) : now;
+    const purgedAt = args.mode === "DESTRUCTIVE" ? now : null;
+    const status = args.mode === "SAFE" ? "SCHEDULED" : "PURGED";
+    const metaJson = JSON.stringify({
+      retentionDays,
+      requestedAt: now.toISOString(),
+    });
+
+    await tx.query(
+      `INSERT INTO "SiteDeletion" (
+         "id",
+         "siteId",
+         "projectId",
+         "accountId",
+         "operatorUserId",
+         "mode",
+         "status",
+         "requestedAt",
+         "purgeScheduledAt",
+         "purgedAt",
+         "origin",
+         "metaJson",
+         "retentionDays"
+       )
+       VALUES (
+         $1,
+         $2,
+         $3,
+         $4,
+         $5,
+         $6::"SiteDeletionMode",
+         $7::"SiteDeletionStatus",
+         $8,
+         $9,
+         $10,
+         $11,
+         $12::jsonb,
+         $13
+       )
+       ON CONFLICT ("siteId") DO UPDATE
+       SET "projectId" = EXCLUDED."projectId",
+           "accountId" = EXCLUDED."accountId",
+           "operatorUserId" = EXCLUDED."operatorUserId",
+           "mode" = EXCLUDED."mode",
+           "status" = EXCLUDED."status",
+           "requestedAt" = EXCLUDED."requestedAt",
+           "purgeScheduledAt" = EXCLUDED."purgeScheduledAt",
+           "purgedAt" = EXCLUDED."purgedAt",
+           "origin" = EXCLUDED."origin",
+           "metaJson" = EXCLUDED."metaJson",
+           "retentionDays" = EXCLUDED."retentionDays"`,
+      [
+        newDbId(),
+        args.siteId,
+        args.projectId,
+        String(project.accountId),
+        args.operatorUserId,
+        args.mode,
+        status,
+        now,
+        purgeScheduledAt,
+        purgedAt,
+        String(site.origin),
+        metaJson,
+        retentionDays,
+      ]
+    );
+
+    return {
+      siteId: String(site.id),
+      origin: String(site.origin),
+      label: String(site.label),
+      nextTopSiteId,
+      retentionDays,
+      purgeScheduledAt: args.mode === "SAFE" ? purgeScheduledAt : null,
+    };
+  });
+}
+
+export async function restoreWorkspaceSite(args: {
+  projectId: number;
+  accountId: string;
+  siteId: string;
+}) {
+  return withAuthTransaction<WorkspaceSiteRestoreResult>(async (tx) => {
+    const project = await queryOne<{ id: number | string; topSiteId: string | null }>(
+      tx,
+      `SELECT "id", "topSiteId"
+       FROM "Project"
+       WHERE "id" = $1
+         AND "accountId" = $2
+       LIMIT 1
+       FOR UPDATE`,
+      [args.projectId, args.accountId]
+    );
+    if (!project) {
+      throw new Error("PROJECT_NOT_FOUND");
+    }
+
+    const site = await queryOne<RawWorkspaceSiteOriginRow>(
+      tx,
+      `SELECT "id", "origin"
+       FROM "Site"
+       WHERE "id" = $1
+         AND "projectId" = $2
+       LIMIT 1
+       FOR UPDATE`,
+      [args.siteId, args.projectId]
+    );
+    if (!site) {
+      throw new Error("SITE_NOT_FOUND");
+    }
+
+    const deletion = await queryOne<{ id: string }>(
+      tx,
+      `SELECT "id"
+       FROM "SiteDeletion"
+       WHERE "siteId" = $1
+         AND "projectId" = $2
+         AND "status" = 'SCHEDULED'::"SiteDeletionStatus"
+         AND "purgeScheduledAt" > NOW()
+       ORDER BY "requestedAt" DESC
+       LIMIT 1
+       FOR UPDATE`,
+      [args.siteId, args.projectId]
+    );
+    if (!deletion?.id) {
+      throw new Error("DELETION_NOT_FOUND");
+    }
+
+    const restoredAt = new Date();
+    await tx.query(
+      `UPDATE "Site"
+       SET "isActive" = true,
+           "status" = 'VERIFIED'::"SiteStatus",
+           "updatedAt" = NOW()
+       WHERE "id" = $1`,
+      [args.siteId]
+    );
+
+    if (!project.topSiteId) {
+      await tx.query(
+        `UPDATE "Project"
+         SET "topSiteId" = $2,
+             "updatedAt" = NOW()
+         WHERE "id" = $1`,
+        [args.projectId, args.siteId]
+      );
+    }
+
+    await tx.query(
+      `UPDATE "SiteDeletion"
+       SET "status" = 'RESTORED'::"SiteDeletionStatus",
+           "purgeScheduledAt" = NULL,
+           "purgedAt" = $2,
+           "metaJson" = COALESCE("metaJson", '{}'::jsonb) || jsonb_build_object('restoredAt', $3::text)
+       WHERE "id" = $1`,
+      [String(deletion.id), restoredAt, restoredAt.toISOString()]
+    );
+
+    return {
+      siteId: String(site.id),
+      origin: String(site.origin),
+      restoredAt,
+    };
+  });
 }

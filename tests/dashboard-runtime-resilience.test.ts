@@ -56,3 +56,26 @@ test("oauth providers use the canonical app origin for redirect URIs", () => {
 test("the dashboard tools icon path exists for deployed bundles", () => {
   assert.equal(fs.existsSync(path.resolve("public/icons/app/tools-svgrepo-com.svg")), true);
 });
+
+test("optional CavAI packs polling degrades to an empty response instead of throwing 500s", () => {
+  const packsRoute = read("app/api/cavai/packs/route.ts");
+
+  assert.match(packsRoute, /degraded empty response/);
+  assert.match(packsRoute, /pack: null/);
+  assert.match(packsRoute, /history: \[\]/);
+  assert.match(packsRoute, /degraded: true/);
+  assert.doesNotMatch(packsRoute, /return json\(\s*\{\s*ok: false,\s*requestId,\s*error: "SERVER_ERROR"/);
+});
+
+test("command center notices and removed-sites list render as signal text with capped scrolling", () => {
+  const page = read("app/page.tsx");
+  const css = read("app/workspace.css");
+
+  assert.match(page, /cb-manage-site-list cb-manage-site-list--removed/);
+  assert.match(css, /\.cb-noticeList \{/);
+  assert.match(css, /max-height: 300px;/);
+  assert.match(css, /\.cb-manage-site-list--removed \{/);
+  assert.match(css, /max-height: 228px;/);
+  assert.match(css, /\.cb-home-alert \{/);
+  assert.doesNotMatch(css, /\.cb-noticeCard\[data-tone="good"\]\s*\{\s*border-color:/);
+});

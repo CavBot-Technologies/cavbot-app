@@ -938,7 +938,7 @@ function CommandDeckPageInner() {
 
   const toastTimer = useRef<number | null>(null);
   const mergedNotices = useMemo(
-    () => [...serverNotices, ...localNotices],
+    () => [...serverNotices, ...localNotices].sort((a, b) => b.ts - a.ts),
     [serverNotices, localNotices]
   );
   const activeProject = useMemo(() => projects.find((p) => p.id === activeProjectId) || null, [projects, activeProjectId]);
@@ -1582,80 +1582,9 @@ function CommandDeckPageInner() {
   async function removeSiteConfirmed(siteId: string, mode: DeleteMode) {
     if (!activeProjectId) return;
 
-
     const target = sites.find((s) => s.id === siteId) || null;
-
-
-    setSites((prev) => {
-      const next = prev.filter((s) => s.id !== siteId);
-
-
-      const nextTopSite = next[0] || null;
-      const nextTop = nextTopSite?.id || "";
-      const nextActive = nextTop;
-
-
-      const nextTopOrigin = (nextTopSite?.origin || "").trim();
-      const nextActiveOrigin = nextTopOrigin;
-
-
-      setTopSiteId(nextTop);
-      setActiveSiteId(nextActive);
-
-
-      publishWorkspaceSignal({
-        projectId: activeProjectId,
-        reason: "siteRemoved",
-        topSiteId: nextTop,
-        topOrigin: nextTopOrigin,
-        activeSiteId: nextActive,
-        activeOrigin: nextActiveOrigin,
-      });
-
-
-      return next.map((s) => ({ ...s, top: !!nextTop && s.id === nextTop }));
-    });
-
-
-    if (guardrails.strictDeletion && target) {
-      try {
-        const prefixA = `cb_site_analytics__${target.origin}__`;
-        const prefixB = `cb_site_analytics__`;
-
-
-        for (let i = globalThis.__cbLocalStore.length - 1; i >= 0; i--) {
-          const k = globalThis.__cbLocalStore.key(i);
-          if (!k) continue;
-
-
-          if (k.startsWith(prefixA)) globalThis.__cbLocalStore.removeItem(k);
-          if (k.startsWith(prefixB) && k.includes(`__${target.origin}__`)) globalThis.__cbLocalStore.removeItem(k);
-        }
-      } catch {}
-    }
-
-
-    addNotice({
-      tone: "watch",
-      title: "Website removed",
-      body:
-        target
-          ? mode === "SAFE"
-            ? `${target.origin} was removed from Workspace (analytics retained for 30 days).`
-            : `${target.origin} was removed and analytics were permanently deleted.`
-          : "A website was removed.",
-    });
-
-    pushToast(
-      mode === "SAFE"
-        ? "Monitoring stopped. Analytics retained for 30 days before purge."
-        : "Site removed and analytics permanently deleted.",
-      mode === "SAFE" ? "watch" : "bad"
-    );
-
-
     try {
-      await apiJSON<{ ok: true; topSiteId: string | null }>(
+      const data = await apiJSON<{ ok: true; topSiteId: string | null; analyticsPurged?: boolean }>(
         `/api/workspaces/${activeProjectId}/sites/${encodeURIComponent(siteId)}`,
         {
           method: "DELETE",
@@ -1666,11 +1595,79 @@ function CommandDeckPageInner() {
         }
       );
 
+      setSites((prev) => {
+        const next = prev.filter((s) => s.id !== siteId);
+        const nextTop =
+          (data.topSiteId || "").trim() && next.some((s) => s.id === data.topSiteId)
+            ? (data.topSiteId || "").trim()
+            : next[0]?.id || "";
+        const nextActive =
+          activeSiteId && activeSiteId !== siteId && next.some((s) => s.id === activeSiteId)
+            ? activeSiteId
+            : nextTop;
+        const nextTopSite = next.find((s) => s.id === nextTop) || null;
+        const nextActiveSite = next.find((s) => s.id === nextActive) || nextTopSite || null;
+        const nextTopOrigin = (nextTopSite?.origin || "").trim();
+        const nextActiveOrigin = (nextActiveSite?.origin || nextTopOrigin || "").trim();
+
+        setTopSiteId(nextTop);
+        setActiveSiteId(nextActive);
+
+        publishWorkspaceSignal({
+          projectId: activeProjectId,
+          reason: "siteRemoved",
+          topSiteId: nextTop,
+          topOrigin: nextTopOrigin,
+          activeSiteId: nextActive,
+          activeOrigin: nextActiveOrigin,
+        });
+
+        return next.map((s) => ({ ...s, top: !!nextTop && s.id === nextTop }));
+      });
+
+      if (guardrails.strictDeletion && target) {
+        try {
+          const prefixA = `cb_site_analytics__${target.origin}__`;
+          const prefixB = `cb_site_analytics__`;
+
+          for (let i = globalThis.__cbLocalStore.length - 1; i >= 0; i--) {
+            const k = globalThis.__cbLocalStore.key(i);
+            if (!k) continue;
+
+            if (k.startsWith(prefixA)) globalThis.__cbLocalStore.removeItem(k);
+            if (k.startsWith(prefixB) && k.includes(`__${target.origin}__`)) globalThis.__cbLocalStore.removeItem(k);
+          }
+        } catch {}
+      }
+
+      addNotice({
+        tone: "bad",
+        title: "Website removed",
+        body:
+          target
+            ? mode === "SAFE"
+              ? `${target.origin} was removed from Workspace. Analytics are retained for 30 days.`
+              : data.analyticsPurged === false
+                ? `${target.origin} was removed. Analytics purge is retrying in the background.`
+                : `${target.origin} was removed and analytics were permanently deleted.`
+            : "A website was removed.",
+      });
+
+      pushToast(
+        mode === "SAFE"
+          ? "Monitoring stopped. Analytics retained for 30 days before purge."
+          : data.analyticsPurged === false
+            ? "Website removed. Analytics purge is retrying."
+            : "Site removed and analytics permanently deleted.",
+        data.analyticsPurged === false ? "watch" : mode === "SAFE" ? "watch" : "bad"
+      );
+
 
       if (sitesKey) void mutate(sitesKey);
 
 
       await loadSitesForProject(activeProjectId, "siteRemoved");
+      void loadRecentlyRemoved();
 
 
       if (sitesKey) void mutate(sitesKey);
@@ -3737,7 +3734,7 @@ function ManageWebsitesModal({
             ) : recentlyRemoved.length === 0 ? (
               <div className="cb-manage-empty">No recently removed sites.</div>
             ) : (
-              <ul className="cb-manage-site-list">
+              <ul className="cb-manage-site-list cb-manage-site-list--removed">
                 {recentlyRemoved.map((entry) => {
                   const days = daysUntil(entry.purgeAt);
                   const daysLabel =

@@ -308,22 +308,31 @@ body.cb-home-delete-open .cb-main{
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.cb-noticeList::-webkit-scrollbar {
+  width: 6px;
+}
+
+.cb-noticeList::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
 }
 
 .cb-noticeCard {
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-  padding: 14px 16px;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
+  border: none;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.cb-noticeCard[data-tone="good"] {
-  border-color: rgba(76, 255, 149, 0.4);
+  gap: 6px;
 }
 
 .cb-noticeCardRow {
@@ -340,7 +349,7 @@ body.cb-home-delete-open .cb-main{
 
 .cb-noticeCardTone {
   font-weight: 800;
-  letter-spacing: 0.36em;
+  letter-spacing: 0.28em;
 }
 
 .cb-noticeCardSource {
@@ -353,13 +362,29 @@ body.cb-home-delete-open .cb-main{
 
 .cb-noticeCardTitle {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .cb-noticeCardBody {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.75);
   line-height: 1.3;
+}
+
+.cb-noticeCard[data-tone="good"] .cb-noticeCardTone,
+.cb-noticeCard[data-tone="good"] .cb-noticeCardTitle {
+  color: rgba(129, 255, 163, 0.96);
+}
+
+.cb-noticeCard[data-tone="watch"] .cb-noticeCardTone,
+.cb-noticeCard[data-tone="watch"] .cb-noticeCardTitle {
+  color: rgba(255, 212, 132, 0.96);
+}
+
+.cb-noticeCard[data-tone="bad"] .cb-noticeCardTone,
+.cb-noticeCard[data-tone="bad"] .cb-noticeCardTitle {
+  color: rgba(255, 126, 126, 0.96);
 }
 
 .cb-noticeEmpty {
@@ -381,11 +406,14 @@ body.cb-home-delete-open .cb-main{
 
 .cb-noticeError {
   margin-top: 12px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: rgba(255, 99, 101, 0.15);
   color: rgba(255, 99, 101, 0.9);
   font-size: 12px;
+}
+
+.cb-home-alert {
+  color: rgba(255, 126, 126, 0.92);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .cb-home .cb-profile-wrap{
@@ -2056,6 +2084,23 @@ html{
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.cb-manage-site-list--removed {
+  max-height: 228px;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.cb-manage-site-list--removed::-webkit-scrollbar {
+  width: 6px;
+}
+
+.cb-manage-site-list--removed::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
 }
 
 .cb-manage-site-row {

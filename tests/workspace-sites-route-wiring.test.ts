@@ -24,6 +24,32 @@ test("command center workspace site route keeps secure site wiring parity", () =
   assert.equal(source.includes("DB_PERMISSION_DENIED"), true);
 });
 
+test("website delete, removed-list, and restore routes stay on the hardened workspace-site path", () => {
+  const deleteRoute = read("app/api/workspaces/[projectId]/sites/[siteId]/route.ts");
+  const removedRoute = read("app/api/workspaces/[projectId]/sites/removed/route.ts");
+  const restoreRoute = read("app/api/workspaces/[projectId]/sites/[siteId]/restore/route.ts");
+  const helper = read("lib/workspaceSites.server.ts");
+
+  assert.equal(deleteRoute.includes("requireLowRiskWriteSession"), true);
+  assert.equal(deleteRoute.includes("removeWorkspaceSite"), true);
+  assert.equal(deleteRoute.includes("createProjectNoticeEntry"), true);
+  assert.equal(deleteRoute.includes("analyticsPurged"), true);
+  assert.doesNotMatch(deleteRoute, /prisma\./);
+
+  assert.equal(removedRoute.includes("listRemovedWorkspaceSites"), true);
+  assert.equal(removedRoute.includes("findOwnedWorkspaceProjectForSites"), true);
+  assert.doesNotMatch(removedRoute, /prisma\./);
+
+  assert.equal(restoreRoute.includes("requireLowRiskWriteSession"), true);
+  assert.equal(restoreRoute.includes("restoreWorkspaceSite"), true);
+  assert.equal(restoreRoute.includes("createProjectNoticeEntry"), true);
+  assert.doesNotMatch(restoreRoute, /prisma\./);
+
+  assert.equal(helper.includes("export async function removeWorkspaceSite"), true);
+  assert.equal(helper.includes("export async function listRemovedWorkspaceSites"), true);
+  assert.equal(helper.includes("export async function restoreWorkspaceSite"), true);
+});
+
 test("command center add-site UI rethrows friendly errors so modal feedback stays visible", () => {
   const source = read("app/page.tsx");
 
@@ -116,4 +142,20 @@ test("command center add-site flow retries project bootstrap instead of asking u
     false,
   );
   assert.equal(source.includes("Create a workspace first."), false);
+});
+
+test("delete-site UI waits for server confirmation before mutating local site state", () => {
+  const source = read("app/page.tsx");
+  const start = source.indexOf("async function removeSiteConfirmed");
+  const end = source.indexOf("async function restoreSite", start);
+  const block = source.slice(start, end);
+
+  assert.ok(start >= 0 && end > start);
+  assert.equal(block.includes('const data = await apiJSON<{ ok: true; topSiteId: string | null; analyticsPurged?: boolean }>('), true);
+  assert.ok(
+    block.indexOf('const data = await apiJSON<{ ok: true; topSiteId: string | null; analyticsPurged?: boolean }>(') <
+      block.indexOf("setSites((prev) => {"),
+  );
+  assert.equal(block.includes('tone: "bad"'), true);
+  assert.equal(block.includes("void loadRecentlyRemoved();"), true);
 });

@@ -1,14 +1,26 @@
 // app/api/workspaces/[projectId]/sites/[siteId]/route.ts
 import "server-only";
 
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { unstable_noStore as noStore } from "next/cache";
 
-import { prisma } from "@/lib/prisma";
-import { requireSession, requireAccountContext, requireAccountRole, isApiAuthError } from "@/lib/apiAuth";
+import {
+  requireLowRiskWriteSession,
+  requireAccountContext,
+  requireAccountRole,
+  isApiAuthError,
+} from "@/lib/apiAuth";
 import { auditLogWrite } from "@/lib/audit";
 import { purgeCavPadNotesForSite, trashCavPadNotesForSite } from "@/lib/cavpad/server";
-import { purgeSiteAnalytics, SiteDeletionMode, upsertSiteDeletionRecord } from "@/lib/siteDeletion.server";
+import { purgeSiteAnalytics } from "@/lib/siteDeletion.server";
+import {
+  createProjectNoticeEntry,
+  findActiveWorkspaceSite,
+  findOwnedWorkspaceProjectForSites,
+  removeWorkspaceSite,
+} from "@/lib/workspaceSites.server";
+import { isPermissionDeniedError, isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -21,11 +33,25 @@ const NO_STORE_HEADERS: Record<string, string> = {
   Vary: "Cookie",
 };
 
-function json(data: unknown, init?: number | ResponseInit) {
+function requestIdFrom(req: Request) {
+  const incoming =
+    req.headers.get("x-request-id") ||
+    req.headers.get("x-vercel-id") ||
+    req.headers.get("cf-ray");
+  return (incoming && incoming.trim()) || crypto.randomUUID();
+}
+
+function withBaseHeaders(headers?: HeadersInit, rid?: string) {
+  const base: Record<string, string> = { ...NO_STORE_HEADERS };
+  if (rid) base["x-cavbot-request-id"] = rid;
+  return { ...(headers || {}), ...base };
+}
+
+function json(data: unknown, init?: number | ResponseInit, rid?: string) {
   const resInit: ResponseInit = typeof init === "number" ? { status: init } : init ?? {};
   return NextResponse.json(data, {
     ...resInit,
-    headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS },
+    headers: withBaseHeaders(resInit.headers, rid),
   });
 }
 
@@ -37,167 +63,218 @@ function parseProjectId(raw: string) {
   return n;
 }
 
+function isDeleteSchemaOutOfDate(error: unknown) {
+  return isSchemaMismatchError(error, {
+    tables: ["Site", "SiteDeletion", "Project", "ProjectNotice", "ScanJob"],
+    columns: ["isActive", "status", "topSiteId", "purgeScheduledAt", "retentionDays"],
+  });
+}
+
+function isDeletePermissionDenied(error: unknown) {
+  return isPermissionDeniedError(error, ["Site", "SiteDeletion", "Project", "ProjectNotice", "ScanJob"]);
+}
+
+function logDeleteFailure(args: {
+  requestId: string;
+  accountId?: string | null;
+  projectId?: number | null;
+  siteId?: string | null;
+  origin?: string | null;
+  errorCode: string;
+  error: unknown;
+}) {
+  console.error("[workspace-site-delete]", {
+    requestId: args.requestId,
+    accountId: args.accountId || null,
+    projectId: args.projectId || null,
+    siteId: args.siteId || null,
+    origin: args.origin || null,
+    errorCode: args.errorCode,
+    detail: args.error instanceof Error ? args.error.message : String(args.error),
+  });
+}
+
+async function createRemovalNoticeBestEffort(args: {
+  projectId: number;
+  origin: string;
+  mode: "SAFE" | "DESTRUCTIVE";
+  retentionDays: number;
+  requestId: string;
+}) {
+  try {
+    await createProjectNoticeEntry({
+      projectId: args.projectId,
+      tone: "BAD",
+      title: "Website removed",
+      body:
+        args.mode === "SAFE"
+          ? `${args.origin} was removed from this workspace. Analytics will be retained for ${args.retentionDays} days.`
+          : `${args.origin} was removed and analytics were permanently deleted.`,
+    });
+  } catch (error) {
+    logDeleteFailure({
+      requestId: args.requestId,
+      projectId: args.projectId,
+      origin: args.origin,
+      errorCode: "PROJECT_NOTICE_WRITE_FAILED",
+      error,
+    });
+  }
+}
+
 export async function DELETE(
   req: NextRequest,
   ctx: { params: { projectId: string; siteId: string } }
 ) {
   noStore();
+  const rid = requestIdFrom(req);
 
   try {
     const projectId = parseProjectId(ctx.params.projectId);
     const siteId = String(ctx.params.siteId || "").trim();
 
     if (!siteId) {
-      return json({ error: "BAD_SITE_ID" }, 400);
+      return json({ error: "BAD_SITE_ID", requestId: rid }, 400, rid);
     }
 
-    // auth
-    const sess = await requireSession(req);
+    const sess = await requireLowRiskWriteSession(req);
     requireAccountContext(sess);
-    await requireAccountRole(sess, ["OWNER", "ADMIN"]);
+    requireAccountRole(sess, ["OWNER", "ADMIN"]);
 
-    // verify project belongs to account
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, accountId: sess.accountId },
-      select: { id: true, topSiteId: true, accountId: true, retentionDays: true },
-    });
-
+    const project = await findOwnedWorkspaceProjectForSites(sess.accountId, projectId);
     if (!project) {
-      return json({ error: "PROJECT_NOT_FOUND" }, 404);
+      return json({ error: "PROJECT_NOT_FOUND", requestId: rid }, 404, rid);
     }
 
-    // verify site exists in this project
-    const site = await prisma.site.findFirst({
-      where: { id: siteId, projectId, isActive: true },
-      select: { id: true, origin: true, label: true },
-    });
-
+    const site = await findActiveWorkspaceSite(projectId, siteId);
     if (!site) {
-      return json({ error: "SITE_NOT_FOUND" }, 404);
+      return json({ error: "SITE_NOT_FOUND", requestId: rid }, 404, rid);
     }
 
-    const body = await readSanitizedJson(req, ({} as Record<string, unknown>));
+    const body = await readSanitizedJson(req, {} as Record<string, unknown>);
     const rawMode = String(body?.mode || "").trim().toLowerCase();
     const confirmedOrigin = String(body?.origin || "").trim();
 
-    let mode: SiteDeletionMode;
-    if (rawMode === "purge_now") {
-      mode = "DESTRUCTIVE";
-    } else if (rawMode === "detach") {
-      mode = "SAFE";
-    } else {
-      return json({ error: "BAD_DELETION_MODE" }, 400);
+    const mode = rawMode === "purge_now" ? "DESTRUCTIVE" : rawMode === "detach" ? "SAFE" : null;
+    if (!mode) {
+      return json({ error: "BAD_DELETION_MODE", requestId: rid }, 400, rid);
     }
 
     if (!confirmedOrigin || confirmedOrigin !== site.origin) {
-      return json({ error: "ORIGIN_MISMATCH" }, 400);
+      return json({ error: "ORIGIN_MISMATCH", requestId: rid }, 400, rid);
     }
 
-    const retentionDays = project.retentionDays ?? 30;
-    const operatorUserId = sess.sub;
-
-    const result = await prisma.$transaction(async (tx) => {
-      await tx.site.update({
-        where: { id: siteId },
-        data: { isActive: false, status: "SUSPENDED" },
-        select: { id: true },
-      });
-
-      let nextTopSiteId: string | null = project.topSiteId;
-
-      if (project.topSiteId === siteId) {
-        const nextTop = await tx.site.findFirst({
-          where: { projectId, isActive: true },
-          orderBy: { createdAt: "asc" },
-          select: { id: true },
-        });
-
-        nextTopSiteId = nextTop?.id ?? null;
-
-        await tx.project.update({
-          where: { id: projectId },
-          data: { topSiteId: nextTopSiteId },
-        });
-      }
-
-      await tx.projectNotice.create({
-        data: {
-          projectId,
-          tone: "WATCH",
-          title: "Website removed",
-          body:
-            mode === "SAFE"
-              ? `${site.origin} was removed from this workspace (analytics retained for ${retentionDays} days).`
-              : `${site.origin} was removed and analytics were deleted immediately.`,
-        },
-      });
-
-      const deletionRecord = await upsertSiteDeletionRecord({
-        tx,
-        projectId,
-        siteId,
-        accountId: project.accountId,
-        operatorUserId,
-        mode,
-        origin: site.origin,
-        retentionDays,
-      });
-
-      if (project.accountId) {
-        await auditLogWrite({
-          request: req,
-          action: mode === "DESTRUCTIVE" ? "SITE_DELETED_IMMEDIATE" : "SITE_DETACHED",
-          accountId: project.accountId,
-          operatorUserId,
-          targetType: "site",
-          targetId: siteId,
-          targetLabel: site.origin,
-          metaJson: {
-            mode,
-            origin: site.origin,
-            retentionDays,
-            requestedAt: new Date().toISOString(),
-          },
-        });
-      }
-
-      return { nextTopSiteId, deletionRecord };
+    const result = await removeWorkspaceSite({
+      projectId,
+      accountId: sess.accountId,
+      siteId,
+      mode,
+      operatorUserId: sess.sub || null,
     });
 
-    if (mode === "SAFE" && project.accountId && result.deletionRecord?.purgeScheduledAt) {
+    await createRemovalNoticeBestEffort({
+      projectId,
+      origin: result.origin,
+      mode,
+      retentionDays: result.retentionDays,
+      requestId: rid,
+    });
+
+    await auditLogWrite({
+      request: req,
+      action: mode === "DESTRUCTIVE" ? "SITE_DELETED_IMMEDIATE" : "SITE_DETACHED",
+      accountId: sess.accountId,
+      operatorUserId: sess.sub || null,
+      targetType: "site",
+      targetId: siteId,
+      targetLabel: result.origin,
+      metaJson: {
+        mode,
+        origin: result.origin,
+        retentionDays: result.retentionDays,
+        requestedAt: new Date().toISOString(),
+      },
+    }).catch((error) => {
+      logDeleteFailure({
+        requestId: rid,
+        accountId: sess.accountId,
+        projectId,
+        siteId,
+        origin: result.origin,
+        errorCode: "AUDIT_WRITE_FAILED",
+        error,
+      });
+    });
+
+    if (mode === "SAFE" && result.purgeScheduledAt) {
       await auditLogWrite({
         request: req,
         action: "SITE_PURGE_SCHEDULED",
-        accountId: project.accountId,
-        operatorUserId,
+        accountId: sess.accountId,
+        operatorUserId: sess.sub || null,
         targetType: "site",
         targetId: siteId,
-        targetLabel: site.origin,
+        targetLabel: result.origin,
         metaJson: {
           mode,
-          origin: site.origin,
-          retentionDays,
-          purgeAt: result.deletionRecord.purgeScheduledAt?.toISOString() ?? null,
+          origin: result.origin,
+          retentionDays: result.retentionDays,
+          purgeAt: result.purgeScheduledAt.toISOString(),
         },
+      }).catch((error) => {
+        logDeleteFailure({
+          requestId: rid,
+          accountId: sess.accountId,
+          projectId,
+          siteId,
+          origin: result.origin,
+          errorCode: "AUDIT_PURGE_SCHEDULE_WRITE_FAILED",
+          error,
+        });
       });
     }
 
+    let analyticsPurged = mode !== "DESTRUCTIVE";
+
     if (mode === "DESTRUCTIVE") {
-      await purgeSiteAnalytics({ projectId, siteId, origin: site.origin, mode: "immediate" });
-      if (project.accountId) {
+      try {
+        await purgeSiteAnalytics({ projectId, siteId, origin: result.origin, mode: "immediate" });
+        analyticsPurged = true;
+
         await auditLogWrite({
           request: req,
           action: "SITE_PURGE_EXECUTED",
-          accountId: project.accountId,
-          operatorUserId,
+          accountId: sess.accountId,
+          operatorUserId: sess.sub || null,
           targetType: "site",
           targetId: siteId,
-          targetLabel: site.origin,
+          targetLabel: result.origin,
           metaJson: {
             mode: "immediate",
-            origin: site.origin,
+            origin: result.origin,
             purgedAt: new Date().toISOString(),
           },
+        }).catch((error) => {
+          logDeleteFailure({
+            requestId: rid,
+            accountId: sess.accountId,
+            projectId,
+            siteId,
+            origin: result.origin,
+            errorCode: "AUDIT_PURGE_EXECUTED_WRITE_FAILED",
+            error,
+          });
+        });
+      } catch (error) {
+        analyticsPurged = false;
+        logDeleteFailure({
+          requestId: rid,
+          accountId: sess.accountId,
+          projectId,
+          siteId,
+          origin: result.origin,
+          errorCode: "ANALYTICS_PURGE_FAILED",
+          error,
         });
       }
     }
@@ -219,42 +296,80 @@ export async function DELETE(
       purgedAtISO: string;
     } | null = null;
 
-    if (project.accountId) {
-      try {
-        if (mode === "DESTRUCTIVE") {
-          cavpadPurge = await purgeCavPadNotesForSite({
-            accountId: project.accountId,
-            operatorUserId,
-            siteId,
-          });
-        } else {
-          cavpadRetention = await trashCavPadNotesForSite({
-            accountId: project.accountId,
-            operatorUserId,
-            siteId,
-          });
-        }
-      } catch (err) {
-        console.error("[site-delete] cavpad note cleanup failed", {
-          projectId,
+    try {
+      if (mode === "DESTRUCTIVE") {
+        cavpadPurge = await purgeCavPadNotesForSite({
+          accountId: sess.accountId,
+          operatorUserId: sess.sub,
           siteId,
-          accountId: project.accountId,
-          operatorUserId,
-          error: err instanceof Error ? err.message : String(err),
+        });
+      } else {
+        cavpadRetention = await trashCavPadNotesForSite({
+          accountId: sess.accountId,
+          operatorUserId: sess.sub,
+          siteId,
         });
       }
+    } catch (error) {
+      logDeleteFailure({
+        requestId: rid,
+        accountId: sess.accountId,
+        projectId,
+        siteId,
+        origin: result.origin,
+        errorCode: "CAVPAD_CLEANUP_FAILED",
+        error,
+      });
     }
 
-    return json({ ok: true, topSiteId: result.nextTopSiteId, cavpadRetention, cavpadPurge }, 200);
-  } catch (e: unknown) {
-    if (isApiAuthError(e)) return json({ error: e.code }, e.status);
+    return json(
+      {
+        ok: true,
+        requestId: rid,
+        topSiteId: result.nextTopSiteId,
+        analyticsPurged,
+        cavpadRetention,
+        cavpadPurge,
+      },
+      200,
+      rid
+    );
+  } catch (error: unknown) {
+    if (isApiAuthError(error)) return json({ error: error.code, requestId: rid }, error.status, rid);
 
-    const msg = String((e as { message?: string })?.message || "");
-    if (msg === "BAD_PROJECT_ID") return json({ error: "BAD_PROJECT_ID" }, 400);
+    const msg = String((error as { message?: string })?.message || "");
+    if (msg === "BAD_PROJECT_ID") return json({ error: "BAD_PROJECT_ID", requestId: rid }, 400, rid);
+    if (msg === "PROJECT_NOT_FOUND") return json({ error: "PROJECT_NOT_FOUND", requestId: rid }, 404, rid);
+    if (msg === "SITE_NOT_FOUND") return json({ error: "SITE_NOT_FOUND", requestId: rid }, 404, rid);
+
+    if (isDeleteSchemaOutOfDate(error)) {
+      return json(
+        {
+          error: "DB_SCHEMA_OUT_OF_DATE",
+          message: "Website removal is temporarily unavailable while workspace schema updates finish.",
+          requestId: rid,
+        },
+        409,
+        rid
+      );
+    }
+
+    if (isDeletePermissionDenied(error)) {
+      return json(
+        {
+          error: "DB_PERMISSION_DENIED",
+          message: "Website removal is temporarily unavailable while workspace permissions are being repaired.",
+          requestId: rid,
+        },
+        503,
+        rid
+      );
+    }
 
     return json(
-      { error: "SITE_DELETE_FAILED", message: msg || "Failed to delete site." },
-      500
+      { error: "SITE_DELETE_FAILED", message: msg || "Failed to delete site.", requestId: rid },
+      500,
+      rid
     );
   }
 }

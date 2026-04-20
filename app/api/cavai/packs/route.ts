@@ -71,14 +71,18 @@ export async function GET(req: NextRequest) {
       return json({ ok: false, requestId, error: error.code }, error.status);
     }
     const message = error instanceof Error ? error.message : "Server error";
+    console.warn("[cavai-packs] degraded empty response", { requestId, message });
     return json(
       {
-        ok: false,
+        ok: true,
         requestId,
-        error: "SERVER_ERROR",
-        ...(process.env.NODE_ENV !== "production" ? { message } : {}),
+        origin: normalizeOriginStrict(new URL(req.url).searchParams.get("origin")) || "",
+        pack: null,
+        history: [],
+        degraded: true,
+        ...(process.env.NODE_ENV !== "production" ? { warning: message } : {}),
       },
-      500
+      200
     );
   }
 }
