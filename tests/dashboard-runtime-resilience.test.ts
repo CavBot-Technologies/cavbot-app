@@ -25,12 +25,20 @@ test("workspace guardrails and scan status routes avoid the Prisma runtime path"
   const guardrailsHelper = read("lib/workspaceGuardrails.server.ts");
   const scanHelper = read("lib/workspaceScans.server.ts");
 
-  assert.match(guardrailsRoute, /ensureWorkspaceProjectGuardrails/);
+  assert.match(guardrailsRoute, /getWorkspaceProjectGuardrails/);
   assert.doesNotMatch(guardrailsRoute, /prisma\.projectGuardrails/);
   assert.match(scanStatusRoute, /getWorkspaceProjectScanStatus/);
   assert.doesNotMatch(scanStatusRoute, /getProjectScanStatus/);
+  assert.match(guardrailsHelper, /export async function getWorkspaceProjectGuardrails/);
   assert.match(guardrailsHelper, /INSERT INTO "ProjectGuardrails"/);
   assert.match(scanHelper, /FROM "ScanJob" job/);
+});
+
+test("workspace guardrails GET stays read-only while PATCH keeps the upsert path", () => {
+  const guardrailsRoute = read("app/api/workspaces/[projectId]/guardrails/route.ts");
+
+  assert.match(guardrailsRoute, /const guardrails = await getWorkspaceProjectGuardrails\(project\.id\);/);
+  assert.match(guardrailsRoute, /const guardrails = await ensureWorkspaceProjectGuardrails\(project\.id, data\);/);
 });
 
 test("oauth providers use the canonical app origin for redirect URIs", () => {

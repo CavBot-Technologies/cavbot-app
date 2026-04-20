@@ -75,6 +75,11 @@ async function loadGuardrails(queryable: Queryable, projectId: number) {
   return normalizeGuardrails(row);
 }
 
+export async function getWorkspaceProjectGuardrails(projectId: number) {
+  const pool = getAuthPool();
+  return loadGuardrails(pool, projectId);
+}
+
 export async function ensureWorkspaceProjectGuardrails(
   projectId: number,
   patch?: Partial<WorkspaceProjectGuardrails>,

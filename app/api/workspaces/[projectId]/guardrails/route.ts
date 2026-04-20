@@ -3,7 +3,10 @@ import { NextResponse } from "next/server";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { findAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
-import { ensureWorkspaceProjectGuardrails } from "@/lib/workspaceGuardrails.server";
+import {
+  ensureWorkspaceProjectGuardrails,
+  getWorkspaceProjectGuardrails,
+} from "@/lib/workspaceGuardrails.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -72,7 +75,7 @@ export async function GET(req: Request, ctx: unknown) {
     });
     if (!project) return json({ error: "NOT_FOUND" }, 404);
 
-    const guardrails = await ensureWorkspaceProjectGuardrails(project.id);
+    const guardrails = await getWorkspaceProjectGuardrails(project.id);
 
     return json({ guardrails }, 200);
   } catch (e: unknown) {
