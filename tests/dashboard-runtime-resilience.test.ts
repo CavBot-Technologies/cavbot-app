@@ -72,8 +72,14 @@ test("command center notices and removed-sites list render as signal text with c
   const css = read("app/workspace.css");
 
   assert.match(page, /cb-manage-site-list cb-manage-site-list--removed/);
+  assert.match(page, /cb-noticeCardHead/);
+  assert.doesNotMatch(page, /cb-noticeCardTone/);
+  assert.doesNotMatch(page, /cb-noticeCardSource/);
   assert.match(css, /\.cb-noticeList \{/);
   assert.match(css, /max-height: 300px;/);
+  assert.match(css, /\.cb-noticeCardHead \{/);
+  assert.match(css, /grid-template-columns: minmax\(0, 1fr\) auto;/);
+  assert.match(css, /\.cb-noticeCard:not\(:last-child\) \{/);
   assert.match(css, /\.cb-manage-site-list--removed \{/);
   assert.match(css, /max-height: 228px;/);
   assert.match(css, /\.cb-home-alert \{/);

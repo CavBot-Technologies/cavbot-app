@@ -2173,9 +2173,8 @@ function CommandDeckPageInner() {
             <ul className="cb-noticeList" aria-live="polite">
               {mergedNotices.map((notice) => (
                 <li key={notice.id} className="cb-noticeCard" data-tone={notice.tone}>
-                  <div className="cb-noticeCardRow">
-                    <span className="cb-noticeCardTone">{notice.tone}</span>
-                    <span className="cb-noticeCardSource">{notice.source === "server" ? "Server" : "Local"}</span>
+                  <div className="cb-noticeCardHead">
+                    <div className="cb-noticeCardTitle">{notice.title}</div>
                     <span className="cb-noticeCardTime">
                       {new Date(notice.ts).toLocaleString(undefined, {
                         dateStyle: "medium",
@@ -2183,7 +2182,6 @@ function CommandDeckPageInner() {
                       })}
                     </span>
                   </div>
-                  <div className="cb-noticeCardTitle">{notice.title}</div>
                   <div className="cb-noticeCardBody">{notice.body}</div>
                 </li>
               ))}
