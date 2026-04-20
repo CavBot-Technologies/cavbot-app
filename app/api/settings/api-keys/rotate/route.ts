@@ -2,8 +2,8 @@ import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthError } from "@/lib/apiAuth";
-import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
-import { resolveApiKeyWorkspace } from "@/lib/settings/apiKeyWorkspace.server";
+import { requireSettingsOwnerResilientSession } from "@/lib/settings/ownerAuth.server";
+import { readApiKeyWorkspaceCookieHints, resolveApiKeyWorkspace } from "@/lib/settings/apiKeyWorkspace.server";
 import { buildApiKeyInsertData, serializeApiKey } from "@/lib/apiKeys.server";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -34,7 +34,7 @@ function json<T>(payload: T, init?: number | ResponseInit) {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await requireSettingsOwnerSession(req);
+    const session = await requireSettingsOwnerResilientSession(req);
 
     const body = (await readSanitizedJson(req, null)) as ApiKeyActionBody | null;
     const keyId = String(body?.keyId || "").trim();
@@ -50,7 +50,11 @@ export async function POST(req: NextRequest) {
 
     let projectId = existing.projectId ?? null;
     if (!projectId) {
-      const workspace = await resolveApiKeyWorkspace({ accountId: session.accountId });
+      const workspaceHints = readApiKeyWorkspaceCookieHints(req);
+      const workspace = await resolveApiKeyWorkspace({
+        accountId: session.accountId,
+        ...workspaceHints,
+      });
       projectId = workspace?.projectId ?? null;
     }
     if (!projectId) {

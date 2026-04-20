@@ -2,8 +2,8 @@ import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthError } from "@/lib/apiAuth";
-import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
-import { resolveApiKeyWorkspace } from "@/lib/settings/apiKeyWorkspace.server";
+import { requireSettingsOwnerResilientSession } from "@/lib/settings/ownerAuth.server";
+import { readApiKeyWorkspaceCookieHints, resolveApiKeyWorkspace } from "@/lib/settings/apiKeyWorkspace.server";
 import { DEFAULT_RATE_LIMIT_LABEL, fetchUsageForWorkspace } from "@/lib/apiKeyUsage.server";
 
 const NO_STORE_HEADERS: Record<string, string> = {
@@ -23,11 +23,13 @@ function json<T>(payload: T, init?: number | ResponseInit) {
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireSettingsOwnerSession(req);
+    const session = await requireSettingsOwnerResilientSession(req);
     const rawSiteId = req.nextUrl.searchParams.get("siteId")?.trim();
+    const workspaceHints = readApiKeyWorkspaceCookieHints(req);
     const workspace = await resolveApiKeyWorkspace({
       accountId: session.accountId,
       requestedSiteId: rawSiteId || null,
+      ...workspaceHints,
     });
     if (!workspace) {
       return json(

@@ -1,11 +1,8 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
-import { prisma } from "@/lib/prisma";
 import { isApiAuthError } from "@/lib/apiAuth";
-import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
-import { readWorkspace } from "@/lib/workspaceStore.server";
+import { requireSettingsOwnerResilientSession } from "@/lib/settings/ownerAuth.server";
 import { getArcadeGames, findArcadeGame } from "@/lib/arcade/catalog";
 import {
   ARCADE_KIND_404,
@@ -15,7 +12,7 @@ import {
   ArcadeConfigPayload,
   ArcadeConfigResponse,
 } from "@/lib/arcade/settings";
-import { resolveTierFromAccount, type Tier } from "@/lib/billing/featureGates";
+import { type Tier } from "@/lib/billing/featureGates";
 import {
   getAllowedArcadeGames,
   getArcadeLockMapForTier,
@@ -23,6 +20,12 @@ import {
 } from "@/lib/billing/arcadeGates";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { findSiteForAccount } from "@/lib/settings/apiKeysRuntime.server";
+import {
+  readSettingsAccountTier,
+  readSiteArcadeConfig,
+  saveSiteArcadeConfig,
+} from "@/lib/settings/arcadeRuntime.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,31 +46,7 @@ function json<T>(payload: T, init?: number | ResponseInit) {
 }
 
 async function resolveAccountTier(accountId?: string): Promise<Tier> {
-  if (!accountId) {
-    return "free";
-  }
-  const effectivePlan = await getEffectiveAccountPlanContext(accountId).catch(() => null);
-  if (effectivePlan?.planId === "premium_plus") return "premium_plus";
-  if (effectivePlan?.planId === "premium") return "premium";
-  const account = await prisma.account.findUnique({
-    where: { id: accountId },
-    select: {
-      tier: true,
-      trialSeatActive: true,
-      trialEndsAt: true,
-      trialEverUsed: true,
-    },
-  });
-  return resolveTierFromAccount(
-    account
-      ? {
-          tier: String(account.tier),
-          trialSeatActive: account.trialSeatActive,
-          trialEndsAt: account.trialEndsAt,
-          trialEverUsed: account.trialEverUsed,
-        }
-      : null
-  );
+  return readSettingsAccountTier(accountId);
 }
 
 function buildGamesList(): ArcadeConfigResponse["games"] {
@@ -125,37 +104,38 @@ function ensureTheme(value: unknown) {
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireSettingsOwnerSession(req);
+    const session = await requireSettingsOwnerResilientSession(req);
 
     const siteId = (req.nextUrl.searchParams.get("siteId") || "").trim();
     if (!siteId) {
       return json({ ok: false, error: "SITE_ID_REQUIRED" }, 400);
     }
 
-    const workspace = await readWorkspace({ accountId: session.accountId });
-    const projectId = workspace.projectId;
-
-    const site = await prisma.site.findFirst({
-      where: { id: siteId, projectId, isActive: true },
+    const site = await findSiteForAccount({
+      siteId,
+      accountId: session.accountId,
     });
     if (!site) {
       return json({ ok: false, error: "SITE_NOT_FOUND" }, 404);
     }
 
-    const config = await prisma.siteArcadeConfig.findUnique({ where: { siteId: site.id } });
+    const config = await readSiteArcadeConfig(site.id);
     const games = buildGamesList();
     const tier = await resolveAccountTier(session.accountId);
     const allowedGames = getAllowedArcadeGames(tier);
     const lockMap = getArcadeLockMapForTier(tier);
     const allowedSet = new Set(allowedGames);
     const fallbackSlug = allowedGames[0] ?? games[0]?.slug ?? "catch-cavbot";
-    const optionsRecord =
-      config?.optionsJson && typeof config.optionsJson === "object" && !Array.isArray(config.optionsJson)
-        ? (config.optionsJson as Record<string, unknown>)
-        : null;
 
     let sanitizedConfig: ArcadeConfigPayload | null = config
-      ? normalizeArcadeConfigResponse(site.id, config.enabled, config.gameSlug, config.gameVersion, optionsRecord, config.updatedAt)
+      ? normalizeArcadeConfigResponse(
+          site.id,
+          config.enabled,
+          config.gameSlug,
+          config.gameVersion,
+          config.optionsRecord,
+          config.updatedAt,
+        )
       : null;
 
     if (
@@ -191,10 +171,7 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const session = await requireSettingsOwnerSession(req);
-
-    const workspace = await readWorkspace({ accountId: session.accountId });
-    const projectId = workspace.projectId;
+    const session = await requireSettingsOwnerResilientSession(req);
 
     const body = (await readSanitizedJson(req, null)) as Record<string, unknown> | null;
     const siteIdFromBody = typeof body?.siteId === "string" ? body.siteId.trim() : "";
@@ -203,8 +180,9 @@ export async function PUT(req: NextRequest) {
       return json({ ok: false, error: "SITE_ID_REQUIRED" }, 400);
     }
 
-    const site = await prisma.site.findFirst({
-      where: { id: siteId, projectId, isActive: true },
+    const site = await findSiteForAccount({
+      siteId,
+      accountId: session.accountId,
     });
     if (!site) {
       return json({ ok: false, error: "SITE_NOT_FOUND" }, 404);
@@ -214,7 +192,7 @@ export async function PUT(req: NextRequest) {
     const allowedGames = getAllowedArcadeGames(tier);
     const lockMap = getArcadeLockMapForTier(tier);
 
-    const existingConfig = await prisma.siteArcadeConfig.findUnique({ where: { siteId: site.id } });
+    const existingConfig = await readSiteArcadeConfig(site.id);
 
     const enabled = body?.enabled !== undefined ? Boolean(body.enabled) : existingConfig?.enabled ?? false;
 
@@ -253,22 +231,16 @@ export async function PUT(req: NextRequest) {
         typeof optionsRaw.supportEmail === "string" ? validateEmail(optionsRaw.supportEmail) : undefined,
     });
 
-    const nextConfig = await prisma.siteArcadeConfig.upsert({
-      where: { siteId: site.id },
-      create: {
-        siteId: site.id,
-        enabled,
-        gameSlug: requestedSlug || null,
-        gameVersion: requestedVersion || "v1",
-        optionsJson: validatedOptions,
-      },
-      update: {
-        enabled,
-        gameSlug: requestedSlug || null,
-        gameVersion: requestedVersion || existingConfig?.gameVersion || "v1",
-        optionsJson: validatedOptions,
-      },
+    const nextConfig = await saveSiteArcadeConfig({
+      siteId: site.id,
+      enabled,
+      gameSlug: requestedSlug || null,
+      gameVersion: requestedVersion || existingConfig?.gameVersion || "v1",
+      optionsRecord: validatedOptions,
     });
+    if (!nextConfig) {
+      return json({ ok: false, error: "ARCADE_CONFIG_SAVE_FAILED", message: "Unable to save Arcade config." }, 500);
+    }
 
     if (session.accountId) {
       await auditLogWrite({
@@ -286,17 +258,12 @@ export async function PUT(req: NextRequest) {
       });
     }
 
-    const nextOptionsRecord =
-      nextConfig.optionsJson && typeof nextConfig.optionsJson === "object" && !Array.isArray(nextConfig.optionsJson)
-        ? (nextConfig.optionsJson as Record<string, unknown>)
-        : null;
-
     const responseConfig = normalizeArcadeConfigResponse(
       site.id,
       nextConfig.enabled,
       nextConfig.gameSlug,
       nextConfig.gameVersion,
-      nextOptionsRecord,
+      nextConfig.optionsRecord,
       nextConfig.updatedAt
     );
 

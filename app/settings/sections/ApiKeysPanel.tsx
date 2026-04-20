@@ -342,7 +342,7 @@ export default function ApiKeysPanel() {
       try {
         const response = await apiJSON<{ key: ApiKeyDTO; plaintextKey: string }>("/api/settings/api-keys", {
           method: "POST",
-          body: JSON.stringify({ type }),
+          body: JSON.stringify({ type, siteId: payload?.site?.id ?? undefined }),
         });
         await loadData();
         await overrideUsageForSite(response.key.bindings.siteId ?? null);
@@ -359,7 +359,7 @@ export default function ApiKeysPanel() {
         showToast(getErrorMessage(err, "Create key failed"), "watch");
       }
     },
-    [loadData, overrideUsageForSite, showToast]
+    [loadData, overrideUsageForSite, payload?.site?.id, showToast]
   );
 
   const saveOrigins = useCallback(

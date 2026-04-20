@@ -2,7 +2,7 @@ import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthError } from "@/lib/apiAuth";
-import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
+import { requireSettingsOwnerResilientSession } from "@/lib/settings/ownerAuth.server";
 import { canonicalizeAllowlistOrigin, AllowedOriginRow } from "@/originMatch";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -38,7 +38,7 @@ async function getParams(ctx: unknown): Promise<OriginsParams> {
 
 export async function PATCH(req: NextRequest, ctx: unknown) {
   try {
-    const session = await requireSettingsOwnerSession(req);
+    const session = await requireSettingsOwnerResilientSession(req);
 
     const { siteId } = await getParams(ctx);
     if (!siteId) return json({ ok: false, error: "SITE_ID_REQUIRED" }, 400);

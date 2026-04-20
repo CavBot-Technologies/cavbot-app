@@ -2,8 +2,8 @@ import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthError } from "@/lib/apiAuth";
-import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
-import { resolveApiKeyWorkspace } from "@/lib/settings/apiKeyWorkspace.server";
+import { requireSettingsOwnerResilientSession } from "@/lib/settings/ownerAuth.server";
+import { readApiKeyWorkspaceCookieHints, resolveApiKeyWorkspace } from "@/lib/settings/apiKeyWorkspace.server";
 import {
   buildApiKeyInsertData,
   serializeApiKey,
@@ -60,8 +60,12 @@ function toType(raw: unknown): ApiKeyType {
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireSettingsOwnerSession(req);
-    const workspace = await resolveApiKeyWorkspace({ accountId: session.accountId });
+    const session = await requireSettingsOwnerResilientSession(req);
+    const workspaceHints = readApiKeyWorkspaceCookieHints(req);
+    const workspace = await resolveApiKeyWorkspace({
+      accountId: session.accountId,
+      ...workspaceHints,
+    });
     if (!workspace) {
       const emptyPayload: KeyResponse = {
         ok: true,
@@ -124,8 +128,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await requireSettingsOwnerSession(req);
-    const workspace = await resolveApiKeyWorkspace({ accountId: session.accountId });
+    const session = await requireSettingsOwnerResilientSession(req);
+    const workspaceHints = readApiKeyWorkspaceCookieHints(req);
+    const workspace = await resolveApiKeyWorkspace({
+      accountId: session.accountId,
+      ...workspaceHints,
+    });
     if (!workspace) return json({ ok: false, error: "PROJECT_NOT_FOUND" }, 404);
 
     const body = (await readSanitizedJson(req, null)) as ApiKeyCreateBody | null;

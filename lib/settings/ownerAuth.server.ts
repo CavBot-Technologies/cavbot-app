@@ -4,8 +4,10 @@ import { cookies, headers } from "next/headers";
 
 import {
   getAppOrigin,
+  isApiAuthError,
   requireAccountContext,
   requireAccountRole,
+  requireLowRiskWriteSession,
   requireSession,
   requireUser,
   type CavbotAccountSession,
@@ -17,6 +19,20 @@ export async function requireSettingsOwnerSession(req: Request): Promise<CavbotA
   requireAccountContext(session);
   requireAccountRole(session, ["OWNER"]);
   return session;
+}
+
+export async function requireSettingsOwnerResilientSession(req: Request): Promise<CavbotAccountSession> {
+  try {
+    return await requireSettingsOwnerSession(req);
+  } catch (error: unknown) {
+    if (!isApiAuthError(error) || error.code !== "AUTH_BACKEND_UNAVAILABLE") throw error;
+
+    const session = await requireLowRiskWriteSession(req);
+    requireUser(session);
+    requireAccountContext(session);
+    requireAccountRole(session, ["OWNER"]);
+    return session;
+  }
 }
 
 export async function requireSettingsOwnerFromRequestContext(pathname = "/settings"): Promise<CavbotAccountSession> {
@@ -37,5 +53,5 @@ export async function requireSettingsOwnerFromRequestContext(pathname = "/settin
       "user-agent": String(headerStore.get("user-agent") || "settings-page"),
     },
   });
-  return requireSettingsOwnerSession(request);
+  return requireSettingsOwnerResilientSession(request);
 }

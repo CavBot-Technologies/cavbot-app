@@ -20,13 +20,21 @@ test("site-wide plan gates resolve from the effective account plan context", () 
     "lib/moduleGate.server.ts",
     "lib/scanner.ts",
     "app/api/auth/session/route.ts",
-    "app/api/settings/arcade/config/route.ts",
   ];
 
   for (const relPath of files) {
     const source = read(relPath);
     assert.equal(source.includes("getEffectiveAccountPlanContext"), true, relPath);
   }
+});
+
+test("settings arcade config resolves effective tier through the runtime-safe settings helper", () => {
+  const routeSource = read("app/api/settings/arcade/config/route.ts");
+  const helperSource = read("lib/settings/arcadeRuntime.server.ts");
+
+  assert.equal(routeSource.includes("readSettingsAccountTier"), true);
+  assert.equal(routeSource.includes("getEffectiveAccountPlanContext"), false);
+  assert.equal(helperSource.includes("resolveCavCloudEffectivePlan"), true);
 });
 
 test("auth session bootstrap exposes effective tier instead of only the raw membership tier", () => {
