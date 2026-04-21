@@ -170,7 +170,8 @@ export async function GET(req: NextRequest) {
       range,
       siteOrigin,
       siteId,
-      projectKey: access.projectKey,
+      projectKey: access.summaryAuth.projectKey,
+      adminToken: access.summaryAuth.adminToken,
       requestId: `console_${project.id}_${Date.now()}`,
     });
 

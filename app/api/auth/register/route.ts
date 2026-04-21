@@ -28,9 +28,10 @@ import {
   withAuthTransaction,
 } from "@/lib/authDb";
 import { buildPreferredPersonalWorkspaceSlug, derivePersonalWorkspaceNameFromEmail } from "@/lib/profileIdentity";
+import { createProjectKeyMaterial } from "@/lib/projectKeyMaterial.server";
 import { sendSignupWelcomeEmail } from "@/lib/signupWelcomeEmail.server";
 
-import { createHash, randomBytes } from "crypto";
+import { randomBytes } from "crypto";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
 import { readCoarseRequestGeo } from "@/lib/requestGeo";
 
@@ -87,10 +88,6 @@ function toSlug(input: unknown) {
 
 function randomToken(bytes = 32) {
   return randomBytes(bytes).toString("hex");
-}
-
-async function sha256Hex(text: string) {
-  return createHash("sha256").update(text).digest("hex");
 }
 
 function toStringValue(value: unknown): string | undefined {
@@ -250,9 +247,13 @@ export async function POST(req: Request) {
 
     const pass = await hashPassword(password);
 
-    const serverKeyRaw = `cavbot_sk_${randomToken(24)}`;
-    const serverKeyHash = await sha256Hex(serverKeyRaw);
-    const serverKeyLast4 = serverKeyRaw.slice(-4);
+    const {
+      serverKeyRaw,
+      serverKeyHash,
+      serverKeyLast4,
+      serverKeyEnc,
+      serverKeyEncIv,
+    } = await createProjectKeyMaterial();
 
     const now = new Date();
     const trialDays = 14;
@@ -335,11 +336,13 @@ export async function POST(req: Request) {
                 "slug",
                 "serverKeyHash",
                 "serverKeyLast4",
+                "serverKeyEnc",
+                "serverKeyEncIv",
                 "isActive",
                 "updatedAt"
-              ) VALUES ($1, $2, 'primary', $3, $4, true, NOW())
+              ) VALUES ($1, $2, 'primary', $3, $4, $5, $6, true, NOW())
               RETURNING "id", "slug"`,
-            [accountId, "Primary Project", serverKeyHash, serverKeyLast4],
+            [accountId, "Primary Project", serverKeyHash, serverKeyLast4, serverKeyEnc, serverKeyEncIv],
           );
 
           const project = {

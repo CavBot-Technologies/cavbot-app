@@ -276,6 +276,7 @@ export async function getProjectSummary(
   options?: SummaryOptions
 ): Promise<ProjectSummary> {
   const { baseUrl } = getEnv();
+  const useAdminAuth = Boolean(options?.auth?.adminToken);
 
   const url = withQuery(`${baseUrl}/v1/projects/${String(projectId)}/summary`, {
     range: options?.range,
@@ -286,8 +287,10 @@ export async function getProjectSummary(
   const res = await fetchWithTimeout(url, {
     method: "GET",
     headers: buildHeaders({
-      requireProjectKey: true,
+      requireAdmin: useAdminAuth,
+      requireProjectKey: !useAdminAuth,
       projectKey: options?.auth?.projectKey,
+      adminToken: options?.auth?.adminToken,
       requestId: options?.auth?.requestId,
     }),
     cache: "no-store",
@@ -317,13 +320,18 @@ export async function getProjectSummaryForTenant(input: {
   siteId?: string;
   siteOrigin?: string;
   projectKey?: string;
+  adminToken?: string;
   requestId?: string;
 }): Promise<ProjectSummary> {
   return getProjectSummary(input.projectId, {
     range: input.range,
     siteId: input.siteId,
     siteOrigin: input.siteOrigin,
-    auth: { projectKey: input.projectKey, requestId: input.requestId },
+    auth: {
+      projectKey: input.projectKey,
+      adminToken: input.adminToken,
+      requestId: input.requestId,
+    },
   });
 }
 

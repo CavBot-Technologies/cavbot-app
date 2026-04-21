@@ -1,7 +1,12 @@
 import "server-only";
 
 import { getAuthPool } from "@/lib/authDb";
-import { getProjectSummaryForTenant, type SummaryRange } from "@/lib/cavbotApi.server";
+import {
+  getEnv,
+  getProjectSummaryForTenant,
+  type RequestAuthOverride,
+  type SummaryRange,
+} from "@/lib/cavbotApi.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
 import { decryptAesGcm } from "@/lib/cryptoAesGcm.server";
 import { resolveEffectiveAccountIdFromHeaders } from "@/lib/effectiveSessionAccount.server";
@@ -23,6 +28,16 @@ type TenantProjectSummaryResult = {
     name: string | null;
   };
   summary: ProjectSummary;
+};
+
+type TenantProjectAccess = {
+  accountId: string;
+  project: {
+    id: number;
+    slug: string;
+    name: string | null;
+  };
+  summaryAuth: RequestAuthOverride;
 };
 
 function normalizeProjectId(input: string | number | null | undefined) {
@@ -90,7 +105,7 @@ export async function resolveTenantProjectAccess(input: {
   accountId?: string | null;
   projectId?: string | number | null;
   projectSlug?: string | null;
-}) {
+}): Promise<TenantProjectAccess> {
   const accountId =
     (await resolveEffectiveAccountIdFromHeaders().catch(() => null)) ||
     String(input.accountId || "").trim() ||
@@ -103,16 +118,24 @@ export async function resolveTenantProjectAccess(input: {
     projectSlug: String(input.projectSlug || "").trim() || undefined,
   });
   if (!project) throw new Error("PROJECT_NOT_FOUND");
-  if (!project.serverKeyEnc || !project.serverKeyEncIv) throw new Error("PROJECT_KEY_MISSING");
 
-  const projectKey = String(
-    await decryptAesGcm({
-      enc: String(project.serverKeyEnc),
-      iv: String(project.serverKeyEncIv),
-    }),
-  ).trim();
+  let summaryAuth: RequestAuthOverride | null = null;
 
-  if (!projectKey) throw new Error("PROJECT_KEY_DECRYPT_FAILED");
+  if (project.serverKeyEnc && project.serverKeyEncIv) {
+    const projectKey = String(
+      await decryptAesGcm({
+        enc: String(project.serverKeyEnc),
+        iv: String(project.serverKeyEncIv),
+      }),
+    ).trim();
+
+    if (!projectKey) throw new Error("PROJECT_KEY_DECRYPT_FAILED");
+    summaryAuth = { projectKey };
+  } else {
+    const adminToken = String(getEnv().adminToken || "").trim();
+    if (!adminToken) throw new Error("PROJECT_SUMMARY_AUTH_UNAVAILABLE");
+    summaryAuth = { adminToken };
+  }
 
   return {
     accountId,
@@ -121,7 +144,7 @@ export async function resolveTenantProjectAccess(input: {
       slug: String(project.slug),
       name: project.name ?? null,
     },
-    projectKey,
+    summaryAuth,
   };
 }
 
@@ -139,7 +162,8 @@ export async function getTenantProjectSummary(
     range: input.range,
     siteId: input.siteId,
     siteOrigin: input.siteOrigin,
-    projectKey: access.projectKey,
+    projectKey: access.summaryAuth.projectKey,
+    adminToken: access.summaryAuth.adminToken,
     requestId: input.requestId,
   });
 

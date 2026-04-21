@@ -36,6 +36,9 @@ test("tenant summary helper resolves per-project auth", () => {
   const source = fs.readFileSync(new URL("../lib/projectSummary.server.ts", import.meta.url), "utf8");
   assert.equal(source.includes("getAuthPool"), true);
   assert.equal(source.includes("decryptAesGcm"), true);
+  assert.equal(source.includes("getEnv"), true);
+  assert.equal(source.includes("summaryAuth"), true);
+  assert.equal(source.includes("adminToken"), true);
   assert.equal(source.includes("getProjectSummaryForTenant"), true);
   assert.equal(source.includes("projectAuth.server"), false);
   assert.equal(source.includes("lib/prisma"), false);
@@ -49,4 +52,33 @@ test("workspace and module gating use effective session account resolution", () 
   assert.equal(workspace.includes("resolveEffectiveAccountIdFromHeaders"), true);
   assert.equal(gate.includes("resolveEffectiveAccountIdForSession"), true);
   assert.equal(apiConsole.includes("resolveEffectiveAccountIdForSession"), true);
+});
+
+test("project creation paths persist encrypted server keys", () => {
+  const files = [
+    "lib/workspaceProjects.server.ts",
+    "lib/currentProject.server.ts",
+    "app/api/auth/register/route.ts",
+    "app/api/auth/oauth/google/callback/route.ts",
+    "app/api/auth/oauth/github/callback/route.ts",
+  ];
+
+  for (const relPath of files) {
+    const source = fs.readFileSync(new URL(`../${relPath}`, import.meta.url), "utf8");
+    assert.equal(
+      source.includes("serverKeyEnc"),
+      true,
+      `${relPath} should persist encrypted server key ciphertext`,
+    );
+    assert.equal(
+      source.includes("serverKeyEncIv"),
+      true,
+      `${relPath} should persist encrypted server key IV`,
+    );
+    assert.equal(
+      source.includes("createProjectKeyMaterial"),
+      true,
+      `${relPath} should use shared project key material generation`,
+    );
+  }
 });

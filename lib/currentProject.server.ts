@@ -1,40 +1,10 @@
 // lib/currentProject.server.ts
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { webcrypto as nodeCrypto } from "crypto";
+import { createProjectKeyMaterial } from "@/lib/projectKeyMaterial.server";
 
 function env(name: string) {
   return (process.env[name] || "").trim();
-}
-
-// Node + Edge crypto safety
-function getCrypto(): Crypto {
-  if (globalThis.crypto?.subtle) return globalThis.crypto;
-  return nodeCrypto as Crypto;
-}
-
-function last4(s: string) {
-  const x = (s || "").trim();
-  return x.length >= 4 ? x.slice(-4) : x;
-}
-
-function bytesToHex(bytes: Uint8Array) {
-  let out = "";
-  for (let i = 0; i < bytes.length; i++) out += bytes[i].toString(16).padStart(2, "0");
-  return out;
-}
-
-async function sha256Hex(input: string) {
-  const c = getCrypto();
-  const data = new TextEncoder().encode(input);
-  const hash = await c.subtle.digest("SHA-256", data);
-  return bytesToHex(new Uint8Array(hash));
-}
-
-function randomToken(bytes = 24) {
-  const c = getCrypto();
-  const b = c.getRandomValues(new Uint8Array(bytes));
-  return bytesToHex(b);
 }
 
 /**
@@ -124,9 +94,8 @@ export async function getCurrentProject(opts?: {
 
     // If none exist, provision a default project (safe, no raw key returned)
     if (!project) {
-      const serverKeyRaw = `cavbot_sk_${randomToken(24)}`;
-      const serverKeyHash = await sha256Hex(serverKeyRaw);
-      const serverKeyLast4 = last4(serverKeyRaw);
+      const { serverKeyHash, serverKeyLast4, serverKeyEnc, serverKeyEncIv } =
+        await createProjectKeyMaterial();
 
       const created = await prisma.project.create({
         data: {
@@ -135,6 +104,8 @@ export async function getCurrentProject(opts?: {
           slug: "primary",
           serverKeyHash,
           serverKeyLast4,
+          serverKeyEnc,
+          serverKeyEncIv,
           isActive: true,
         },
         select: {
@@ -163,8 +134,8 @@ export async function getCurrentProject(opts?: {
     throw new Error("Missing env: CAVBOT_PROJECT_KEY (server secret key) or CAVBOT_SECRET_KEY");
   }
 
-  const serverKeyHash = await sha256Hex(rawSecret);
-  const serverKeyLast4 = last4(rawSecret);
+  const { serverKeyHash, serverKeyLast4, serverKeyEnc, serverKeyEncIv } =
+    await createProjectKeyMaterial(rawSecret);
 
   // “System account” bootstrap (single-project mode)
   const accountSlug = env("CAVBOT_SYSTEM_ACCOUNT_SLUG") || "cavbot";
@@ -185,6 +156,8 @@ export async function getCurrentProject(opts?: {
     where: { serverKeyHash },
     update: {
       serverKeyLast4,
+      serverKeyEnc,
+      serverKeyEncIv,
       isActive: true,
       name: projectName,
       slug: projectSlug,
@@ -196,6 +169,8 @@ export async function getCurrentProject(opts?: {
       slug: projectSlug,
       serverKeyHash,
       serverKeyLast4,
+      serverKeyEnc,
+      serverKeyEncIv,
       isActive: true,
     },
     select: {

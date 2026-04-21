@@ -2,10 +2,11 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import type pg from "pg";
-import { createHash, randomBytes } from "crypto";
+import { randomBytes } from "crypto";
 
 import { getAuthPool, isPgUniqueViolation, withAuthTransaction } from "@/lib/authDb";
 import { isPermissionDeniedError, isSchemaMismatchError } from "@/lib/dbSchemaGuard";
+import { createProjectKeyMaterial } from "@/lib/projectKeyMaterial.server";
 
 const DEFAULT_PROJECT_NAME = "Primary Project";
 const DEFAULT_PROJECT_SLUG = "primary";
@@ -112,15 +113,6 @@ export type WorkspaceBootstrapErrorCode =
   | "DB_SCHEMA_OUT_OF_DATE"
   | "DB_PERMISSION_DENIED"
   | "WORKSPACE_BOOTSTRAP_FAILED";
-
-function sha256Hex(input: string) {
-  return createHash("sha256").update(input).digest("hex");
-}
-
-function last4(input: string) {
-  const value = String(input || "").trim();
-  return value.length >= 4 ? value.slice(-4) : value;
-}
 
 function toInt(value: unknown) {
   const n = Number(value);
@@ -311,9 +303,8 @@ export async function ensureActiveWorkspaceProject(accountId: string) {
     isActive: true,
   });
 
-  const serverKeyRaw = `cavbot_sk_${randomBytes(24).toString("hex")}`;
-  const serverKeyHash = sha256Hex(serverKeyRaw);
-  const serverKeyLast4 = last4(serverKeyRaw);
+  const { serverKeyHash, serverKeyLast4, serverKeyEnc, serverKeyEncIv } =
+    await createProjectKeyMaterial();
 
   return withAuthTransaction(async (tx) => {
     const retryExisting = await findFirstProjectFrom(tx, accountId, false);
@@ -339,13 +330,15 @@ export async function ensureActiveWorkspaceProject(accountId: string) {
              "slug",
              "serverKeyHash",
              "serverKeyLast4",
+             "serverKeyEnc",
+             "serverKeyEncIv",
              "isActive",
              "createdAt",
              "updatedAt"
            )
-           VALUES ($1, $2, $3, $4, $5, true, NOW(), NOW())
+           VALUES ($1, $2, $3, $4, $5, $6, $7, true, NOW(), NOW())
            RETURNING ${PROJECT_COLUMN_SQL}`,
-          [accountId, DEFAULT_PROJECT_NAME, slug, serverKeyHash, serverKeyLast4]
+          [accountId, DEFAULT_PROJECT_NAME, slug, serverKeyHash, serverKeyLast4, serverKeyEnc, serverKeyEncIv]
         );
 
         if (!inserted) {

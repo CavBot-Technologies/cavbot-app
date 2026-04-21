@@ -9,9 +9,10 @@ import {
   hasMeaningfulProfileName,
   normalizeProviderDisplayName,
 } from "@/lib/profileIdentity";
+import { createProjectKeyMaterial } from "@/lib/projectKeyMaterial.server";
 import { createUserSession, getAppOrigin, isApiAuthError, sessionCookieOptions } from "@/lib/apiAuth";
 import { auditLogWrite } from "@/lib/audit";
-import { createHash, randomBytes } from "crypto";
+import { randomBytes } from "crypto";
 import { sendSignupWelcomeEmail } from "@/lib/signupWelcomeEmail.server";
 import { readCoarseRequestGeo } from "@/lib/requestGeo";
 
@@ -80,10 +81,6 @@ function normalizeEmail(x: unknown) {
 
 function randomToken(bytes = 32) {
   return randomBytes(bytes).toString("hex");
-}
-
-async function sha256Hex(text: string) {
-  return createHash("sha256").update(text).digest("hex");
 }
 
 async function findAvailableUsername(tx: Prisma.TransactionClient, base: string) {
@@ -321,9 +318,8 @@ export async function GET(req: NextRequest) {
         const trialDays = 14;
         const trialEndsAt = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
 
-        const serverKeyRaw = `cavbot_sk_${randomToken(24)}`;
-        const serverKeyHash = await sha256Hex(serverKeyRaw);
-        const serverKeyLast4 = serverKeyRaw.slice(-4);
+        const { serverKeyHash, serverKeyLast4, serverKeyEnc, serverKeyEncIv } =
+          await createProjectKeyMaterial();
 
         const account = await tx.account.create({
           data: {
@@ -363,6 +359,8 @@ export async function GET(req: NextRequest) {
             slug: "primary",
             serverKeyHash,
             serverKeyLast4,
+            serverKeyEnc,
+            serverKeyEncIv,
             isActive: true,
           },
           select: { id: true },
