@@ -10,7 +10,7 @@ import LockedModule from "@/components/LockedModule";
 import AppShell from "@/components/AppShell";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
 import { readWorkspace } from "@/lib/workspaceStore.server";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
+import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -1012,10 +1012,12 @@ export default async function A11yPage({ searchParams }: PageProps) {
   let a11y: A11yPayload = {};
 
   try {
-    summary = await getProjectSummary(projectId, {
+    const { summary: loadedSummary } = await getTenantProjectSummary({
+      projectId,
       range: range === "30d" ? "30d" : "7d",
       siteOrigin: activeSite.url || undefined,
     });
+    summary = loadedSummary;
     a11y = normalizeA11yFromSummary(summary);
   } catch {
     summary = null;

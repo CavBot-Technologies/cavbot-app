@@ -8,10 +8,10 @@ import AppShell from "@/components/AppShell";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
 import DashboardToolsControls from "@/components/DashboardToolsControls";
 import { readWorkspace } from "@/lib/workspaceStore.server";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
 import { prisma } from "@/lib/prisma";
 import { findArcadeGame } from "@/lib/arcade/catalog";
 import { ARCADE_KIND_404 } from "@/lib/arcade/settings";
+import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -694,10 +694,12 @@ export default async function ControlRoomGamesPage({ searchParams }: PageProps) 
   let cr: ControlRoomPayload = {};
 
   try {
-    summary = await getProjectSummary(projectId, {
+    const { summary: loadedSummary } = await getTenantProjectSummary({
+      projectId,
       range: range === "30d" ? "30d" : "7d",
       siteOrigin: activeSite.url || undefined,
     });
+    summary = loadedSummary;
     cr = normalizeControlRoomFromSummary(summary);
   } catch {
     summary = null;

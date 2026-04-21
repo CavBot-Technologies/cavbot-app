@@ -11,7 +11,7 @@ import AppShell from "@/components/AppShell";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
 import { readWorkspace } from "@/lib/workspaceStore.server";
 import type { WorkspacePayload } from "@/lib/workspaceStore.server";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
+import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 import {
   generateSeoActions,
   medianSeoScore,
@@ -641,10 +641,12 @@ export default async function SeoPage({ searchParams }: PageProps) {
   let favicon: FaviconIntelligenceResult | null = null;
 
   try {
-    summary = await getProjectSummary(projectId, {
+    const { summary: loadedSummary } = await getTenantProjectSummary({
+      projectId,
       range: range === "30d" ? "30d" : "7d",
       siteOrigin: activeSite.url || undefined,
     });
+    summary = loadedSummary;
     seo = normalizeSeoFromSummary(summary);
     vitals = normalizeVitalsFromSummary(summary);
   } catch {

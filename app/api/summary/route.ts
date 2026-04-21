@@ -1,10 +1,9 @@
 // app/api/summary/route.ts
 import "server-only";
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireAccountContext, requireSession } from "@/lib/apiAuth";
 import type { SummaryRange } from "@/lib/cavbotApi.server";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
+import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,11 +60,16 @@ function normalizeMaybeOrigin(input: string | null): string | undefined {
 function asHttpError(e: unknown) {
   const msg = String((e as { message?: unknown })?.message || e);
 
+  if (msg === "ACCOUNT_CONTEXT_REQUIRED") {
+    return { status: 401, payload: { ok: false, error: "UNAUTHENTICATED" } };
+  }
   if (msg === "UNAUTHORIZED" || msg === "NO_SESSION" || msg === "UNAUTHENTICATED") {
     return { status: 401, payload: { ok: false, error: "UNAUTHENTICATED" } };
   }
   if (msg === "FORBIDDEN") return { status: 403, payload: { ok: false, error: "FORBIDDEN" } };
   if (msg === "BAD_ORIGIN") return { status: 400, payload: { ok: false, error: "BAD_ORIGIN" } };
+  if (msg === "PROJECT_NOT_FOUND") return { status: 404, payload: { ok: false, error: "PROJECT_NOT_FOUND" } };
+  if (msg === "PROJECT_KEY_MISSING") return { status: 409, payload: { ok: false, error: "PROJECT_KEY_MISSING" } };
 
   return { status: 500, payload: { ok: false, error: "SUMMARY_PROXY_FAILED" } };
 }
@@ -80,24 +84,6 @@ export async function GET(req: Request) {
     const pid = parseProjectId(searchParams.get("projectId"));
     const projectSlug = String(searchParams.get("projectSlug") ?? "").trim();
 
-    const project = pid
-      ? await prisma.project.findFirst({
-          where: { id: pid, accountId: session.accountId!, isActive: true },
-          select: { id: true, slug: true, name: true },
-        })
-      : projectSlug
-      ? await prisma.project.findFirst({
-          where: { slug: projectSlug, accountId: session.accountId!, isActive: true },
-          select: { id: true, slug: true, name: true },
-        })
-      : await prisma.project.findFirst({
-          where: { accountId: session.accountId!, isActive: true },
-          orderBy: { createdAt: "asc" },
-          select: { id: true, slug: true, name: true },
-        });
-
-    if (!project) return json({ ok: false, error: "PROJECT_NOT_FOUND" }, 404);
-
     const range = normalizeRange(searchParams.get("range"));
 
     const siteOrigin = normalizeMaybeOrigin(
@@ -105,7 +91,10 @@ export async function GET(req: Request) {
     );
     const siteId = String(searchParams.get("siteId") ?? "").trim() || undefined;
 
-    const data = await getProjectSummary(String(project.id), {
+    const { project, summary: data } = await getTenantProjectSummary({
+      accountId: session.accountId,
+      projectId: pid,
+      projectSlug,
       range,
       siteOrigin,
       siteId,

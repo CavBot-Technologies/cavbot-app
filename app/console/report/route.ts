@@ -3,9 +3,11 @@ import "server-only";
 import { NextResponse } from "next/server";
 
 import { requireAccountContext, requireSession } from "@/lib/apiAuth";
-import { getProjectSummary, type SummaryRange } from "@/lib/cavbotApi.server";
+import type { SummaryRange } from "@/lib/cavbotApi.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
+import { resolveEffectiveAccountIdForSession } from "@/lib/effectiveSessionAccount.server";
 import { prisma } from "@/lib/prisma";
+import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -560,7 +562,7 @@ export async function GET(req: Request) {
     const session = await requireSession(req);
     requireAccountContext(session);
 
-    const accountId = s(session.accountId);
+    const accountId = s((await resolveEffectiveAccountIdForSession(session).catch(() => null)) || session.accountId);
     if (!accountId) {
       return NextResponse.json({ ok: false, error: "ACCOUNT_CONTEXT_REQUIRED" }, { status: 401 });
     }
@@ -589,7 +591,9 @@ export async function GET(req: Request) {
       topSiteId: project.topSiteId,
     });
 
-    const summary = await getProjectSummary(String(project.id), {
+    const { summary } = await getTenantProjectSummary({
+      accountId,
+      projectId: project.id,
       range,
       siteId: site?.id || undefined,
       siteOrigin: site?.origin || undefined,

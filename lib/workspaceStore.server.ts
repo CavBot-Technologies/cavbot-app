@@ -1,9 +1,9 @@
 import "server-only";
 
 import type { Prisma } from "@prisma/client";
-import { cookies, headers } from "next/headers";
-import { getAppOrigin, getSession } from "@/lib/apiAuth";
+import { cookies } from "next/headers";
 import { getAuthPool } from "@/lib/authDb";
+import { resolveEffectiveAccountIdFromHeaders } from "@/lib/effectiveSessionAccount.server";
 import { originsShareWebsiteContext } from "@/originMatch";
 import { resolveAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
 import { findAccountTier, listActiveWorkspaceSites } from "@/lib/workspaceSites.server";
@@ -126,28 +126,7 @@ async function cookieSetOrDelete(key: string, value: string) {
 }
 
 async function inferAccountIdFromSessionCookie(): Promise<string | null> {
-  try {
-    const headerStore = await headers();
-    const cookie = String(headerStore.get("cookie") || "").trim();
-    if (!cookie) return null;
-
-    const fallback = new URL(getAppOrigin());
-    const host = String(headerStore.get("x-forwarded-host") || headerStore.get("host") || fallback.host).trim();
-    const proto = String(headerStore.get("x-forwarded-proto") || fallback.protocol.replace(/:$/, "")).trim() || "http";
-
-    const req = new Request(`${proto}://${host}/_workspace`, {
-      headers: {
-        cookie,
-        host,
-      },
-    });
-
-    const sess = await getSession(req);
-    const accountId = sess?.systemRole === "user" ? String(sess.accountId || "").trim() : "";
-    return accountId || null;
-  } catch {
-    return null;
-  }
+  return resolveEffectiveAccountIdFromHeaders();
 }
 
 async function findProjectPointer(projectId: number) {

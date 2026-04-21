@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { gateModuleAccess } from "@/lib/moduleGate.server";
 import { readWorkspace } from "@/lib/workspaceStore.server";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
+import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 import {
   generateSeoActions,
   medianSeoScore,
@@ -293,10 +293,12 @@ export async function GET(req: Request) {
   let favicon = null as Awaited<ReturnType<typeof buildFaviconIntelligence>> | null;
 
   try {
-    summary = await getProjectSummary(projectId, {
+    const { summary: loadedSummary } = await getTenantProjectSummary({
+      projectId,
       range: range === "30d" ? "30d" : "7d",
       siteOrigin: activeSite.url || undefined,
     });
+    summary = loadedSummary;
     seo = normalizeSeoFromSummary(summary);
     vitals = normalizeVitalsFromSummary(summary);
   } catch {

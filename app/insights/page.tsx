@@ -10,8 +10,8 @@ import LockedModule from "@/components/LockedModule";
 import AppShell from "@/components/AppShell";
 import { readWorkspace } from "@/lib/workspaceStore.server";
 import type { WorkspacePayload } from "@/lib/workspaceStore.server";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
+import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -1528,10 +1528,12 @@ export default async function InsightsPage({ searchParams }: PageProps) {
   let scoreTrendRaw: ScoreTrendPoint[] = [];
 
   try {
-    summary = await getProjectSummary(projectId, {
+    const { summary: loadedSummary } = await getTenantProjectSummary({
+      projectId,
       range: range === "30d" ? "30d" : "7d",
       siteOrigin: activeSite.url || undefined,
     });
+    summary = loadedSummary;
 
     guardianScore = pickNumber(summary, [
       "guardianScore",

@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 
 import { isApiAuthError, requireSession, requireAccountContext } from "@/lib/apiAuth";
 import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
+import { resolveEffectiveAccountIdForSession } from "@/lib/effectiveSessionAccount.server";
 import { resolvePlanIdFromTier, hasModule, type ModuleId } from "@/lib/plans";
 
 export type GateMode = "screen" | "redirect";
@@ -42,7 +43,7 @@ export async function gateModuleAccess(
     throw error;
   }
 
-  const accountId = sess.accountId!;
+  const accountId = (await resolveEffectiveAccountIdForSession(sess).catch(() => null)) || sess.accountId!;
   const plan = await getEffectiveAccountPlanContext(accountId).catch(() => null);
   const planId = plan?.planId ?? resolvePlanIdFromTier("FREE");
   const allowed = hasModule(planId, moduleId);

@@ -8,8 +8,8 @@ import AppShell from "@/components/AppShell";
 import DashboardToolsControls from "@/components/DashboardToolsControls";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
 import { readWorkspace } from "@/lib/workspaceStore.server";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
+import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -612,10 +612,12 @@ export default async function RoutesPage({ searchParams }: PageProps) {
   let trend: TrendPoint[] = [];
 
   try {
-    summary = await getProjectSummary(projectId, {
+    const { summary: loadedSummary } = await getTenantProjectSummary({
+      projectId,
       range: range === "30d" ? "30d" : "7d",
       siteOrigin: activeSite.url || undefined,
     });
+    summary = loadedSummary as ProjectSummaryWithTrend;
     routes = normalizeRoutesFromSummary(summary);
 
     const rawTrend = range === "30d" ? summary?.trend30d ?? summary?.trend ?? null : summary?.trend7d ?? summary?.trend ?? null;

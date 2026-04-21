@@ -6,6 +6,7 @@ import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/api
 import type { SummaryRange } from "@/lib/cavbotApi.server";
 import { CavBotApiError, getProjectSummaryForTenant } from "@/lib/cavbotApi.server";
 import { decryptAesGcm } from "@/lib/cryptoAesGcm.server";
+import { resolveEffectiveAccountIdForSession } from "@/lib/effectiveSessionAccount.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -118,6 +119,7 @@ export async function GET(req: NextRequest) {
     // MUST be NextRequest so apiAuth can reliably read cookies
     const session = await requireSession(req);
     requireAccountContext(session);
+    const accountId = (await resolveEffectiveAccountIdForSession(session).catch(() => null)) || session.accountId!;
 
     const { searchParams } = req.nextUrl;
     const range = normalizeRange(searchParams.get("range"));
@@ -140,7 +142,7 @@ export async function GET(req: NextRequest) {
 
     const project = pid
       ? await prisma.project.findFirst({
-          where: { id: pid, accountId: session.accountId!, isActive: true },
+          where: { id: pid, accountId, isActive: true },
           select: {
             id: true,
             slug: true,
@@ -151,7 +153,7 @@ export async function GET(req: NextRequest) {
         })
       : projectSlug
       ? await prisma.project.findFirst({
-          where: { slug: projectSlug, accountId: session.accountId!, isActive: true },
+          where: { slug: projectSlug, accountId, isActive: true },
           select: {
             id: true,
             slug: true,
@@ -161,7 +163,7 @@ export async function GET(req: NextRequest) {
           },
         })
       : await prisma.project.findFirst({
-          where: { accountId: session.accountId!, isActive: true },
+          where: { accountId, isActive: true },
           orderBy: { createdAt: "asc" },
           select: {
             id: true,

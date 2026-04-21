@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 
 import { gateModuleAccess } from "@/lib/moduleGate.server";
 import { readWorkspace } from "@/lib/workspaceStore.server";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
 import { buildErrorInsights } from "@/lib/errors/errorInsights";
+import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 
 // Keep the API stable and safe:
 // - Errors remains Premium-locked via gateModuleAccess("errors")
@@ -224,10 +224,12 @@ export async function GET(req: Request) {
   let errors: ErrorsPayload = { updatedAtISO: null, totals: {}, trend: [], groups: [], recent: [] };
 
   try {
-    summary = await getProjectSummary(projectId, {
+    const { summary: loadedSummary } = await getTenantProjectSummary({
+      projectId,
       range: range === "30d" ? "30d" : "7d",
       siteOrigin: activeSite.url || undefined,
     });
+    summary = loadedSummary;
     errors = normalizeErrorsFromSummary(summary);
   } catch {
     summary = null;
@@ -258,4 +260,3 @@ export async function GET(req: Request) {
   res.headers.set("Cache-Control", "no-store, max-age=0");
   return res;
 }
-

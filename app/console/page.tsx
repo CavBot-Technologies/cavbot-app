@@ -12,10 +12,10 @@ import { COUNTRY_TERRITORY_ISO } from "@/geo/countries";
 import { REGION_GROUPED } from "@/geo/regions";
 import { getSession } from "@/lib/apiAuth";
 import { findUserById, getAuthPool } from "@/lib/authDb";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
 import type { SummaryRange } from "@/lib/cavbotApi.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
 import { prisma } from "@/lib/prisma";
+import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 import { readWorkspace } from "@/lib/workspaceStore.server";
 import type { WorkspacePayload } from "@/lib/workspaceStore.server";
 
@@ -847,19 +847,24 @@ export default async function ConsolePage({ searchParams }: PageProps) {
   const summarySiteOrigin = activeSite.url || undefined;
 
   try {
-    // company-grade: pass selected range + origin and let API decide aggregation
-    data = await getProjectSummary(projectId, {
+    const { summary } = await getTenantProjectSummary({
+      projectId,
       range: summaryRange,
       siteOrigin: summarySiteOrigin,
+      requestId: `console_page_${projectId}_${summaryRange}`,
     });
+    data = summary;
   } catch (error) {
     // Backward-safe fallback while upstream rolls out full 24h/14d support.
     if (summaryRange === "24h" || summaryRange === "14d") {
       try {
-        data = await getProjectSummary(projectId, {
+        const { summary } = await getTenantProjectSummary({
+          projectId,
           range: "7d",
           siteOrigin: summarySiteOrigin,
+          requestId: `console_page_${projectId}_7d_fallback`,
         });
+        data = summary;
       } catch (fallbackError) {
         loadError = fallbackError;
       }

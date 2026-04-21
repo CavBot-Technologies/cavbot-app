@@ -10,10 +10,10 @@ import { headers } from "next/headers";
 import AppShell from "@/components/AppShell";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
 import { readWorkspace } from "@/lib/workspaceStore.server";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
 import { gateModuleAccess } from "@/lib/moduleGate.server";
 import LockedModule from "@/components/LockedModule";
 import { buildErrorInsights } from "@/lib/errors/errorInsights";
+import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 
 declare global {
   // JSX intrinsic element augmentation is one of the few valid namespace uses in TS.
@@ -492,10 +492,12 @@ export default async function ErrorsPage({ searchParams }: PageProps) {
   let errors: ErrorsPayload = { updatedAtISO: null, totals: {}, trend: [], groups: [], recent: [] };
 
   try {
-    summary = await getProjectSummary(projectId, {
+    const { summary: loadedSummary } = await getTenantProjectSummary({
+      projectId,
       range: range === "30d" ? "30d" : "7d",
       siteOrigin: activeSite.url || undefined,
     });
+    summary = loadedSummary;
     errors = normalizeErrorsFromSummary(summary);
   } catch {
     summary = null;
