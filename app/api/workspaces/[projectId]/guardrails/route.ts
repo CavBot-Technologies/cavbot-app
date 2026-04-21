@@ -1,12 +1,13 @@
 // app/api/workspaces/[projectId]/guardrails/route.ts
 import { NextResponse } from "next/server";
-import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { isApiAuthError } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { findAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
 import {
   ensureWorkspaceProjectGuardrails,
   getWorkspaceProjectGuardrails,
 } from "@/lib/workspaceGuardrails.server";
+import { requireWorkspaceSession } from "@/lib/workspaceAuth.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -61,8 +62,7 @@ async function getParams(ctx: unknown): Promise<{ projectId?: string }> {
 
 export async function GET(req: Request, ctx: unknown) {
   try {
-    const sess = await requireSession(req);
-    requireAccountContext(sess);
+    const sess = await requireWorkspaceSession(req);
 
     const params = await getParams(ctx);
     const projectId = parseProjectId(params?.projectId || "");
@@ -86,8 +86,7 @@ export async function GET(req: Request, ctx: unknown) {
 
 export async function PATCH(req: Request, ctx: unknown) {
   try {
-    const sess = await requireSession(req);
-    requireAccountContext(sess);
+    const sess = await requireWorkspaceSession(req);
 
     const params = await getParams(ctx);
     const projectId = parseProjectId(params?.projectId || "");

@@ -3,9 +3,10 @@ import "server-only";
 
 import crypto from "crypto";
 import { NextResponse } from "next/server";
-import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { isApiAuthError } from "@/lib/apiAuth";
 import { findOwnedWorkspaceProjectForSites, listRemovedWorkspaceSites } from "@/lib/workspaceSites.server";
 import { isPermissionDeniedError, isSchemaMismatchError } from "@/lib/dbSchemaGuard";
+import { requireWorkspaceSession } from "@/lib/workspaceAuth.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,8 +66,7 @@ export async function GET(
   const rid = requestIdFrom(req);
 
   try {
-    const sess = await requireSession(req);
-    requireAccountContext(sess);
+    const sess = await requireWorkspaceSession(req);
 
     const projectId = parseProjectId(ctx.params.projectId);
     const project = await findOwnedWorkspaceProjectForSites(sess.accountId, projectId);

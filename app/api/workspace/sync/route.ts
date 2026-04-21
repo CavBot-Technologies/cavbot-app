@@ -1,10 +1,13 @@
 // app/api/workspace/sync/route.ts
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { requireSession, requireAccountContext } from "@/lib/apiAuth";
 import { writeWorkspace, type WorkspacePayload } from "@/lib/workspaceStore.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { requireWorkspaceSession } from "@/lib/workspaceAuth.server";
+import {
+  findOwnedWorkspaceProjectForSites,
+  listActiveWorkspaceSites,
+} from "@/lib/workspaceSites.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,8 +42,7 @@ function pickFirstId(ids: string[]) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const sess = await requireSession(req);
-    requireAccountContext(sess);
+    const sess = await requireWorkspaceSession(req);
 
     const body = (await readSanitizedJson(req, null)) as Partial<WorkspacePayload> | null;
     const bodyPayload = body ?? {};
@@ -48,21 +50,14 @@ export async function POST(req: NextRequest) {
     // Resolve + validate project in account
     const projectId = parseProjectId(bodyPayload.projectId) ?? 1;
 
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, accountId: sess.accountId! },
-      select: { id: true, topSiteId: true },
-    });
+    const project = await findOwnedWorkspaceProjectForSites(sess.accountId!, projectId);
 
     if (!project) {
       return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404, headers: NO_STORE_HEADERS });
     }
 
     // DB truth (do NOT trust client sites list)
-    const rows = await prisma.site.findMany({
-      where: { projectId: project.id, isActive: true },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, label: true, origin: true, createdAt: true, notes: true },
-    });
+    const rows = await listActiveWorkspaceSites(project.id, "desc");
 
     const sites = rows.map((r) => ({
       id: r.id,

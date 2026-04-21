@@ -1,9 +1,10 @@
 // app/api/workspaces/[projectId]/scan/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { isApiAuthError } from "@/lib/apiAuth";
 import { requestScan, ScanRequestError } from "@/lib/scanner";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { findAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
+import { requireWorkspaceSession } from "@/lib/workspaceAuth.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -46,8 +47,7 @@ type ScanBody = {
 
 export async function POST(req: Request, ctx: unknown) {
   try {
-    const sess = await requireSession(req);
-    requireAccountContext(sess);
+    const sess = await requireWorkspaceSession(req);
     const accountId = String(sess.accountId || "").trim();
     if (!accountId) return json({ error: "UNAUTHORIZED" }, 401);
 
@@ -55,8 +55,9 @@ export async function POST(req: Request, ctx: unknown) {
     const projectId = parseProjectId(params.projectId || "");
     if (!projectId) return json({ error: "BAD_PROJECT" }, 400);
 
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, accountId },
+    const project = await findAccountWorkspaceProject({
+      accountId,
+      projectId,
       select: { id: true, topSiteId: true },
     });
     if (!project) return json({ error: "NOT_FOUND" }, 404);

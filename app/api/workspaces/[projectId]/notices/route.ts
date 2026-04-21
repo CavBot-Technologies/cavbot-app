@@ -1,7 +1,9 @@
 // app/api/workspaces/[projectId]/notices/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { isApiAuthError } from "@/lib/apiAuth";
+import { requireWorkspaceSession } from "@/lib/workspaceAuth.server";
+import { getAuthPool } from "@/lib/authDb";
+import { findOwnedWorkspaceProjectForSites } from "@/lib/workspaceSites.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -30,26 +32,41 @@ function parseProjectId(raw: string): number | null {
 
 export async function GET(req: Request, ctx: { params: { projectId: string } }) {
   try {
-    const sess = await requireSession(req);
-    requireAccountContext(sess);
+    const sess = await requireWorkspaceSession(req);
 
     const projectId = parseProjectId(ctx.params.projectId);
     if (!projectId) return json({ error: "BAD_PROJECT" }, 400);
 
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, accountId: sess.accountId },
-      select: { id: true },
-    });
+    const project = await findOwnedWorkspaceProjectForSites(sess.accountId!, projectId);
     if (!project) return json({ error: "NOT_FOUND" }, 404);
 
-    const notices = await prisma.projectNotice.findMany({
-      where: { projectId: project.id },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-      select: { id: true, tone: true, title: true, body: true, createdAt: true },
-    });
+    const noticeResult = await getAuthPool().query<{
+      id: string;
+      tone: string;
+      title: string;
+      body: string;
+      createdAt: Date | string;
+    }>(
+      `SELECT "id", "tone", "title", "body", "createdAt"
+       FROM "ProjectNotice"
+       WHERE "projectId" = $1
+       ORDER BY "createdAt" DESC
+       LIMIT 20`,
+      [project.id]
+    );
 
-    return json({ notices }, 200);
+    return json(
+      {
+        notices: noticeResult.rows.map((notice) => ({
+          id: notice.id,
+          tone: notice.tone,
+          title: notice.title,
+          body: notice.body,
+          createdAt: notice.createdAt instanceof Date ? notice.createdAt : new Date(notice.createdAt),
+        })),
+      },
+      200
+    );
   } catch (e: unknown) {
     if (isApiAuthError(e)) return json({ error: e.code }, e.status);
     return json({ error: "SERVER_ERROR" }, 500);

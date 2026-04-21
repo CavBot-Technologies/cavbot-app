@@ -2,9 +2,10 @@
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { requireLowRiskWriteSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { isApiAuthError } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { findAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
+import { requireLowRiskWorkspaceSession } from "@/lib/workspaceAuth.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -68,8 +69,7 @@ export async function POST(req: NextRequest) {
   const rid = requestIdFrom(req);
 
   try {
-    const sess = await requireLowRiskWriteSession(req);
-    requireAccountContext(sess);
+    const sess = await requireLowRiskWorkspaceSession(req);
 
     const ct = req.headers.get("content-type") || "";
     if (!ct.includes("application/json")) {

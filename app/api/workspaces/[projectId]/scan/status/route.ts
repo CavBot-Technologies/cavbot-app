@@ -1,9 +1,11 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { isApiAuthError } from "@/lib/apiAuth";
 import { findAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
 import { getWorkspaceProjectScanStatus, getWorkspaceScanUsage } from "@/lib/workspaceScans.server";
+import { getPlanLimits, PLANS } from "@/lib/plans";
+import { requireWorkspaceSession } from "@/lib/workspaceAuth.server";
 
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
@@ -38,8 +40,7 @@ async function getParams(ctx: unknown): Promise<{ projectId?: string }> {
 
 export async function GET(req: NextRequest, ctx: unknown) {
   try {
-    const session = await requireSession(req);
-    requireAccountContext(session);
+    const session = await requireWorkspaceSession(req);
     const accountId = String(session.accountId || "").trim();
     if (!accountId) return json({ error: "UNAUTHORIZED" }, 401);
 
@@ -53,11 +54,41 @@ export async function GET(req: NextRequest, ctx: unknown) {
       select: { id: true },
     });
     if (!project) {
-      const usage = await getWorkspaceScanUsage(accountId);
+      const usage = await getWorkspaceScanUsage(accountId).catch(() => {
+        const planId = "free";
+        const limits = getPlanLimits(planId);
+        return {
+          planId,
+          planLabel: PLANS[planId].tierLabel,
+          scansThisMonth: 0,
+          scansPerMonth: limits.scansPerMonth,
+          pagesPerScan: limits.pagesPerScan,
+        };
+      });
       return json({ ok: true, status: { usage, lastJob: null } }, 200);
     }
 
-    const status = await getWorkspaceProjectScanStatus(projectId, accountId);
+    let status;
+    try {
+      status = await getWorkspaceProjectScanStatus(projectId, accountId);
+    } catch (error) {
+      console.error("[workspace-scan-status]", {
+        projectId,
+        accountId,
+        detail: error instanceof Error ? error.message : String(error),
+      });
+      const planId = "free";
+      const limits = getPlanLimits(planId);
+      const usage = await getWorkspaceScanUsage(accountId).catch(() => ({
+        planId,
+        planLabel: PLANS[planId].tierLabel,
+        scansThisMonth: 0,
+        scansPerMonth: limits.scansPerMonth,
+        pagesPerScan: limits.pagesPerScan,
+      }));
+      return json({ ok: true, degraded: true, status: { usage, lastJob: null } }, 200);
+    }
+
     return json({ ok: true, status }, 200);
   } catch (error) {
     if (isApiAuthError(error)) return json({ error: error.code }, error.status);

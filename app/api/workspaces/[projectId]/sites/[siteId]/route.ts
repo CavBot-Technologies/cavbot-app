@@ -6,8 +6,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { unstable_noStore as noStore } from "next/cache";
 
 import {
-  requireLowRiskWriteSession,
-  requireAccountContext,
   requireAccountRole,
   isApiAuthError,
 } from "@/lib/apiAuth";
@@ -22,6 +20,7 @@ import {
 } from "@/lib/workspaceSites.server";
 import { isPermissionDeniedError, isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { requireLowRiskWorkspaceSession } from "@/lib/workspaceAuth.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -137,8 +136,7 @@ export async function DELETE(
       return json({ error: "BAD_SITE_ID", requestId: rid }, 400, rid);
     }
 
-    const sess = await requireLowRiskWriteSession(req);
-    requireAccountContext(sess);
+    const sess = await requireLowRiskWorkspaceSession(req);
     requireAccountRole(sess, ["OWNER", "ADMIN"]);
 
     const project = await findOwnedWorkspaceProjectForSites(sess.accountId, projectId);

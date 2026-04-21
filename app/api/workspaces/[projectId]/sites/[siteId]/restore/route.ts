@@ -4,8 +4,6 @@ import "server-only";
 import crypto from "crypto";
 import { NextResponse } from "next/server";
 import {
-  requireLowRiskWriteSession,
-  requireAccountContext,
   requireAccountRole,
   isApiAuthError,
 } from "@/lib/apiAuth";
@@ -16,6 +14,7 @@ import {
   restoreWorkspaceSite,
 } from "@/lib/workspaceSites.server";
 import { isPermissionDeniedError, isSchemaMismatchError } from "@/lib/dbSchemaGuard";
+import { requireLowRiskWorkspaceSession } from "@/lib/workspaceAuth.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -95,8 +94,7 @@ export async function POST(
   const rid = requestIdFrom(req);
 
   try {
-    const sess = await requireLowRiskWriteSession(req);
-    requireAccountContext(sess);
+    const sess = await requireLowRiskWorkspaceSession(req);
     requireAccountRole(sess, ["OWNER", "ADMIN"]);
 
     const projectId = parseProjectId(ctx.params.projectId);

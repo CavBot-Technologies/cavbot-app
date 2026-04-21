@@ -3,9 +3,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import {
-  requireLowRiskWriteSession,
-  requireSession,
-  requireAccountContext,
   requireAccountRole,
   isApiAuthError,
 } from "@/lib/apiAuth";
@@ -32,6 +29,10 @@ import { resolvePlanIdFromTier, getPlanLimits } from "@/lib/plans";
 import { getCavbotAppOrigins } from "@/lib/security/embedAppOrigins";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { expandRelatedExactOrigins } from "@/originMatch";
+import {
+  requireLowRiskWorkspaceSession,
+  requireWorkspaceSession,
+} from "@/lib/workspaceAuth.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -270,8 +271,7 @@ export async function GET(req: Request, ctx: unknown) {
   const rid = requestIdFrom(req);
 
   try {
-    const sess = await requireSession(req);
-    requireAccountContext(sess);
+    const sess = await requireWorkspaceSession(req);
 
     const params = await getParams(ctx);
     const projectId = parseProjectId(params?.projectId || "");
@@ -293,8 +293,7 @@ export async function POST(req: Request, ctx: unknown) {
   const rid = requestIdFrom(req);
 
   try {
-    const sess = await requireLowRiskWriteSession(req);
-    requireAccountContext(sess);
+    const sess = await requireLowRiskWorkspaceSession(req);
     requireAccountRole(sess, ["OWNER", "ADMIN"]);
 
     const params = await getParams(ctx);

@@ -8,20 +8,23 @@ function read(rel: string) {
 }
 
 test("low-risk dashboard writes use signed-session fallback instead of strict auth backend gating", () => {
-  const authSource = read("lib/apiAuth.ts");
+  const authSource = read("lib/workspaceAuth.server.ts");
   const selectProjectRoute = read("app/api/workspaces/select-project/route.ts");
   const selectionRoute = read("app/api/workspaces/selection/route.ts");
   const cavpadSettingsRoute = read("app/api/cavpad/settings/route.ts");
 
-  assert.match(authSource, /export async function requireLowRiskWriteSession\(req: Request\)/);
-  assert.match(selectProjectRoute, /requireLowRiskWriteSession/);
-  assert.match(selectionRoute, /requireLowRiskWriteSession/);
+  assert.match(authSource, /export async function requireLowRiskWorkspaceSession/);
+  assert.match(authSource, /requireLowRiskWriteSession/);
+  assert.match(selectProjectRoute, /requireLowRiskWorkspaceSession/);
+  assert.match(selectionRoute, /requireLowRiskWorkspaceSession/);
   assert.match(cavpadSettingsRoute, /const sess = await requireLowRiskWriteSession\(req\);/);
 });
 
 test("workspace guardrails and scan status routes avoid the Prisma runtime path", () => {
   const guardrailsRoute = read("app/api/workspaces/[projectId]/guardrails/route.ts");
   const scanStatusRoute = read("app/api/workspaces/[projectId]/scan/status/route.ts");
+  const scanRoute = read("app/api/workspaces/[projectId]/scan/route.ts");
+  const topSiteRoute = read("app/api/workspaces/[projectId]/top-site/route.ts");
   const guardrailsHelper = read("lib/workspaceGuardrails.server.ts");
   const scanHelper = read("lib/workspaceScans.server.ts");
 
@@ -29,9 +32,29 @@ test("workspace guardrails and scan status routes avoid the Prisma runtime path"
   assert.doesNotMatch(guardrailsRoute, /prisma\.projectGuardrails/);
   assert.match(scanStatusRoute, /getWorkspaceProjectScanStatus/);
   assert.doesNotMatch(scanStatusRoute, /getProjectScanStatus/);
+  assert.match(scanStatusRoute, /degraded: true/);
+  assert.match(scanRoute, /findAccountWorkspaceProject/);
+  assert.doesNotMatch(scanRoute, /prisma\.project\.findFirst/);
+  assert.match(topSiteRoute, /findOwnedWorkspaceProjectForSites/);
+  assert.doesNotMatch(topSiteRoute, /prisma\./);
   assert.match(guardrailsHelper, /export async function getWorkspaceProjectGuardrails/);
   assert.match(guardrailsHelper, /INSERT INTO "ProjectGuardrails"/);
   assert.match(scanHelper, /FROM "ScanJob" job/);
+});
+
+test("workspace routes promote the effective membership account before project reads", () => {
+  const authSource = read("lib/workspaceAuth.server.ts");
+  const selectProjectRoute = read("app/api/workspaces/select-project/route.ts");
+  const selectionRoute = read("app/api/workspaces/selection/route.ts");
+  const sitesRoute = read("app/api/workspaces/[projectId]/sites/route.ts");
+
+  assert.match(authSource, /resolveEffectiveAccountIdForSession/);
+  assert.match(authSource, /export async function requireWorkspaceSession/);
+  assert.match(authSource, /export async function requireLowRiskWorkspaceSession/);
+  assert.match(selectProjectRoute, /requireLowRiskWorkspaceSession/);
+  assert.match(selectionRoute, /requireLowRiskWorkspaceSession/);
+  assert.match(sitesRoute, /requireWorkspaceSession/);
+  assert.match(sitesRoute, /requireLowRiskWorkspaceSession/);
 });
 
 test("workspace guardrails GET stays read-only while PATCH keeps the upsert path", () => {

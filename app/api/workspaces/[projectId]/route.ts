@@ -1,8 +1,10 @@
 // app/api/workspaces/[projectId]/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { isApiAuthError } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { requireWorkspaceSession } from "@/lib/workspaceAuth.server";
+import { getAuthPool } from "@/lib/authDb";
+import { createProjectNoticeEntry, findActiveWorkspaceSite, findOwnedWorkspaceProjectForSites } from "@/lib/workspaceSites.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,8 +33,7 @@ function parseProjectId(raw: string): number | null {
 
 export async function PATCH(req: Request, ctx: { params: { projectId: string } }) {
   try {
-    const sess = await requireSession(req);
-    requireAccountContext(sess);
+    const sess = await requireWorkspaceSession(req);
 
     const projectId = parseProjectId(ctx.params.projectId);
     if (!projectId) return json({ error: "BAD_PROJECT" }, 400);
@@ -41,32 +42,25 @@ export async function PATCH(req: Request, ctx: { params: { projectId: string } }
     const topSiteId = (body?.topSiteId || "").trim();
     if (!topSiteId) return json({ error: "BAD_TOP_SITE" }, 400);
 
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, accountId: sess.accountId },
-      select: { id: true },
-    });
+    const project = await findOwnedWorkspaceProjectForSites(sess.accountId!, projectId);
     if (!project) return json({ error: "NOT_FOUND" }, 404);
 
-    const site = await prisma.site.findFirst({
-      where: { id: topSiteId, projectId: project.id, isActive: true },
-      select: { id: true, origin: true },
-    });
+    const site = await findActiveWorkspaceSite(project.id, topSiteId);
     if (!site) return json({ error: "SITE_NOT_FOUND" }, 404);
 
-    await prisma.$transaction(async (tx) => {
-      await tx.project.update({
-        where: { id: project.id },
-        data: { topSiteId: site.id },
-      });
+    await getAuthPool().query(
+      `UPDATE "Project"
+       SET "topSiteId" = $2,
+           "updatedAt" = NOW()
+       WHERE "id" = $1`,
+      [project.id, site.id]
+    );
 
-      await tx.projectNotice.create({
-        data: {
-          projectId: project.id,
-          tone: "GOOD",
-          title: "Top site updated",
-          body: `${site.origin} is now the pinned origin for this workspace.`,
-        },
-      });
+    await createProjectNoticeEntry({
+      projectId: project.id,
+      tone: "GOOD",
+      title: "Top site updated",
+      body: `${site.origin} is now the pinned origin for this workspace.`,
     });
 
     return json({ ok: true, topSiteId: site.id }, 200);
