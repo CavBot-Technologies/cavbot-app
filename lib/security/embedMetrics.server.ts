@@ -9,7 +9,7 @@ export type EmbedUsagePayload = {
   topDeniedOrigins: string[] | null;
 };
 
-export const DEFAULT_EMBED_RATE_LIMIT_LABEL = "25 requests / min per origin + IP";
+export const DEFAULT_EMBED_RATE_LIMIT_LABEL = "120 requests / min per verified origin/site/key bucket";
 
 const DENY_AUDIT_INTERVAL_MS = 60 * 60 * 1000;
 

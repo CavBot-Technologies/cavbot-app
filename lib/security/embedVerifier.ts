@@ -6,7 +6,7 @@ import { enforceRateLimit, type RateLimitEnv } from "@/rateLimit";
 import { recordEmbedMetric, trackDeniedOrigin } from "@/lib/security/embedMetrics.server";
 import { getCavbotAppOrigins } from "@/lib/security/embedAppOrigins";
 
-const RATE_LIMIT_SPEC = { capacity: 25, refillPerSec: 25 / 60 };
+const RATE_LIMIT_SPEC = { capacity: 120, refillPerSec: 2 };
 
 type EmbedVerifierResultOk = {
   ok: true;
@@ -28,6 +28,7 @@ type EmbedVerifierResultError = {
   code: string;
   message?: string;
   origin?: string;
+  retryAfterSec?: number;
 };
 
 export type EmbedVerifierResult = EmbedVerifierResultOk | EmbedVerifierResultError;
@@ -112,8 +113,14 @@ function buildAllowedOrigins(siteOrigin: string, rows: AllowedOriginRow[]) {
   return canonicalRows;
 }
 
-function failure(code: string, status: number, message?: string, origin?: string): EmbedVerifierResultError {
-  return { ok: false, code, status, message, origin };
+function failure(
+  code: string,
+  status: number,
+  message?: string,
+  origin?: string,
+  retryAfterSec?: number
+): EmbedVerifierResultError {
+  return { ok: false, code, status, message, origin, retryAfterSec };
 }
 
 type EmbedVerifierOptions = {
@@ -229,9 +236,14 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
     await enforceRateLimit(req, env, String(record.projectId), canonicalOrigin, RATE_LIMIT_SPEC, `origin:${canonicalOrigin}`);
     await enforceRateLimit(req, env, String(record.projectId), canonicalOrigin, RATE_LIMIT_SPEC, `site:${site.id}`);
     await enforceRateLimit(req, env, String(record.projectId), canonicalOrigin, RATE_LIMIT_SPEC, `key:${record.id}`);
-  } catch {
+  } catch (error) {
+    const retryAfterRaw =
+      error instanceof Response ? error.headers.get("Retry-After") : null;
+    const parsedRetryAfter = Number.parseInt(String(retryAfterRaw || ""), 10);
+    const retryAfterSec =
+      Number.isFinite(parsedRetryAfter) && parsedRetryAfter > 0 ? parsedRetryAfter : 1;
     await slowFailMetric(record, site.id, canonicalOrigin, false, true, req, "RATE_LIMIT");
-    return failure("RATE_LIMIT", 429, "Rate limit exceeded.", canonicalOrigin);
+    return failure("RATE_LIMIT", 429, "Rate limit exceeded.", canonicalOrigin, retryAfterSec);
   }
 
   if (recordMetrics) {

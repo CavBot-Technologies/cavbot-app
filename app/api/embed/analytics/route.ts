@@ -44,16 +44,14 @@ function handleOptions(req: NextRequest) {
 function buildRemoteHeaders(
   req: NextRequest,
   payload: Record<string, unknown> | null,
-  projectKey: string,
-  serverKey?: string | null
+  projectKey: string
 ) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
 
-  const authKey = typeof serverKey === "string" && serverKey ? serverKey : projectKey;
-  if (authKey) {
-    headers["X-Project-Key"] = authKey;
+  if (projectKey) {
+    headers["X-Project-Key"] = projectKey;
   }
   const sdkVersion = req.headers.get("x-cavbot-sdk-version");
   if (sdkVersion) {
@@ -121,22 +119,26 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
 
   if (!verification.ok) {
     const origin = verification.origin ?? req.headers.get("origin");
+    const headers = corsHeaders(origin);
+    if (verification.retryAfterSec && verification.retryAfterSec > 0) {
+      headers["Retry-After"] = String(verification.retryAfterSec);
+    }
     return NextResponse.json(
       { ok: false, allowed: false, code: verification.code },
       {
         status: verification.status,
-        headers: corsHeaders(origin),
+        headers,
       }
     );
   }
 
-  const { baseUrl, secretKey } = getEnv();
+  const { baseUrl } = getEnv();
   const remoteUrl = `${baseUrl}/v1/events`;
 
   try {
     const response = await fetch(remoteUrl, {
       method: "POST",
-      headers: buildRemoteHeaders(req, payload, verification.projectKey, secretKey),
+      headers: buildRemoteHeaders(req, payload, verification.projectKey),
       body: payload ? JSON.stringify(payload) : undefined,
       cache: "no-store",
       credentials: "omit",
@@ -151,6 +153,10 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
       "Content-Type": response.headers.get("content-type") || "application/json",
       ...corsHeaders(origin),
     };
+    const retryAfter = response.headers.get("Retry-After");
+    if (retryAfter) {
+      responseHeaders["Retry-After"] = retryAfter;
+    }
 
     return new NextResponse(text, {
       status: response.status,
