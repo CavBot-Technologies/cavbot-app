@@ -34,9 +34,11 @@ test("dashboard surfaces use tenant-scoped summary reads", () => {
 
 test("tenant summary helper resolves per-project auth", () => {
   const source = fs.readFileSync(new URL("../lib/projectSummary.server.ts", import.meta.url), "utf8");
-  assert.equal(source.includes("resolveProjectForAccount"), true);
+  assert.equal(source.includes("getAuthPool"), true);
   assert.equal(source.includes("decryptAesGcm"), true);
   assert.equal(source.includes("getProjectSummaryForTenant"), true);
+  assert.equal(source.includes("projectAuth.server"), false);
+  assert.equal(source.includes("lib/prisma"), false);
 });
 
 test("workspace and module gating use effective session account resolution", () => {

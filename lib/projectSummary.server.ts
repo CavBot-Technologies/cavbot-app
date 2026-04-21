@@ -1,10 +1,10 @@
 import "server-only";
 
+import { getAuthPool } from "@/lib/authDb";
 import { getProjectSummaryForTenant, type SummaryRange } from "@/lib/cavbotApi.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
 import { decryptAesGcm } from "@/lib/cryptoAesGcm.server";
 import { resolveEffectiveAccountIdFromHeaders } from "@/lib/effectiveSessionAccount.server";
-import { resolveProjectForAccount } from "@/lib/projectAuth.server";
 
 type TenantProjectSummaryInput = {
   accountId?: string | null;
@@ -32,6 +32,60 @@ function normalizeProjectId(input: string | number | null | undefined) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
+type ProjectAccessRow = {
+  id: number | string;
+  slug: string;
+  name: string | null;
+  serverKeyEnc: string | null;
+  serverKeyEncIv: string | null;
+};
+
+async function findProjectForAccount(input: {
+  accountId: string;
+  projectId?: number;
+  projectSlug?: string;
+}) {
+  const pool = getAuthPool();
+
+  const byId = input.projectId
+    ? await pool.query<ProjectAccessRow>(
+        `SELECT "id", "slug", "name", "serverKeyEnc", "serverKeyEncIv"
+         FROM "Project"
+         WHERE "id" = $1
+           AND "accountId" = $2
+           AND "isActive" = true
+         LIMIT 1`,
+        [input.projectId, input.accountId],
+      )
+    : null;
+  if (byId?.rows[0]) return byId.rows[0];
+
+  const projectSlug = String(input.projectSlug || "").trim();
+  const bySlug = projectSlug
+    ? await pool.query<ProjectAccessRow>(
+        `SELECT "id", "slug", "name", "serverKeyEnc", "serverKeyEncIv"
+         FROM "Project"
+         WHERE "slug" = $1
+           AND "accountId" = $2
+           AND "isActive" = true
+         LIMIT 1`,
+        [projectSlug, input.accountId],
+      )
+    : null;
+  if (bySlug?.rows[0]) return bySlug.rows[0];
+
+  const first = await pool.query<ProjectAccessRow>(
+    `SELECT "id", "slug", "name", "serverKeyEnc", "serverKeyEncIv"
+     FROM "Project"
+     WHERE "accountId" = $1
+       AND "isActive" = true
+     ORDER BY "createdAt" ASC
+     LIMIT 1`,
+    [input.accountId],
+  );
+  return first.rows[0] ?? null;
+}
+
 export async function resolveTenantProjectAccess(input: {
   accountId?: string | null;
   projectId?: string | number | null;
@@ -43,11 +97,13 @@ export async function resolveTenantProjectAccess(input: {
     "";
   if (!accountId) throw new Error("ACCOUNT_CONTEXT_REQUIRED");
 
-  const project = await resolveProjectForAccount({
+  const project = await findProjectForAccount({
     accountId,
     projectId: normalizeProjectId(input.projectId),
     projectSlug: String(input.projectSlug || "").trim() || undefined,
   });
+  if (!project) throw new Error("PROJECT_NOT_FOUND");
+  if (!project.serverKeyEnc || !project.serverKeyEncIv) throw new Error("PROJECT_KEY_MISSING");
 
   const projectKey = String(
     await decryptAesGcm({

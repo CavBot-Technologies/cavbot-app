@@ -1,12 +1,11 @@
 // app/api/console/route.ts
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import type { SummaryRange } from "@/lib/cavbotApi.server";
 import { CavBotApiError, getProjectSummaryForTenant } from "@/lib/cavbotApi.server";
-import { decryptAesGcm } from "@/lib/cryptoAesGcm.server";
 import { resolveEffectiveAccountIdForSession } from "@/lib/effectiveSessionAccount.server";
+import { resolveTenantProjectAccess } from "@/lib/projectSummary.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -139,46 +138,12 @@ export async function GET(req: NextRequest) {
     const pid = pidFromQuery ?? pidFromCookie;
 
     const projectSlug = String(searchParams.get("projectSlug") ?? "").trim();
-
-    const project = pid
-      ? await prisma.project.findFirst({
-          where: { id: pid, accountId, isActive: true },
-          select: {
-            id: true,
-            slug: true,
-            name: true,
-            serverKeyEnc: true,
-            serverKeyEncIv: true,
-          },
-        })
-      : projectSlug
-      ? await prisma.project.findFirst({
-          where: { slug: projectSlug, accountId, isActive: true },
-          select: {
-            id: true,
-            slug: true,
-            name: true,
-            serverKeyEnc: true,
-            serverKeyEncIv: true,
-          },
-        })
-      : await prisma.project.findFirst({
-          where: { accountId, isActive: true },
-          orderBy: { createdAt: "asc" },
-          select: {
-            id: true,
-            slug: true,
-            name: true,
-            serverKeyEnc: true,
-            serverKeyEncIv: true,
-          },
-        });
-
-    if (!project) return json({ error: "PROJECT_NOT_FOUND" }, 404);
-
-    if (!project.serverKeyEnc || !project.serverKeyEncIv) {
-      return json({ error: "PROJECT_KEY_MISSING" }, 409);
-    }
+    const access = await resolveTenantProjectAccess({
+      accountId,
+      projectId: pid,
+      projectSlug,
+    });
+    const project = access.project;
 
     // ===== SITE SCOPING (this is the fix) =====
     // Query params win. If absent, fall back to Command Center cookie pointers for THIS project.
@@ -200,20 +165,12 @@ export async function GET(req: NextRequest) {
     const siteOrigin = siteOriginFromQuery ?? siteOriginFromCookie;
     const siteId = siteIdFromQuery ?? siteIdFromCookie;
 
-    const decryptedServerKey = await decryptAesGcm({
-      enc: String(project.serverKeyEnc),
-      iv: String(project.serverKeyEncIv),
-    });
-
-    const projectKey = String(decryptedServerKey || "").trim();
-    if (!projectKey) return json({ error: "PROJECT_KEY_DECRYPT_FAILED" }, 500);
-
     const out = await getProjectSummaryForTenant({
       projectId: project.id,
       range,
       siteOrigin,
       siteId,
-      projectKey,
+      projectKey: access.projectKey,
       requestId: `console_${project.id}_${Date.now()}`,
     });
 
