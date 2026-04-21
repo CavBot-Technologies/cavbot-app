@@ -68,7 +68,6 @@ export async function OPTIONS(req: NextRequest) {
 function buildRemoteHeaders(
   req: NextRequest,
   projectKey: string,
-  serverKey: string | null | undefined,
   siteOrigin: string,
   siteId: string
 ) {
@@ -76,9 +75,8 @@ function buildRemoteHeaders(
     "Content-Type": "application/json",
   };
 
-  const authKey = typeof serverKey === "string" && serverKey ? serverKey : projectKey;
-  if (authKey) {
-    headers["X-Project-Key"] = authKey;
+  if (projectKey) {
+    headers["X-Project-Key"] = projectKey;
   }
   const sdkVersion = req.headers.get("x-cavbot-sdk-version");
   if (sdkVersion) {
@@ -233,16 +231,20 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
 
   if (!verification.ok) {
     const origin = verification.origin ?? req.headers.get("origin");
+    const headers = corsHeaders(req, origin);
+    if (verification.retryAfterSec && verification.retryAfterSec > 0) {
+      headers["Retry-After"] = String(verification.retryAfterSec);
+    }
     return NextResponse.json(
       { ok: false, allowed: false, code: verification.code },
       {
         status: verification.status,
-        headers: corsHeaders(req, origin),
+        headers,
       }
     );
   }
 
-  const { baseUrl, secretKey } = getEnv();
+  const { baseUrl } = getEnv();
   const remoteUrl = `${baseUrl}/v1/events`;
   const responseOrigin = verification.origin ?? req.headers.get("origin");
   const canonicalSiteOrigin = verification.siteOrigin;
@@ -256,7 +258,6 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
       headers: buildRemoteHeaders(
         req,
         verification.projectKey,
-        secretKey,
         canonicalSiteOrigin,
         verification.siteId
       ),
@@ -273,6 +274,10 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
       "Content-Type": response.headers.get("content-type") || "application/json",
       ...corsHeaders(req, responseOrigin),
     };
+    const retryAfter = response.headers.get("Retry-After");
+    if (retryAfter) {
+      responseHeaders["Retry-After"] = retryAfter;
+    }
 
     const responseBody =
       response.status === 403 && responseHeaders["Content-Type"].includes("application/json") && text

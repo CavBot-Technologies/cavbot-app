@@ -32,6 +32,7 @@ type EmbedVerifierResultError = {
   code: string;
   message?: string;
   origin?: string;
+  retryAfterSec?: number;
 };
 
 export type EmbedVerifierResult = EmbedVerifierResultOk | EmbedVerifierResultError;
@@ -176,8 +177,14 @@ function buildAllowedOrigins(siteOrigin: string, rows: AllowedOriginRow[]) {
   return canonicalRows;
 }
 
-function failure(code: string, status: number, message?: string, origin?: string): EmbedVerifierResultError {
-  return { ok: false, code, status, message, origin };
+function failure(
+  code: string,
+  status: number,
+  message?: string,
+  origin?: string,
+  retryAfterSec?: number
+): EmbedVerifierResultError {
+  return { ok: false, code, status, message, origin, retryAfterSec };
 }
 
 type EmbedVerifierOptions = {
@@ -292,9 +299,14 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
       EMBED_RATE_LIMIT_SPEC,
       `key:${record.id}:actor:${rateLimitActor}`
     );
-  } catch {
+  } catch (error) {
+    const retryAfterRaw =
+      error instanceof Response ? error.headers.get("Retry-After") : null;
+    const parsedRetryAfter = Number.parseInt(String(retryAfterRaw || ""), 10);
+    const retryAfterSec =
+      Number.isFinite(parsedRetryAfter) && parsedRetryAfter > 0 ? parsedRetryAfter : 1;
     await slowFailMetric(record, site.id, canonicalOrigin, false, true, req, "RATE_LIMIT");
-    return failure("RATE_LIMIT", 429, "Rate limit exceeded.", canonicalOrigin);
+    return failure("RATE_LIMIT", 429, "Rate limit exceeded.", canonicalOrigin, retryAfterSec);
   }
 
   if (recordMetrics) {
