@@ -63,18 +63,44 @@ export async function enforceRateLimit(
     body: JSON.stringify({ key: bucketKey, spec }),
   });
 
-  const data = (await r.json().catch(() => null)) as RateLimitResponse | null;
-  if (!data?.allowed) {
+  if (r.status === 429) {
+    const retryAfter = r.headers.get("Retry-After") || "1";
     throw new Response(
       JSON.stringify({ ok: false, error: "rate_limited" }),
       {
         status: 429,
         headers: {
           "Content-Type": "application/json",
-          "Retry-After": "1",
+          "Retry-After": retryAfter,
           "Cache-Control": "no-store",
         },
       }
     );
+  }
+
+  if (!r.ok) {
+    const detail = await r.text().catch(() => "");
+    throw new Error(
+      `[rateLimit] backend ${r.status}${detail ? ` ${detail.slice(0, 200)}` : ""}`
+    );
+  }
+
+  const data = (await r.json().catch(() => null)) as RateLimitResponse | null;
+  if (data?.allowed === false) {
+    throw new Response(
+      JSON.stringify({ ok: false, error: "rate_limited" }),
+      {
+        status: 429,
+        headers: {
+          "Content-Type": "application/json",
+          "Retry-After": r.headers.get("Retry-After") || "1",
+          "Cache-Control": "no-store",
+        },
+      }
+    );
+  }
+
+  if (data?.allowed !== true) {
+    throw new Error("[rateLimit] backend returned invalid response");
   }
 }

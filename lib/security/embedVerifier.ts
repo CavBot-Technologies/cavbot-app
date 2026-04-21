@@ -300,13 +300,16 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
       `key:${record.id}:actor:${rateLimitActor}`
     );
   } catch (error) {
-    const retryAfterRaw =
-      error instanceof Response ? error.headers.get("Retry-After") : null;
-    const parsedRetryAfter = Number.parseInt(String(retryAfterRaw || ""), 10);
-    const retryAfterSec =
-      Number.isFinite(parsedRetryAfter) && parsedRetryAfter > 0 ? parsedRetryAfter : 1;
-    await slowFailMetric(record, site.id, canonicalOrigin, false, true, req, "RATE_LIMIT");
-    return failure("RATE_LIMIT", 429, "Rate limit exceeded.", canonicalOrigin, retryAfterSec);
+    if (!(error instanceof Response)) {
+      console.error("[embedVerifier] rate limiter unavailable; allowing verified request", error);
+    } else {
+      const retryAfterRaw = error.headers.get("Retry-After");
+      const parsedRetryAfter = Number.parseInt(String(retryAfterRaw || ""), 10);
+      const retryAfterSec =
+        Number.isFinite(parsedRetryAfter) && parsedRetryAfter > 0 ? parsedRetryAfter : 1;
+      await slowFailMetric(record, site.id, canonicalOrigin, false, true, req, "RATE_LIMIT");
+      return failure("RATE_LIMIT", 429, "Rate limit exceeded.", canonicalOrigin, retryAfterSec);
+    }
   }
 
   if (recordMetrics) {
