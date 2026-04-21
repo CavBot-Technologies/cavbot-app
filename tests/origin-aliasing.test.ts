@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  canonicalizeWebsiteContextOrigin,
+  canonicalizeWebsiteContextUrl,
   expandRelatedExactOrigins,
   originAllowed,
   originsShareWebsiteContext,
@@ -39,4 +41,19 @@ test("common multi-part apex domains still alias to their www host", () => {
 test("non-www product subdomains do not alias to synthetic www variants", () => {
   assert.deepEqual(expandRelatedExactOrigins("https://app.cavbot.io"), ["https://app.cavbot.io"]);
   assert.equal(originsShareWebsiteContext("https://app.cavbot.io", "https://www.app.cavbot.io"), false);
+});
+
+test("website-context canonicalization rewrites www urls back to the stored site origin", () => {
+  assert.equal(
+    canonicalizeWebsiteContextOrigin("https://www.cavbot.io", "https://cavbot.io"),
+    "https://cavbot.io"
+  );
+  assert.equal(
+    canonicalizeWebsiteContextUrl("https://www.cavbot.io/pricing?plan=pro#faq", "https://cavbot.io"),
+    "https://cavbot.io/pricing?plan=pro#faq"
+  );
+  assert.equal(
+    canonicalizeWebsiteContextUrl("https://external.example.com/pricing?plan=pro#faq", "https://cavbot.io"),
+    "https://external.example.com/pricing?plan=pro#faq"
+  );
 });

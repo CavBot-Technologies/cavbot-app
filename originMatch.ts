@@ -92,6 +92,37 @@ export function originsShareWebsiteContext(left: string, right: string): boolean
   }
 }
 
+export function canonicalizeWebsiteContextOrigin(input: string, canonicalOrigin: string): string {
+  const normalizedCanonical = normalizeOriginStrict(canonicalOrigin);
+  const normalizedInput = normalizeOriginStrict(input);
+  return originsShareWebsiteContext(normalizedInput, normalizedCanonical)
+    ? normalizedCanonical
+    : normalizedInput;
+}
+
+export function canonicalizeWebsiteContextUrl(input: string, canonicalOrigin: string): string {
+  const raw = String(input || "").trim();
+  if (!raw) return raw;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return raw;
+  }
+
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    return raw;
+  }
+
+  const normalizedCanonical = normalizeOriginStrict(canonicalOrigin);
+  if (!originsShareWebsiteContext(parsed.origin, normalizedCanonical)) {
+    return raw;
+  }
+
+  return new URL(`${parsed.pathname}${parsed.search}${parsed.hash}`, normalizedCanonical).toString();
+}
+
 function hostMatchesWildcard(host: string, base: string): boolean {
   // base is like "client.com"
   if (host === base) return true;

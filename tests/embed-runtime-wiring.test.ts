@@ -23,6 +23,7 @@ test("embed verification paths avoid Prisma runtime imports", () => {
   const verifierSource = read("lib/security/embedVerifier.ts");
   const tokenSource = read("lib/security/embedToken.ts");
   const runtimeSource = read("lib/security/embedKeyRuntime.server.ts");
+  const analyticsRouteSource = read("app/api/embed/analytics/route.ts");
 
   assert.equal(verifierSource.includes('from "@/lib/prisma"'), false);
   assert.equal(tokenSource.includes('from "@/lib/prisma"'), false);
@@ -34,6 +35,10 @@ test("embed verification paths avoid Prisma runtime imports", () => {
 
   assert.equal(tokenSource.includes("findEmbedKeyById"), true);
   assert.equal(tokenSource.includes("findActiveEmbedSite"), true);
+  assert.equal(tokenSource.includes("originsShareWebsiteContext"), true);
+  assert.equal(analyticsRouteSource.includes("verification.siteOrigin"), true);
+  assert.equal(analyticsRouteSource.includes("rewriteCanonicalSiteContext"), true);
+  assert.equal(analyticsRouteSource.includes("canonicalizeWebsiteContextUrl"), true);
 });
 
 test("workspace bootstrap routes use the resilient session helper", () => {

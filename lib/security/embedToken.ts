@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import crypto from "crypto";
-import { normalizeOriginStrict } from "@/originMatch";
+import { normalizeOriginStrict, originsShareWebsiteContext } from "@/originMatch";
 import {
   findEmbedKeyById,
   findActiveEmbedSite,
@@ -214,11 +214,11 @@ export async function verifyEmbedToken(options: VerifyOptions): Promise<EmbedTok
     return { ok: false, status: 400, code: "ORIGIN_INVALID" };
   }
 
-  if (parsedOrigin !== claims.origin) {
+  if (!originsShareWebsiteContext(parsedOrigin, claims.origin)) {
     return { ok: false, status: 403, code: "TOKEN_ORIGIN_MISMATCH" };
   }
 
-  if (options.expectedOrigin && options.expectedOrigin !== parsedOrigin) {
+  if (options.expectedOrigin && !originsShareWebsiteContext(options.expectedOrigin, parsedOrigin)) {
     return { ok: false, status: 403, code: "ORIGIN_MISMATCH" };
   }
 

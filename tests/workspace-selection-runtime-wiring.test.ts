@@ -27,3 +27,17 @@ test("command center syncs active site selection back to server cookies", () => 
   assert.equal(source.includes("activeSiteOrigin"), true);
   assert.equal(source.includes("topSiteOrigin"), true);
 });
+
+test("command center hydrates cached workspace sites before background refresh", () => {
+  const source = read("app/page.tsx");
+
+  assert.equal(source.includes("cb_workspace_projects_snapshot_v1"), true);
+  assert.equal(source.includes("cb_workspace_snapshot__"), true);
+  assert.equal(source.includes("readCachedWorkspaceProjects"), true);
+  assert.equal(source.includes("readCachedWorkspaceSnapshot"), true);
+  assert.equal(source.includes("hydrateProjectStateFromCache"), true);
+  assert.equal(source.includes("loadWorkspaceBootstrap"), true);
+  assert.equal(source.includes("writeCachedWorkspaceSnapshot"), true);
+  assert.equal(source.includes("clearCachedWorkspaceSnapshot"), true);
+  assert.equal(source.includes("siteStateProjectId"), true);
+});

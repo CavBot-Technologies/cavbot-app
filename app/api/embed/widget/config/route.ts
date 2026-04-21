@@ -211,7 +211,8 @@ export async function GET(req: NextRequest, ctx: { env?: RateLimitEnv }) {
     );
   }
 
-  const canonicalOrigin = verification.origin ?? req.headers.get("origin") ?? "";
+  const responseOrigin = verification.origin ?? req.headers.get("origin") ?? "";
+  const canonicalOrigin = verification.siteOrigin || responseOrigin;
   const siteId = verification.siteId;
   const accountRecord = await prisma.account.findUnique({
     where: { id: verification.accountId },
@@ -247,7 +248,7 @@ export async function GET(req: NextRequest, ctx: { env?: RateLimitEnv }) {
       },
       {
         status: 200,
-        headers: corsHeaders(canonicalOrigin),
+        headers: corsHeaders(responseOrigin),
       }
     );
   }
@@ -422,7 +423,7 @@ export async function GET(req: NextRequest, ctx: { env?: RateLimitEnv }) {
     payload,
     {
       status: 200,
-      headers: corsHeaders(canonicalOrigin),
+        headers: corsHeaders(responseOrigin),
     }
   );
 }

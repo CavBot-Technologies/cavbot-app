@@ -470,6 +470,154 @@ function storageKeyWorkspaceVersion(projectId: number) {
   return `cb_workspace_v__${projectId}`;
 }
 
+function storageKeyWorkspaceProjectsSnapshot() {
+  return "cb_workspace_projects_snapshot_v1";
+}
+
+function storageKeyWorkspaceSnapshot(projectId: number) {
+  return `cb_workspace_snapshot__${projectId}`;
+}
+
+function readCachedWorkspaceProjects(): Project[] {
+  try {
+    const raw = globalThis.__cbLocalStore.getItem(storageKeyWorkspaceProjectsSnapshot());
+    const parsed = safeJsonParse<unknown[]>(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    const projects: Project[] = [];
+    for (const entry of parsed) {
+      const row = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : null;
+      const id = Number(row?.id);
+      if (!Number.isFinite(id) || id <= 0) continue;
+      const slug = String(row?.slug || "").trim();
+      if (!slug) continue;
+      projects.push({
+        id,
+        name: typeof row?.name === "string" ? row.name : row?.name == null ? null : String(row?.name),
+        slug,
+        region: String(row?.region || ""),
+        retentionDays: Number(row?.retentionDays || 0),
+        topSiteId: row?.topSiteId == null ? null : String(row?.topSiteId),
+        createdAt: String(row?.createdAt || ""),
+      });
+    }
+    return projects;
+  } catch {
+    return [];
+  }
+}
+
+function writeCachedWorkspaceProjects(projects: Project[]) {
+  try {
+    const serialized = projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      slug: project.slug,
+      region: project.region,
+      retentionDays: project.retentionDays,
+      topSiteId: project.topSiteId,
+      createdAt:
+        typeof project.createdAt === "string"
+          ? project.createdAt
+          : project.createdAt instanceof Date
+          ? project.createdAt.toISOString()
+          : String(project.createdAt || ""),
+    }));
+    globalThis.__cbLocalStore.setItem(storageKeyWorkspaceProjectsSnapshot(), JSON.stringify(serialized));
+  } catch {}
+}
+
+function readCachedWorkspaceSnapshot(projectId: number) {
+  if (!Number.isFinite(projectId) || projectId <= 0) return null;
+
+  try {
+    const raw = globalThis.__cbLocalStore.getItem(storageKeyWorkspaceSnapshot(projectId));
+    const parsed = safeJsonParse<Record<string, unknown> | null>(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+
+    const rawSites = Array.isArray(parsed.sites) ? parsed.sites : [];
+    const sites: Site[] = [];
+    for (const entry of rawSites) {
+      const row = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : null;
+      const id = String(row?.id || "").trim();
+      const origin = String(row?.origin || "").trim();
+      if (!id || !origin) continue;
+      sites.push({
+        id,
+        label: clampStr(String(row?.label || originToLabel(origin)), 15),
+        origin,
+        createdAt: safeNumDate(row?.createdAt),
+        top: Boolean(row?.top),
+        notes: row?.notes == null ? undefined : String(row?.notes),
+      });
+    }
+
+    if (!sites.length) return null;
+
+    const topSiteId = String(parsed.topSiteId || "").trim();
+    const activeSiteId = String(parsed.activeSiteId || "").trim();
+
+    return {
+      sites,
+      topSiteId: topSiteId && sites.some((site) => site.id === topSiteId) ? topSiteId : sites[0]?.id || "",
+      activeSiteId:
+        activeSiteId && sites.some((site) => site.id === activeSiteId)
+          ? activeSiteId
+          : topSiteId && sites.some((site) => site.id === topSiteId)
+          ? topSiteId
+          : sites[0]?.id || "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedWorkspaceSnapshot(
+  projectId: number,
+  input: { sites: Site[]; topSiteId: string; activeSiteId: string }
+) {
+  if (!Number.isFinite(projectId) || projectId <= 0) return;
+  if (!Array.isArray(input.sites) || input.sites.length === 0) return;
+
+  try {
+    const serialized = {
+      projectId,
+      topSiteId: input.topSiteId,
+      activeSiteId: input.activeSiteId,
+      cachedAt: Date.now(),
+      sites: input.sites.map((site) => ({
+        id: site.id,
+        label: site.label,
+        origin: site.origin,
+        createdAt:
+          typeof site.createdAt === "number"
+            ? site.createdAt
+            : site.createdAt instanceof Date
+            ? site.createdAt.getTime()
+            : safeNumDate(site.createdAt),
+        top: Boolean(site.top),
+        notes: site.notes ?? null,
+      })),
+    };
+    globalThis.__cbLocalStore.setItem(storageKeyWorkspaceSnapshot(projectId), JSON.stringify(serialized));
+  } catch {}
+}
+
+function clearCachedWorkspaceSnapshot(projectId: number) {
+  if (!Number.isFinite(projectId) || projectId <= 0) return;
+  try {
+    globalThis.__cbLocalStore.removeItem(storageKeyWorkspaceSnapshot(projectId));
+  } catch {}
+}
+
+function readCachedActiveProjectId(projects: Project[]) {
+  try {
+    const raw = Number((globalThis.__cbLocalStore.getItem(storageKeyActiveProjectId()) || "").trim());
+    if (Number.isFinite(raw) && raw > 0 && projects.some((project) => project.id === raw)) return raw;
+  } catch {}
+  return projects[0]?.id ?? null;
+}
+
 
 const CB_WORKSPACE_EVENT = "cb:workspace";
 const CB_SELECTION_EVENT = "cb:selection";
@@ -779,6 +927,7 @@ function CommandDeckPageInner() {
   const [sites, setSites] = useState<Site[]>([]);
   const [topSiteId, setTopSiteId] = useState<string>(""); // DB: Project.topSiteId
   const [activeSiteId, setActiveSiteId] = useState<string>(""); // UI preference
+  const [siteStateProjectId, setSiteStateProjectId] = useState<number | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [toolsSiteId, setToolsSiteId] = useState<string>(activeSiteId || "");
   const closeToolsModal = useCallback(() => setToolsOpen(false), []);
@@ -971,6 +1120,46 @@ function CommandDeckPageInner() {
 
 
   const activeSite = useMemo(() => sites.find((s) => s.id === activeSiteId) || null, [sites, activeSiteId]);
+
+  const hydrateProjectStateFromCache = useCallback((projectId: number | null) => {
+    if (!projectId) return false;
+    const cached = readCachedWorkspaceSnapshot(projectId);
+    if (!cached) return false;
+
+    setSiteStateProjectId(projectId);
+    setSites(cached.sites.map((site) => ({ ...site, top: site.id === cached.topSiteId })));
+    setTopSiteId(cached.topSiteId);
+    setActiveSiteId(cached.activeSiteId);
+    return true;
+  }, []);
+
+  useLayoutEffect(() => {
+    const cachedProjects = readCachedWorkspaceProjects();
+    if (cachedProjects.length) {
+      setProjects(cachedProjects);
+    }
+
+    const cachedProjectId = readCachedActiveProjectId(cachedProjects);
+    if (!cachedProjectId) return;
+
+    setActiveProjectId(cachedProjectId);
+    hydrateProjectStateFromCache(cachedProjectId);
+  }, [hydrateProjectStateFromCache]);
+
+  useEffect(() => {
+    if (!projects.length) return;
+    writeCachedWorkspaceProjects(projects);
+  }, [projects]);
+
+  useEffect(() => {
+    if (!activeProjectId) return;
+    if (siteStateProjectId !== activeProjectId) return;
+    if (!sites.length && !topSiteId && !activeSiteId) {
+      clearCachedWorkspaceSnapshot(activeProjectId);
+      return;
+    }
+    writeCachedWorkspaceSnapshot(activeProjectId, { sites, topSiteId, activeSiteId });
+  }, [activeProjectId, siteStateProjectId, sites, topSiteId, activeSiteId]);
 
 
   function pushToast(msg: string, tone: "good" | "watch" | "bad" = "good") {
@@ -1243,6 +1432,123 @@ function CommandDeckPageInner() {
     DB LOADERS (SOURCE OF TRUTH)
   ========================== */
 
+  function deriveWorkspaceSiteState(
+    projectId: number,
+    rawSites: Array<{ id: string; label: string; origin: string; createdAt: string | number; notes?: string | null }>,
+    topSiteIdHint?: string | null,
+    activeSiteIdHint?: string | null
+  ) {
+    const topId = String(topSiteIdHint || "").trim();
+    const preferredActiveId = String(activeSiteIdHint || "").trim();
+
+    const normalized: Site[] = rawSites
+      .map((s) => {
+        let origin = (s.origin || "").trim();
+        try {
+          origin = normalizeOrigin(origin);
+        } catch {}
+
+        return {
+          id: String(s.id || ""),
+          label: clampStr(String(s.label || originToLabel(origin)), 15),
+          origin,
+          createdAt: safeNumDate(s.createdAt),
+          notes: s.notes == null ? undefined : String(s.notes),
+        };
+      })
+      .filter((s) => !!s.id && !!s.origin);
+
+    const firstId = normalized[0]?.id || "";
+    const nextTop = topId && normalized.some((site) => site.id === topId) ? topId : firstId;
+
+    let storedActive = "";
+    try {
+      storedActive = (globalThis.__cbLocalStore.getItem(storageKeyActiveSiteId(projectId)) || "").trim();
+    } catch {}
+
+    const prevActiveFromState = activeSiteId;
+    const nextActive =
+      storedActive && normalized.some((site) => site.id === storedActive)
+        ? storedActive
+        : preferredActiveId && normalized.some((site) => site.id === preferredActiveId)
+        ? preferredActiveId
+        : prevActiveFromState && normalized.some((site) => site.id === prevActiveFromState)
+        ? prevActiveFromState
+        : nextTop;
+
+    const topSiteObj = normalized.find((site) => site.id === nextTop) || null;
+    const activeSiteObj = normalized.find((site) => site.id === nextActive) || topSiteObj || null;
+    const topOrigin = (topSiteObj?.origin || "").trim();
+    const activeOrigin = (activeSiteObj?.origin || topOrigin || "").trim();
+
+    return {
+      sites: normalized.map((site) => ({ ...site, top: !!nextTop && site.id === nextTop })),
+      nextTop,
+      nextActive,
+      topOrigin,
+      activeOrigin,
+    };
+  }
+
+  function applyWorkspaceSiteState(
+    projectId: number,
+    nextState: ReturnType<typeof deriveWorkspaceSiteState>,
+    reason: "boot" | "refresh" | "topSite" | "siteAdded" | "siteRemoved"
+  ) {
+    setSiteStateProjectId(projectId);
+    setSites(nextState.sites);
+    setTopSiteId(nextState.nextTop || "");
+    setActiveSiteId(nextState.nextActive || "");
+
+    publishWorkspaceSignal({
+      projectId,
+      reason,
+      topSiteId: nextState.nextTop || "",
+      topOrigin: nextState.topOrigin,
+      activeSiteId: nextState.nextActive || "",
+      activeOrigin: nextState.activeOrigin,
+    });
+
+    void persistWorkspaceSelection({
+      projectId,
+      topSiteId: nextState.nextTop || "",
+      topSiteOrigin: nextState.topOrigin,
+      activeSiteId: nextState.nextActive || "",
+      activeSiteOrigin: nextState.activeOrigin,
+    });
+  }
+
+  async function loadWorkspaceBootstrap() {
+    const data = await apiJSON<{
+      ok?: boolean;
+      projectId?: number | null;
+      hasWorkspace?: boolean;
+      sites?: Array<{ id: string; label: string; origin: string; createdAt: string | number; notes?: string | null }>;
+      topSiteId?: string | null;
+      activeSiteId?: string | null;
+    }>("/api/workspace", {
+      method: "GET",
+    });
+
+    const projectId = typeof data.projectId === "number" && data.projectId > 0 ? data.projectId : null;
+    const rawSites = Array.isArray(data.sites) ? data.sites : [];
+
+    if (!projectId || data.hasWorkspace === false) {
+      return { projectId: null };
+    }
+
+    setActiveProjectId(projectId);
+    try {
+      globalThis.__cbLocalStore.setItem(storageKeyActiveProjectId(), String(projectId));
+    } catch {}
+
+    if (rawSites.length) {
+      const nextState = deriveWorkspaceSiteState(projectId, rawSites, data.topSiteId, data.activeSiteId);
+      applyWorkspaceSiteState(projectId, nextState, "boot");
+    }
+
+    return { projectId };
+  }
 
   async function loadProjects() {
     const data = await apiJSON<{
@@ -1305,83 +1611,17 @@ function CommandDeckPageInner() {
   ) {
     const data = await apiJSON<{
       topSiteId: string | null;
-      sites: Array<{ id: string; label: string; origin: string; createdAt: string | number }>;
+      activeSiteId?: string | null;
+      sites: Array<{ id: string; label: string; origin: string; createdAt: string | number; notes?: string | null }>;
     }>(`/api/workspaces/${projectId}/sites`, { method: "GET" });
 
-
-    const rawSites = Array.isArray(data.sites) ? data.sites : [];
-    const topId = (data.topSiteId || "").trim();
-
-
-    const normalized: Site[] = rawSites
-      .map((s) => {
-        let origin = (s.origin || "").trim();
-        try {
-          origin = normalizeOrigin(origin);
-        } catch {}
-
-
-        return {
-          id: String(s.id || ""),
-          label: clampStr(String(s.label || originToLabel(origin)), 15),
-          origin,
-          createdAt: safeNumDate(s.createdAt),
-        };
-      })
-      .filter((s) => !!s.id && !!s.origin);
-
-
-    const firstId = normalized[0]?.id || "";
-    const nextTop = topId && normalized.some((x) => x.id === topId) ? topId : firstId;
-
-
-    // Restore last active site per-project if possible, otherwise use nextTop
-    let storedActive = "";
-    try {
-      storedActive = (globalThis.__cbLocalStore.getItem(storageKeyActiveSiteId(projectId)) || "").trim();
-    } catch {}
-
-
-    const prevActiveFromState = activeSiteId;
-
-
-    const nextActive =
-      storedActive && normalized.some((x) => x.id === storedActive)
-        ? storedActive
-        : prevActiveFromState && normalized.some((x) => x.id === prevActiveFromState)
-        ? prevActiveFromState
-        : nextTop;
-
-
-    const topSiteObj = normalized.find((x) => x.id === nextTop) || null;
-    const activeSiteObj = normalized.find((x) => x.id === nextActive) || topSiteObj || null;
-
-
-    const topOrigin = (topSiteObj?.origin || "").trim();
-    const activeOrigin = (activeSiteObj?.origin || topOrigin || "").trim();
-
-
-    setSites(normalized.map((s) => ({ ...s, top: !!nextTop && s.id === nextTop })));
-    setTopSiteId(nextTop || "");
-    setActiveSiteId(nextActive || "");
-
-
-    publishWorkspaceSignal({
+    const nextState = deriveWorkspaceSiteState(
       projectId,
-      reason,
-      topSiteId: nextTop || "",
-      topOrigin,
-      activeSiteId: nextActive || "",
-      activeOrigin,
-    });
-
-    void persistWorkspaceSelection({
-      projectId,
-      topSiteId: nextTop || "",
-      topSiteOrigin: topOrigin,
-      activeSiteId: nextActive || "",
-      activeSiteOrigin: activeOrigin,
-    });
+      Array.isArray(data.sites) ? data.sites : [],
+      data.topSiteId,
+      data.activeSiteId
+    );
+    applyWorkspaceSiteState(projectId, nextState, reason);
   }
 
 
@@ -1447,25 +1687,39 @@ function CommandDeckPageInner() {
   useEffect(() => {
     if (auth.status !== "authed") return;
 
-
     (async () => {
-      try {
-        const { next } = await loadProjects();
-        if (next) {
-          await refreshWorkspace(next, "boot");
-        } else {
-          setSites([]);
-          setTopSiteId("");
-          setActiveSiteId("");
-          setGuardrails(DEFAULT_GUARDRAILS);
-        }
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : "";
+      const [workspaceResult, projectsResult] = await Promise.allSettled([loadWorkspaceBootstrap(), loadProjects()]);
+
+      const nextProjectId =
+        workspaceResult.status === "fulfilled" && workspaceResult.value.projectId
+          ? workspaceResult.value.projectId
+          : projectsResult.status === "fulfilled"
+          ? projectsResult.value.next
+          : null;
+
+      if (!nextProjectId && sites.length === 0) {
+        setSiteStateProjectId(null);
+        setSites([]);
+        setTopSiteId("");
+        setActiveSiteId("");
+        setGuardrails(DEFAULT_GUARDRAILS);
+      }
+
+      if (workspaceResult.status === "rejected" && projectsResult.status === "rejected") {
+        const msg =
+          (workspaceResult.reason instanceof Error && workspaceResult.reason.message) ||
+          (projectsResult.reason instanceof Error && projectsResult.reason.message) ||
+          "";
         pushToast(msg || "Failed to load workspaces.", "bad");
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.status]);
+
+  useEffect(() => {
+    if (!activeProjectId) return;
+    hydrateProjectStateFromCache(activeProjectId);
+  }, [activeProjectId, hydrateProjectStateFromCache]);
 
 
   // When activeProjectId changes, reload its sites+guardrails (DB truth)

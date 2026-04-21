@@ -164,7 +164,8 @@ export async function GET(req: NextRequest, ctx: { env?: RateLimitEnv }) {
     );
   }
 
-  const canonicalOrigin = verification.origin ?? req.headers.get("origin") ?? "";
+  const responseOrigin = verification.origin ?? req.headers.get("origin") ?? "";
+  const canonicalOrigin = verification.siteOrigin || responseOrigin;
   const siteId = verification.siteId;
   const accountRecord = await prisma.account.findUnique({
     where: { id: verification.accountId },
@@ -203,7 +204,7 @@ export async function GET(req: NextRequest, ctx: { env?: RateLimitEnv }) {
       },
       {
         status: 200,
-        headers: corsHeaders(canonicalOrigin),
+        headers: corsHeaders(responseOrigin),
       }
     );
   }
@@ -214,7 +215,7 @@ export async function GET(req: NextRequest, ctx: { env?: RateLimitEnv }) {
   if (!arcadeConfig || !arcadeConfig.enabled) {
     return NextResponse.json(
       { ok: true, allowed: gateResult.allowed, enabled: false },
-      { status: 200, headers: corsHeaders(canonicalOrigin) }
+      { status: 200, headers: corsHeaders(responseOrigin) }
     );
   }
 
@@ -231,7 +232,7 @@ export async function GET(req: NextRequest, ctx: { env?: RateLimitEnv }) {
   if (!game) {
     return NextResponse.json(
       { ok: false, allowed: false, code: "GAME_NOT_FOUND" },
-      { status: 404, headers: corsHeaders(canonicalOrigin) }
+      { status: 404, headers: corsHeaders(responseOrigin) }
     );
   }
   if (!allowedSet.has(game.slug)) {
@@ -239,14 +240,14 @@ export async function GET(req: NextRequest, ctx: { env?: RateLimitEnv }) {
     if (!fallbackSlug) {
       return NextResponse.json(
         { ok: true, allowed: false, enabled: true, code: "ARCADE_TIER_LOCKED" },
-        { status: 200, headers: corsHeaders(canonicalOrigin) }
+        { status: 200, headers: corsHeaders(responseOrigin) }
       );
     }
     const fallbackGame = getArcadeGames(ARCADE_KIND_404).find((entry) => entry.slug === fallbackSlug);
     if (!fallbackGame) {
       return NextResponse.json(
         { ok: true, allowed: false, enabled: true, code: "ARCADE_TIER_LOCKED" },
-        { status: 200, headers: corsHeaders(canonicalOrigin) }
+        { status: 200, headers: corsHeaders(responseOrigin) }
       );
     }
     game = fallbackGame;
@@ -440,6 +441,6 @@ export async function GET(req: NextRequest, ctx: { env?: RateLimitEnv }) {
 
   return NextResponse.json(payload, {
     status: 200,
-    headers: corsHeaders(canonicalOrigin),
+    headers: corsHeaders(responseOrigin),
   });
 }
