@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getAuthPool } from "@/lib/authDb";
+import { expandRelatedExactOrigins, originsShareWebsiteContext } from "@/originMatch";
 
 export type ApiKeyWorkspaceSite = {
   id: string;
@@ -153,7 +154,7 @@ export async function resolveApiKeyWorkspace(args: ResolveApiKeyWorkspaceArgs): 
     ? sites.find((site) => site.id === activeSiteIdHint) ?? null
     : null;
   const hintedOriginSite = !requestedSite && !hintedSite && activeSiteOriginHint
-    ? sites.find((site) => site.origin === activeSiteOriginHint) ?? null
+    ? sites.find((site) => originsShareWebsiteContext(site.origin, activeSiteOriginHint)) ?? null
     : null;
   const topSite = !requestedSite && !hintedSite && !hintedOriginSite && resolvedTopSiteId
     ? sites.find((site) => site.id === resolvedTopSiteId) ?? null
@@ -163,7 +164,11 @@ export async function resolveApiKeyWorkspace(args: ResolveApiKeyWorkspaceArgs): 
     : requestedSite || hintedSite || hintedOriginSite || topSite || sites[0] || null;
 
   const originSet = new Set<string>();
-  if (activeSite?.origin) originSet.add(activeSite.origin);
+  if (activeSite?.origin) {
+    for (const origin of expandRelatedExactOrigins(activeSite.origin)) {
+      originSet.add(origin);
+    }
+  }
 
   if (activeSite) {
     try {
@@ -176,7 +181,14 @@ export async function resolveApiKeyWorkspace(args: ResolveApiKeyWorkspaceArgs): 
       );
       for (const row of allowedRows.rows) {
         const origin = String(row.origin || "").trim();
-        if (origin) originSet.add(origin);
+        if (!origin) continue;
+        try {
+          for (const candidate of expandRelatedExactOrigins(origin)) {
+            originSet.add(candidate);
+          }
+        } catch {
+          originSet.add(origin);
+        }
       }
     } catch (error) {
       console.error("[settings/api-keys] allowed origins lookup failed", error);

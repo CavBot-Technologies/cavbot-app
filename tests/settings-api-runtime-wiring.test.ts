@@ -58,6 +58,8 @@ test("settings api-key runtime helpers use the auth pool instead of Prisma", () 
   assert.equal(workspaceSource.includes("preferredProjectId"), true);
   assert.equal(workspaceSource.includes("activeSiteIdHint"), true);
   assert.equal(workspaceSource.includes("activeSiteOriginHint"), true);
+  assert.equal(workspaceSource.includes("originsShareWebsiteContext"), true);
+  assert.equal(workspaceSource.includes("expandRelatedExactOrigins"), true);
 
   assert.equal(runtimeSource.includes('from "@/lib/prisma"'), false);
   assert.equal(runtimeSource.includes("getAuthPool"), true);

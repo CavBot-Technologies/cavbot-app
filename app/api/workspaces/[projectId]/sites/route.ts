@@ -31,6 +31,7 @@ import { isPermissionDeniedError, isSchemaMismatchError } from "@/lib/dbSchemaGu
 import { resolvePlanIdFromTier, getPlanLimits } from "@/lib/plans";
 import { getCavbotAppOrigins } from "@/lib/security/embedAppOrigins";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { expandRelatedExactOrigins } from "@/originMatch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -104,7 +105,7 @@ function normalizeOrigin(input: string): string {
   if (!u.hostname || u.hostname.includes("..")) throw new Error("That domain/origin is invalid.");
   if (u.username || u.password) throw new Error("Origins may not include credentials.");
 
-  const host = u.hostname.toLowerCase().replace(/^www\./, "");
+  const host = u.hostname.toLowerCase();
   const isDefaultPort =
     (u.protocol === "https:" && (u.port === "" || u.port === "443")) ||
     (u.protocol === "http:" && (u.port === "" || u.port === "80"));
@@ -337,6 +338,7 @@ export async function POST(req: Request, ctx: unknown) {
 
     const label = (labelRaw || hostLabel(origin)).slice(0, 48);
     const baseSlug = baseSlugFromOrigin(origin);
+    const originAliases = expandRelatedExactOrigins(origin);
 
     try {
       assertWorkerSiteRegistrationConfig();
@@ -357,6 +359,7 @@ export async function POST(req: Request, ctx: unknown) {
         projectId: project.id,
         accountId: sess.accountId,
         origin,
+        originAliases,
         label,
         notes,
         baseSlug,
@@ -388,7 +391,7 @@ export async function POST(req: Request, ctx: unknown) {
 
       try {
         await createDefaultAllowedOriginsForSite(result.site.id, [
-          result.site.origin,
+          ...originAliases,
           ...getCavbotAppOrigins(),
         ]);
         await registerWorkerSite(project.id, result.site.origin, result.site.label);

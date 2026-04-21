@@ -5,6 +5,26 @@ export type AllowedOriginRow = {
   matchType: OriginMatchType;
 };
 
+const MULTI_LABEL_PUBLIC_SUFFIXES = new Set([
+  "ac.uk",
+  "co.jp",
+  "co.kr",
+  "co.nz",
+  "co.uk",
+  "com.au",
+  "com.br",
+  "com.mx",
+  "com.tr",
+  "edu.au",
+  "gov.au",
+  "gov.uk",
+  "net.au",
+  "net.br",
+  "org.au",
+  "org.br",
+  "org.uk",
+]);
+
 function isLocalHost(value: string) {
   return (
     value === "localhost" ||
@@ -14,12 +34,62 @@ function isLocalHost(value: string) {
   );
 }
 
+function isIpLiteral(value: string) {
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(value) || value.includes(":");
+}
+
+function hasLikelyApexStructure(hostname: string) {
+  const labels = hostname
+    .toLowerCase()
+    .split(".")
+    .map((label) => label.trim())
+    .filter(Boolean);
+
+  if (labels.length < 2) return false;
+  if (labels.length === 2) return true;
+  if (labels.length !== 3) return false;
+
+  return MULTI_LABEL_PUBLIC_SUFFIXES.has(`${labels[1]}.${labels[2]}`);
+}
+
+function deriveCompanionHostname(hostname: string) {
+  const normalized = hostname.toLowerCase().trim();
+  if (!normalized || isLocalHost(normalized) || isIpLiteral(normalized)) return null;
+
+  if (normalized.startsWith("www.")) {
+    const bare = normalized.slice(4).trim();
+    return bare || null;
+  }
+
+  if (!hasLikelyApexStructure(normalized)) return null;
+  return `www.${normalized}`;
+}
+
 export function normalizeOriginStrict(origin: string): string {
   const u = new URL(origin);
   // Only allow http(s)
   if (u.protocol !== "https:" && u.protocol !== "http:") throw new Error("bad_origin_scheme");
   // No path/query/fragment allowed in stored origins
   return `${u.protocol}//${u.host}`;
+}
+
+export function expandRelatedExactOrigins(origin: string): string[] {
+  const canonical = normalizeOriginStrict(origin);
+  const parsed = new URL(canonical);
+  const companionHostname = deriveCompanionHostname(parsed.hostname);
+  if (!companionHostname) return [canonical];
+
+  const companionOrigin = `${parsed.protocol}//${companionHostname}${parsed.port ? `:${parsed.port}` : ""}`;
+  return companionOrigin === canonical ? [canonical] : [canonical, companionOrigin];
+}
+
+export function originsShareWebsiteContext(left: string, right: string): boolean {
+  try {
+    const canonicalRight = normalizeOriginStrict(right);
+    return expandRelatedExactOrigins(left).includes(canonicalRight);
+  } catch {
+    return false;
+  }
 }
 
 function hostMatchesWildcard(host: string, base: string): boolean {
@@ -98,7 +168,11 @@ export function originAllowed(originHeader: string | null, rows: AllowedOriginRo
     const mt = (r.matchType || "EXACT").toUpperCase();
 
     if (mt === "EXACT") {
-      if (normalizeOriginStrict(r.origin) === origin) return true;
+      try {
+        if (expandRelatedExactOrigins(r.origin).includes(origin)) return true;
+      } catch {
+        continue;
+      }
       continue;
     }
 

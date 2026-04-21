@@ -10,18 +10,22 @@ function read(rel: string) {
 test("command center workspace site route keeps secure site wiring parity", () => {
   const source = read("app/api/workspaces/[projectId]/sites/route.ts");
   const helper = read("lib/workspaceSites.server.ts");
+  const originHelper = read("originMatch.ts");
 
   assert.equal(source.includes("requireLowRiskWriteSession"), true);
   assert.equal(source.includes("requireAccountRole(sess, [\"OWNER\", \"ADMIN\"])"), true);
   assert.equal(source.includes("assertWorkerSiteRegistrationConfig()"), true);
   assert.equal(source.includes("registerWorkerSite(project.id, result.site.origin, result.site.label)"), true);
   assert.equal(source.includes("createDefaultAllowedOriginsForSite"), true);
+  assert.equal(source.includes("expandRelatedExactOrigins"), true);
   assert.equal(source.includes("getCavbotAppOrigins()"), true);
+  assert.equal(helper.includes("originAliases"), true);
   assert.equal(helper.includes("ON CONFLICT (\"siteId\", \"origin\") DO NOTHING"), true);
   assert.equal(source.includes("createProjectNoticeBestEffort"), true);
   assert.equal(source.includes("rollbackCreatedWorkspaceSite"), true);
   assert.equal(source.includes("SITE_WIRING_CONFIG_INVALID"), true);
   assert.equal(source.includes("DB_PERMISSION_DENIED"), true);
+  assert.equal(originHelper.includes("originsShareWebsiteContext"), true);
 });
 
 test("website delete, removed-list, and restore routes stay on the hardened workspace-site path", () => {

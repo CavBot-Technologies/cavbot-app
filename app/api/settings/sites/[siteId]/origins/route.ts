@@ -3,7 +3,7 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerResilientSession } from "@/lib/settings/ownerAuth.server";
-import { canonicalizeAllowlistOrigin, AllowedOriginRow } from "@/originMatch";
+import { canonicalizeAllowlistOrigin, AllowedOriginRow, expandRelatedExactOrigins } from "@/originMatch";
 import { auditLogWrite } from "@/lib/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import {
@@ -54,17 +54,28 @@ export async function PATCH(req: NextRequest, ctx: unknown) {
     const rawOrigins = Array.isArray(payload?.allowedOrigins) ? payload.allowedOrigins : [];
 
     const canonicalMap = new Map<string, AllowedOriginRow>();
+    const addEntry = (entry: AllowedOriginRow) => {
+      canonicalMap.set(`${entry.matchType}:${entry.origin}`, entry);
+    };
+
     for (const raw of rawOrigins) {
       try {
         const canonical = canonicalizeAllowlistOrigin(String(raw || ""));
-        canonicalMap.set(canonical.origin, canonical);
+        if (canonical.matchType === "EXACT") {
+          for (const origin of expandRelatedExactOrigins(canonical.origin)) {
+            addEntry({ origin, matchType: "EXACT" });
+          }
+        } else {
+          addEntry(canonical);
+        }
       } catch (err) {
         return json({ ok: false, error: "BAD_ORIGIN", message: (err as Error)?.message || "Invalid origin." }, 400);
       }
     }
 
-    const siteOriginEntry: AllowedOriginRow = { origin: site.origin, matchType: "EXACT" };
-    canonicalMap.set(site.origin, siteOriginEntry);
+    for (const origin of expandRelatedExactOrigins(site.origin)) {
+      addEntry({ origin, matchType: "EXACT" });
+    }
 
     const entries = Array.from(canonicalMap.values());
     const normalizedOrigins = entries.map((entry) => entry.origin);

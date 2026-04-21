@@ -7,6 +7,7 @@ import {
   pgUniqueViolationMentions,
   withAuthTransaction,
 } from "@/lib/authDb";
+import { expandRelatedExactOrigins } from "@/originMatch";
 
 type Queryable = {
   query: <T extends pg.QueryResultRow = pg.QueryResultRow>(
@@ -243,15 +244,16 @@ export async function findActiveWorkspaceSite(projectId: number, siteId: string)
 }
 
 export async function findActiveWorkspaceSiteByOrigin(projectId: number, origin: string) {
+  const candidateOrigins = expandRelatedExactOrigins(origin);
   const row = await queryOne<RawWorkspaceSiteOriginRow>(
     getAuthPool(),
     `SELECT "id", "origin"
      FROM "Site"
      WHERE "projectId" = $1
-       AND "origin" = $2
+       AND "origin" = ANY($2::text[])
        AND "isActive" = true
      LIMIT 1`,
-    [projectId, origin]
+    [projectId, candidateOrigins]
   );
   return row ? { id: String(row.id), origin: String(row.origin) } : null;
 }
@@ -272,12 +274,21 @@ export async function createWorkspaceSite(args: {
   projectId: number;
   accountId: string;
   origin: string;
+  originAliases: string[];
   label: string;
   notes: string | null;
   baseSlug: string;
   siteLimit: number | null;
 }) {
   return withAuthTransaction<WorkspaceSiteWriteResult>(async (tx) => {
+    const candidateOrigins = Array.from(
+      new Set(
+        (Array.isArray(args.originAliases) && args.originAliases.length ? args.originAliases : [args.origin])
+          .map((origin) => String(origin || "").trim())
+          .filter(Boolean)
+      )
+    );
+
     const project = await queryOne<RawProjectSiteSummaryRow>(
       tx,
       `SELECT "id", "topSiteId"
@@ -300,12 +311,12 @@ export async function createWorkspaceSite(args: {
       isActive: boolean;
     }>(
       tx,
-      `SELECT "id", "origin", "label", "isActive"
+        `SELECT "id", "origin", "label", "isActive"
        FROM "Site"
        WHERE "projectId" = $1
-         AND "origin" = $2
+         AND "origin" = ANY($2::text[])
        LIMIT 1`,
-      [args.projectId, args.origin]
+      [args.projectId, candidateOrigins]
     );
 
     if (existingByOrigin?.isActive) {
@@ -399,9 +410,9 @@ export async function createWorkspaceSite(args: {
         `SELECT "id", "origin", "label", "isActive"
          FROM "Site"
          WHERE "projectId" = $1
-           AND "origin" = $2
+           AND "origin" = ANY($2::text[])
          LIMIT 1`,
-        [args.projectId, args.origin]
+        [args.projectId, candidateOrigins]
       );
       if (existingOrigin?.isActive) {
         return {
@@ -446,9 +457,9 @@ export async function createWorkspaceSite(args: {
             `SELECT "id", "origin", "label", "isActive"
              FROM "Site"
              WHERE "projectId" = $1
-               AND "origin" = $2
+               AND "origin" = ANY($2::text[])
              LIMIT 1`,
-            [args.projectId, args.origin]
+            [args.projectId, candidateOrigins]
           );
           if (retryExistingOrigin?.isActive) {
             return {
@@ -494,7 +505,21 @@ export async function createWorkspaceSite(args: {
 }
 
 export async function createDefaultAllowedOriginsForSite(siteId: string, origins: string[]) {
-  const uniqueOrigins = Array.from(new Set(origins.map((origin) => String(origin || "").trim()).filter(Boolean)));
+  const uniqueOrigins = Array.from(
+    new Set(
+      origins
+        .flatMap((origin) => {
+          const trimmed = String(origin || "").trim();
+          if (!trimmed) return [];
+          try {
+            return expandRelatedExactOrigins(trimmed);
+          } catch {
+            return [trimmed];
+          }
+        })
+        .filter(Boolean)
+    )
+  );
   if (!uniqueOrigins.length) return;
 
   const values: unknown[] = [];

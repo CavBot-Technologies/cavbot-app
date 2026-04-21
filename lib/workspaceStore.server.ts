@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { cookies, headers } from "next/headers";
 import { getAppOrigin, getSession } from "@/lib/apiAuth";
 import { getAuthPool } from "@/lib/authDb";
+import { originsShareWebsiteContext } from "@/originMatch";
 import { resolveAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
 import { findAccountTier, listActiveWorkspaceSites } from "@/lib/workspaceSites.server";
 
@@ -225,7 +226,7 @@ export async function readWorkspace(opts?: { accountId?: string }): Promise<Work
     ? sites.find((site) => site.id === resolvedProject.topSiteId) ?? null
     : null;
   const topSiteByOrigin = !topSiteByProject && topSiteOriginHint
-    ? sites.find((site) => site.origin === topSiteOriginHint) ?? null
+    ? sites.find((site) => originsShareWebsiteContext(site.origin, topSiteOriginHint)) ?? null
     : null;
   const topSite = topSiteByProject || topSiteByOrigin || firstSite;
 
@@ -233,7 +234,7 @@ export async function readWorkspace(opts?: { accountId?: string }): Promise<Work
     ? sites.find((site) => site.id === activeSiteIdHint) ?? null
     : null;
   const activeSiteByOrigin = !activeSiteById && activeSiteOriginHint
-    ? sites.find((site) => site.origin === activeSiteOriginHint) ?? null
+    ? sites.find((site) => originsShareWebsiteContext(site.origin, activeSiteOriginHint)) ?? null
     : null;
   const activeSite = activeSiteById || activeSiteByOrigin || topSite || firstSite;
 
