@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { createHash } from "crypto";
 import { hashApiKey } from "@/lib/apiKeys.server";
 import { AllowedOriginRow, originAllowed, normalizeOriginStrict } from "@/originMatch";
 import { enforceRateLimit, type RateLimitEnv } from "@/rateLimit";
@@ -43,6 +44,29 @@ function pickFirstValue(...candidates: Array<string | null | undefined>) {
     }
   }
   return null;
+}
+
+function hashRateLimitActor(raw: string) {
+  return createHash("sha256").update(raw).digest("hex").slice(0, 24);
+}
+
+function extractEmbedRateLimitActor(body: Record<string, unknown> | null | undefined) {
+  const records = Array.isArray(body?.records) ? body.records : [];
+  const firstRecord =
+    records.length > 0 && records[0] && typeof records[0] === "object"
+      ? (records[0] as Record<string, unknown>)
+      : null;
+
+  const actor = pickFirstValue(
+    firstRecord?.visitor_id as string | undefined,
+    firstRecord?.anonymous_id as string | undefined,
+    firstRecord?.session_key as string | undefined,
+    body?.visitor_id as string | undefined,
+    body?.anonymous_id as string | undefined,
+    body?.session_key as string | undefined,
+  );
+
+  return actor ? hashRateLimitActor(actor) : "anonymous";
 }
 
 function inferRequestOrigin(req: Request) {
@@ -204,6 +228,8 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
     return failure("DENIED_ORIGIN", 403, "Origin not allowed.", canonicalOrigin);
   }
 
+  const rateLimitActor = extractEmbedRateLimitActor(body);
+
   try {
     await enforceRateLimit(
       req,
@@ -211,7 +237,7 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
       String(record.projectId),
       canonicalOrigin,
       EMBED_RATE_LIMIT_SPEC,
-      `origin:${canonicalOrigin}`
+      `origin:${canonicalOrigin}:actor:${rateLimitActor}`
     );
     await enforceRateLimit(
       req,
@@ -219,7 +245,7 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
       String(record.projectId),
       canonicalOrigin,
       EMBED_RATE_LIMIT_SPEC,
-      `site:${site.id}`
+      `site:${site.id}:actor:${rateLimitActor}`
     );
     await enforceRateLimit(
       req,
@@ -227,7 +253,7 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
       String(record.projectId),
       canonicalOrigin,
       EMBED_RATE_LIMIT_SPEC,
-      `key:${record.id}`
+      `key:${record.id}:actor:${rateLimitActor}`
     );
   } catch {
     await slowFailMetric(record, site.id, canonicalOrigin, false, true, req, "RATE_LIMIT");
