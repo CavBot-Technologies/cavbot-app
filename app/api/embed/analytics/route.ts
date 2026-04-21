@@ -68,6 +68,7 @@ export async function OPTIONS(req: NextRequest) {
 function buildRemoteHeaders(
   req: NextRequest,
   projectKey: string,
+  serverKey: string | null | undefined,
   siteOrigin: string,
   siteId: string
 ) {
@@ -75,8 +76,9 @@ function buildRemoteHeaders(
     "Content-Type": "application/json",
   };
 
-  if (projectKey) {
-    headers["X-Project-Key"] = projectKey;
+  const authKey = typeof serverKey === "string" && serverKey ? serverKey : projectKey;
+  if (authKey) {
+    headers["X-Project-Key"] = authKey;
   }
   const sdkVersion = req.headers.get("x-cavbot-sdk-version");
   if (sdkVersion) {
@@ -244,7 +246,7 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
     );
   }
 
-  const { baseUrl } = getEnv();
+  const { baseUrl, secretKey } = getEnv();
   const remoteUrl = `${baseUrl}/v1/events`;
   const responseOrigin = verification.origin ?? req.headers.get("origin");
   const canonicalSiteOrigin = verification.siteOrigin;
@@ -258,6 +260,7 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
       headers: buildRemoteHeaders(
         req,
         verification.projectKey,
+        secretKey,
         canonicalSiteOrigin,
         verification.siteId
       ),
