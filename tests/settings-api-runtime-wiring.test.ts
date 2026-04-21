@@ -45,6 +45,7 @@ test("settings api-key runtime helpers use the auth pool instead of Prisma", () 
   const installStateRuntimeSource = read("lib/settings/installStateRuntime.server.ts");
   const ownerAuthSource = read("lib/settings/ownerAuth.server.ts");
   const apiKeyRouteSource = read("app/api/settings/api-keys/route.ts");
+  const apiKeysPanelSource = read("app/settings/sections/ApiKeysPanel.tsx");
   const rotateRouteSource = read("app/api/settings/api-keys/rotate/route.ts");
   const usageRouteSource = read("app/api/settings/api-keys/usage/route.ts");
   const originsRouteSource = read("app/api/settings/sites/[siteId]/origins/route.ts");
@@ -93,4 +94,13 @@ test("settings api-key runtime helpers use the auth pool instead of Prisma", () 
   assert.equal(arcadeRouteSource.includes("findSiteForAccount"), true);
   assert.equal(installStateRouteSource.includes("listSiteInstallState"), true);
   assert.equal(installStateRouteSource.includes("findSiteForAccount"), true);
+  assert.equal(apiKeyRouteSource.includes("requestedSiteId"), true);
+  assert.equal(apiKeyRouteSource.includes("const scopedKeys = siteRecord?.id"), true);
+  assert.equal(apiKeyRouteSource.includes("sites: workspace.sites.map"), true);
+  assert.equal(apiKeysPanelSource.includes("/api/settings/api-keys?siteId="), true);
+  assert.equal(apiKeysPanelSource.includes("/api/workspaces/selection"), true);
+  assert.equal(
+    apiKeysPanelSource.includes("Each origin keeps its own key bindings, origin allowlist, and snippet output."),
+    true,
+  );
 });

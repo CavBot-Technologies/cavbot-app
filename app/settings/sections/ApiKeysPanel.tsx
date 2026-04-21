@@ -48,6 +48,8 @@ type KeyUsagePayload = {
 };
 
 type ApiKeysPayload = {
+  projectId: number | null;
+  sites: { id: string; origin: string }[];
   publishableKeys: ApiKeyDTO[];
   secretKeys: ApiKeyDTO[];
   allowedOrigins: string[];
@@ -146,6 +148,7 @@ type SnippetSection = {
 export default function ApiKeysPanel() {
   const [payload, setPayload] = useState<ApiKeysPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedSiteId, setSelectedSiteId] = useState("");
   const [allowedOrigins, setAllowedOrigins] = useState<string[]>([]);
   const [originInput, setOriginInput] = useState("");
   const [arcadeEnabled, setArcadeEnabled] = useState<boolean | null>(null);
@@ -163,6 +166,7 @@ export default function ApiKeysPanel() {
   const [pendingRevokeKeyId, setPendingRevokeKeyId] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
   const copyTimer = useRef<number | null>(null);
+  const selectedSiteIdRef = useRef("");
   const [overrideUsage, setOverrideUsage] = useState<KeyUsagePayload | null>(null);
   const usageOverrideSiteId = useRef<string | null>(null);
   const tier = useAccountTier();
@@ -200,6 +204,18 @@ export default function ApiKeysPanel() {
     [refreshUsageOverride]
   );
 
+  const buildApiKeysUrl = useCallback((siteId?: string | null) => {
+    const normalizedSiteId = String(siteId ?? "").trim();
+    if (!normalizedSiteId) return "/api/settings/api-keys";
+    return `/api/settings/api-keys?siteId=${encodeURIComponent(normalizedSiteId)}`;
+  }, []);
+
+  const updateSelectedSiteId = useCallback((siteId?: string | null) => {
+    const normalizedSiteId = String(siteId ?? "").trim();
+    selectedSiteIdRef.current = normalizedSiteId;
+    setSelectedSiteId(normalizedSiteId);
+  }, []);
+
   const activePublishable = useMemo(
     () => payload?.publishableKeys.find((key) => key.status === "ACTIVE") ?? payload?.publishableKeys[0] ?? null,
     [payload?.publishableKeys]
@@ -210,16 +226,23 @@ export default function ApiKeysPanel() {
     [payload?.secretKeys]
   );
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (siteIdOverride?: string | null) => {
     setError(null);
     try {
-      const response = await apiJSON<ApiKeysPayload>("/api/settings/api-keys");
+      const requestedSiteId = String(siteIdOverride ?? selectedSiteIdRef.current).trim();
+      const response = await apiJSON<ApiKeysPayload>(buildApiKeysUrl(requestedSiteId || undefined));
       setPayload(response);
+      const resolvedSiteId =
+        String(response.site?.id || "").trim() ||
+        String(response.sites[0]?.id || "").trim();
+      updateSelectedSiteId(resolvedSiteId);
+      usageOverrideSiteId.current = null;
+      setOverrideUsage(null);
       await refreshUsageOverride();
     } catch (err: unknown) {
       setError(getErrorMessage(err, "Failed to load API keys."));
     }
-  }, [refreshUsageOverride]);
+  }, [buildApiKeysUrl, refreshUsageOverride, updateSelectedSiteId]);
 
   useEffect(() => {
     loadData();
@@ -232,6 +255,20 @@ export default function ApiKeysPanel() {
   useEffect(() => {
     setAllowedOrigins(payload?.allowedOrigins ?? []);
   }, [payload?.allowedOrigins]);
+
+  const selectedSite = useMemo(() => {
+    if (!payload) return null;
+    const normalizedSiteId = String(selectedSiteId || payload.site?.id || "").trim();
+    if (!normalizedSiteId) {
+      return payload.site ?? payload.sites[0] ?? null;
+    }
+    return (
+      payload.sites.find((site) => site.id === normalizedSiteId) ??
+      payload.site ??
+      payload.sites[0] ??
+      null
+    );
+  }, [payload, selectedSiteId]);
 
   useEffect(() => {
     const siteId = payload?.site?.id ?? null;
@@ -342,7 +379,7 @@ export default function ApiKeysPanel() {
       try {
         const response = await apiJSON<{ key: ApiKeyDTO; plaintextKey: string }>("/api/settings/api-keys", {
           method: "POST",
-          body: JSON.stringify({ type, siteId: payload?.site?.id ?? undefined }),
+          body: JSON.stringify({ type, siteId: selectedSiteIdRef.current || payload?.site?.id || undefined }),
         });
         await loadData();
         await overrideUsageForSite(response.key.bindings.siteId ?? null);
@@ -364,7 +401,7 @@ export default function ApiKeysPanel() {
 
   const saveOrigins = useCallback(
     async (nextOrigins: string[]) => {
-      const siteId = payload?.site?.id ?? null;
+      const siteId = selectedSite?.id ?? payload?.site?.id ?? null;
       if (!siteId) {
         setOriginError("Select a site first.");
         return;
@@ -388,7 +425,7 @@ export default function ApiKeysPanel() {
         setOriginSaving(false);
       }
     },
-    [payload?.site?.id, showToast]
+    [payload?.site?.id, selectedSite?.id, showToast]
   );
 
   const handleAddOrigin = useCallback(() => {
@@ -413,6 +450,35 @@ export default function ApiKeysPanel() {
     setPendingRevokeKeyId(keyId);
     setRevokeModalOpen(true);
   }, []);
+
+  const handleSiteContextChange = useCallback(
+    async (nextSiteId: string) => {
+      const normalizedSiteId = String(nextSiteId || "").trim();
+      updateSelectedSiteId(normalizedSiteId);
+      if (!normalizedSiteId) {
+        await loadData(null);
+        return;
+      }
+
+      try {
+        if (payload?.projectId) {
+          await apiJSON<{ ok: true; requestId?: string }>("/api/workspaces/selection", {
+            method: "POST",
+            body: JSON.stringify({
+              projectId: payload.projectId,
+              activeSiteId: normalizedSiteId,
+            }),
+          });
+        }
+        await loadData(normalizedSiteId);
+        showToast("Site context updated");
+      } catch (err: unknown) {
+        await loadData(normalizedSiteId);
+        showToast(getErrorMessage(err, "Failed to update site context"), "watch");
+      }
+    },
+    [loadData, payload?.projectId, showToast, updateSelectedSiteId]
+  );
 
   const renderSnippetCard = (snippet: SnippetCard) => {
     const disabled = !snippet.ready || Boolean(snippet.copyLocked);
@@ -567,6 +633,52 @@ export default function ApiKeysPanel() {
         <div className="sx-api-card sx-api-error">{error}</div>
       ) : null}
 
+      <section className="sx-api-card sx-api-cardContext" aria-label="Site context">
+        <div className="sx-api-cardHead sx-api-cardHead--stack">
+          <div>
+            <div className="sx-footK">Site context</div>
+            <p className="sx-status-sub">
+              Keys, allowed origins, snippets, and install state below apply only to the selected site. Switching this
+              context updates CavBot&apos;s active site target across the metrics pages.
+            </p>
+          </div>
+        </div>
+        {payload?.sites.length ? (
+          <div className="sx-api-siteContext">
+            <div className="sx-api-siteContextSummary">
+              <div className="sx-api-siteContextOrigin">{selectedSite?.origin ?? "No site selected"}</div>
+              <div className="sx-api-siteContextSub">
+                Each origin keeps its own key bindings, origin allowlist, and snippet output.
+              </div>
+            </div>
+            <div className="sx-api-siteContextControls">
+              <label className="sx-api-label" htmlFor="sx-api-site-select">
+                Selected site
+              </label>
+              <select
+                id="sx-api-site-select"
+                className="sx-api-siteSelect"
+                value={selectedSiteId || selectedSite?.id || ""}
+                onChange={(event) => {
+                  void handleSiteContextChange(event.target.value);
+                }}
+              >
+                {payload.sites.map((site) => (
+                  <option key={site.id} value={site.id}>
+                    {site.origin}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        ) : (
+          <div className="sx-api-originEmpty">
+            Add a website in Command Center first. CavBot generates keys and snippets per site origin, not across the
+            whole workspace.
+          </div>
+        )}
+      </section>
+
       <section className="sx-api-card" aria-label="Publishable key">
         <div className="sx-api-cardHead">
           <div>
@@ -608,23 +720,29 @@ export default function ApiKeysPanel() {
           <p className="sx-status-sub">No publishable key detected yet. Create one to get started.</p>
         )}
 
-        <div className="sx-api-origins">
-          {(allowedOrigins.length ? allowedOrigins : ["No origins added yet"]).map((origin) => (
-            <span className="sx-origin-chip" key={origin}>
-              {origin}
-              {allowedOrigins.includes(origin) && (
-                <button
-                  type="button"
-                  className="sx-origin-remove"
-                  aria-label={`Remove ${origin}`}
-                  onClick={() => handleRemoveOrigin(origin)}
-                  disabled={originSaving}
-                >
-                  <span className="cb-closeIcon" aria-hidden="true" />
-                </button>
-              )}
-            </span>
-          ))}
+        <div className="sx-api-originPanel">
+          <div className="sx-api-label">Allowed origins for this site</div>
+          {selectedSite?.origin ? <div className="sx-api-originHint">Primary origin: {selectedSite.origin}</div> : null}
+          <div className="sx-api-originList">
+            {allowedOrigins.length ? (
+              allowedOrigins.map((origin) => (
+                <div className="sx-origin-row" key={origin}>
+                  <div className="sx-origin-text">{origin}</div>
+                  <button
+                    type="button"
+                    className="sx-origin-remove"
+                    aria-label={`Remove ${origin}`}
+                    onClick={() => handleRemoveOrigin(origin)}
+                    disabled={originSaving}
+                  >
+                    <span className="cb-closeIcon" aria-hidden="true" />
+                  </button>
+                </div>
+              ))
+            ) : (
+              <div className="sx-origin-empty">No origins added for this site yet.</div>
+            )}
+          </div>
         </div>
 
         <div className="sx-origin-editor">
@@ -775,7 +893,9 @@ export default function ApiKeysPanel() {
           <div>
             <div className="sx-footK">Snippets</div>
             <p className="sx-status-sub" style={{ maxWidth: "100%" }}>
-              Copy-ready scripts that wire analytics and the CavAi brain to your site; generate a publishable key and pick a site to unlock the code.
+              Copy-ready scripts that wire analytics and the CavAi brain to your site. The snippet output below is for{" "}
+              {selectedSite?.origin ?? "the selected site"} only, so switch the site context above to generate a
+              different install for another origin.
             </p>
           </div>
         </div>

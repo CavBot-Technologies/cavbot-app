@@ -474,6 +474,9 @@
   justify-content:space-between;
   gap:16px;
 }
+.sx-api-cardHead--stack{
+  align-items:flex-start;
+}
 .sx-api-link{
   display:inline-flex;
   align-items:center;
@@ -497,21 +500,21 @@
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.18);
   box-shadow: none;
-  height: 30px;
-  padding: 0 12px;
-  font-size: 11px;
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 12px;
   letter-spacing: 0.02em;
   line-height: 1;
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
   border-radius: var(--sx-r10);
 }
 .sx-api-link-pill:hover{
-  background: rgba(255,255,255,0.18);
-  border-color: rgba(255,255,255,0.35);
-  transform: translateY(-1px) scale(1.01);
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.28);
+  transform: translateY(-1px);
 }
 .sx-api-link-compact{
   display:inline-flex;
@@ -613,7 +616,7 @@
   font-size:11px;
   color: rgba(255,255,255,0.54);
   text-transform:none;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 .sx-api-meta{
   display:flex;
@@ -629,18 +632,21 @@
   align-items:flex-start;
 }
 .sx-api-meta span{
-  background: rgba(255,255,255,0.03);
+  display:flex;
+  align-items:center;
+  min-height: 38px;
+  background: rgba(255,255,255,0.035);
   border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 999px;
-  padding: 4px 12px;
+  border-radius: var(--sx-r10);
+  padding: 8px 12px;
   font-size: 11px;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.02em;
   text-transform: none;
   color: rgba(255,255,255,0.7);
-  max-width: min(220px, 100%);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: 1 1 180px;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .sx-api-origins{
   display:flex;
@@ -672,13 +678,14 @@
   opacity: 0.9;
 }
 .sx-api-copySmall{
-  padding:6px 16px;
+  min-height: 38px;
+  padding:8px 16px;
   border-radius: var(--sx-r10);
   border:1px solid rgba(255,255,255,0.3);
   background: rgba(255,255,255,0.05);
   color:#fff;
   font-size:12px;
-  letter-spacing:0.1em;
+  letter-spacing:0.02em;
   transition: border 0.2s ease, transform 0.2s ease;
 }
 .sx-api-copySmall:hover{
@@ -969,11 +976,112 @@
 .sx-origin-input{
   flex:1;
   min-width:160px;
-  padding:6px 10px;
+  min-height: 38px;
+  padding:8px 12px;
   border-radius: var(--sx-r10);
   border:1px solid rgba(255,255,255,0.24);
   background:rgba(255,255,255,0.04);
   color:#fff;
+}
+.sx-api-cardContext{
+  gap: 18px;
+}
+.sx-api-siteContext{
+  display:grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(240px, 0.9fr);
+  gap: 18px;
+  align-items:end;
+}
+.sx-api-siteContextSummary{
+  display:flex;
+  flex-direction:column;
+  gap: 8px;
+  min-width: 0;
+}
+.sx-api-siteContextOrigin{
+  display:flex;
+  align-items:center;
+  min-height: 56px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--sx-r10);
+  background: rgba(255,255,255,0.035);
+  color: rgba(255,255,255,0.92);
+  font-size: 15px;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+.sx-api-siteContextSub{
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgba(255,255,255,0.62);
+}
+.sx-api-siteContextControls{
+  display:flex;
+  flex-direction:column;
+  gap: 10px;
+}
+.sx-api-siteSelect{
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 42px 10px 14px;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: var(--sx-r10);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02)),
+    right 14px center / 10px 6px no-repeat var(--sx-select-chevron-svg);
+  color: rgba(255,255,255,0.92);
+  appearance: none;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+.sx-api-originPanel{
+  display:flex;
+  flex-direction:column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--sx-r10);
+  background: rgba(255,255,255,0.025);
+}
+.sx-api-originHint{
+  font-size: 12px;
+  color: rgba(255,255,255,0.58);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.sx-api-originList{
+  display:flex;
+  flex-direction:column;
+  gap: 10px;
+}
+.sx-origin-row{
+  display:grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items:center;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--sx-r10);
+  background: rgba(255,255,255,0.03);
+}
+.sx-origin-text{
+  min-width: 0;
+  font-size: 13px;
+  color: rgba(255,255,255,0.88);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.sx-origin-empty,
+.sx-api-originEmpty{
+  padding: 14px 16px;
+  border: 1px dashed rgba(255,255,255,0.14);
+  border-radius: var(--sx-r10);
+  background: rgba(255,255,255,0.02);
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgba(255,255,255,0.62);
 }
 .sx-origin-error{
   color:#ffbcbc;
@@ -1027,10 +1135,14 @@
   text-overflow: ellipsis;
 }
 .sx-origin-remove{
-  background:none;
-  border:none;
+  min-width: 30px;
+  width: 30px;
+  height: 30px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: var(--sx-r10);
   color:#fff;
-  opacity:0.8;
+  opacity:0.9;
   font-size:12px;
   cursor:pointer;
   padding:0;
@@ -1038,6 +1150,10 @@
   display:inline-flex;
   align-items:center;
   justify-content:center;
+}
+.sx-origin-remove:hover{
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.24);
 }
 .sx-origin-remove .cb-closeIcon{
   --cb-close-size: 10px;
@@ -1113,6 +1229,9 @@
     flex-direction: column;
     align-items: flex-start;
   }
+  .sx-api-siteContext {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1124,8 +1243,8 @@
     gap: 8px;
   }
   .sx-api-meta span {
-    max-width: 160px;
     font-size: 10px;
+    flex-basis: 100%;
   }
   .sx-api-link {
     padding: 4px 10px;
@@ -1143,8 +1262,8 @@
   .sx-origin-input {
     width: 100%;
   }
-  .sx-api-origins {
-    gap: 6px;
+  .sx-api-originPanel {
+    padding: 14px;
   }
   .sx-api-snippetGrid {
     grid-template-columns: 1fr;
@@ -1163,10 +1282,13 @@
     letter-spacing: 0.04em;
   }
   .sx-api-meta span {
-    padding: 3px 10px;
+    padding: 8px 10px;
   }
-  .sx-api-origins {
-    gap: 4px;
+  .sx-origin-row {
+    grid-template-columns: 1fr;
+  }
+  .sx-origin-remove {
+    justify-self: flex-start;
   }
 }
 

@@ -46,6 +46,8 @@ type ApiKeyCreateBody = {
 
 type KeyResponse = {
   ok: true;
+  projectId: number | null;
+  sites: { id: string; origin: string }[];
   publishableKeys: ReturnType<typeof serializeApiKey>[];
   secretKeys: ReturnType<typeof serializeApiKey>[];
   allowedOrigins: string[];
@@ -84,13 +86,17 @@ export async function GET(req: NextRequest) {
   try {
     const session = await requireSettingsOwnerResilientSession(req);
     const workspaceHints = readApiKeyWorkspaceCookieHints(req);
+    const requestedSiteId = String(req.nextUrl.searchParams.get("siteId") || "").trim() || undefined;
     const workspace = await resolveApiKeyWorkspace({
       accountId: session.accountId,
+      requestedSiteId,
       ...workspaceHints,
     });
     if (!workspace) {
       const emptyPayload: KeyResponse = {
         ok: true,
+        projectId: null,
+        sites: [],
         publishableKeys: [],
         secretKeys: [],
         allowedOrigins: [],
@@ -115,11 +121,14 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const publishableKeys = safeSerializeKeyList(keys, "PUBLISHABLE", true);
-    const secretKeys = safeSerializeKeyList(keys, "SECRET");
-
     const siteRecord = workspace.activeSite;
-    const allowedOrigins = workspace.allowedOrigins;
+    const scopedKeys = siteRecord?.id
+      ? keys.filter((key) => String(key.siteId || "").trim() === siteRecord.id)
+      : keys.filter((key) => !String(key.siteId || "").trim());
+
+    const publishableKeys = safeSerializeKeyList(scopedKeys, "PUBLISHABLE", true);
+    const secretKeys = safeSerializeKeyList(scopedKeys, "SECRET");
+    const allowedOrigins = siteRecord ? workspace.allowedOrigins : [];
 
     const usage =
       (await fetchUsageForWorkspace({
@@ -137,6 +146,8 @@ export async function GET(req: NextRequest) {
 
     const payload: KeyResponse = {
       ok: true,
+      projectId: workspace.projectId,
+      sites: workspace.sites.map((site) => ({ id: site.id, origin: site.origin })),
       publishableKeys,
       secretKeys,
       allowedOrigins,
@@ -157,8 +168,10 @@ export async function POST(req: NextRequest) {
     const body = (await readSanitizedJson(req, null)) as ApiKeyCreateBody | null;
     const session = await requireSettingsOwnerResilientSession(req);
     const workspaceHints = readApiKeyWorkspaceCookieHints(req);
+    const requestedSiteId = String(body?.siteId ?? "").trim() || undefined;
     let workspace = await resolveApiKeyWorkspace({
       accountId: session.accountId,
+      requestedSiteId,
       ...workspaceHints,
     });
 
