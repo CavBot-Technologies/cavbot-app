@@ -39,6 +39,12 @@ type RawApiKeySiteRow = {
   projectId: number | string;
 };
 
+type RawAccountSiteRow = {
+  id: string;
+  origin: string;
+  projectId: number | string;
+};
+
 type RawAllowedOriginRow = {
   origin: string | null;
 };
@@ -166,6 +172,40 @@ export async function findSiteForAccount(args: {
     origin: String(row.origin || "").trim(),
     projectId: asNumber(row.projectId),
   };
+}
+
+export async function listActiveSitesForAccount(accountId: string) {
+  const result = await getAuthPool().query<RawAccountSiteRow>(
+    `SELECT s."id", s."origin", s."projectId"
+     FROM "Site" s
+     INNER JOIN "Project" p
+       ON p."id" = s."projectId"
+     WHERE s."isActive" = TRUE
+       AND p."accountId" = $1
+       AND p."isActive" = TRUE
+     ORDER BY p."createdAt" ASC, s."createdAt" ASC`,
+    [accountId],
+  );
+
+  return result.rows.map((row) => ({
+    id: String(row.id || "").trim(),
+    origin: String(row.origin || "").trim(),
+    projectId: asNumber(row.projectId),
+  }));
+}
+
+export async function listAllowedOriginsForSite(siteId: string) {
+  const result = await getAuthPool().query<RawAllowedOriginRow>(
+    `SELECT "origin"
+     FROM "SiteAllowedOrigin"
+     WHERE "siteId" = $1
+     ORDER BY "createdAt" ASC`,
+    [siteId],
+  );
+
+  return result.rows
+    .map((row) => String(row.origin || "").trim())
+    .filter(Boolean);
 }
 
 export async function createApiKeyRecord(insertData: ApiKeyInsertRecord) {

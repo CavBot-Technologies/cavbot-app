@@ -1,10 +1,14 @@
 import type { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { hashApiKey } from "@/lib/apiKeys.server";
 import { AllowedOriginRow, originAllowed, normalizeOriginStrict } from "@/originMatch";
 import { enforceRateLimit, type RateLimitEnv } from "@/rateLimit";
 import { recordEmbedMetric, trackDeniedOrigin } from "@/lib/security/embedMetrics.server";
 import { getCavbotAppOrigins } from "@/lib/security/embedAppOrigins";
+import {
+  findActiveEmbedSite,
+  findEmbedKeyByHash,
+  listEmbedAllowedOrigins,
+} from "@/lib/security/embedKeyRuntime.server";
 
 const RATE_LIMIT_SPEC = { capacity: 25, refillPerSec: 25 / 60 };
 
@@ -154,38 +158,14 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
   if (!siteId) return failure("SITE_REQUIRED", 400, "Site identifier required for embed verification.");
 
   const keyHash = hashApiKey(projectKey.trim());
-  const record = await prisma.apiKey.findFirst({
-    where: { keyHash, projectId: { not: null } },
-    include: {
-      site: {
-        select: {
-          id: true,
-          origin: true,
-          projectId: true,
-          isActive: true,
-          allowedOrigins: {
-            select: { origin: true, matchType: true },
-            orderBy: { createdAt: "asc" },
-          },
-        },
-      },
-    },
-  });
+  const record = await findEmbedKeyByHash(keyHash);
   if (!record) return failure("INVALID_KEY", 401, "Key not found.");
   if (record.status !== "ACTIVE") return failure("KEY_INACTIVE", 403, "Key is not active.");
   if (record.type !== "PUBLISHABLE") return failure("INVALID_KEY_TYPE", 403, "Publishable key required.");
   if (!record.projectId) return failure("INVALID_KEY", 401, "Key missing project binding.");
 
   const projectId = record.projectId!;
-  const site = await prisma.site.findFirst({
-    where: { id: siteId, projectId: record.projectId, isActive: true },
-    include: {
-      allowedOrigins: {
-        select: { origin: true, matchType: true },
-        orderBy: { createdAt: "asc" },
-      },
-    },
-  });
+  const site = await findActiveEmbedSite(siteId, record.projectId);
   if (!site) {
     await slowFailMetric(record, siteId, null, false, false, req, "SITE_NOT_FOUND");
     return failure("SITE_NOT_FOUND", 404, "Requested site missing or inactive.");
@@ -219,7 +199,7 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
     return failure("DENIED_ORIGIN", 403, "Origin parsing failed.", originHeader);
   }
 
-  const allowedRows = buildAllowedOrigins(site.origin, site.allowedOrigins ?? []);
+  const allowedRows = buildAllowedOrigins(site.origin, await listEmbedAllowedOrigins(site.id));
   if (!originAllowed(canonicalOrigin, allowedRows)) {
     await slowFailMetric(record, site.id, canonicalOrigin, false, false, req, "DENIED_ORIGIN");
     return failure("DENIED_ORIGIN", 403, "Origin not allowed.", canonicalOrigin);

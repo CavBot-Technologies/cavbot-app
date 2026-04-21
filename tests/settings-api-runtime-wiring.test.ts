@@ -64,6 +64,8 @@ test("settings api-key runtime helpers use the auth pool instead of Prisma", () 
   assert.equal(runtimeSource.includes("withAuthTransaction"), true);
   assert.equal(runtimeSource.includes('"updatedAt"'), true);
   assert.equal(runtimeSource.includes("NOW(), NOW()"), true);
+  assert.equal(runtimeSource.includes("listActiveSitesForAccount"), true);
+  assert.equal(runtimeSource.includes("listAllowedOriginsForSite"), true);
 
   assert.equal(historySource.includes('from "@/lib/prisma"'), false);
   assert.equal(historySource.includes("getAuthPool"), true);
@@ -86,6 +88,7 @@ test("settings api-key runtime helpers use the auth pool instead of Prisma", () 
   }
   assert.equal(apiKeyRouteSource.includes("readApiKeyWorkspaceCookieHints"), true);
   assert.equal(apiKeyRouteSource.includes("findSiteForAccount"), true);
+  assert.equal(apiKeyRouteSource.includes("resolveApiKeyWorkspaceWithFallback"), true);
   assert.equal(rotateRouteSource.includes("readApiKeyWorkspaceCookieHints"), true);
   assert.equal(usageRouteSource.includes("readApiKeyWorkspaceCookieHints"), true);
   assert.equal(arcadeRouteSource.includes("readSettingsAccountTier"), true);
@@ -100,7 +103,9 @@ test("settings api-key runtime helpers use the auth pool instead of Prisma", () 
   assert.equal(apiKeysPanelSource.includes("/api/settings/api-keys?siteId="), true);
   assert.equal(apiKeysPanelSource.includes("/api/workspaces/selection"), true);
   assert.equal(
-    apiKeysPanelSource.includes("Each origin keeps its own key bindings, origin allowlist, and snippet output."),
+    apiKeysPanelSource.includes(
+      "Keys, allowed origins, snippets, and install state below apply only to the selected site.",
+    ),
     true,
   );
 });

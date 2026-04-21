@@ -16,13 +16,34 @@ const NO_STORE_HEADERS: Record<string, string> = {
   Expires: "0",
 };
 
-function corsHeaders(origin: string | null) {
+function corsHeaders(req: NextRequest, origin: string | null) {
+  const requestedHeaders = String(req.headers.get("access-control-request-headers") || "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+  const allowHeaders = Array.from(
+    new Set([
+      "authorization",
+      "content-type",
+      "x-cavbot-env",
+      "x-cavbot-project-key",
+      "x-cavbot-sdk-version",
+      "x-cavbot-site",
+      "x-cavbot-site-host",
+      "x-cavbot-site-origin",
+      "x-cavbot-site-public-id",
+      ...requestedHeaders,
+    ]),
+  ).join(",");
+
   const headers: Record<string, string> = {
     ...NO_STORE_HEADERS,
-    Vary: "Origin",
+    Vary: "Origin, Access-Control-Request-Headers",
     "Access-Control-Allow-Origin": origin || "",
-    "Access-Control-Allow-Methods": "POST,OPTIONS",
-    "Access-Control-Allow-Headers": "content-type,x-cavbot-project-key,x-cavbot-site",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": allowHeaders,
+    "Access-Control-Max-Age": "86400",
   };
   if (!origin) {
     delete headers["Access-Control-Allow-Origin"];
@@ -30,15 +51,12 @@ function corsHeaders(origin: string | null) {
   return headers;
 }
 
-function handleOptions(req: NextRequest) {
+export async function OPTIONS(req: NextRequest) {
   const origin = req.headers.get("origin");
-  return NextResponse.json(
-    { ok: true },
-    {
-      status: 204,
-      headers: corsHeaders(origin),
-    }
-  );
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders(req, origin),
+  });
 }
 
 function buildRemoteHeaders(
@@ -100,10 +118,6 @@ function getSiteIdFromPayload(payload: Record<string, unknown> | null, req: Next
 }
 
 export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
-  if (req.method === "OPTIONS") {
-    return handleOptions(req);
-  }
-
   const payload = (await readSanitizedJson(req, null)) as Record<string, unknown> | null;
 
   const tokenVerification = await verifyEmbedToken({
@@ -125,7 +139,7 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
       { ok: false, allowed: false, code: verification.code },
       {
         status: verification.status,
-        headers: corsHeaders(origin),
+        headers: corsHeaders(req, origin),
       }
     );
   }
@@ -149,7 +163,7 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
     const origin = verification.origin ?? req.headers.get("origin");
     const responseHeaders: Record<string, string> = {
       "Content-Type": response.headers.get("content-type") || "application/json",
-      ...corsHeaders(origin),
+      ...corsHeaders(req, origin),
     };
 
     return new NextResponse(text, {
@@ -162,7 +176,7 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
       { ok: false, error: "UPSTREAM_ERROR" },
       {
         status: 502,
-        headers: corsHeaders(origin),
+        headers: corsHeaders(req, origin),
       }
     );
   }

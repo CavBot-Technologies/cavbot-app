@@ -24,30 +24,34 @@ type MetricParams = {
 export async function recordEmbedMetric(params: MetricParams) {
   if (!params.accountId) return;
   if (!params.siteId) return;
-  const dayKey = formatDayKey(new Date());
-  await prisma.embedVerificationMetric.upsert({
-    where: {
-      projectId_siteId_keyId_dayKey: {
+  try {
+    const dayKey = formatDayKey(new Date());
+    await prisma.embedVerificationMetric.upsert({
+      where: {
+        projectId_siteId_keyId_dayKey: {
+          projectId: params.projectId,
+          siteId: params.siteId,
+          keyId: params.keyId,
+          dayKey,
+        },
+      },
+      create: {
+        accountId: params.accountId,
         projectId: params.projectId,
         siteId: params.siteId,
         keyId: params.keyId,
         dayKey,
+        verified: params.allowed ? 1 : 0,
+        denied: params.allowed ? 0 : 1,
       },
-    },
-    create: {
-      accountId: params.accountId,
-      projectId: params.projectId,
-      siteId: params.siteId,
-      keyId: params.keyId,
-      dayKey,
-      verified: params.allowed ? 1 : 0,
-      denied: params.allowed ? 0 : 1,
-    },
-    update: {
-      verified: params.allowed ? { increment: 1 } : undefined,
-      denied: params.allowed ? undefined : { increment: 1 },
-    },
-  });
+      update: {
+        verified: params.allowed ? { increment: 1 } : undefined,
+        denied: params.allowed ? undefined : { increment: 1 },
+      },
+    });
+  } catch (error) {
+    console.error("[embedMetrics] record failed", error);
+  }
 }
 
 type DeniedOriginParams = {
@@ -106,40 +110,44 @@ async function upsertDeniedOrigin(params: Omit<DeniedOriginParams, "siteId"> & {
 export async function trackDeniedOrigin(params: DeniedOriginParams) {
   if (!params.accountId) return;
   if (!params.siteId) return;
-  const dayKey = formatDayKey(new Date());
-  const row = await upsertDeniedOrigin({ ...params, siteId: params.siteId }, dayKey);
-  const lastAudit = row.auditLoggedAt ? row.auditLoggedAt.getTime() : 0;
-  const interval = Date.now() - lastAudit;
-  const shouldAudit = !row.auditLoggedAt || interval > DENY_AUDIT_INTERVAL_MS;
+  try {
+    const dayKey = formatDayKey(new Date());
+    const row = await upsertDeniedOrigin({ ...params, siteId: params.siteId }, dayKey);
+    const lastAudit = row.auditLoggedAt ? row.auditLoggedAt.getTime() : 0;
+    const interval = Date.now() - lastAudit;
+    const shouldAudit = !row.auditLoggedAt || interval > DENY_AUDIT_INTERVAL_MS;
 
-  if (shouldAudit) {
-    await auditLogWrite({
-      request: params.request ?? null,
-      accountId: params.accountId,
-      action: params.rateLimited ? "KEY_RATE_LIMITED" : "KEY_DENIED_ORIGIN",
-      category: "keys",
-      severity: "warning",
-      targetType: "apiKey",
-      targetId: params.keyId,
-      targetLabel: `•••• ${params.keyId.slice(-4)}`,
-      metaJson: {
-        origin: params.origin,
-        denyCode: params.denyCode,
-        keyLast4: params.keyId.slice(-4),
-      },
-    });
-    await prisma.embedDeniedOrigin.update({
-      where: {
-        projectId_siteId_keyId_dayKey_origin: {
-          projectId: params.projectId,
-          siteId: params.siteId,
-          keyId: params.keyId,
-          dayKey,
+    if (shouldAudit) {
+      await auditLogWrite({
+        request: params.request ?? null,
+        accountId: params.accountId,
+        action: params.rateLimited ? "KEY_RATE_LIMITED" : "KEY_DENIED_ORIGIN",
+        category: "keys",
+        severity: "warning",
+        targetType: "apiKey",
+        targetId: params.keyId,
+        targetLabel: `•••• ${params.keyId.slice(-4)}`,
+        metaJson: {
           origin: params.origin,
+          denyCode: params.denyCode,
+          keyLast4: params.keyId.slice(-4),
         },
-      },
-      data: { auditLoggedAt: new Date() },
-    });
+      });
+      await prisma.embedDeniedOrigin.update({
+        where: {
+          projectId_siteId_keyId_dayKey_origin: {
+            projectId: params.projectId,
+            siteId: params.siteId,
+            keyId: params.keyId,
+            dayKey,
+            origin: params.origin,
+          },
+        },
+        data: { auditLoggedAt: new Date() },
+      });
+    }
+  } catch (error) {
+    console.error("[embedMetrics] denied-origin tracking failed", error);
   }
 }
 

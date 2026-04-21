@@ -1,13 +1,14 @@
 // app/api/workspaces/route.ts
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { isApiAuthError } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import {
   classifyWorkspaceBootstrapError,
   listAccountWorkspaceProjects,
   resolveAccountWorkspaceProject,
 } from "@/lib/workspaceProjects.server";
+import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -226,8 +227,7 @@ export async function GET(req: NextRequest) {
   const rid = requestIdFrom(req);
   let accountId: string | null = null;
   try {
-    const sess = await requireSession(req);
-    requireAccountContext(sess);
+    const sess = await requireWorkspaceResilientSession(req);
     accountId = sess.accountId || null;
 
     const includeInactive = includeInactiveFromQuery(req);
@@ -251,8 +251,7 @@ export async function POST(req: NextRequest) {
   const rid = requestIdFrom(req);
   let accountId: string | null = null;
   try {
-    const sess = await requireSession(req);
-    requireAccountContext(sess);
+    const sess = await requireWorkspaceResilientSession(req);
     accountId = sess.accountId || null;
 
     const body = (await safeJsonBody<ListWorkspacesBody>(req)) || {};

@@ -16,7 +16,9 @@ import {
   createApiKeyRecord,
   findSiteForAccount,
   findSiteForProject,
+  listActiveSitesForAccount,
   listApiKeysForProject,
+  listAllowedOriginsForSite,
 } from "@/lib/settings/apiKeysRuntime.server";
 
 export const runtime = "nodejs";
@@ -55,6 +57,12 @@ type KeyResponse = {
   usage: KeyUsagePayload;
 };
 
+type WorkspaceSiteSummary = {
+  id: string;
+  origin: string;
+  projectId: number;
+};
+
 function toType(raw: unknown): ApiKeyType {
   const value = String(raw ?? "publishable").trim().toUpperCase();
   if (value === "SECRET" || value === "ADMIN" || value === "PUBLISHABLE") return value as ApiKeyType;
@@ -82,12 +90,72 @@ function safeSerializeKeyList(
     });
 }
 
+async function resolveApiKeyWorkspaceWithFallback(args: {
+  accountId: string;
+  requestedSiteId?: string | null;
+  preferredProjectId?: number | null;
+  activeSiteIdHint?: string | null;
+  activeSiteOriginHint?: string | null;
+}) {
+  try {
+    return await resolveApiKeyWorkspace(args);
+  } catch (error) {
+    console.error("[settings/api-keys] workspace resolve failed", {
+      accountId: args.accountId,
+      requestedSiteId: args.requestedSiteId ?? null,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  let sites: WorkspaceSiteSummary[] = [];
+  try {
+    sites = await listActiveSitesForAccount(args.accountId);
+  } catch (error) {
+    console.error("[settings/api-keys] site fallback failed", {
+      accountId: args.accountId,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+
+  if (!sites.length) return null;
+
+  const requestedSiteId = String(args.requestedSiteId || "").trim();
+  const activeSite =
+    (requestedSiteId ? sites.find((site) => site.id === requestedSiteId) : null) ??
+    sites[0] ??
+    null;
+  if (!activeSite) return null;
+
+  const projectSites = sites
+    .filter((site) => site.projectId === activeSite.projectId)
+    .map((site) => ({ id: site.id, origin: site.origin }));
+
+  let allowedOrigins = [activeSite.origin];
+  try {
+    const extraOrigins = await listAllowedOriginsForSite(activeSite.id);
+    allowedOrigins = Array.from(new Set([activeSite.origin, ...extraOrigins]));
+  } catch (error) {
+    console.error("[settings/api-keys] fallback allowed origins lookup failed", {
+      siteId: activeSite.id,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  return {
+    projectId: activeSite.projectId,
+    sites: projectSites,
+    activeSite: { id: activeSite.id, origin: activeSite.origin },
+    allowedOrigins,
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await requireSettingsOwnerResilientSession(req);
     const workspaceHints = readApiKeyWorkspaceCookieHints(req);
     const requestedSiteId = String(req.nextUrl.searchParams.get("siteId") || "").trim() || undefined;
-    const workspace = await resolveApiKeyWorkspace({
+    const workspace = await resolveApiKeyWorkspaceWithFallback({
       accountId: session.accountId,
       requestedSiteId,
       ...workspaceHints,
@@ -169,7 +237,7 @@ export async function POST(req: NextRequest) {
     const session = await requireSettingsOwnerResilientSession(req);
     const workspaceHints = readApiKeyWorkspaceCookieHints(req);
     const requestedSiteId = String(body?.siteId ?? "").trim() || undefined;
-    let workspace = await resolveApiKeyWorkspace({
+    let workspace = await resolveApiKeyWorkspaceWithFallback({
       accountId: session.accountId,
       requestedSiteId,
       ...workspaceHints,

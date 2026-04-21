@@ -1,8 +1,10 @@
 import { NextRequest } from "next/server";
 import crypto from "crypto";
-import { ApiKeyStatus } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
 import { normalizeOriginStrict } from "@/originMatch";
+import {
+  findEmbedKeyById,
+  findActiveEmbedSite,
+} from "@/lib/security/embedKeyRuntime.server";
 
 let embedSecretWarned = false;
 
@@ -233,23 +235,13 @@ export async function verifyEmbedToken(options: VerifyOptions): Promise<EmbedTok
     }
   }
 
-  const keyRecord = await prisma.apiKey.findUnique({
-    where: { id: claims.keyId },
-    include: {
-      site: {
-        select: {
-          id: true,
-          origin: true,
-        },
-      },
-    },
-  });
+  const keyRecord = await findEmbedKeyById(claims.keyId);
 
   if (!keyRecord) {
     return { ok: false, status: 401, code: "TOKEN_KEY_NOT_FOUND" };
   }
 
-  if (keyRecord.status !== ApiKeyStatus.ACTIVE) {
+  if (keyRecord.status !== "ACTIVE") {
     return { ok: false, status: 403, code: "TOKEN_KEY_INACTIVE" };
   }
 
@@ -270,12 +262,17 @@ export async function verifyEmbedToken(options: VerifyOptions): Promise<EmbedTok
     return { ok: false, status: 403, code: "TOKEN_KEY_STALE" };
   }
 
+  const siteRecord = await findActiveEmbedSite(claims.siteId, claims.projectId);
+  if (!siteRecord) {
+    return { ok: false, status: 404, code: "TOKEN_SITE_NOT_FOUND" };
+  }
+
   return {
     ok: true,
     accountId: keyRecord.accountId ?? "",
     projectId: keyRecord.projectId ?? 0,
     siteId: claims.siteId,
-    siteOrigin: keyRecord.site?.origin ?? "",
+    siteOrigin: siteRecord.origin,
     origin: parsedOrigin,
     keyId: claims.keyId,
     projectKey: "",
