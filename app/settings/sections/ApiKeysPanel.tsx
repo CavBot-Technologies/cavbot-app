@@ -645,12 +645,6 @@ export default function ApiKeysPanel() {
         </div>
         {payload?.sites.length ? (
           <div className="sx-api-siteContext">
-            <div className="sx-api-siteContextSummary">
-              <div className="sx-api-siteContextOrigin">{selectedSite?.origin ?? "No site selected"}</div>
-              <div className="sx-api-siteContextSub">
-                Each origin keeps its own key bindings, origin allowlist, and snippet output.
-              </div>
-            </div>
             <div className="sx-api-siteContextControls">
               <label className="sx-api-label" htmlFor="sx-api-site-select">
                 Selected site
@@ -714,7 +708,7 @@ export default function ApiKeysPanel() {
             <span>Scopes: {activePublishable.scopes.join(", ") || "—"}</span>
             <span>Created {formatDate(activePublishable.createdAt)}</span>
             <span>Last used {formatDate(activePublishable.lastUsedAt)}</span>
-            <span className={`sx-status-chip is-${activePublishable.status.toLowerCase()}`}>{activePublishable.status}</span>
+            <span className={`sx-status-inline is-${activePublishable.status.toLowerCase()}`}>{activePublishable.status}</span>
           </div>
         ) : (
           <p className="sx-status-sub">No publishable key detected yet. Create one to get started.</p>
@@ -722,7 +716,6 @@ export default function ApiKeysPanel() {
 
         <div className="sx-api-originPanel">
           <div className="sx-api-label">Allowed origins for this site</div>
-          {selectedSite?.origin ? <div className="sx-api-originHint">Primary origin: {selectedSite.origin}</div> : null}
           <div className="sx-api-originList">
             {allowedOrigins.length ? (
               allowedOrigins.map((origin) => (
@@ -840,7 +833,7 @@ export default function ApiKeysPanel() {
             <span>Scopes: {activeSecret.scopes.join(", ") || "—"}</span>
             <span>Created {formatDate(activeSecret.createdAt)}</span>
             <span>Last used {formatDate(activeSecret.lastUsedAt)}</span>
-            <span className={`sx-status-chip is-${activeSecret.status.toLowerCase()}`}>{activeSecret.status}</span>
+            <span className={`sx-status-inline is-${activeSecret.status.toLowerCase()}`}>{activeSecret.status}</span>
           </div>
         ) : (
           <p className="sx-status-sub">Generate a secret server key to unlock CavBot ingestion.</p>
