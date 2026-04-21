@@ -61,6 +61,8 @@ test("settings api-key runtime helpers use the auth pool instead of Prisma", () 
   assert.equal(runtimeSource.includes('from "@/lib/prisma"'), false);
   assert.equal(runtimeSource.includes("getAuthPool"), true);
   assert.equal(runtimeSource.includes("withAuthTransaction"), true);
+  assert.equal(runtimeSource.includes('"updatedAt"'), true);
+  assert.equal(runtimeSource.includes("NOW(), NOW()"), true);
 
   assert.equal(historySource.includes('from "@/lib/prisma"'), false);
   assert.equal(historySource.includes("getAuthPool"), true);

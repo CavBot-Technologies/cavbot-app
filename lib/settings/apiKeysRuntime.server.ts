@@ -184,9 +184,11 @@ export async function createApiKeyRecord(insertData: ApiKeyInsertRecord) {
        "value",
        "scopes",
        "siteId",
-       "rotatedFromId"
+       "rotatedFromId",
+       "createdAt",
+       "updatedAt"
      ) VALUES (
-       $1, $2, $3, $4::"ApiKeyType", $5::"ApiKeyStatus", $6, $7, $8, $9, $10, $11::text[], $12, $13
+       $1, $2, $3, $4::"ApiKeyType", $5::"ApiKeyStatus", $6, $7, $8, $9, $10, $11::text[], $12, $13, NOW(), NOW()
      )
      RETURNING
        "id",
@@ -290,9 +292,11 @@ export async function rotateApiKeyRecord(args: {
          "value",
          "scopes",
          "siteId",
-         "rotatedFromId"
+         "rotatedFromId",
+         "createdAt",
+         "updatedAt"
        ) VALUES (
-         $1, $2, $3, $4::"ApiKeyType", $5::"ApiKeyStatus", $6, $7, $8, $9, $10, $11::text[], $12, $13
+         $1, $2, $3, $4::"ApiKeyType", $5::"ApiKeyStatus", $6, $7, $8, $9, $10, $11::text[], $12, $13, NOW(), NOW()
        )
        RETURNING
          "id",
