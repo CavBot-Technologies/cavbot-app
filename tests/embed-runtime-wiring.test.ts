@@ -39,6 +39,9 @@ test("embed verification paths avoid Prisma runtime imports", () => {
   assert.equal(analyticsRouteSource.includes("verification.siteOrigin"), true);
   assert.equal(analyticsRouteSource.includes("rewriteCanonicalSiteContext"), true);
   assert.equal(analyticsRouteSource.includes("canonicalizeWebsiteContextUrl"), true);
+  assert.equal(analyticsRouteSource.includes("canonicalizeWebsiteContextHost"), true);
+  assert.equal(analyticsRouteSource.includes('key === "site_host"'), true);
+  assert.equal(analyticsRouteSource.includes('key === "base_url"'), true);
 });
 
 test("workspace bootstrap routes use the resilient session helper", () => {

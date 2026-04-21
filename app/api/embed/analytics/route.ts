@@ -7,6 +7,7 @@ import { verifyEmbedToken } from "@/lib/security/embedToken";
 import { RateLimitEnv } from "@/rateLimit";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import {
+  canonicalizeWebsiteContextHost,
   canonicalizeWebsiteContextOrigin,
   canonicalizeWebsiteContextUrl,
   originsShareWebsiteContext,
@@ -152,6 +153,15 @@ function rewriteCanonicalSiteContext(
       continue;
     }
 
+    if (key === "host" || key === "siteHost" || key === "site_host" || key === "referrerHost" || key === "referrer_host") {
+      if (typeof raw === "string") {
+        output[key] = canonicalizeWebsiteContextHost(raw, canonicalSiteOrigin);
+      } else {
+        output[key] = raw;
+      }
+      continue;
+    }
+
     if (
       key === "url" ||
       key === "href" ||
@@ -164,6 +174,8 @@ function rewriteCanonicalSiteContext(
       key === "canonical_url" ||
       key === "currentUrl" ||
       key === "current_url" ||
+      key === "baseUrl" ||
+      key === "base_url" ||
       key === "siteUrl" ||
       key === "site_url"
     ) {

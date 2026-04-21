@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  canonicalizeWebsiteContextHost,
   canonicalizeWebsiteContextOrigin,
   canonicalizeWebsiteContextUrl,
   expandRelatedExactOrigins,
@@ -47,6 +48,10 @@ test("website-context canonicalization rewrites www urls back to the stored site
   assert.equal(
     canonicalizeWebsiteContextOrigin("https://www.cavbot.io", "https://cavbot.io"),
     "https://cavbot.io"
+  );
+  assert.equal(
+    canonicalizeWebsiteContextHost("www.cavbot.io", "https://cavbot.io"),
+    "cavbot.io"
   );
   assert.equal(
     canonicalizeWebsiteContextUrl("https://www.cavbot.io/pricing?plan=pro#faq", "https://cavbot.io"),

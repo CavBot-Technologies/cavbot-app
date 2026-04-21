@@ -100,6 +100,28 @@ export function canonicalizeWebsiteContextOrigin(input: string, canonicalOrigin:
     : normalizedInput;
 }
 
+export function canonicalizeWebsiteContextHost(input: string, canonicalOrigin: string): string {
+  const raw = String(input || "").trim();
+  if (!raw) return raw;
+
+  let canonical: URL;
+  try {
+    canonical = new URL(normalizeOriginStrict(canonicalOrigin));
+  } catch {
+    return raw;
+  }
+
+  const normalizedInput = raw.toLowerCase();
+  const canonicalHost = canonical.host.toLowerCase();
+  if (normalizedInput === canonicalHost) return canonical.host;
+
+  const companionHostname = deriveCompanionHostname(canonical.hostname);
+  if (!companionHostname) return raw;
+
+  const companionHost = `${companionHostname}${canonical.port ? `:${canonical.port}` : ""}`.toLowerCase();
+  return normalizedInput === companionHost ? canonical.host : raw;
+}
+
 export function canonicalizeWebsiteContextUrl(input: string, canonicalOrigin: string): string {
   const raw = String(input || "").trim();
   if (!raw) return raw;
