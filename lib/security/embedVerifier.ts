@@ -4,13 +4,12 @@ import { AllowedOriginRow, originAllowed, normalizeOriginStrict } from "@/origin
 import { enforceRateLimit, type RateLimitEnv } from "@/rateLimit";
 import { recordEmbedMetric, trackDeniedOrigin } from "@/lib/security/embedMetrics.server";
 import { getCavbotAppOrigins } from "@/lib/security/embedAppOrigins";
+import { EMBED_RATE_LIMIT_SPEC } from "@/lib/security/embedRateLimit";
 import {
   findActiveEmbedSite,
   findEmbedKeyByHash,
   listEmbedAllowedOrigins,
 } from "@/lib/security/embedKeyRuntime.server";
-
-const RATE_LIMIT_SPEC = { capacity: 25, refillPerSec: 25 / 60 };
 
 type EmbedVerifierResultOk = {
   ok: true;
@@ -206,9 +205,30 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
   }
 
   try {
-    await enforceRateLimit(req, env, String(record.projectId), canonicalOrigin, RATE_LIMIT_SPEC, `origin:${canonicalOrigin}`);
-    await enforceRateLimit(req, env, String(record.projectId), canonicalOrigin, RATE_LIMIT_SPEC, `site:${site.id}`);
-    await enforceRateLimit(req, env, String(record.projectId), canonicalOrigin, RATE_LIMIT_SPEC, `key:${record.id}`);
+    await enforceRateLimit(
+      req,
+      env,
+      String(record.projectId),
+      canonicalOrigin,
+      EMBED_RATE_LIMIT_SPEC,
+      `origin:${canonicalOrigin}`
+    );
+    await enforceRateLimit(
+      req,
+      env,
+      String(record.projectId),
+      canonicalOrigin,
+      EMBED_RATE_LIMIT_SPEC,
+      `site:${site.id}`
+    );
+    await enforceRateLimit(
+      req,
+      env,
+      String(record.projectId),
+      canonicalOrigin,
+      EMBED_RATE_LIMIT_SPEC,
+      `key:${record.id}`
+    );
   } catch {
     await slowFailMetric(record, site.id, canonicalOrigin, false, true, req, "RATE_LIMIT");
     return failure("RATE_LIMIT", 429, "Rate limit exceeded.", canonicalOrigin);

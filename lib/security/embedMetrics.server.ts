@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { formatDayKey } from "@/lib/status/time";
 import { auditLogWrite } from "@/lib/audit";
+import { EMBED_RATE_LIMIT_LABEL } from "@/lib/security/embedRateLimit";
 
 export type EmbedUsagePayload = {
   verifiedToday: number | null;
@@ -9,7 +10,7 @@ export type EmbedUsagePayload = {
   topDeniedOrigins: string[] | null;
 };
 
-export const DEFAULT_EMBED_RATE_LIMIT_LABEL = "25 requests / min per origin + IP";
+export const DEFAULT_EMBED_RATE_LIMIT_LABEL = EMBED_RATE_LIMIT_LABEL;
 
 const DENY_AUDIT_INTERVAL_MS = 60 * 60 * 1000;
 

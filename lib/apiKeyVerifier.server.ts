@@ -3,8 +3,7 @@ import { originAllowed, AllowedOriginRow } from "@/originMatch";
 import type { ApiKey } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hashApiKey } from "@/lib/apiKeys.server";
-
-const RATE_LIMIT_SPEC = { capacity: 25, refillPerSec: 25 / 60 };
+import { EMBED_RATE_LIMIT_SPEC } from "@/lib/security/embedRateLimit";
 
 type VerifyOptions = {
   req: Request;
@@ -106,7 +105,7 @@ export async function verifyCavbotApiKey(options: VerifyOptions): Promise<{ key:
     throw respondError(403, "ORIGIN_BLOCKED");
   }
 
-  await enforceRateLimit(options.req, options.env, String(record.projectId), originHeader, RATE_LIMIT_SPEC);
+  await enforceRateLimit(options.req, options.env, String(record.projectId), originHeader, EMBED_RATE_LIMIT_SPEC);
 
   void prisma.apiKey.update({
     where: { id: record.id },

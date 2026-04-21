@@ -24,10 +24,18 @@ test("embed verification paths avoid Prisma runtime imports", () => {
   const tokenSource = read("lib/security/embedToken.ts");
   const runtimeSource = read("lib/security/embedKeyRuntime.server.ts");
   const analyticsRouteSource = read("app/api/embed/analytics/route.ts");
+  const apiKeyVerifierSource = read("lib/apiKeyVerifier.server.ts");
+  const rateLimitSource = read("lib/security/embedRateLimit.ts");
+  const metricsSource = read("lib/security/embedMetrics.server.ts");
 
   assert.equal(verifierSource.includes('from "@/lib/prisma"'), false);
   assert.equal(tokenSource.includes('from "@/lib/prisma"'), false);
   assert.equal(runtimeSource.includes('from "@/lib/prisma"'), false);
+  assert.equal(verifierSource.includes("EMBED_RATE_LIMIT_SPEC"), true);
+  assert.equal(apiKeyVerifierSource.includes("EMBED_RATE_LIMIT_SPEC"), true);
+  assert.equal(rateLimitSource.includes("capacity: 240"), true);
+  assert.equal(rateLimitSource.includes("refillPerSec: 4"), true);
+  assert.equal(metricsSource.includes("EMBED_RATE_LIMIT_LABEL"), true);
 
   assert.equal(verifierSource.includes("findEmbedKeyByHash"), true);
   assert.equal(verifierSource.includes("findActiveEmbedSite"), true);
