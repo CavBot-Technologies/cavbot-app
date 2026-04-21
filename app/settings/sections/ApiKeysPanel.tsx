@@ -708,7 +708,11 @@ export default function ApiKeysPanel() {
             <span>Scopes: {activePublishable.scopes.join(", ") || "—"}</span>
             <span>Created {formatDate(activePublishable.createdAt)}</span>
             <span>Last used {formatDate(activePublishable.lastUsedAt)}</span>
-            <span className={`sx-status-inline is-${activePublishable.status.toLowerCase()}`}>{activePublishable.status}</span>
+            {activePublishable.status !== "ACTIVE" ? (
+              <span className={`sx-status-inline is-${activePublishable.status.toLowerCase()}`}>
+                {activePublishable.status}
+              </span>
+            ) : null}
           </div>
         ) : (
           <p className="sx-status-sub">No publishable key detected yet. Create one to get started.</p>
@@ -833,7 +837,9 @@ export default function ApiKeysPanel() {
             <span>Scopes: {activeSecret.scopes.join(", ") || "—"}</span>
             <span>Created {formatDate(activeSecret.createdAt)}</span>
             <span>Last used {formatDate(activeSecret.lastUsedAt)}</span>
-            <span className={`sx-status-inline is-${activeSecret.status.toLowerCase()}`}>{activeSecret.status}</span>
+            {activeSecret.status !== "ACTIVE" ? (
+              <span className={`sx-status-inline is-${activeSecret.status.toLowerCase()}`}>{activeSecret.status}</span>
+            ) : null}
           </div>
         ) : (
           <p className="sx-status-sub">Generate a secret server key to unlock CavBot ingestion.</p>

@@ -1004,11 +1004,12 @@
   color:#fff;
 }
 .sx-api-cardContext{
-  gap: 12px;
+  gap: 24px;
 }
 .sx-api-siteContext{
   display:flex;
   justify-content:flex-start;
+  margin-top: 4px;
 }
 .sx-api-siteContextControls{
   display:flex;
@@ -1070,6 +1071,7 @@
   font-size: 12px;
   line-height: 1.6;
   color: rgba(255,255,255,0.62);
+  margin-top: 4px;
 }
 .sx-origin-error{
   color:#ffbcbc;
