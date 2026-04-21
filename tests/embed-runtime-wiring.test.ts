@@ -34,12 +34,18 @@ test("embed verification paths avoid Prisma runtime imports", () => {
   assert.equal(verifierSource.includes("EMBED_RATE_LIMIT_SPEC"), true);
   assert.equal(verifierSource.includes("extractEmbedRateLimitActor"), true);
   assert.equal(verifierSource.includes("visitor_id"), true);
+  assert.equal(verifierSource.includes("visitorId"), true);
   assert.equal(verifierSource.includes("anonymous_id"), true);
+  assert.equal(verifierSource.includes("anonymousId"), true);
   assert.equal(verifierSource.includes("session_key"), true);
+  assert.equal(verifierSource.includes("sessionKey"), true);
+  assert.equal(verifierSource.includes("session_id"), true);
+  assert.equal(verifierSource.includes("sessionId"), true);
+  assert.equal(verifierSource.includes("unknown-route"), true);
   assert.equal(verifierSource.includes("actor:"), true);
   assert.equal(apiKeyVerifierSource.includes("EMBED_RATE_LIMIT_SPEC"), true);
-  assert.equal(rateLimitSource.includes("capacity: 240"), true);
-  assert.equal(rateLimitSource.includes("refillPerSec: 4"), true);
+  assert.equal(rateLimitSource.includes("capacity: 1200"), true);
+  assert.equal(rateLimitSource.includes("refillPerSec: 20"), true);
   assert.equal(metricsSource.includes("EMBED_RATE_LIMIT_LABEL"), true);
 
   assert.equal(verifierSource.includes("findEmbedKeyByHash"), true);

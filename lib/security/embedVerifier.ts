@@ -50,7 +50,11 @@ function hashRateLimitActor(raw: string) {
   return createHash("sha256").update(raw).digest("hex").slice(0, 24);
 }
 
-function extractEmbedRateLimitActor(body: Record<string, unknown> | null | undefined) {
+function extractEmbedRateLimitActor(
+  body: Record<string, unknown> | null | undefined,
+  req: NextRequest,
+  canonicalOrigin: string
+) {
   const records = Array.isArray(body?.records) ? body.records : [];
   const firstRecord =
     records.length > 0 && records[0] && typeof records[0] === "object"
@@ -59,14 +63,47 @@ function extractEmbedRateLimitActor(body: Record<string, unknown> | null | undef
 
   const actor = pickFirstValue(
     firstRecord?.visitor_id as string | undefined,
+    firstRecord?.visitorId as string | undefined,
     firstRecord?.anonymous_id as string | undefined,
+    firstRecord?.anonymousId as string | undefined,
     firstRecord?.session_key as string | undefined,
+    firstRecord?.sessionKey as string | undefined,
+    firstRecord?.session_id as string | undefined,
+    firstRecord?.sessionId as string | undefined,
     body?.visitor_id as string | undefined,
+    body?.visitorId as string | undefined,
     body?.anonymous_id as string | undefined,
+    body?.anonymousId as string | undefined,
     body?.session_key as string | undefined,
+    body?.sessionKey as string | undefined,
+    body?.session_id as string | undefined,
+    body?.sessionId as string | undefined,
   );
 
-  return actor ? hashRateLimitActor(actor) : "anonymous";
+  if (actor) return hashRateLimitActor(actor);
+
+  const pathHint = pickFirstValue(
+    firstRecord?.route as string | undefined,
+    firstRecord?.pathname as string | undefined,
+    firstRecord?.path as string | undefined,
+    firstRecord?.page_url as string | undefined,
+    firstRecord?.pageUrl as string | undefined,
+    firstRecord?.url as string | undefined,
+    body?.route as string | undefined,
+    body?.pathname as string | undefined,
+    body?.path as string | undefined,
+    body?.page_url as string | undefined,
+    body?.pageUrl as string | undefined,
+    body?.url as string | undefined,
+  );
+
+  const userAgent = pickFirstValue(
+    req.headers.get("user-agent"),
+    req.headers.get("sec-ch-ua"),
+    "unknown-agent",
+  );
+
+  return hashRateLimitActor(`${canonicalOrigin}:${userAgent}:${pathHint || "unknown-route"}`);
 }
 
 function inferRequestOrigin(req: Request) {
@@ -228,7 +265,7 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
     return failure("DENIED_ORIGIN", 403, "Origin not allowed.", canonicalOrigin);
   }
 
-  const rateLimitActor = extractEmbedRateLimitActor(body);
+  const rateLimitActor = extractEmbedRateLimitActor(body, req, canonicalOrigin);
 
   try {
     await enforceRateLimit(

@@ -4,8 +4,8 @@ import type { RateLimitSpec } from "@/rate-limiter.do";
 // performance, and accessibility signals. Keep a real abuse guard, but size it
 // for production telemetry instead of auth-style request rates.
 export const EMBED_RATE_LIMIT_SPEC: RateLimitSpec = {
-  capacity: 240,
-  refillPerSec: 4,
+  capacity: 1200,
+  refillPerSec: 20,
 };
 
-export const EMBED_RATE_LIMIT_LABEL = "240 requests / min per origin + IP";
+export const EMBED_RATE_LIMIT_LABEL = "1200 requests / min per visitor, site, and IP";
