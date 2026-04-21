@@ -4,11 +4,14 @@ import { useEffect } from "react";
 
 type ManagedEye = {
   inner: HTMLElement;
+  pupil: HTMLElement;
   track: HTMLElement;
   centerX: number;
   centerY: number;
   currentX: number;
   currentY: number;
+  maxX: number;
+  maxY: number;
   phase: number;
 };
 
@@ -21,6 +24,7 @@ const IDLE_X = 0.82;
 const IDLE_Y = 0.52;
 const POINTER_COOLDOWN_MS = 1800;
 const POINTER_PULL_DISTANCE = 132;
+const EYE_BOUND_INSET = 0.18;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -66,9 +70,14 @@ export default function CavbotBadgeMotion() {
 
     const measure = () => {
       eyes.forEach((eye) => {
-        const rect = eye.inner.getBoundingClientRect();
-        eye.centerX = rect.left + rect.width / 2;
-        eye.centerY = rect.top + rect.height / 2;
+        const innerRect = eye.inner.getBoundingClientRect();
+        const pupilRect = eye.pupil.getBoundingClientRect();
+        eye.centerX = innerRect.left + innerRect.width / 2;
+        eye.centerY = innerRect.top + innerRect.height / 2;
+        eye.maxX = Math.min(MAX_SHIFT_X, Math.max(0, (innerRect.width - pupilRect.width) / 2 - EYE_BOUND_INSET));
+        eye.maxY = Math.min(MAX_SHIFT_Y, Math.max(0, (innerRect.height - pupilRect.height) / 2 - EYE_BOUND_INSET));
+        eye.currentX = clamp(eye.currentX, -eye.maxX, eye.maxX);
+        eye.currentY = clamp(eye.currentY, -eye.maxY, eye.maxY);
       });
       window.__cavbotEyeTrackingLastRefresh = Date.now();
       window.__cavbotEyeTrackingReady = eyes.length > 0;
@@ -89,11 +98,14 @@ export default function CavbotBadgeMotion() {
         const previous = previousEyes.get(track);
         nextEyes.push({
           inner,
+          pupil,
           track,
           centerX: previous?.centerX ?? 0,
           centerY: previous?.centerY ?? 0,
           currentX: previous?.currentX ?? 0,
           currentY: previous?.currentY ?? 0,
+          maxX: previous?.maxX ?? MAX_SHIFT_X,
+          maxY: previous?.maxY ?? MAX_SHIFT_Y,
           phase: previous?.phase ?? index * 1.31,
         });
       });
@@ -118,15 +130,17 @@ export default function CavbotBadgeMotion() {
             const dy = pointerY - eye.centerY;
             const distance = Math.hypot(dx, dy) || 1;
             const pull = clamp(distance / POINTER_PULL_DISTANCE, 0, 1);
-            targetX = clamp((dx / distance) * MAX_SHIFT_X * pull, -MAX_SHIFT_X, MAX_SHIFT_X);
-            targetY = clamp((dy / distance) * MAX_SHIFT_Y * pull, -MAX_SHIFT_Y, MAX_SHIFT_Y);
+            targetX = clamp((dx / distance) * eye.maxX * pull, -eye.maxX, eye.maxX);
+            targetY = clamp((dy / distance) * eye.maxY * pull, -eye.maxY, eye.maxY);
           } else {
-            targetX = Math.sin(ts / 920 + eye.phase) * IDLE_X;
-            targetY = Math.cos(ts / 1220 + eye.phase * 1.17) * IDLE_Y;
+            targetX = Math.sin(ts / 920 + eye.phase) * Math.min(IDLE_X, eye.maxX);
+            targetY = Math.cos(ts / 1220 + eye.phase * 1.17) * Math.min(IDLE_Y, eye.maxY);
           }
 
           eye.currentX += (targetX - eye.currentX) * EASE;
           eye.currentY += (targetY - eye.currentY) * EASE;
+          eye.currentX = clamp(eye.currentX, -eye.maxX, eye.maxX);
+          eye.currentY = clamp(eye.currentY, -eye.maxY, eye.maxY);
           eye.track.style.transform = `translate(${eye.currentX.toFixed(2)}px, ${eye.currentY.toFixed(2)}px)`;
         });
 
