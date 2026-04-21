@@ -69,8 +69,7 @@ function buildRemoteHeaders(
   req: NextRequest,
   projectKey: string,
   serverKey: string | null | undefined,
-  siteOrigin: string,
-  siteId: string
+  siteOrigin: string
 ) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -91,7 +90,6 @@ function buildRemoteHeaders(
 
   headers["X-Cavbot-Site-Host"] = new URL(siteOrigin).host;
   headers["X-Cavbot-Site-Origin"] = siteOrigin;
-  headers["X-Cavbot-Site-Public-Id"] = siteId;
 
   return headers;
 }
@@ -215,6 +213,41 @@ function rewriteCanonicalSiteContext(
   return output;
 }
 
+function stripUpstreamSitePublicIds(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUpstreamSitePublicIds(item));
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const input = value as Record<string, unknown>;
+  const output: Record<string, unknown> = {};
+
+  for (const [key, raw] of Object.entries(input)) {
+    if (key === "site_public_id" || key === "sitePublicId") {
+      continue;
+    }
+
+    if (key === "site" && raw && typeof raw === "object" && !Array.isArray(raw)) {
+      const nested = stripUpstreamSitePublicIds(raw);
+      if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+        const siteRecord = { ...(nested as Record<string, unknown>) };
+        delete siteRecord.public_id;
+        delete siteRecord.site_public_id;
+        delete siteRecord.sitePublicId;
+        output[key] = siteRecord;
+        continue;
+      }
+    }
+
+    output[key] = stripUpstreamSitePublicIds(raw);
+  }
+
+  return output;
+}
+
 export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
   const payload = (await readSanitizedJson(req, null)) as Record<string, unknown> | null;
 
@@ -253,6 +286,7 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
   const canonicalPayload = rewriteCanonicalSiteContext(payload, canonicalSiteOrigin, verification.siteId) as
     | Record<string, unknown>
     | null;
+  const upstreamPayload = stripUpstreamSitePublicIds(canonicalPayload) as Record<string, unknown> | null;
 
   try {
     const response = await fetch(remoteUrl, {
@@ -261,10 +295,9 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
         req,
         verification.projectKey,
         secretKey,
-        canonicalSiteOrigin,
-        verification.siteId
+        canonicalSiteOrigin
       ),
-      body: canonicalPayload ? JSON.stringify(canonicalPayload) : undefined,
+      body: upstreamPayload ? JSON.stringify(upstreamPayload) : undefined,
       cache: "no-store",
       credentials: "omit",
       keepalive: true,
