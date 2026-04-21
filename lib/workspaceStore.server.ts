@@ -1,11 +1,9 @@
 import "server-only";
 
-import type { Prisma } from "@prisma/client";
 import { cookies } from "next/headers";
 import { getAuthPool } from "@/lib/authDb";
 import { resolveEffectiveAccountIdFromHeaders } from "@/lib/effectiveSessionAccount.server";
 import { originsShareWebsiteContext } from "@/originMatch";
-import { resolveAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
 import { findAccountTier, listActiveWorkspaceSites } from "@/lib/workspaceSites.server";
 
 type SiteDTO = {
@@ -140,6 +138,32 @@ async function findProjectPointer(projectId: number) {
   return asProjectPointer(result.rows[0]);
 }
 
+async function findOwnedProjectPointer(projectId: number, accountId: string) {
+  const result = await getAuthPool().query<RawProjectPointerRow>(
+    `SELECT "id", "topSiteId"
+     FROM "Project"
+     WHERE "id" = $1
+       AND "accountId" = $2
+       AND "isActive" = true
+     LIMIT 1`,
+    [projectId, accountId],
+  );
+  return asProjectPointer(result.rows[0]);
+}
+
+async function findFirstOwnedProjectPointer(accountId: string) {
+  const result = await getAuthPool().query<RawProjectPointerRow>(
+    `SELECT "id", "topSiteId"
+     FROM "Project"
+     WHERE "accountId" = $1
+       AND "isActive" = true
+     ORDER BY "createdAt" ASC
+     LIMIT 1`,
+    [accountId],
+  );
+  return asProjectPointer(result.rows[0]);
+}
+
 async function resolveProjectPointerForAccount(
   requestedProjectId: number,
   fallbackProjectId: number | null,
@@ -149,33 +173,43 @@ async function resolveProjectPointerForAccount(
     return (await findProjectPointer(requestedProjectId)) ?? { id: requestedProjectId, topSiteId: null };
   }
 
-  const project = await resolveAccountWorkspaceProject({
-    accountId,
-    select: { id: true, topSiteId: true } satisfies Prisma.ProjectSelect,
-    requestedProjectId,
-    fallbackProjectId,
-    ensureActive: true,
-  });
+  const candidateIds = Array.from(
+    new Set(
+      [requestedProjectId, fallbackProjectId].filter(
+        (value): value is number => Number.isInteger(value) && Number(value) > 0,
+      ),
+    ),
+  );
 
-  if (!project) {
-    return { id: requestedProjectId, topSiteId: null };
+  for (const projectId of candidateIds) {
+    const owned = await findOwnedProjectPointer(projectId, accountId);
+    if (owned) return owned;
   }
 
-  return {
-    id: Number(project.id),
-    topSiteId: project.topSiteId ? String(project.topSiteId).trim() : null,
-  };
+  return (await findFirstOwnedProjectPointer(accountId)) ?? { id: requestedProjectId, topSiteId: null };
 }
 
 export async function readWorkspace(opts?: { accountId?: string }): Promise<WorkspacePayload> {
   const projectPointers = await getActiveProjectPointersFromCookies();
-  const accountId = opts?.accountId || (await inferAccountIdFromSessionCookie()) || undefined;
+  const accountId =
+    opts?.accountId ||
+    (await inferAccountIdFromSessionCookie().catch(() => null)) ||
+    undefined;
 
-  const resolvedProject = await resolveProjectPointerForAccount(
-    projectPointers.requestedProjectId,
-    projectPointers.fallbackProjectId,
-    accountId,
-  );
+  let resolvedProject: ProjectPointer;
+  try {
+    resolvedProject = await resolveProjectPointerForAccount(
+      projectPointers.requestedProjectId,
+      projectPointers.fallbackProjectId,
+      accountId,
+    );
+  } catch {
+    resolvedProject =
+      (await findProjectPointer(projectPointers.requestedProjectId).catch(() => null)) ?? {
+        id: projectPointers.requestedProjectId,
+        topSiteId: null,
+      };
+  }
 
   const projectId = resolvedProject.id;
   const projectIdStr = String(projectId);
@@ -191,7 +225,7 @@ export async function readWorkspace(opts?: { accountId?: string }): Promise<Work
   const topSiteOriginHint = await cookieGetDecoded(`${KEY_TOP_SITE_ORIGIN_PREFIX}${projectIdStr}`);
   const activeSiteIdHint = await cookieGetDecoded(`${KEY_ACTIVE_SITE_ID_PREFIX}${projectIdStr}`);
 
-  const rows = await listActiveWorkspaceSites(projectId, "desc");
+  const rows = await listActiveWorkspaceSites(projectId, "desc").catch(() => []);
   const sites: SiteDTO[] = rows.map((row) => ({
     id: row.id,
     label: row.label,
@@ -222,7 +256,7 @@ export async function readWorkspace(opts?: { accountId?: string }): Promise<Work
   const topSiteOrigin = topSite?.origin ?? "";
   const activeSiteOrigin = activeSite?.origin ?? topSiteOrigin;
 
-  const tierStr = accountId ? await findAccountTier(accountId) : null;
+  const tierStr = accountId ? await findAccountTier(accountId).catch(() => null) : null;
 
   return {
     projectId,

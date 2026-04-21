@@ -13,7 +13,9 @@ test("workspace store uses runtime-safe helpers instead of Prisma", () => {
   const source = read("lib/workspaceStore.server.ts");
 
   assert.equal(source.includes('from "@/lib/prisma"'), false);
-  assert.equal(source.includes("resolveAccountWorkspaceProject"), true);
+  assert.equal(source.includes('from "@/lib/workspaceProjects.server"'), false);
+  assert.equal(source.includes('from "@prisma/client"'), false);
+  assert.equal(source.includes('SELECT "id", "topSiteId"'), true);
   assert.equal(source.includes("listActiveWorkspaceSites"), true);
   assert.equal(source.includes("findAccountTier"), true);
   assert.equal(source.includes("getAuthPool"), true);

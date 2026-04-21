@@ -42,6 +42,18 @@ test("workspace guardrails and scan status routes avoid the Prisma runtime path"
   assert.match(scanHelper, /FROM "ScanJob" job/);
 });
 
+test("console heading and workspace bootstrap avoid runtime-fragile Prisma paths", () => {
+  const consolePage = read("app/console/page.tsx");
+  const workspaceStore = read("lib/workspaceStore.server.ts");
+
+  assert.doesNotMatch(consolePage, /from "@\/lib\/prisma"/);
+  assert.doesNotMatch(consolePage, /fallbackOwner = "U's"/);
+  assert.match(consolePage, /findUserById\(getAuthPool\(\), userId\)/);
+  assert.doesNotMatch(workspaceStore, /resolveAccountWorkspaceProject/);
+  assert.match(workspaceStore, /findOwnedProjectPointer/);
+  assert.match(workspaceStore, /listActiveWorkspaceSites\(projectId, "desc"\)\.catch\(\(\) => \[\]\)/);
+});
+
 test("workspace routes promote the effective membership account before project reads", () => {
   const authSource = read("lib/workspaceAuth.server.ts");
   const selectProjectRoute = read("app/api/workspaces/select-project/route.ts");

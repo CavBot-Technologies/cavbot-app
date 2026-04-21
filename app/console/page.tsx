@@ -14,7 +14,7 @@ import { getSession } from "@/lib/apiAuth";
 import { findUserById, getAuthPool } from "@/lib/authDb";
 import type { SummaryRange } from "@/lib/cavbotApi.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
-import { prisma } from "@/lib/prisma";
+import { normalizeCavbotFounderProfile, resolveAccountDisplayName } from "@/lib/profileIdentity";
 import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 import { readWorkspace } from "@/lib/workspaceStore.server";
 import type { WorkspacePayload } from "@/lib/workspaceStore.server";
@@ -708,14 +708,6 @@ function canonicalOrigin(input: string) {
   }
 }
 
-function firstInitialFromUsername(input: string): string {
-  const source = String(input || "").trim().replace(/^@+/, "");
-  if (!source) return "";
-  const asciiMatch = source.match(/[A-Za-z0-9]/);
-  const token = asciiMatch?.[0] || source[0] || "";
-  return token.toUpperCase();
-}
-
 function profileToneToAccentColor(tone: string): string {
   const value = String(tone || "").trim().toLowerCase();
   if (value === "violet") return "#8b5cff";
@@ -733,7 +725,7 @@ type DashboardHeading = {
 };
 
 async function resolveDashboardHeading(): Promise<DashboardHeading> {
-  const fallbackOwner = "U's";
+  const fallbackOwner = "Your";
   const fallback: DashboardHeading = {
     appShellTitle: `${fallbackOwner} Dashboard`,
     ownerLabel: fallbackOwner,
@@ -754,31 +746,23 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
     const userId = String(sess.sub || "").trim();
     if (!userId || userId === "system") return fallback;
 
-    const [profile, authUser] = await Promise.all([
-      prisma.user
-        .findUnique({
-          where: { id: userId },
-          select: { displayName: true, fullName: true, username: true, avatarTone: true },
-        })
-        .catch(() => null),
-      findUserById(getAuthPool(), userId).catch(() => null),
-    ]);
+    const authUser = await findUserById(getAuthPool(), userId).catch(() => null);
+    const normalized = normalizeCavbotFounderProfile({
+      fullName: authUser?.fullName,
+      displayName: authUser?.displayName,
+      username: authUser?.username,
+    });
 
-    const accentColor = profileToneToAccentColor(String(profile?.avatarTone || authUser?.avatarTone || ""));
-    const preferredName = String(profile?.fullName || profile?.displayName || authUser?.displayName || "").trim();
-    if (preferredName) {
-      const ownerLabel = `${preferredName}'s`;
-      return {
-        appShellTitle: `${ownerLabel} Dashboard`,
-        ownerLabel,
-        accentColor,
-      };
-    }
+    const accentColor = profileToneToAccentColor(String(authUser?.avatarTone || ""));
+    const displayName = resolveAccountDisplayName({
+      fullName: normalized.fullName,
+      displayName: normalized.displayName,
+      username: normalized.username,
+      fallbackLabel: fallbackOwner,
+    }).trim();
 
-    const username = String(profile?.username || authUser?.username || "").trim().replace(/^@+/, "");
-    if (username) {
-      const initial = firstInitialFromUsername(username) || "U";
-      const ownerLabel = `${initial}'s`;
+    if (displayName) {
+      const ownerLabel = displayName.startsWith("@") ? displayName : `${displayName}'s`;
       return {
         appShellTitle: `${ownerLabel} Dashboard`,
         ownerLabel,
