@@ -3,6 +3,7 @@ import "server-only";
 
 import { createHmac as nodeCreateHmac, pbkdf2 as nodePbkdf2, webcrypto as nodeCrypto } from "crypto";
 import type { NextResponse } from "next/server";
+import { isAdminHost } from "@/lib/admin/config";
 import {
   findMembershipsForUser,
   findSessionMembership,
@@ -162,6 +163,17 @@ function inferFirstPartyCookieDomain(host: string): string {
   if (!normalizedHost || isLocalhostHost(normalizedHost)) return "";
   if (normalizedHost === "cavbot.io" || normalizedHost.endsWith(".cavbot.io")) return "cavbot.io";
   return "";
+}
+
+function isConfiguredAdminOrigin(origin: string) {
+  const normalized = normalizeOriginValue(origin);
+  if (!normalized) return false;
+
+  try {
+    return isAdminHost(new URL(normalized).host.toLowerCase());
+  } catch {
+    return false;
+  }
 }
 
 function inferRequestOrigin(req: Request): string {
@@ -354,6 +366,8 @@ export function assertWriteOrigin(req: Request) {
 
   const allowed = getAllowedOrigins();
   if (allowed.includes(origin)) return;
+
+  if (isConfiguredAdminOrigin(origin)) return;
 
   if (process.env.NODE_ENV !== "production") {
     if (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")) return;

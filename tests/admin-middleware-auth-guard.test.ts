@@ -60,10 +60,25 @@ test("admin middleware redirects protected routes when stale cookies are present
   assert.equal(hasClearedCookie(response, ADMIN_COOKIE), true);
 });
 
+test("admin middleware sends the host root to HQ sign-in instead of the shared app auth flow", async () => {
+  const response = await middleware(adminRequest("/"));
+
+  assert.equal(response.status, 307);
+  assert.equal(response.headers.get("location")?.endsWith("/sign-in?next=%2F"), true);
+});
+
 test("admin middleware rewrites protected routes only when both validated cookies belong to the same user", async () => {
   const response = await middleware(adminRequest("/overview", await buildValidCookieHeader()));
 
   assert.equal(response.headers.get("x-middleware-rewrite")?.endsWith("/admin-internal/overview"), true);
+  assert.equal(hasClearedCookie(response, USER_COOKIE), false);
+  assert.equal(hasClearedCookie(response, ADMIN_COOKIE), false);
+});
+
+test("admin middleware rewrites the host root to the HQ internal root when admin auth is valid", async () => {
+  const response = await middleware(adminRequest("/", await buildValidCookieHeader()));
+
+  assert.equal(response.headers.get("x-middleware-rewrite")?.endsWith("/admin-internal"), true);
   assert.equal(hasClearedCookie(response, USER_COOKIE), false);
   assert.equal(hasClearedCookie(response, ADMIN_COOKIE), false);
 });
