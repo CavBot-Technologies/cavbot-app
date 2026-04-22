@@ -78,14 +78,26 @@ function safeString(x: unknown) {
 }
 
 async function getRestrictedAccountError(accountId: string) {
-  const discipline = await getAccountDisciplineState(accountId);
+  let discipline = null;
+  try {
+    discipline = await getAccountDisciplineState(accountId);
+  } catch (error) {
+    console.warn("[auth/login] non-fatal account discipline lookup failure", error);
+    return "";
+  }
   if (discipline?.status === "REVOKED") return "ACCOUNT_REVOKED";
   if (discipline?.status === "SUSPENDED") return "ACCOUNT_SUSPENDED";
   return "";
 }
 
 async function getRestrictedUserError(userId: string) {
-  const discipline = await getUserDisciplineState(userId);
+  let discipline = null;
+  try {
+    discipline = await getUserDisciplineState(userId);
+  } catch (error) {
+    console.warn("[auth/login] non-fatal user discipline lookup failure", error);
+    return "";
+  }
   if (discipline?.status === "REVOKED") return "USER_REVOKED";
   if (discipline?.status === "SUSPENDED") return "USER_SUSPENDED";
   return "";

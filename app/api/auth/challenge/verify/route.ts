@@ -195,7 +195,12 @@ export async function POST(req: NextRequest) {
     const active = pickPrimaryMembership(memberships);
     if (!active) return json({ ok: false, error: "NO_MEMBERSHIP", message: "No workspace membership found." }, 403);
     {
-      const discipline = await getUserDisciplineState(user.id);
+      let discipline = null;
+      try {
+        discipline = await getUserDisciplineState(user.id);
+      } catch (error) {
+        console.warn("[auth/challenge/verify] non-fatal user discipline lookup failure", error);
+      }
       if (discipline?.status === "REVOKED") {
         return json({ ok: false, error: "USER_REVOKED", message: "This user access has been revoked." }, 403);
       }
@@ -204,7 +209,12 @@ export async function POST(req: NextRequest) {
       }
     }
     {
-      const discipline = await getAccountDisciplineState(active.accountId);
+      let discipline = null;
+      try {
+        discipline = await getAccountDisciplineState(active.accountId);
+      } catch (error) {
+        console.warn("[auth/challenge/verify] non-fatal account discipline lookup failure", error);
+      }
       if (discipline?.status === "REVOKED") {
         return json({ ok: false, error: "ACCOUNT_REVOKED", message: "This account has been revoked." }, 403);
       }

@@ -69,3 +69,13 @@ test("user discipline reads soft-fail when the Prisma delegate is unavailable", 
   assert.match(source, /const delegate = getUserDisciplineDelegate\(\);\s*if \(!delegate\) return new Map<string, UserDisciplineState>\(\);/);
   assert.match(source, /const delegate = getUserDisciplineDelegate\(\);\s*if \(!delegate\) return \[\];/);
 });
+
+test("interactive auth routes fail open when discipline lookups throw unexpectedly", () => {
+  const loginSource = read("app/api/auth/login/route.ts");
+  const challengeSource = read("app/api/auth/challenge/verify/route.ts");
+
+  assert.match(loginSource, /non-fatal account discipline lookup failure/);
+  assert.match(loginSource, /non-fatal user discipline lookup failure/);
+  assert.match(challengeSource, /non-fatal user discipline lookup failure/);
+  assert.match(challengeSource, /non-fatal account discipline lookup failure/);
+});
