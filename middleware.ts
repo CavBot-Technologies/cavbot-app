@@ -39,6 +39,24 @@ function isStatusPublicPath(pathname: string) {
   return false;
 }
 
+function parseCookieValues(header: string, name: string) {
+  const parts = String(header || "")
+    .split(";")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  const values: string[] = [];
+  for (const part of parts) {
+    const idx = part.indexOf("=");
+    if (idx === -1) continue;
+    const key = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    if (key === name && value) values.push(value);
+  }
+
+  return values;
+}
+
 function badRequestResponse() {
   return new NextResponse("Bad Request", {
     status: 400,
@@ -221,6 +239,34 @@ async function parseVerifiedSessionPayload(token: string): Promise<null | { memb
   }
 }
 
+async function readVerifiedSessionPayload(req: NextRequest) {
+  const cookieHeader = req.headers.get("cookie") || "";
+  const candidates = Array.from(
+    new Set(
+      parseCookieValues(cookieHeader, SESSION_COOKIE_NAME)
+        .map((token) => String(token || "").trim())
+        .filter(Boolean),
+    ),
+  );
+
+  for (const token of candidates) {
+    const payload = await parseVerifiedSessionPayload(token);
+    if (payload) return payload;
+  }
+
+  return null;
+}
+
+function redirectToLogin(req: NextRequest, pathname: string, search: string) {
+  const url = req.nextUrl.clone();
+  const params = new URLSearchParams();
+  params.set("mode", "login");
+  params.set("next", safeNextParam(pathname, search));
+  url.pathname = "/auth";
+  url.search = params.toString();
+  return NextResponse.redirect(url);
+}
+
 export async function middleware(req: NextRequest) {
   if (req.headers.get(STATUS_PROBE_HEADER) === "1") {
     return NextResponse.next();
@@ -317,15 +363,12 @@ export async function middleware(req: NextRequest) {
   if (isPublicPath(pathname)) {
     // If already logged in, don’t show auth again
     if (pathname === "/auth" || pathname === "/login" || pathname === "/register") {
-      const token = req.cookies.get(SESSION_COOKIE_NAME)?.value?.trim();
-      if (token) {
-        const payload = await parseVerifiedSessionPayload(token);
-        if (payload) {
-          const url = req.nextUrl.clone();
-          url.pathname = "/";
-          url.search = "";
-          return NextResponse.redirect(url);
-        }
+      const payload = await readVerifiedSessionPayload(req);
+      if (payload) {
+        const url = req.nextUrl.clone();
+        url.pathname = "/";
+        url.search = "";
+        return NextResponse.redirect(url);
       }
     }
 
@@ -344,22 +387,9 @@ export async function middleware(req: NextRequest) {
   // ------------------------------------------------------------
   // PROTECTED ROUTES
   // ------------------------------------------------------------
-  const token = req.cookies.get(SESSION_COOKIE_NAME)?.value?.trim();
-
-  // No session -> send to /auth and preserve destination
-  if (!token) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/auth";
-    url.search = `next=${encodeURIComponent(safeNextParam(pathname, search))}`;
-    return NextResponse.redirect(url);
-  }
-
-  const payload = await parseVerifiedSessionPayload(token);
+  const payload = await readVerifiedSessionPayload(req);
   if (!payload) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/auth";
-    url.search = `next=${encodeURIComponent(safeNextParam(pathname, search))}`;
-    return NextResponse.redirect(url);
+    return redirectToLogin(req, pathname, search);
   }
 
   const isOwnerSettingsPath = pathname === "/settings"
