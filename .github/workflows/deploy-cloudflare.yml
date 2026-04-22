@@ -31,6 +31,8 @@ jobs:
       NEXT_PUBLIC_WIDGET_CONFIG_ORIGIN: https://app.cavbot.io
       NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_live_51SsIgA0H03R4PCfTE71vHIXAcwrTiXITwassSUpLsl7aMn4HmpcstFXO6tCi2FxCXClrPPQcUMHN6Af4NEDtPhLo00XiNpm18i
       ALLOWED_ORIGINS: https://app.cavbot.io
+      # Required during build because middleware validates signed session cookies.
+      CAVBOT_SESSION_SECRET: ${{ secrets.CAVBOT_SESSION_SECRET }}
       # Optional security secret for CavAi external share tokens.
       CAVAI_SHARE_TOKEN_SECRET: ${{ secrets.CAVAI_SHARE_TOKEN_SECRET }}
     steps:
@@ -79,6 +81,13 @@ jobs:
 
       - name: Verify Cloudflare Auth
         run: npx -y wrangler@3.114.0 whoami
+
+      - name: Validate Auth Build Secrets
+        run: |
+          if [ -z "${CAVBOT_SESSION_SECRET:-}" ] || [ "${CAVBOT_SESSION_SECRET}" = "paste_your_secret_here" ]; then
+            echo "::error title=Missing session secret::Set production secret CAVBOT_SESSION_SECRET for Deploy Cloudflare so middleware can validate auth cookies."
+            exit 1
+          fi
 
       - name: Ensure OpenNext Config Exists
         run: |
