@@ -1,12 +1,24 @@
 import "server-only";
 
-import { prisma } from "@/lib/prisma";
+import { getAuthPool } from "@/lib/authDb";
 import {
   CAVAI_INSIGHT_PACK_VERSION_V1,
   validateInsightPackV1,
   type CavAiInsightPackV1,
   type CavAiPriorityV1,
 } from "@/packages/cavai-contracts/src";
+
+type RawPackHistoryRow = {
+  runId: string;
+  createdAt: Date | string;
+  pagesScanned: number | string | null;
+  pageLimit: number | string | null;
+  engineVersion: string | null;
+  packVersion: string | null;
+  generatedAt: Date | string | null;
+  packJson: unknown;
+  findingCount: number | string | null;
+};
 
 export type CavAiPackHistoryEntry = {
   runId: string;
@@ -28,6 +40,16 @@ export type CavAiLatestPackWithHistory = {
   pack: CavAiInsightPackV1 | null;
   history: CavAiPackHistoryEntry[];
 };
+
+function asDate(value: Date | string | null | undefined) {
+  if (!value) return null;
+  return value instanceof Date ? value : new Date(value);
+}
+
+function asInt(value: number | string | null | undefined) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : 0;
+}
 
 export function normalizeOriginStrict(input: unknown): string | null {
   const raw = String(input || "").trim();
@@ -80,42 +102,47 @@ export async function getLatestPackWithHistory(args: {
   limit?: number;
 }): Promise<CavAiLatestPackWithHistory> {
   const limit = clampLimit(args.limit);
-  const runs = await prisma.cavAiRun.findMany({
-    where: {
-      accountId: args.accountId,
-      origin: args.origin,
-    },
-    orderBy: { createdAt: "desc" },
-    take: limit,
-    include: {
-      insightPack: {
-        select: {
-          generatedAt: true,
-          packJson: true,
-        },
-      },
-      _count: {
-        select: {
-          findings: true,
-        },
-      },
-    },
-  });
+  const result = await getAuthPool().query<RawPackHistoryRow>(
+    `SELECT
+       r."id" AS "runId",
+       r."createdAt",
+       r."pagesScanned",
+       r."pageLimit",
+       r."engineVersion",
+       r."packVersion",
+       p."generatedAt",
+       p."packJson",
+       COALESCE(f."findingCount", 0) AS "findingCount"
+     FROM "CavAiRun" r
+     LEFT JOIN "CavAiInsightPack" p
+       ON p."runId" = r."id"
+      AND p."accountId" = r."accountId"
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS "findingCount"
+       FROM "CavAiFinding" cf
+       WHERE cf."runId" = r."id"
+     ) f ON TRUE
+     WHERE r."accountId" = $1
+       AND r."origin" = $2
+     ORDER BY r."createdAt" DESC
+     LIMIT $3`,
+    [args.accountId, args.origin, limit]
+  );
 
-  const history: CavAiPackHistoryEntry[] = runs.map((run) => {
-    const pack = safePack(run.insightPack?.packJson);
+  const history: CavAiPackHistoryEntry[] = result.rows.map((row) => {
+    const pack = safePack(row.packJson);
     const topPriority = topPriorityFromPack(pack);
     const topPriorityScoreRaw = Number(topPriority?.priorityScore);
 
     return {
-      runId: run.id,
-      createdAtISO: run.createdAt.toISOString(),
-      generatedAtISO: run.insightPack?.generatedAt ? run.insightPack.generatedAt.toISOString() : null,
-      pagesScanned: Number(run.pagesScanned || 0),
-      pageLimit: Number(run.pageLimit || 0),
-      engineVersion: String(run.engineVersion || ""),
-      packVersion: String(run.packVersion || ""),
-      findingCount: Number(run._count?.findings || 0),
+      runId: String(row.runId),
+      createdAtISO: asDate(row.createdAt)?.toISOString() || new Date(0).toISOString(),
+      generatedAtISO: asDate(row.generatedAt)?.toISOString() ?? null,
+      pagesScanned: asInt(row.pagesScanned),
+      pageLimit: asInt(row.pageLimit),
+      engineVersion: String(row.engineVersion || ""),
+      packVersion: String(row.packVersion || ""),
+      findingCount: asInt(row.findingCount),
       priorityCount: Array.isArray(pack?.priorities) ? pack.priorities.length : 0,
       topPriorityCode: topPriority?.code || null,
       topPriorityScore: Number.isFinite(topPriorityScoreRaw) ? topPriorityScoreRaw : null,
@@ -123,7 +150,7 @@ export async function getLatestPackWithHistory(args: {
     };
   });
 
-  const latestPack = safePack(runs[0]?.insightPack?.packJson);
+  const latestPack = safePack(result.rows[0]?.packJson);
   return {
     origin: args.origin,
     pack: latestPack,

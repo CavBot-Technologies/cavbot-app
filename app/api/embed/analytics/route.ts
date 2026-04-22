@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getEnv } from "@/lib/cavbotApi.server";
 import { verifyEmbedRequest, type EmbedVerifierResult } from "@/lib/security/embedVerifier";
 import { verifyEmbedToken } from "@/lib/security/embedToken";
+import { recordAnalyticsEmbedActivityBestEffort } from "@/lib/security/embedAnalyticsTracker.server";
 import { RateLimitEnv } from "@/rateLimit";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import {
@@ -332,6 +333,18 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
             }
           })()
         : text;
+
+    if (response.ok) {
+      await recordAnalyticsEmbedActivityBestEffort({
+        req,
+        accountId: verification.accountId,
+        projectId: verification.projectId,
+        siteId: verification.siteId,
+        origin: canonicalSiteOrigin,
+        siteOrigin: verification.siteOrigin,
+        keyLast4: verification.keyLast4,
+      });
+    }
 
     return new NextResponse(responseBody, {
       status: response.status,

@@ -1,7 +1,8 @@
 import "server-only";
 
 import { createHash } from "crypto";
-import { prisma } from "@/lib/prisma";
+import type pg from "pg";
+import { getAuthPool, newDbId, withAuthTransaction } from "@/lib/authDb";
 import {
   CAVAI_INSIGHT_PACK_VERSION_V1,
   type CavAiFindingV1,
@@ -10,7 +11,6 @@ import {
   type CavAiOverlayV1,
   type NormalizedScanInputV1,
 } from "@/packages/cavai-contracts/src";
-import { scopedRunLookupKey } from "@/lib/cavai/scoping";
 
 const IDEMPOTENCY_WINDOW_MS = (() => {
   const parsed = Number(process.env.CAVAI_IDEMPOTENCY_WINDOW_MS || "");
@@ -19,12 +19,57 @@ const IDEMPOTENCY_WINDOW_MS = (() => {
 })();
 const OVERLAY_HISTORY_WINDOW = 5;
 
+type Queryable = {
+  query: <T extends pg.QueryResultRow = pg.QueryResultRow>(
+    text: string,
+    values?: unknown[]
+  ) => Promise<pg.QueryResult<T>>;
+};
+
+type RawPackRow = {
+  packJson: unknown;
+};
+
+type RawRunLookupRow = {
+  runId: string;
+  createdAt: Date | string;
+  packJson: unknown;
+};
+
+type RawCreatedRunRow = {
+  id: string;
+  createdAt: Date | string;
+};
+
+type RawOverlayRunRow = {
+  id: string;
+};
+
+type RawFindingCodeRow = {
+  runId: string;
+  code: string | null;
+};
+
 function stableIndex(seed: string, modulo: number) {
   if (modulo <= 0) return 0;
   const hash = createHash("sha256").update(seed).digest("hex");
   const value = Number.parseInt(hash.slice(0, 8), 16);
   if (!Number.isFinite(value)) return 0;
   return value % modulo;
+}
+
+function asDate(value: Date | string | null | undefined) {
+  if (!value) return null;
+  return value instanceof Date ? value : new Date(value);
+}
+
+async function queryOne<T extends pg.QueryResultRow>(
+  queryable: Queryable,
+  text: string,
+  values: unknown[] = []
+) {
+  const result = await queryable.query<T>(text, values);
+  return result.rows[0] ?? null;
 }
 
 function safePack(raw: unknown): CavAiInsightPackV1 | null {
@@ -42,18 +87,25 @@ export async function findIdempotentPack(params: {
   inputHash: string;
 }): Promise<CavAiInsightPackV1 | null> {
   const windowStart = new Date(Date.now() - IDEMPOTENCY_WINDOW_MS);
-  const run = await prisma.cavAiRun.findFirst({
-    where: {
-      accountId: params.accountId,
-      origin: params.origin,
-      inputHash: params.inputHash,
-      createdAt: { gte: windowStart },
-    },
-    orderBy: { createdAt: "desc" },
-    include: { insightPack: true },
-  });
-  if (!run?.insightPack?.packJson) return null;
-  return safePack(run.insightPack.packJson);
+  const row = await queryOne<RawRunLookupRow>(
+    getAuthPool(),
+    `SELECT
+       r."id" AS "runId",
+       r."createdAt",
+       p."packJson"
+     FROM "CavAiRun" r
+     LEFT JOIN "CavAiInsightPack" p
+       ON p."runId" = r."id"
+      AND p."accountId" = r."accountId"
+     WHERE r."accountId" = $1
+       AND r."origin" = $2
+       AND r."inputHash" = $3
+       AND r."createdAt" >= $4
+     ORDER BY r."createdAt" DESC
+     LIMIT 1`,
+    [params.accountId, params.origin, params.inputHash, windowStart]
+  );
+  return safePack(row?.packJson);
 }
 
 export async function createRunAndFindings(params: {
@@ -63,40 +115,101 @@ export async function createRunAndFindings(params: {
   inputHash: string;
   engineVersion: string;
 }): Promise<{ runId: string; createdAtIso: string }> {
-  const run = await prisma.cavAiRun.create({
-    data: {
-      accountId: params.accountId,
-      origin: params.input.origin,
-      createdByUserId: params.userId,
-      pagesScanned: params.input.pagesSelected.length,
-      pageLimit: params.input.pageLimit,
-      pagesSelectedJson: params.input.pagesSelected,
-      inputHash: params.inputHash,
-      engineVersion: params.engineVersion,
-      packVersion: CAVAI_INSIGHT_PACK_VERSION_V1,
-    },
+  return withAuthTransaction(async (tx) => {
+    const runId = newDbId();
+    const created = await queryOne<RawCreatedRunRow>(
+      tx,
+      `INSERT INTO "CavAiRun" (
+         "id",
+         "accountId",
+         "origin",
+         "createdByUserId",
+         "pagesScanned",
+         "pageLimit",
+         "pagesSelectedJson",
+         "inputHash",
+         "engineVersion",
+         "packVersion",
+         "createdAt"
+       )
+       VALUES (
+         $1,
+         $2,
+         $3,
+         $4,
+         $5,
+         $6,
+         $7::jsonb,
+         $8,
+         $9,
+         $10,
+         NOW()
+       )
+       RETURNING "id", "createdAt"`,
+      [
+        runId,
+        params.accountId,
+        params.input.origin,
+        params.userId,
+        params.input.pagesSelected.length,
+        params.input.pageLimit,
+        JSON.stringify(params.input.pagesSelected),
+        params.inputHash,
+        params.engineVersion,
+        CAVAI_INSIGHT_PACK_VERSION_V1,
+      ]
+    );
+
+    if (!created) {
+      throw new Error("CAVAI_RUN_CREATE_FAILED");
+    }
+
+    if (params.input.findings.length) {
+      const values: unknown[] = [];
+      const tuples: string[] = [];
+
+      for (const finding of params.input.findings) {
+        const base = values.length;
+        values.push(
+          newDbId(),
+          params.accountId,
+          runId,
+          finding.code,
+          finding.pillar,
+          finding.severity,
+          finding.pagePath,
+          finding.templateHint || null,
+          JSON.stringify(finding.evidence),
+          new Date(finding.detectedAt)
+        );
+        tuples.push(
+          `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}::jsonb, $${base + 10})`
+        );
+      }
+
+      await tx.query(
+        `INSERT INTO "CavAiFinding" (
+           "id",
+           "accountId",
+           "runId",
+           "code",
+           "pillar",
+           "severity",
+           "pagePath",
+           "templateHint",
+           "evidenceJson",
+           "detectedAt"
+         )
+         VALUES ${tuples.join(", ")}`,
+        values
+      );
+    }
+
+    return {
+      runId,
+      createdAtIso: asDate(created.createdAt)?.toISOString() || new Date().toISOString(),
+    };
   });
-
-  const findingsData = params.input.findings.map((finding) => ({
-    accountId: params.accountId,
-    runId: run.id,
-    code: finding.code,
-    pillar: finding.pillar,
-    severity: finding.severity,
-    pagePath: finding.pagePath,
-    templateHint: finding.templateHint || null,
-    evidenceJson: finding.evidence as unknown as object,
-    detectedAt: new Date(finding.detectedAt),
-  }));
-
-  if (findingsData.length) {
-    await prisma.cavAiFinding.createMany({ data: findingsData });
-  }
-
-  return {
-    runId: run.id,
-    createdAtIso: run.createdAt.toISOString(),
-  };
 }
 
 function trendFromIssueCounts(counts: number[]) {
@@ -130,20 +243,41 @@ export async function computeOverlay(params: {
   accountId: string;
   origin: string;
 }): Promise<CavAiOverlayV1> {
-  const runs = await prisma.cavAiRun.findMany({
-    where: { accountId: params.accountId, origin: params.origin },
-    orderBy: { createdAt: "desc" },
-    take: OVERLAY_HISTORY_WINDOW,
-    include: {
-      findings: { select: { code: true } },
-    },
-  });
+  const runsResult = await getAuthPool().query<RawOverlayRunRow>(
+    `SELECT "id"
+     FROM "CavAiRun"
+     WHERE "accountId" = $1
+       AND "origin" = $2
+     ORDER BY "createdAt" DESC
+     LIMIT $3`,
+    [params.accountId, params.origin, OVERLAY_HISTORY_WINDOW]
+  );
 
-  const generatedFromRunIds = runs.map((run) => run.id);
+  const runIds = runsResult.rows.map((row) => String(row.id));
+  const findingsResult = runIds.length
+    ? await getAuthPool().query<RawFindingCodeRow>(
+        `SELECT "runId", "code"
+         FROM "CavAiFinding"
+         WHERE "runId" = ANY($1::text[])`,
+        [runIds]
+      )
+    : { rows: [] as RawFindingCodeRow[] };
+
+  const codeMap = new Map<string, Set<string>>();
+  for (const runId of runIds) codeMap.set(runId, new Set<string>());
+  for (const finding of findingsResult.rows) {
+    const runId = String(finding.runId || "");
+    const code = String(finding.code || "").toLowerCase().trim();
+    if (!runId || !code) continue;
+    const bucket = codeMap.get(runId);
+    if (bucket) bucket.add(code);
+  }
+
+  const generatedFromRunIds = runIds.slice();
   const codeHistory: Record<string, { runsSeen: number; consecutiveRuns: number }> = {};
-  const runsWithCodes = runs.map((run) => ({
-    id: run.id,
-    codes: new Set(run.findings.map((finding) => String(finding.code || "").toLowerCase()).filter(Boolean)),
+  const runsWithCodes = runIds.map((runId) => ({
+    id: runId,
+    codes: codeMap.get(runId) || new Set<string>(),
   }));
 
   const allCodes = new Set<string>();
@@ -154,7 +288,7 @@ export async function computeOverlay(params: {
   for (const code of allCodes) {
     let runsSeen = 0;
     let consecutiveRuns = 0;
-    for (let i = 0; i < runsWithCodes.length; i++) {
+    for (let i = 0; i < runsWithCodes.length; i += 1) {
       const hasCode = runsWithCodes[i].codes.has(code);
       if (hasCode) {
         runsSeen += 1;
@@ -164,7 +298,7 @@ export async function computeOverlay(params: {
     codeHistory[code] = { runsSeen, consecutiveRuns };
   }
 
-  const issueCounts = runs.map((run) => run.findings.length);
+  const issueCounts = runsWithCodes.map((run) => run.codes.size);
   const trend = trendFromIssueCounts(issueCounts);
 
   const currentCodes = runsWithCodes[0]?.codes || new Set<string>();
@@ -244,26 +378,45 @@ export async function persistInsightPack(params: {
   runId: string;
   pack: CavAiInsightPackV1;
 }): Promise<void> {
-  const scopedKey = scopedRunLookupKey(params.accountId, params.runId);
-  await prisma.cavAiInsightPack.upsert({
-    where: scopedKey,
-    create: {
-      accountId: params.accountId,
-      runId: params.runId,
-      packJson: params.pack as unknown as object,
-      generatedAt: new Date(params.pack.generatedAt),
-      engineVersion: params.pack.engineVersion,
-      packVersion: params.pack.packVersion,
-      overlayIncluded: params.pack.overlayIncluded,
-    },
-    update: {
-      packJson: params.pack as unknown as object,
-      generatedAt: new Date(params.pack.generatedAt),
-      engineVersion: params.pack.engineVersion,
-      packVersion: params.pack.packVersion,
-      overlayIncluded: params.pack.overlayIncluded,
-    },
-  });
+  await getAuthPool().query(
+    `INSERT INTO "CavAiInsightPack" (
+       "id",
+       "accountId",
+       "runId",
+       "packJson",
+       "generatedAt",
+       "engineVersion",
+       "packVersion",
+       "overlayIncluded"
+     )
+     VALUES (
+       $1,
+       $2,
+       $3,
+       $4::jsonb,
+       $5,
+       $6,
+       $7,
+       $8
+     )
+     ON CONFLICT ("runId") DO UPDATE
+     SET "accountId" = EXCLUDED."accountId",
+         "packJson" = EXCLUDED."packJson",
+         "generatedAt" = EXCLUDED."generatedAt",
+         "engineVersion" = EXCLUDED."engineVersion",
+         "packVersion" = EXCLUDED."packVersion",
+         "overlayIncluded" = EXCLUDED."overlayIncluded"`,
+    [
+      newDbId(),
+      params.accountId,
+      params.runId,
+      JSON.stringify(params.pack),
+      new Date(params.pack.generatedAt),
+      params.pack.engineVersion,
+      params.pack.packVersion,
+      params.pack.overlayIncluded,
+    ]
+  );
 }
 
 export async function persistDeterministicFixPlan(params: {
@@ -275,32 +428,64 @@ export async function persistDeterministicFixPlan(params: {
   fixPlan: CavAiFixPlanV1;
   origin?: string;
 }): Promise<void> {
-  await prisma.cavAiFixPlan.create({
-    data: {
-      accountId: params.accountId,
-      runId: params.runId,
-      requestId: params.requestId,
-      priorityCode: params.priorityCode,
-      source: "deterministic",
-      status: "PROPOSED",
-      planJson: params.fixPlan as unknown as object,
-      createdByUserId: params.userId,
-      origin: params.origin || null,
-    },
-  });
+  await getAuthPool().query(
+    `INSERT INTO "CavAiFixPlan" (
+       "id",
+       "accountId",
+       "runId",
+       "requestId",
+       "priorityCode",
+       "source",
+       "status",
+       "planJson",
+       "createdByUserId",
+       "origin",
+       "createdAt",
+       "updatedAt"
+     )
+     VALUES (
+       $1,
+       $2,
+       $3,
+       $4,
+       $5,
+       $6,
+       $7,
+       $8::jsonb,
+       $9,
+       $10,
+       NOW(),
+       NOW()
+     )`,
+    [
+      newDbId(),
+      params.accountId,
+      params.runId,
+      params.requestId,
+      params.priorityCode,
+      "deterministic",
+      "PROPOSED",
+      JSON.stringify(params.fixPlan),
+      params.userId,
+      params.origin || null,
+    ]
+  );
 }
 
 export async function getInsightPackForRun(params: {
   accountId: string;
   runId: string;
 }): Promise<CavAiInsightPackV1 | null> {
-  const scopedKey = scopedRunLookupKey(params.accountId, params.runId);
-  const record = await prisma.cavAiInsightPack.findUnique({
-    where: scopedKey,
-    select: { packJson: true },
-  });
-  if (!record?.packJson) return null;
-  return safePack(record.packJson);
+  const record = await queryOne<RawPackRow>(
+    getAuthPool(),
+    `SELECT "packJson"
+     FROM "CavAiInsightPack"
+     WHERE "accountId" = $1
+       AND "runId" = $2
+     LIMIT 1`,
+    [params.accountId, params.runId]
+  );
+  return safePack(record?.packJson);
 }
 
 export function normalizeFindingsForInput(

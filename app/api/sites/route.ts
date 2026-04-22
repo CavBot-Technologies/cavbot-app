@@ -1,12 +1,22 @@
 // app/api/sites/route.ts
 import "server-only";
+
 import { NextResponse } from "next/server";
-import { SiteAllowedOriginMatchType, type Prisma } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import { getAuthPool } from "@/lib/authDb";
 import { requireAccountContext, requireAccountRole, requireSession } from "@/lib/apiAuth";
-import { registerWorkerSite } from "@/lib/cavbotApi.server";
+import {
+  assertWorkerSiteRegistrationConfig,
+  registerWorkerSite,
+} from "@/lib/cavbotApi.server";
 import { getCavbotAppOrigins } from "@/lib/security/embedAppOrigins";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import {
+  createDefaultAllowedOriginsForSite,
+  createWorkspaceSite,
+  findOwnedWorkspaceProjectForSites,
+  rollbackCreatedWorkspaceSite,
+} from "@/lib/workspaceSites.server";
+import { expandRelatedExactOrigins } from "@/originMatch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +28,23 @@ const NO_STORE_HEADERS: Record<string, string> = {
   Vary: "Cookie",
 };
 
+type LegacySiteRow = {
+  id: string;
+  projectId: number | string;
+  slug: string;
+  label: string;
+  origin: string;
+  status: string;
+  isActive: boolean | null;
+  verifiedAt: Date | string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+
+type ProjectIdRow = {
+  id: number | string;
+};
+
 function json(payload: unknown, init?: number | ResponseInit) {
   const resInit: ResponseInit = typeof init === "number" ? { status: init } : init ?? {};
   return NextResponse.json(payload, {
@@ -26,26 +53,9 @@ function json(payload: unknown, init?: number | ResponseInit) {
   });
 }
 
-// Launch-grade: never leak verification secrets to the browser
-const SAFE_SITE_SELECT = {
-  id: true,
-  projectId: true,
-  slug: true,
-  label: true,
-  origin: true,
-  status: true,
-  isActive: true,
-  verifiedAt: true,
-  createdAt: true,
-  updatedAt: true,
-} as const;
-
-type SafeSite = Prisma.SiteGetPayload<{ select: typeof SAFE_SITE_SELECT }>;
-
 function parseProjectId(raw: string | null): number | null {
   const s = String(raw ?? "").trim();
-  if (!s) return null;
-  if (!/^\d+$/.test(s)) return null;
+  if (!s || !/^\d+$/.test(s)) return null;
   const n = Number(s);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
@@ -69,6 +79,110 @@ function normalizeOrigin(input: string) {
   return u.origin;
 }
 
+function asDate(value: Date | string | null) {
+  if (!value) return null;
+  return value instanceof Date ? value : new Date(value);
+}
+
+function asSite(row: LegacySiteRow) {
+  return {
+    id: String(row.id),
+    projectId: Number(row.projectId),
+    slug: String(row.slug),
+    label: String(row.label),
+    origin: String(row.origin),
+    status: String(row.status),
+    isActive: Boolean(row.isActive),
+    verifiedAt: asDate(row.verifiedAt)?.toISOString() ?? null,
+    createdAt: asDate(row.createdAt)?.toISOString() ?? null,
+    updatedAt: asDate(row.updatedAt)?.toISOString() ?? null,
+  };
+}
+
+async function findOwnedProjectBySlug(accountId: string, projectSlug: string) {
+  const result = await getAuthPool().query<ProjectIdRow>(
+    `SELECT "id"
+     FROM "Project"
+     WHERE "slug" = $1
+       AND "accountId" = $2
+       AND "isActive" = true
+     LIMIT 1`,
+    [projectSlug, accountId]
+  );
+  const row = result.rows[0];
+  return row ? { id: Number(row.id) } : null;
+}
+
+async function listOwnedProjectIds(accountId: string) {
+  const result = await getAuthPool().query<ProjectIdRow>(
+    `SELECT "id"
+     FROM "Project"
+     WHERE "accountId" = $1
+       AND "isActive" = true
+     ORDER BY "createdAt" ASC`,
+    [accountId]
+  );
+  return result.rows
+    .map((row) => Number(row.id))
+    .filter((id) => Number.isFinite(id) && id > 0);
+}
+
+async function listLegacySites(projectIds: number[]) {
+  if (!projectIds.length) return [];
+  const result = await getAuthPool().query<LegacySiteRow>(
+    `SELECT
+       "id",
+       "projectId",
+       "slug",
+       "label",
+       "origin",
+       "status",
+       "isActive",
+       "verifiedAt",
+       "createdAt",
+       "updatedAt"
+     FROM "Site"
+     WHERE "projectId" = ANY($1::int[])
+       AND "isActive" = true
+     ORDER BY "createdAt" ASC`,
+    [projectIds]
+  );
+  return result.rows.map(asSite);
+}
+
+async function findLegacySiteById(siteId: string) {
+  const result = await getAuthPool().query<LegacySiteRow>(
+    `SELECT
+       "id",
+       "projectId",
+       "slug",
+       "label",
+       "origin",
+       "status",
+       "isActive",
+       "verifiedAt",
+       "createdAt",
+       "updatedAt"
+     FROM "Site"
+     WHERE "id" = $1
+     LIMIT 1`,
+    [siteId]
+  );
+  return result.rows[0] ? asSite(result.rows[0]) : null;
+}
+
+async function slugExists(projectId: number, slug: string) {
+  const result = await getAuthPool().query<{ id: string }>(
+    `SELECT "id"
+     FROM "Site"
+     WHERE "projectId" = $1
+       AND "slug" = $2
+     LIMIT 1`,
+    [projectId, slug]
+  );
+  return Boolean(result.rows[0]?.id);
+}
+
 function asHttpError(e: unknown) {
   const msg = e instanceof Error ? e.message : String(e ?? "");
 
@@ -76,6 +190,9 @@ function asHttpError(e: unknown) {
     return { status: 401, payload: { error: "UNAUTHENTICATED" } };
   }
   if (msg === "FORBIDDEN") return { status: 403, payload: { error: "FORBIDDEN" } };
+  if (msg === "BAD_PROJECT" || msg === "PROJECT_NOT_FOUND") {
+    return { status: 404, payload: { error: "PROJECT_NOT_FOUND" } };
+  }
 
   return { status: 500, payload: { error: "SITES_FAILED", message: msg } };
 }
@@ -86,43 +203,26 @@ export async function GET(req: Request) {
     requireAccountContext(session);
 
     const { searchParams } = new URL(req.url);
-
     const pid = parseProjectId(searchParams.get("projectId"));
     const projectSlug = String(searchParams.get("projectSlug") ?? "").trim();
 
     let projectIds: number[] = [];
 
     if (pid) {
-      const p = await prisma.project.findFirst({
-        where: { id: pid, accountId: session.accountId!, isActive: true },
-        select: { id: true },
-      });
-      if (!p) return json({ error: "PROJECT_NOT_FOUND" }, 404);
-      projectIds = [p.id];
+      const project = await findOwnedWorkspaceProjectForSites(session.accountId!, pid);
+      if (!project) return json({ error: "PROJECT_NOT_FOUND" }, 404);
+      projectIds = [project.id];
     } else if (projectSlug) {
-      const p = await prisma.project.findFirst({
-        where: { slug: projectSlug, accountId: session.accountId!, isActive: true },
-        select: { id: true },
-      });
-      if (!p) return json({ error: "PROJECT_NOT_FOUND" }, 404);
-      projectIds = [p.id];
+      const project = await findOwnedProjectBySlug(session.accountId!, projectSlug);
+      if (!project) return json({ error: "PROJECT_NOT_FOUND" }, 404);
+      projectIds = [project.id];
     } else {
-      const projects = await prisma.project.findMany({
-        where: { accountId: session.accountId!, isActive: true },
-        select: { id: true },
-        orderBy: { createdAt: "asc" },
-      });
-      projectIds = projects.map((p) => p.id);
+      projectIds = await listOwnedProjectIds(session.accountId!);
     }
 
-    if (projectIds.length === 0) return json({ sites: [] }, 200);
+    if (!projectIds.length) return json({ sites: [] }, 200);
 
-    const sites = await prisma.site.findMany({
-      where: { projectId: { in: projectIds }, isActive: true },
-      orderBy: { createdAt: "asc" },
-      select: SAFE_SITE_SELECT,
-    });
-
+    const sites = await listLegacySites(projectIds);
     return json({ sites }, 200);
   } catch (e: unknown) {
     const { status, payload } = asHttpError(e);
@@ -140,12 +240,11 @@ export async function POST(req: Request) {
     const pidQ = parseProjectId(searchParams.get("projectId"));
     const projectSlugQ = String(searchParams.get("projectSlug") ?? "").trim();
 
-    const body = (await readSanitizedJson(req, ({} as Record<string, unknown>))) as Record<string, unknown>;
+    const body = (await readSanitizedJson(req, {} as Record<string, unknown>)) as Record<string, unknown>;
 
     const slug = String(body.slug ?? "").trim();
     const label = String(body.label ?? "").trim();
     const originRaw = String(body.origin ?? "").trim();
-
     const pidB = parseProjectId(body.projectId != null ? String(body.projectId) : null);
     const projectSlugB = String(body.projectSlug ?? "").trim();
 
@@ -163,19 +262,19 @@ export async function POST(req: Request) {
     }
 
     const project = pid
-      ? await prisma.project.findFirst({
-          where: { id: pid, accountId: session.accountId!, isActive: true },
-          select: { id: true },
-        })
+      ? await findOwnedWorkspaceProjectForSites(session.accountId!, pid)
       : projectSlug
-      ? await prisma.project.findFirst({
-          where: { slug: projectSlug, accountId: session.accountId!, isActive: true },
-          select: { id: true },
-        })
+      ? await findOwnedProjectBySlug(session.accountId!, projectSlug)
       : null;
 
     if (!project) {
-      return json({ error: "BAD_PROJECT", message: "projectId or projectSlug is required (and must belong to your account)" }, 400);
+      return json(
+        {
+          error: "BAD_PROJECT",
+          message: "projectId or projectSlug is required (and must belong to your account)",
+        },
+        400
+      );
     }
 
     let origin: string;
@@ -185,48 +284,48 @@ export async function POST(req: Request) {
       return json({ error: "BAD_ORIGIN", message: "origin must be a valid URL or domain" }, 400);
     }
 
-    // Create in DB first. Handle uniqueness by catching Prisma (race-safe).
-    let site: SafeSite | null = null;
+    if (await slugExists(project.id, slug)) {
+      return json({ error: "SITE_CONFLICT" }, 409);
+    }
+
+    assertWorkerSiteRegistrationConfig();
+
+    const originAliases = expandRelatedExactOrigins(origin);
+    const result = await createWorkspaceSite({
+      projectId: project.id,
+      accountId: session.accountId!,
+      origin,
+      originAliases,
+      label,
+      notes: null,
+      baseSlug: slug,
+      siteLimit: null,
+    });
+
+    if ("limitBlocked" in result) {
+      return json({ error: "PLAN_SITE_LIMIT", current: result.current, limit: result.limit }, 403);
+    }
+
+    if (result.conflict) {
+      return json({ error: "SITE_CONFLICT" }, 409);
+    }
+
     try {
-      site = await prisma.site.create({
-        data: { projectId: project.id, slug, label, origin, isActive: true },
-        select: SAFE_SITE_SELECT,
+      await createDefaultAllowedOriginsForSite(result.site.id, [
+        ...originAliases,
+        ...getCavbotAppOrigins(),
+      ]);
+      await registerWorkerSite(project.id, result.site.origin, result.site.label);
+    } catch (error) {
+      await rollbackCreatedWorkspaceSite({
+        projectId: project.id,
+        siteId: result.site.id,
+        autoPinned: result.autoPinned,
       });
-    } catch (e: unknown) {
-      const code =
-        e && typeof e === "object" && "code" in e ? String((e as { code?: unknown }).code ?? "") : "";
-      if (code === "P2002") {
-        return json({ error: "SITE_CONFLICT" }, 409);
-      }
-      throw e;
+      throw error;
     }
 
-    if (site) {
-      const autoOrigins = new Set<string>();
-      autoOrigins.add(site.origin);
-      for (const originEntry of getCavbotAppOrigins()) {
-        autoOrigins.add(originEntry);
-      }
-      const createPayload = Array.from(autoOrigins).map((originValue) => ({
-        siteId: site.id,
-        origin: originValue,
-        matchType: SiteAllowedOriginMatchType.EXACT,
-      }));
-      if (createPayload.length) {
-        await prisma.siteAllowedOrigin.createMany({ data: createPayload });
-      }
-    }
-
-    // Register in Worker/D1. If this fails, rollback DB insert to prevent drift.
-    try {
-      await registerWorkerSite(project.id, origin, label);
-    } catch (e: unknown) {
-      if (site) {
-        await prisma.site.delete({ where: { id: site.id } }).catch(() => {});
-      }
-      throw e;
-    }
-
+    const site = await findLegacySiteById(result.site.id);
     return json({ site }, 201);
   } catch (e: unknown) {
     const { status, payload } = asHttpError(e);
