@@ -67,6 +67,10 @@ await cp(path.join(openNextDir, "server-functions"), path.join(deployDir, "serve
   recursive: true
 });
 
+const typescriptSourceDir = path.join(rootDir, "node_modules", "typescript");
+const typescriptDeployDir = path.join(deployDir, "server-functions", "default", "node_modules", "typescript");
+await cp(typescriptSourceDir, typescriptDeployDir, { recursive: true });
+
 // Keep the default OpenNext worker entrypoint so runtime bootstrapping remains compatible
 // with Workers (the server index path can trigger unsupported fs calls in workerd).
 const workerSource = await readFile(path.join(openNextDir, "worker.js"), "utf8");

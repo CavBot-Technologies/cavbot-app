@@ -1,5 +1,3 @@
-import { readCavtoolsRuntimeSnapshot } from "@/lib/cavtools/commandPlane.server";
-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -90,6 +88,7 @@ export async function GET(req: Request) {
               break;
             }
 
+            const { readCavtoolsRuntimeSnapshot } = await import("@/lib/cavtools/commandPlane.server");
             const snapshot = await readCavtoolsRuntimeSnapshot(req, {
               sessionId: query.sessionId,
               afterSeq,

@@ -3,9 +3,11 @@ import "server-only";
 import crypto from "node:crypto";
 import type { ChildProcess } from "node:child_process";
 import { lstat, mkdtemp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { CavCloudShareMode, PublicArtifactVisibility } from "@prisma/client";
+import type * as tsType from "typescript";
 
 import {
   ApiAuthError,
@@ -61,7 +63,6 @@ import { prisma } from "@/lib/prisma";
 import { prismaEmpty, prismaJoin, prismaRaw, prismaSql, type Sql } from "@/lib/prismaRuntime";
 import { requirePremiumEntitlement } from "@/lib/security/authorize";
 import { buildCavGuardDecision } from "@/src/lib/cavguard/cavGuard.registry";
-import * as ts from "typescript";
 
 const Prisma = {
   empty: prismaEmpty,
@@ -69,6 +70,13 @@ const Prisma = {
   raw: prismaRaw,
   sql: prismaSql,
 } as const;
+
+function getTypeScriptModuleId(): string {
+  return ["type", "script"].join("");
+}
+
+const nodeRequire = createRequire(import.meta.url);
+const ts = nodeRequire(getTypeScriptModuleId()) as typeof import("typescript");
 
 export type CavtoolsNamespace = "cavcloud" | "cavsafe" | "cavcode" | "telemetry" | "workspace";
 
@@ -6039,7 +6047,7 @@ function isIndexableFilePath(relPath: string): boolean {
   return /\.(tsx?|jsx?|mts|cts|mjs|cjs)$/i.test(lower);
 }
 
-function toRefContext(node: ts.Identifier): "read" | "write" | "type" {
+function toRefContext(node: tsType.Identifier): "read" | "write" | "type" {
   const parent = node.parent;
   if (!parent) return "read";
   if (ts.isTypeReferenceNode(parent) || ts.isExpressionWithTypeArguments(parent) || ts.isTypeQueryNode(parent)) return "type";
@@ -6060,7 +6068,7 @@ function toRefContext(node: ts.Identifier): "read" | "write" | "type" {
   return "read";
 }
 
-function lineColFromPos(sf: ts.SourceFile, pos: number): { line: number; col: number } {
+function lineColFromPos(sf: tsType.SourceFile, pos: number): { line: number; col: number } {
   const lc = sf.getLineAndCharacterOfPosition(Math.max(0, pos));
   return {
     line: (lc?.line || 0) + 1,
@@ -6107,7 +6115,7 @@ function buildIndexerFilePayload(filePath: string, raw: string): CavcodeIndexerF
   const calls: CavcodeIndexerCall[] = [];
   const dependencies: CavcodeIndexerDependencyEdge[] = [];
 
-  const pushSymbol = (name: string, kind: string, node: ts.Node, exported: boolean) => {
+  const pushSymbol = (name: string, kind: string, node: tsType.Node, exported: boolean) => {
     if (!name) return;
     if (symbols.length >= CAVCODE_INDEX_MAX_FILES * 20) return;
     const at = lineColFromPos(sf, node.getStart(sf));
@@ -6121,7 +6129,7 @@ function buildIndexerFilePayload(filePath: string, raw: string): CavcodeIndexerF
     });
   };
 
-  const pushReference = (name: string, node: ts.Identifier) => {
+  const pushReference = (name: string, node: tsType.Identifier) => {
     if (!name) return;
     if (references.length >= CAVCODE_INDEX_MAX_FILES * 80) return;
     const at = lineColFromPos(sf, node.getStart(sf));
@@ -6134,7 +6142,7 @@ function buildIndexerFilePayload(filePath: string, raw: string): CavcodeIndexerF
     });
   };
 
-  const pushCall = (name: string, node: ts.Node) => {
+  const pushCall = (name: string, node: tsType.Node) => {
     if (!name) return;
     if (calls.length >= CAVCODE_INDEX_MAX_FILES * 40) return;
     const at = lineColFromPos(sf, node.getStart(sf));
@@ -6146,12 +6154,12 @@ function buildIndexerFilePayload(filePath: string, raw: string): CavcodeIndexerF
     });
   };
 
-  const isNodeExported = (node: ts.Node): boolean => {
-    const flags = ts.getCombinedModifierFlags(node as ts.Declaration);
+  const isNodeExported = (node: tsType.Node): boolean => {
+    const flags = ts.getCombinedModifierFlags(node as tsType.Declaration);
     return (flags & ts.ModifierFlags.Export) !== 0 || (flags & ts.ModifierFlags.Default) !== 0;
   };
 
-  const visit = (node: ts.Node) => {
+  const visit = (node: tsType.Node) => {
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
       const spec = node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)
         ? s(node.moduleSpecifier.text)
@@ -8922,14 +8930,14 @@ function isLintCandidatePath(pathValue: string, mimeType?: string | null): boole
   return mime.includes("typescript") || mime.includes("javascript") || mime.includes("json");
 }
 
-function toDiagnosticSeverity(category: ts.DiagnosticCategory): "error" | "warn" | "info" {
+function toDiagnosticSeverity(category: tsType.DiagnosticCategory): "error" | "warn" | "info" {
   if (category === ts.DiagnosticCategory.Error) return "error";
   if (category === ts.DiagnosticCategory.Warning) return "warn";
   return "info";
 }
 
 function mapTsDiagnostic(
-  diagnostic: ts.Diagnostic,
+  diagnostic: tsType.Diagnostic,
   fallbackFile = "/cavcode/tsconfig.json"
 ): CavtoolsWorkspaceDiagnostic | null {
   const source = s(diagnostic.source || "typescript") || "typescript";
@@ -8993,7 +9001,7 @@ function pushWorkspaceDiagnostic(
 function readTsConfigCompilerOptions(
   files: LintWorkspaceFile[],
   diagnosticsOut: CavtoolsWorkspaceDiagnostic[]
-): ts.CompilerOptions {
+): tsType.CompilerOptions {
   const tsconfig = files.find((file) => normalizePath(file.path) === "/cavcode/tsconfig.json");
   if (!tsconfig) return {};
 
@@ -9208,7 +9216,7 @@ async function runCavcodeWorkspaceDiagnostics(
   for (const item of configDiagnostics) push(item);
 
   if (tsFiles.length) {
-    const defaultCompilerOptions: ts.CompilerOptions = {
+    const defaultCompilerOptions: tsType.CompilerOptions = {
       target: ts.ScriptTarget.ES2022,
       module: ts.ModuleKind.ESNext,
       moduleResolution: ts.ModuleResolutionKind.Bundler,
@@ -9227,7 +9235,7 @@ async function runCavcodeWorkspaceDiagnostics(
       },
     };
 
-    const compilerOptions: ts.CompilerOptions = {
+    const compilerOptions: tsType.CompilerOptions = {
       ...defaultCompilerOptions,
       ...configuredCompilerOptions,
     };
@@ -9317,7 +9325,7 @@ async function runCavcodeWorkspaceDiagnostics(
     if (!JSON_LINT_FILE_RE.test(file.path)) continue;
     const jsonText = ts.parseJsonText(file.path, file.content);
     const parseDiagnostics =
-      ((jsonText as unknown as { parseDiagnostics?: ts.Diagnostic[] }).parseDiagnostics || []) as ts.Diagnostic[];
+      ((jsonText as unknown as { parseDiagnostics?: tsType.Diagnostic[] }).parseDiagnostics || []) as tsType.Diagnostic[];
     for (const diagnostic of parseDiagnostics) {
       const start = Number.isFinite(Number(diagnostic.start)) ? Math.max(0, Math.trunc(Number(diagnostic.start))) : 0;
       const lc = jsonText.getLineAndCharacterOfPosition(start);
@@ -10747,7 +10755,7 @@ function mapTsserverDiagnostics(
     const line = Number(start?.line);
     const col = Number(start?.offset);
     const code = Number(rec.code);
-    const messageText = ts.flattenDiagnosticMessageText(rec.text as ts.DiagnosticMessageChain | string, "\n").trim();
+    const messageText = ts.flattenDiagnosticMessageText(rec.text as tsType.DiagnosticMessageChain | string, "\n").trim();
     if (!messageText) continue;
     out.push({
       file,
@@ -11141,7 +11149,7 @@ async function startProjectServiceSession(
     );
   }
   const workspaceDir = stage.workspaceDir;
-  const tsserverPath = path.join(process.cwd(), "node_modules", "typescript", "lib", "tsserver.js");
+  const tsserverPath = path.join(process.cwd(), "node_modules", getTypeScriptModuleId(), "lib", "tsserver.js");
   if (!await pathExists(tsserverPath)) {
     throw new CavtoolsExecError("PROJECT_SERVICE_UNAVAILABLE", "typescript/lib/tsserver.js is not available.", 500);
   }
