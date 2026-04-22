@@ -308,7 +308,7 @@
   gap: clamp(16px, 1.5vw, 24px) clamp(24px, 2vw, 32px);
   align-items: stretch;
   padding: clamp(16px, 1.2vw, 20px);
-  border-radius: calc(var(--r-lg) - 8px);
+  border-radius: var(--cb-r);
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(5, 7, 18, 0.92);
   text-decoration: none;
