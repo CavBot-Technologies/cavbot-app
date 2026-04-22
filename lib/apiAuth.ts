@@ -2,6 +2,7 @@
 import "server-only";
 
 import { createHmac as nodeCreateHmac, pbkdf2 as nodePbkdf2, webcrypto as nodeCrypto } from "crypto";
+import type { NextResponse } from "next/server";
 import {
   findMembershipsForUser,
   findSessionMembership,
@@ -629,7 +630,7 @@ function sessionCookieWriteOptions(req?: Request) {
   };
 }
 
-export function writeSessionCookie(req: Request, res: { cookies: { set: (...args: unknown[]) => void } }, token: string) {
+export function writeSessionCookie(req: Request, res: NextResponse<unknown>, token: string): NextResponse<unknown> {
   const { name, cookieOpts } = sessionCookieWriteOptions(req);
   res.cookies.set(name, token, cookieOpts);
 
@@ -642,7 +643,7 @@ export function writeSessionCookie(req: Request, res: { cookies: { set: (...args
   return res;
 }
 
-export function expireSessionCookie(req: Request, res: { cookies: { set: (...args: unknown[]) => void } }) {
+export function expireSessionCookie(req: Request, res: NextResponse<unknown>): NextResponse<unknown> {
   const { name, cookieOpts } = sessionCookieWriteOptions(req);
   res.cookies.set(name, "", { ...cookieOpts, maxAge: 0 });
 
