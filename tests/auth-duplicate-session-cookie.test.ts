@@ -21,8 +21,12 @@ test("session parsing tries every duplicate cookie value instead of trusting the
 test("session cookie writes and clears also remove the legacy host-only variant", () => {
   const source = read("lib/apiAuth.ts");
 
+  assert.match(source, /function hostOnlyCookieOptions/);
   assert.match(source, /export function writeSessionCookie/);
-  assert.match(source, /if \(cookieOpts\.domain\)/);
-  assert.match(source, /res\.cookies\.set\(name, "", \{ \.\.\.hostOnlyOpts, maxAge: 0 \}\);/);
+  assert.match(source, /shared session cookie write failed; falling back to host-only cookie/);
+  assert.match(source, /res\.cookies\.set\(name, token, hostOnlyOpts\);/);
+  assert.match(source, /if \(!cookieOpts\.domain\)/);
   assert.match(source, /export function expireSessionCookie/);
+  assert.match(source, /shared session cookie clear failed/);
+  assert.match(source, /legacy host-only session cookie clear failed/);
 });

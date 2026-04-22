@@ -227,19 +227,22 @@ export async function POST(req: NextRequest) {
 
     writeSessionCookie(req, res, sessionToken);
 
-    // pointer cookies
-    const firstProject = await findFirstProjectIdByAccount(pool, active.accountId);
+    try {
+      const firstProject = await findFirstProjectIdByAccount(pool, active.accountId);
 
-    if (firstProject?.id) {
-      const pointerCookieOpts = {
-        httpOnly: true,
-        sameSite: "lax" as const,
-        secure: process.env.NODE_ENV === "production",
-        path: "/",
-        maxAge: 60 * 60 * 24 * 30,
-      };
-      res.cookies.set("cb_active_project_id", String(firstProject.id), pointerCookieOpts);
-      res.cookies.set("cb_pid", String(firstProject.id), pointerCookieOpts);
+      if (firstProject?.id) {
+        const pointerCookieOpts = {
+          httpOnly: true,
+          sameSite: "lax" as const,
+          secure: process.env.NODE_ENV === "production",
+          path: "/",
+          maxAge: 60 * 60 * 24 * 30,
+        };
+        res.cookies.set("cb_active_project_id", String(firstProject.id), pointerCookieOpts);
+        res.cookies.set("cb_pid", String(firstProject.id), pointerCookieOpts);
+      }
+    } catch (error) {
+      console.warn("[auth/challenge/verify] non-fatal project pointer cookie failure", error);
     }
 
     // Mark used

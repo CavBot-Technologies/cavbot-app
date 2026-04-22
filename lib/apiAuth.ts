@@ -630,14 +630,33 @@ function sessionCookieWriteOptions(req?: Request) {
   };
 }
 
+function hostOnlyCookieOptions<T extends { domain?: string }>(cookieOpts: T) {
+  const hostOnlyOpts = { ...cookieOpts };
+  delete hostOnlyOpts.domain;
+  return hostOnlyOpts;
+}
+
 export function writeSessionCookie(req: Request, res: NextResponse<unknown>, token: string): NextResponse<unknown> {
   const { name, cookieOpts } = sessionCookieWriteOptions(req);
-  res.cookies.set(name, token, cookieOpts);
+  if (!cookieOpts.domain) {
+    res.cookies.set(name, token, cookieOpts);
+    return res;
+  }
 
-  if (cookieOpts.domain) {
-    const hostOnlyOpts = { ...cookieOpts };
-    delete hostOnlyOpts.domain;
+  const hostOnlyOpts = hostOnlyCookieOptions(cookieOpts);
+
+  try {
+    res.cookies.set(name, token, cookieOpts);
+  } catch (error) {
+    console.warn("[auth] shared session cookie write failed; falling back to host-only cookie", error);
+    res.cookies.set(name, token, hostOnlyOpts);
+    return res;
+  }
+
+  try {
     res.cookies.set(name, "", { ...hostOnlyOpts, maxAge: 0 });
+  } catch (error) {
+    console.warn("[auth] legacy host-only session cookie clear failed", error);
   }
 
   return res;
@@ -645,12 +664,23 @@ export function writeSessionCookie(req: Request, res: NextResponse<unknown>, tok
 
 export function expireSessionCookie(req: Request, res: NextResponse<unknown>): NextResponse<unknown> {
   const { name, cookieOpts } = sessionCookieWriteOptions(req);
-  res.cookies.set(name, "", { ...cookieOpts, maxAge: 0 });
+  if (!cookieOpts.domain) {
+    res.cookies.set(name, "", { ...cookieOpts, maxAge: 0 });
+    return res;
+  }
 
-  if (cookieOpts.domain) {
-    const hostOnlyOpts = { ...cookieOpts };
-    delete hostOnlyOpts.domain;
+  const hostOnlyOpts = hostOnlyCookieOptions(cookieOpts);
+
+  try {
+    res.cookies.set(name, "", { ...cookieOpts, maxAge: 0 });
+  } catch (error) {
+    console.warn("[auth] shared session cookie clear failed", error);
+  }
+
+  try {
     res.cookies.set(name, "", { ...hostOnlyOpts, maxAge: 0 });
+  } catch (error) {
+    console.warn("[auth] legacy host-only session cookie clear failed", error);
   }
 
   return res;

@@ -412,16 +412,20 @@ export async function POST(req: Request) {
 
       writeSessionCookie(req, res, token);
 
-      const pointerCookieOpts = {
-        httpOnly: true,
-        sameSite: "lax" as const,
-        secure: process.env.NODE_ENV === "production",
-        path: "/",
-        maxAge: 60 * 60 * 24 * 30,
-      };
+      try {
+        const pointerCookieOpts = {
+          httpOnly: true,
+          sameSite: "lax" as const,
+          secure: process.env.NODE_ENV === "production",
+          path: "/",
+          maxAge: 60 * 60 * 24 * 30,
+        };
 
-      res.cookies.set("cb_active_project_id", String(result.project.id), pointerCookieOpts);
-      res.cookies.set("cb_pid", String(result.project.id), pointerCookieOpts);
+        res.cookies.set("cb_active_project_id", String(result.project.id), pointerCookieOpts);
+        res.cookies.set("cb_pid", String(result.project.id), pointerCookieOpts);
+      } catch (error) {
+        console.warn("[auth/register] non-fatal project pointer cookie failure", error);
+      }
 
       await sendSignupWelcomeEmail({
         userId: result.user.id,

@@ -40,6 +40,8 @@ test("interactive login and challenge verification mint sessions with the stored
 
   assert.match(loginSource, /sessionVersion: resolveIssuedSessionVersion\(userAuth\.sessionVersion\),/);
   assert.match(loginSource, /writeSessionCookie\(req, res, token\)/);
+  assert.match(loginSource, /non-fatal project pointer cookie failure/);
   assert.match(challengeSource, /sessionVersion: resolveIssuedSessionVersion\(userAuth\?\.sessionVersion\),/);
   assert.match(challengeSource, /writeSessionCookie\(req, res, sessionToken\)/);
+  assert.match(challengeSource, /non-fatal project pointer cookie failure/);
 });
