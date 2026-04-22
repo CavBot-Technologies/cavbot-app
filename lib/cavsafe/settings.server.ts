@@ -2,6 +2,7 @@ import "server-only";
 
 import type { PublicArtifactVisibility } from "@prisma/client";
 
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
 
 const THEME_ACCENTS = ["lime", "violet", "blue", "white", "clear"] as const;
@@ -197,6 +198,40 @@ function isMissingSettingsTableError(err: unknown): boolean {
   return code === "P2021" || (message.includes("cavsafesettings") && message.includes("does not exist"));
 }
 
+export function isCavSafeSettingsSchemaMismatchError(err: unknown) {
+  return isSchemaMismatchError(err, {
+    tables: ["CavSafeSettings"],
+    columns: [
+      "accountId",
+      "userId",
+      "themeAccent",
+      "trashRetentionDays",
+      "autoPurgeTrash",
+      "preferDownloadUnknownBinary",
+      "defaultIntegrityLockOnUpload",
+      "defaultEvidenceVisibility",
+      "defaultEvidenceExpiryDays",
+      "auditRetentionDays",
+      "enableAuditExport",
+      "timelockDefaultPreset",
+      "notifySafeStorage80",
+      "notifySafeStorage95",
+      "notifySafeUploadFailures",
+      "notifySafeMoveFailures",
+      "notifySafeEvidencePublished",
+      "notifySafeSnapshotCreated",
+      "notifySafeTimeLockEvents",
+    ],
+  });
+}
+
+function mergeSettingsPatch(base: CavSafeSettings, patch: PatchInput): CavSafeSettings {
+  return normalizeSettingsRow({
+    ...base,
+    ...(patch as Record<string, unknown>),
+  });
+}
+
 async function ensureSettingsRow(accountId: string, userId: string) {
   const where = {
     accountId_userId: {
@@ -216,7 +251,7 @@ async function ensureSettingsRow(accountId: string, userId: string) {
 
     return await prisma.cavSafeSettings.findUnique({ where });
   } catch (err) {
-    if (isMissingSettingsTableError(err)) return null;
+    if (isMissingSettingsTableError(err) || isCavSafeSettingsSchemaMismatchError(err)) return null;
     throw err;
   }
 }
@@ -309,9 +344,16 @@ export async function getCavSafeSettings(args: {
   const premiumPlus = args.premiumPlus === true;
   if (!accountId || !userId) return sanitizeForTier({ ...DEFAULT_CAVSAFE_SETTINGS }, premiumPlus);
 
-  const row = await ensureSettingsRow(accountId, userId);
-  const settings = normalizeSettingsRow(row as Partial<Record<string, unknown>> | null);
-  return sanitizeForTier(settings, premiumPlus);
+  try {
+    const row = await ensureSettingsRow(accountId, userId);
+    const settings = normalizeSettingsRow(row as Partial<Record<string, unknown>> | null);
+    return sanitizeForTier(settings, premiumPlus);
+  } catch (err) {
+    if (isCavSafeSettingsSchemaMismatchError(err)) {
+      return sanitizeForTier({ ...DEFAULT_CAVSAFE_SETTINGS }, premiumPlus);
+    }
+    throw err;
+  }
 }
 
 export async function updateCavSafeSettings(args: {
@@ -326,28 +368,38 @@ export async function updateCavSafeSettings(args: {
   if (!accountId || !userId) return sanitizeForTier({ ...DEFAULT_CAVSAFE_SETTINGS }, premiumPlus);
 
   const patch = args.patch || {};
-  const row = await ensureSettingsRow(accountId, userId);
-  if (!row) {
-    const normalized = normalizeSettingsRow(patch as Record<string, unknown>);
-    return sanitizeForTier(
-      {
-        ...DEFAULT_CAVSAFE_SETTINGS,
-        ...normalized,
-      },
+  const fallbackSettings = (row: Partial<Record<string, unknown>> | null) =>
+    sanitizeForTier(
+      mergeSettingsPatch(
+        normalizeSettingsRow(row),
+        patch,
+      ),
       premiumPlus,
     );
+
+  try {
+    const row = await ensureSettingsRow(accountId, userId);
+    if (!row) return fallbackSettings(null);
+
+    try {
+      const next = await prisma.cavSafeSettings.update({
+        where: { id: row.id },
+        data: patch,
+      });
+
+      return getCavSafeSettings({
+        accountId,
+        userId: String(next.userId || userId),
+        premiumPlus,
+      });
+    } catch (err) {
+      if (isCavSafeSettingsSchemaMismatchError(err)) return fallbackSettings(row as Partial<Record<string, unknown>>);
+      throw err;
+    }
+  } catch (err) {
+    if (isCavSafeSettingsSchemaMismatchError(err)) return fallbackSettings(null);
+    throw err;
   }
-
-  const next = await prisma.cavSafeSettings.update({
-    where: { id: row.id },
-    data: patch,
-  });
-
-  return getCavSafeSettings({
-    accountId,
-    userId: String(next.userId || userId),
-    premiumPlus,
-  });
 }
 
 export async function resolveCavSafeRetentionPolicy(args: {

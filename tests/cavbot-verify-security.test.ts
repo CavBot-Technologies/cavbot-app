@@ -460,6 +460,8 @@ test("modal source keeps verify entrypoint, shape-rendering, and no click-jank h
   assert.equal(adminAuthHeroSource.includes("hq-authVerifyShieldIcon"), true);
 
   assert.equal(modalSource.includes("Use email code instead"), true);
+  assert.equal(modalSource.includes("createPortal"), true);
+  assert.equal(modalSource.includes("document.body.style.overflow = \"hidden\""), true);
   assert.equal(modalSource.includes("window.addEventListener(\"click\""), false);
   assert.equal(modalSource.includes("location.reload("), false);
   assert.equal(modalSource.includes("/logo/cavbot-wordmark.svg"), false);

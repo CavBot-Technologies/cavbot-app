@@ -137,6 +137,11 @@
   opacity: 0.92;
 }
 
+.metricIconImageSettings {
+  width: 16px;
+  height: 16px;
+}
+
 .systemMetricIcon {
   width: 14px;
   height: 14px;
@@ -256,12 +261,12 @@
   position: absolute;
   left: max(12px, var(--safe-left));
   bottom: calc(var(--cb-global-footer-height) + var(--safe-bottom) + 8px);
-  width: min(264px, calc(100vw - 24px));
+  width: min(312px, calc(100vw - 24px));
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(4, 10, 28, 0.96);
   border-radius: 12px;
   box-shadow: none;
-  padding: 10px;
+  padding: 12px;
   opacity: 0;
   transform: translateY(6px);
   pointer-events: none;
@@ -290,19 +295,26 @@
 }
 
 .developerClose {
+  width: 30px;
   height: 30px;
-  padding: 0 10px;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.03);
   color: rgba(247, 251, 255, 0.86);
-  font-size: 11px;
-  font-weight: 600;
   border-radius: var(--r-sm);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.developerClose .cb-closeIcon {
+  --cb-close-size: 11px;
+  opacity: 0.88;
 }
 
 .developerLinks {
-  margin-top: 0;
+  margin-top: 10px;
   display: grid;
   gap: 6px;
 }
@@ -440,6 +452,6 @@
 
   .developerPanel {
     left: max(8px, var(--safe-left));
-    width: min(264px, calc(100vw - 16px));
+    width: min(304px, calc(100vw - 16px));
   }
 }

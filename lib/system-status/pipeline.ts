@@ -67,10 +67,11 @@ type SystemStatusHistoryMonthMetricsPayload = {
   metrics: StatusHistoryMonthMetrics;
 };
 
-const DEFAULT_SITE_ORIGIN = getAppOrigin();
 const CDN_ORIGIN = process.env.CAVBOT_CDN_BASE_URL || "https://cdn.cavbot.io";
 const DEFAULT_ARCADE_CDN_ORIGIN = "https://cdn.cavbot.io/arcade/";
 const DEFAULT_CAVCLOUD_GATEWAY_ORIGIN = "https://cavcloud.cavbot.io";
+const DEFAULT_SITE_ORIGIN_FALLBACK =
+  process.env.NODE_ENV === "production" ? "https://app.cavbot.io" : "http://localhost:3000";
 const DEFAULT_CACHE_TTL_MS = Number(process.env.SYSTEM_STATUS_CACHE_TTL_MS) || 20_000;
 const DEFAULT_PROBE_TIMEOUT_MS = Number(process.env.SYSTEM_STATUS_PROBE_TIMEOUT_MS) || 2_200;
 const PIPELINE_CACHE_KEY = Symbol.for("cavbot.systemStatus.pipeline");
@@ -143,6 +144,14 @@ function normalizeOriginOnly(origin: string, fallback: string) {
   }
 }
 
+function getDefaultSiteOrigin() {
+  try {
+    return getAppOrigin();
+  } catch {
+    return DEFAULT_SITE_ORIGIN_FALLBACK;
+  }
+}
+
 const ARCADE_CDN_ORIGIN = normalizeArcadeCdnOrigin(CDN_ORIGIN);
 const CAVCLOUD_GATEWAY_ORIGIN = normalizeOriginOnly(
   process.env.CAVCLOUD_GATEWAY_ORIGIN || DEFAULT_CAVCLOUD_GATEWAY_ORIGIN,
@@ -195,7 +204,7 @@ function resolveProbeUrl(config: ServiceProbeConfig) {
       ? CDN_ORIGIN
       : typeof config.origin === "string"
       ? config.origin
-      : DEFAULT_SITE_ORIGIN;
+      : getDefaultSiteOrigin();
   const resolved = /^https?:\/\//i.test(config.url)
     ? config.url
     : new URL(config.url, origin).toString();

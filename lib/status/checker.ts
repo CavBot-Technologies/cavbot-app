@@ -5,10 +5,11 @@ import type { ServiceKey, ServiceProbeConfig, ServiceStatusState } from "./types
 import { SERVICE_DEFINITIONS, SERVICE_LIST, SERVICE_ORDER } from "./constants";
 import { formatDayKey } from "./time";
 
-const DEFAULT_SITE_ORIGIN = getAppOrigin();
 const CDN_ORIGIN = process.env.CAVBOT_CDN_BASE_URL || "https://cdn.cavbot.io";
 const DEFAULT_ARCADE_CDN_ORIGIN = "https://cdn.cavbot.io/arcade/";
 const DEFAULT_CAVCLOUD_GATEWAY_ORIGIN = "https://cavcloud.cavbot.io";
+const DEFAULT_SITE_ORIGIN_FALLBACK =
+  process.env.NODE_ENV === "production" ? "https://app.cavbot.io" : "http://localhost:3000";
 
 function trimTrailingSlashes(value: string) {
   return value.replace(/\/+$/g, "");
@@ -51,6 +52,14 @@ function normalizeOriginOnly(origin: string, fallback: string) {
     return new URL(origin).origin;
   } catch {
     return fallback;
+  }
+}
+
+function getDefaultSiteOrigin() {
+  try {
+    return getAppOrigin();
+  } catch {
+    return DEFAULT_SITE_ORIGIN_FALLBACK;
   }
 }
 
@@ -214,7 +223,7 @@ function resolveProbeUrl(config: ServiceProbeConfig) {
       ? CDN_ORIGIN
       : typeof config.origin === "string"
       ? config.origin
-      : DEFAULT_SITE_ORIGIN;
+      : getDefaultSiteOrigin();
   const resolved = /^https?:\/\//i.test(config.url)
     ? config.url
     : new URL(config.url, origin).toString();

@@ -22,12 +22,35 @@ test("AppShell owner-gated settings click does not block unresolved role", () =>
   assert.equal(source.includes("if (memberRole && memberRole !== \"OWNER\")"), true);
 });
 
-test("AppShell plan widget does not default to FREE while plan tier is unresolved", () => {
+test("AppShell restores plan state from the cached shell snapshot before auth bootstrap settles", () => {
   const source = read("components/AppShell.tsx");
 
-  assert.equal(source.includes("if (!planResolved)"), true);
-  assert.equal(source.includes('kind: "RESOLVING"'), true);
-  assert.equal(source.includes("if (planResolved && planTier === \"FREE\")"), true);
+  assert.equal(source.includes("const bootSnapshot = useMemo(() => shellPlanSnapshotCache ?? readShellPlanSnapshot(), []);"), true);
+  assert.equal(source.includes("const [planTier, setPlanTier] = useState<PlanTier>(bootSnapshot?.planTier || \"FREE\");"), true);
+  assert.equal(source.includes("const [memberRole, setMemberRole] = useState<MemberRole>(bootSnapshot?.memberRole || null);"), true);
+});
+
+test("AppShell restores cached shell plan state before first visible client render", () => {
+  const source = read("components/AppShell.tsx");
+
+  assert.equal(source.includes("const bootSnapshot = useMemo(() => shellPlanSnapshotCache ?? readShellPlanSnapshot(), []);"), true);
+});
+
+test("AppShell treats notification auth loss as passive recovery instead of emitting CavGuard", () => {
+  const source = read("components/AppShell.tsx");
+
+  assert.equal(source.includes("const handlePassiveAuthLoss = useCallback(() => {"), true);
+  assert.equal(source.includes("if (isAuthRequiredLikeResponse(res.status, data)) {"), true);
+  assert.equal(source.includes("guardMode: \"passive\""), true);
+  assert.equal(source.includes("setSessionAuthenticated(false);"), true);
+});
+
+test("AppShell routes AUTH_REQUIRED dismiss flows back to login", () => {
+  const source = read("components/AppShell.tsx");
+
+  assert.equal(source.includes("const authLoginHref = useMemo(() => {"), true);
+  assert.equal(source.includes("actionId === \"AUTH_REQUIRED\""), true);
+  assert.equal(source.includes("authLoginHref"), true);
 });
 
 test("AppShell uses a single global click-outside listener lifecycle", () => {

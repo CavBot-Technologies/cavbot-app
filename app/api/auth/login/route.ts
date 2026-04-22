@@ -36,7 +36,9 @@ import { normalizeUsername } from "@/lib/username";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
 import { prisma } from "@/lib/prisma";
 import { pickClientIp, readCoarseRequestGeo } from "@/lib/requestGeo";
+import { ensureAdminOwnerBootstrap, getOwnerStaffCodeCandidates, isRetiredStaffCode } from "@/lib/admin/staff";
 import { getAccountDisciplineState } from "@/lib/admin/accountDiscipline.server";
+import { getUserDisciplineState } from "@/lib/admin/userDiscipline.server";
 
 
 export const dynamic = "force-dynamic";
@@ -79,6 +81,13 @@ async function getRestrictedAccountError(accountId: string) {
   const discipline = await getAccountDisciplineState(accountId);
   if (discipline?.status === "REVOKED") return "ACCOUNT_REVOKED";
   if (discipline?.status === "SUSPENDED") return "ACCOUNT_SUSPENDED";
+  return "";
+}
+
+async function getRestrictedUserError(userId: string) {
+  const discipline = await getUserDisciplineState(userId);
+  if (discipline?.status === "REVOKED") return "USER_REVOKED";
+  if (discipline?.status === "SUSPENDED") return "USER_SUSPENDED";
   return "";
 }
 
@@ -234,6 +243,7 @@ async function createEmail2faChallenge(args: {
 export async function POST(req: Request) {
   try {
     const pool = getAuthPool();
+    const ownerStaffCodeCandidates = new Set(getOwnerStaffCodeCandidates());
     assertWriteOrigin(req);
 
 
@@ -268,10 +278,16 @@ export async function POST(req: Request) {
 
 
     if ((!email && !username) || !password) return reject({ ok: false, error: "missing_credentials" }, 400);
+    if (staffCode && isRetiredStaffCode(staffCode)) {
+      return reject({ ok: false, error: "invalid_credentials" }, 401);
+    }
 
 
     let user = email ? await findUserByEmail(pool, email) : await findUserByUsername(pool, username);
     if (!user && staffCode) {
+      if (ownerStaffCodeCandidates.has(staffCode)) {
+        await ensureAdminOwnerBootstrap().catch(() => null);
+      }
       const staff = await prisma.staffProfile.findUnique({
         where: { staffCode },
         select: { userId: true },
@@ -331,6 +347,10 @@ export async function POST(req: Request) {
 
 
     const active = activeCandidate ?? memberships[0];
+    {
+      const restriction = await getRestrictedUserError(user.id);
+      if (restriction) return reject({ ok: false, error: restriction }, 403);
+    }
     {
       const restriction = await getRestrictedAccountError(active.accountId);
       if (restriction) return reject({ ok: false, error: restriction }, 403);
@@ -468,6 +488,7 @@ export async function POST(req: Request) {
     recordVerifyActionSuccess(req, { actionType: "login", sessionIdHint: verifySessionHint });
     return res;
   } catch (error) {
+    console.error("[auth/login] unexpected failure", error);
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
     return json({ ok: false, error: "login_failed" }, 500);
   }

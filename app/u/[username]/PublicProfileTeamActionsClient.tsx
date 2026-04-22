@@ -473,9 +473,6 @@ export function PublicProfileTeamActionsClient({
     try {
       const qs = new URLSearchParams();
       qs.set("username", normalizedUsername);
-      if (process.env.NODE_ENV !== "production") {
-        qs.set("seedDemo", "1");
-      }
       const res = await fetch(`/api/public/profile/members?${qs.toString()}`, {
         method: "GET",
         credentials: "include",

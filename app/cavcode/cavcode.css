@@ -580,6 +580,10 @@ body[data-cb-footer-hidden="1"] .cc-ide{
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  position: relative;
+  z-index: calc(var(--z-pop) - 1);
+  overflow: visible;
+  isolation: isolate;
 }
 
 .cc-brand-row{
@@ -626,10 +630,19 @@ body[data-cb-footer-hidden="1"] .cc-ide{
   color: rgba(247,251,255,.85);
 }
 
-.cc-side-actions{ display: inline-flex; gap: 8px; align-items: center; }
+.cc-side-actions{
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+  overflow: visible;
+}
 
 .cc-side-menuShell{
   position: relative;
+  z-index: calc(var(--z-pop) + 1);
+  isolation: isolate;
 }
 
 .cc-side-menuBtn{
@@ -661,13 +674,18 @@ body[data-cb-footer-hidden="1"] .cc-ide{
   padding: 7px;
   border: 1px solid rgba(255,255,255,.14);
   border-radius: 14px;
-  background: rgba(3,6,22,.92);
-  box-shadow: 0 18px 60px rgba(0,0,0,.55);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  z-index: 40;
+  background:
+    linear-gradient(180deg, rgba(16,20,34,.99), rgba(8,12,24,.995)),
+    rgba(8,12,24,.995);
+  box-shadow:
+    0 22px 70px rgba(0,0,0,.64),
+    0 0 0 1px rgba(255,255,255,.02) inset;
+  z-index: calc(var(--z-pop) + 2);
   display: grid;
   gap: 3px;
+  overflow: hidden;
+  isolation: isolate;
+  background-clip: padding-box;
 }
 
 .cc-side-menuItem{
@@ -790,6 +808,8 @@ body[data-cb-footer-hidden="1"] .cc-ide{
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
+  position: relative;
+  z-index: 0;
   -ms-overflow-style: none;
   scrollbar-width: none;
   scrollbar-color: transparent transparent;
@@ -1056,6 +1076,8 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   min-height: 0;
   display: grid;
   gap: 10px;
+  position: relative;
+  z-index: 0;
 }
 
 .cc-run-modebar{
@@ -2088,39 +2110,81 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 /* SEARCH */
 .cc-search{
-  padding: 10px 10px 12px;
+  padding: 10px 8px 12px;
   display: grid;
-  gap: 10px;
+  gap: 12px;
   min-height: 0;
   height: 100%;
+  overflow: hidden;
+  position: relative;
+  z-index: 0;
 }
 
-.cc-search-in{
-  width: 100%;
-  height: 34px;
-  border-radius: 12px;
+.cc-search-shell{
+  display: grid;
+  gap: 9px;
+  padding: 12px 12px 13px;
   border: 1px solid rgba(255,255,255,.10);
-  background: rgba(0,0,0,.18);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(8,12,24,.9), rgba(4,8,20,.82)),
+    rgba(4,8,20,.82);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+}
+
+.cc-search-kicker{
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: rgba(247,251,255,.88);
+}
+
+.cc-search-note{
+  font-size: 11px;
+  line-height: 1.6;
+  color: rgba(197,206,231,.76);
+  font-weight: 700;
+}
+
+.cc-search .cc-search-in{
+  width: 100%;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.20);
   color: rgba(247,251,255,.92);
   padding: 0 12px;
   outline: none;
+  font-family: var(--cb-mono);
+  font-size: 11px;
   font-weight: 750;
+  letter-spacing: .015em;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.02);
 }
 
-.cc-search-in::placeholder{ color: rgba(197,206,231,.50); }
+.cc-search .cc-search-in::placeholder{
+  color: rgba(197,206,231,.50);
+  letter-spacing: 0;
+}
 
-.cc-search-in:focus{
-  border-color: rgba(185,200,90,.22);
- 
+.cc-search .cc-search-in:focus{
+  border-color: rgba(185,200,90,.26);
+  background: rgba(5,10,22,.72);
+  box-shadow:
+    0 0 0 1px rgba(185,200,90,.08),
+    inset 0 1px 0 rgba(255,255,255,.02);
 }
 
 .cc-search-results{
   min-height: 0;
   overflow: auto;
   border-radius: 14px;
-  border: 1px solid rgba(255,255,255,.08);
-  background: rgba(0,0,0,.12);
-  padding: 8px;
+  border: 1px solid rgba(255,255,255,.10);
+  background:
+    linear-gradient(180deg, rgba(8,12,24,.72), rgba(4,7,18,.78)),
+    rgba(4,7,18,.78);
+  padding: 6px 0;
   -ms-overflow-style: none;
   scrollbar-width: none;
   scrollbar-color: transparent transparent;
@@ -2131,22 +2195,26 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-hit{
   width: 100%;
   text-align: left;
-  border: 1px solid rgba(255,255,255,.08);
-  background: rgba(255,255,255,.02);
+  border: 0;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  background: transparent;
   color: rgba(247,251,255,.92);
-  border-radius: 12px;
-  padding: 10px 10px;
+  border-radius: 0;
+  padding: 10px 12px;
   display: grid;
-  gap: 6px;
+  gap: 4px;
   cursor: pointer;
-  margin-bottom: 8px;
-  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+  margin-bottom: 0;
+  transition: background 160ms ease, color 160ms ease;
 }
 
 .cc-hit:hover{
-  border-color: rgba(139,92,255,.18);
-  background: rgba(139,92,255,.05);
-  transform: translateY(-1px);
+  background: rgba(255,255,255,.06);
+  color: rgba(247,251,255,.97);
+}
+
+.cc-hit:last-child{
+  border-bottom: 0;
 }
 
 .cc-hit-kind{
@@ -2155,13 +2223,17 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   letter-spacing: .14em;
   text-transform: uppercase;
   font-weight: 800;
-  color: rgba(197,206,231,.72);
+  color: rgba(197,206,231,.68);
 }
 
-.cc-hit-kind.file{ color: rgba(185,200,90,.80); }
-.cc-hit-kind.folder{ color: rgba(139,92,255,.80); }
+.cc-hit-kind.file{ color: rgba(185,200,90,.86); }
+.cc-hit-kind.folder{ color: rgba(143,171,255,.82); }
 
-.cc-hit-name{ font-weight: 800; font-size: 12px; }
+.cc-hit-name{
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: -.01em;
+}
 
 .cc-hit-path{
   font-size: 11px;
@@ -2172,9 +2244,11 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-search-empty{
-  padding: 10px;
-  font-size: 12px;
-  color: rgba(197,206,231,.70);
+  padding: 12px 12px 14px;
+  font-family: var(--cb-mono);
+  font-size: 11px;
+  line-height: 1.65;
+  color: rgba(197,206,231,.72);
 }
 
 /* CHANGES */
@@ -2187,6 +2261,8 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   min-height: 0;
   height: 100%;
   overflow: visible;
+  position: relative;
+  z-index: 0;
 }
 
 .cc-changes-commitWrap{

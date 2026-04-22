@@ -21,6 +21,7 @@ import {
   pickPrimaryMembership,
 } from "@/lib/authDb";
 import { getAccountDisciplineState } from "@/lib/admin/accountDiscipline.server";
+import { getUserDisciplineState } from "@/lib/admin/userDiscipline.server";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
 
 
@@ -258,6 +259,7 @@ export async function GET(req: Request) {
     const client = makeClientMeta(req);
     const authErrorCode = isApiAuthError(error) ? error.code : "";
 
+
     if (isApiAuthError(error) && (error.status === 401 || error.status === 403)) {
       const res = json({ ok: true, authed: false, signedOut: true, error: error.code, client }, 200);
       return clearSessionCookie(req, res);
@@ -363,6 +365,15 @@ export async function POST(req: Request) {
 
 
     if (!active) return json({ ok: false, error: "user_not_found_or_no_membership" }, 404);
+    {
+      const discipline = await getUserDisciplineState(user.id);
+      if (discipline?.status === "REVOKED") {
+        return json({ ok: false, error: "USER_REVOKED" }, 403);
+      }
+      if (discipline?.status === "SUSPENDED") {
+        return json({ ok: false, error: "USER_SUSPENDED" }, 403);
+      }
+    }
     {
       const discipline = await getAccountDisciplineState(active.accountId);
       if (discipline?.status === "REVOKED") {

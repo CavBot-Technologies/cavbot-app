@@ -1,11 +1,14 @@
 // scripts/bootstrap-owner.mjs
-import "dotenv/config";
+import { config as loadEnv } from "dotenv";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pgPkg from "pg";
 import { createHash, randomBytes, pbkdf2Sync } from "crypto";
 
 const { Pool } = pgPkg;
+
+loadEnv({ path: ".env" });
+loadEnv({ path: ".env.local", override: true });
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is missing");
@@ -43,10 +46,32 @@ function requireEnv(name) {
   return v;
 }
 
+function normalizeStaffCode(value) {
+  const digits = String(value || "").replace(/\D+/g, "");
+  if (!digits) return "";
+  return `CAV-${digits.padStart(6, "0").slice(-6)}`;
+}
+
+function isRetiredStaffCode(value) {
+  return normalizeStaffCode(value) === "CAV-000001";
+}
+
+function parseStaffCodeNumber(value) {
+  const digits = String(value || "").replace(/\D+/g, "");
+  if (!digits) return 0;
+  return Math.max(0, Number.parseInt(digits, 10) || 0);
+}
+
 async function main() {
   const email = requireEnv("CAVBOT_OWNER_EMAIL").toLowerCase();
   const password = requireEnv("CAVBOT_OWNER_PASSWORD");
   const iters = Number(process.env.CAVBOT_PBKDF2_ITERS || 210_000);
+  const ownerStaffCode = normalizeStaffCode(process.env.CAVBOT_ADMIN_STAFF_CODE || "");
+  if (!ownerStaffCode || isRetiredStaffCode(ownerStaffCode)) {
+    throw new Error("CAVBOT_ADMIN_STAFF_CODE must be set to a non-retired staff code.");
+  }
+  const ownerStaffFloor = parseStaffCodeNumber(ownerStaffCode) || 1;
+  const ownerPositionTitle = String(process.env.ADMIN_OWNER_POSITION_TITLE || process.env.CAVBOT_OWNER_POSITION_TITLE || "Founder & CEO").trim() || "Founder & CEO";
 
   // 1) User
   let user = await prisma.user.findUnique({
@@ -133,6 +158,59 @@ async function main() {
     });
   }
 
+  const existingStaffSequence = await prisma.staffSequence.findUnique({
+    where: { key: "staff" },
+    select: { lastValue: true },
+  });
+  if (!existingStaffSequence) {
+    await prisma.staffSequence.create({
+      data: {
+        key: "staff",
+        lastValue: ownerStaffFloor,
+      },
+    });
+  } else if (existingStaffSequence.lastValue < ownerStaffFloor) {
+    await prisma.staffSequence.update({
+      where: { key: "staff" },
+      data: {
+        lastValue: ownerStaffFloor,
+      },
+    });
+  }
+
+  await prisma.staffProfile.upsert({
+    where: { userId: user.id },
+    update: {
+      staffCode: ownerStaffCode,
+      systemRole: "OWNER",
+      positionTitle: ownerPositionTitle,
+      status: "ACTIVE",
+      onboardingStatus: "COMPLETED",
+      invitedEmail: user.email,
+      invitedByUserId: user.id,
+      createdByUserId: user.id,
+      metadataJson: {
+        founder: true,
+        immutableFounderId: true,
+      },
+    },
+    create: {
+      userId: user.id,
+      staffCode: ownerStaffCode,
+      systemRole: "OWNER",
+      positionTitle: ownerPositionTitle,
+      status: "ACTIVE",
+      onboardingStatus: "COMPLETED",
+      invitedEmail: user.email,
+      invitedByUserId: user.id,
+      createdByUserId: user.id,
+      metadataJson: {
+        founder: true,
+        immutableFounderId: true,
+      },
+    },
+  });
+
   // 4) Subscription record (optional, but nice for consistency)
   // Keep one ACTIVE premium subscription row (no provider required yet).
   const now = new Date();
@@ -179,6 +257,7 @@ async function main() {
   console.log("email:", email);
   console.log("userId:", user.id);
   console.log("accountId:", accountId);
+  console.log("staffCode:", ownerStaffCode);
   console.log("projectId:", project.id);
   if (serverKeyRaw) console.log("serverKey (SAVE THIS NOW):", serverKeyRaw);
 

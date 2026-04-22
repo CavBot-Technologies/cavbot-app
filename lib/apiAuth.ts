@@ -9,7 +9,9 @@ import {
   pickPrimaryMembership,
   userHasOAuthIdentity,
 } from "@/lib/authDb";
+import { isAdminHost } from "@/lib/admin/config";
 import { getAccountDisciplineState } from "@/lib/admin/accountDiscipline.server";
+import { getUserDisciplineState } from "@/lib/admin/userDiscipline.server";
 
 /**
  * CavBot Auth Model (Multi-tenant)
@@ -132,58 +134,15 @@ function normalizeOriginValue(raw: string): string | null {
   }
 }
 
-function normalizeHostValue(raw: string): string {
-  const candidate = String(raw || "").trim().toLowerCase();
-  if (!candidate) return "";
-  try {
-    return new URL(candidate.includes("://") ? candidate : `https://${candidate}`).host.toLowerCase();
-  } catch {
-    return candidate.replace(/^https?:\/\//, "").replace(/\/.*$/, "").toLowerCase();
-  }
-}
-
-function splitEnvList(name: string): string[] {
-  return env(name)
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
-
 function isConfiguredAdminOrigin(origin: string) {
   const normalized = normalizeOriginValue(origin);
   if (!normalized) return false;
 
-  let host = "";
   try {
-    host = new URL(normalized).host.toLowerCase();
+    return isAdminHost(new URL(normalized).host.toLowerCase());
   } catch {
     return false;
   }
-
-  const adminHosts = [
-    ...splitEnvList("ADMIN_ALLOWED_HOSTS"),
-    ...splitEnvList("ADMIN_PRODUCTION_HOSTS"),
-    env("ADMIN_BASE_URL"),
-  ]
-    .map((value) => normalizeHostValue(value))
-    .filter(Boolean);
-
-  if (process.env.NODE_ENV !== "production") {
-    adminHosts.push("admin.localhost:3000", "admin.127.0.0.1:3000");
-  }
-
-  if (adminHosts.includes(host)) return true;
-
-  const previewSuffixes = [
-    ".pages.dev",
-    ".workers.dev",
-    ".cavbot-preview.local",
-    ...splitEnvList("ADMIN_PREVIEW_HOST_SUFFIXES"),
-  ]
-    .map((value) => String(value || "").trim().toLowerCase())
-    .filter(Boolean);
-
-  return previewSuffixes.some((suffix) => host.endsWith(suffix));
 }
 
 function inferRequestOrigin(req: Request): string {
@@ -703,6 +662,13 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
     }
 
     try {
+      const userDiscipline = await getUserDisciplineState(userId);
+      if (userDiscipline?.status === "REVOKED") {
+        throw new ApiAuthError("USER_REVOKED", 403);
+      }
+      if (userDiscipline?.status === "SUSPENDED") {
+        throw new ApiAuthError("USER_SUSPENDED", 403);
+      }
       const discipline = await getAccountDisciplineState(String(sess.accountId || ""));
       if (discipline?.status === "REVOKED") {
         throw new ApiAuthError("ACCOUNT_REVOKED", 403);

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 import { CavGuardCard } from "./CavGuardCard";
 import styles from "./CavGuardModal.module.css";
@@ -17,11 +18,16 @@ type CavGuardModalProps = {
 export function CavGuardModal(props: CavGuardModalProps) {
   const { open, onClose, decision, onCtaClick } = props;
   const modalOpen = Boolean(open);
+  const [portalReady, setPortalReady] = React.useState(false);
 
   const headline = String(decision?.title || "Unauthorized action blocked.").trim();
   const request = String(decision?.request || "Access protected workspace action.").trim();
   const reason = String(decision?.reason || "This action is restricted by workspace access controls.").trim();
   const cta = decision?.cta || null;
+
+  React.useEffect(() => {
+    setPortalReady(true);
+  }, []);
 
   React.useEffect(() => {
     if (!modalOpen) return;
@@ -72,17 +78,31 @@ export function CavGuardModal(props: CavGuardModalProps) {
     onCtaClick?.();
   }, [cta?.href, headline, onCtaClick]);
 
-  return (
+  const dialogStyle: React.CSSProperties = {
+    width: "min(620px, 100%)",
+    display: "grid",
+    justifyItems: "center",
+    placeSelf: "center",
+    boxSizing: "border-box",
+    margin: 0,
+  };
+
+  if (!portalReady || !modalOpen) {
+    return null;
+  }
+
+  const modalNode = (
     <div
       className={styles.overlay}
-      data-open={modalOpen ? "true" : "false"}
+      data-open="true"
       role="presentation"
-      aria-hidden={!modalOpen}
+      aria-hidden="false"
     >
       <div
         role="dialog"
-        aria-modal={modalOpen ? "true" : undefined}
+        aria-modal="true"
         aria-labelledby="cb-cavguard-title"
+        style={dialogStyle}
       >
         <CavGuardCard
           titleId="cb-cavguard-title"
@@ -98,4 +118,6 @@ export function CavGuardModal(props: CavGuardModalProps) {
       </div>
     </div>
   );
+
+  return createPortal(modalNode, document.body);
 }

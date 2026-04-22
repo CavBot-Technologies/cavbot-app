@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Image from "next/image";
+import { createPortal } from "react-dom";
 
 import styles from "./CavBotVerifyModal.module.css";
 import { emitAdminTelemetry } from "@/lib/admin/clientTelemetry";
@@ -219,6 +220,7 @@ async function postJson<T>(url: string, body: Record<string, unknown>) {
 
 export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
   const { open, actionType, route, onClose, onVerified } = props;
+  const [portalReady, setPortalReady] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [mode, setMode] = React.useState<"challenge" | "otp">("challenge");
@@ -290,6 +292,22 @@ export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
     },
     [actionType, route, sessionId],
   );
+
+  React.useEffect(() => {
+    setPortalReady(true);
+    return () => {
+      setPortalReady(false);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!portalReady || !open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open, portalReady]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -566,7 +584,7 @@ export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
     }
   }, [actionType, challenge?.sessionId, onVerified, otpChallengeId, otpCode, sessionId]);
 
-  if (!open) return null;
+  if (!open || !portalReady) return null;
 
   const challengePrompt = s(challenge?.prompt);
   const showChallengePrompt = challengePrompt && challengePrompt !== "Quick check to protect CavBot.";
@@ -582,7 +600,7 @@ export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
     height: `${Math.max(8, (slot.height / viewBoxMetrics.height) * 100)}%`,
   };
 
-  return (
+  const modalNode = (
     <div className={styles.overlay}>
       <div className={styles.card} role="dialog" aria-modal="true" aria-labelledby="cbv-title">
         <div className={styles.top}>
@@ -715,4 +733,6 @@ export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
       </div>
     </div>
   );
+
+  return createPortal(modalNode, document.body);
 }

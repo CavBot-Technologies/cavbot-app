@@ -11,6 +11,7 @@ import {
   type FocusEvent as ReactFocusEvent,
 } from "react";
 import useSWR from "swr";
+import { isAdminHost, toAdminInternalPath } from "@/lib/admin/config";
 import { useSystemStatus } from "@/lib/hooks/useSystemStatus";
 import styles from "./CavbotGlobalFooter.module.css";
 
@@ -49,24 +50,46 @@ type FooterMetricsPayload = FooterMetricsSuccess | FooterMetricsUnavailable;
 
 type FooterCardKey = "system" | "api" | "destination";
 
+type FooterAdminSessionPayload = {
+  ok: boolean;
+  authenticated?: boolean;
+  adminAuthenticated?: boolean;
+  staff?: {
+    department?: string | null;
+    systemRole?: string | null;
+  } | null;
+};
+
 const HUMAN_RESOURCES_LINKS = [
   {
     href: "/staff",
     label: "Team",
-    sub: "Roles, onboarding, and readiness",
+    sub: "Lifecycle, roles, and placement",
     iconSrc: "/icons/app/hq/staff-symbol-svgrepo-com.svg",
+  },
+  {
+    href: "/staff-lifecycle",
+    label: "Team Lifecycle",
+    sub: "Onboarding, moves, leave, and offboarding",
+    iconSrc: "/icons/app/hq/staff-lifecycle-analytics-svgrepo-com.svg",
+  },
+  {
+    href: "/broadcasts",
+    label: "Team Broadcasts",
+    sub: "Internal notices and mail fanout",
+    iconSrc: "/icons/app/hq/walkie-talkie-svgrepo-com.svg",
+  },
+  {
+    href: "/message-oversight",
+    label: "Message Oversight",
+    sub: "Team inbox review, safety checks, and archives",
+    iconSrc: "/icons/app/hq/secure-mail-svgrepo-com.svg",
   },
   {
     href: "/audit",
     label: "Audit",
-    sub: "Sensitive admin activity",
+    sub: "Sensitive action trail and evidence",
     iconSrc: "/icons/app/hq/audit-report-svgrepo-com.svg",
-  },
-  {
-    href: "/settings",
-    label: "Settings",
-    sub: "Admin environment and owner state",
-    iconSrc: "/icons/app/hq/hq-settings-svgrepo-com%20copy.svg",
   },
 ] as const;
 
@@ -85,6 +108,21 @@ async function fetchFooterMetrics(url: string): Promise<FooterMetricsPayload> {
     throw new Error(`Footer metrics request failed (${response.status})`);
   }
   return (await response.json()) as FooterMetricsPayload;
+}
+
+async function fetchFooterAdminSession(url: string): Promise<FooterAdminSessionPayload> {
+  const response = await fetch(url, {
+    method: "GET",
+    cache: "no-store",
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Footer admin session request failed (${response.status})`);
+  }
+  return (await response.json()) as FooterAdminSessionPayload;
 }
 
 function formatCount(value: number | null | undefined) {
@@ -128,6 +166,7 @@ export default function CavbotGlobalFooter() {
   const [hoverCard, setHoverCard] = useState<FooterCardKey | null>(null);
   const [pinnedCard, setPinnedCard] = useState<FooterCardKey | null>(null);
   const [canHover, setCanHover] = useState(false);
+  const [adminHostRuntime, setAdminHostRuntime] = useState(false);
   const systemCardId = useId();
   const apiCardId = useId();
   const destinationCardId = useId();
@@ -144,6 +183,17 @@ export default function CavbotGlobalFooter() {
       keepPreviousData: true,
     }
   );
+  const { data: adminSessionPayload } = useSWR<FooterAdminSessionPayload>(
+    adminHostRuntime ? "/api/admin/session" : null,
+    fetchFooterAdminSession,
+    {
+      refreshInterval: 45_000,
+      dedupingInterval: 15_000,
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
+      keepPreviousData: true,
+    },
+  );
 
   useEffect(() => {
     const query = window.matchMedia("(hover: hover) and (pointer: fine)");
@@ -155,6 +205,11 @@ export default function CavbotGlobalFooter() {
     }
     query.addListener(sync);
     return () => query.removeListener(sync);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setAdminHostRuntime(isAdminHost(window.location.host));
   }, []);
 
   useEffect(() => {
@@ -186,6 +241,22 @@ export default function CavbotGlobalFooter() {
   }, []);
 
   const activeCard = pinnedCard ?? hoverCard;
+  const humanResourcesLinks = useMemo(
+    () => HUMAN_RESOURCES_LINKS.map((item) => ({
+      ...item,
+      resolvedHref: adminHostRuntime ? item.href : toAdminInternalPath(item.href),
+    })),
+    [adminHostRuntime],
+  );
+  const settingsHref = useMemo(
+    () => (adminHostRuntime ? "/settings" : toAdminInternalPath("/settings")),
+    [adminHostRuntime],
+  );
+  const canOpenSettings = useMemo(() => {
+    if (!adminHostRuntime) return false;
+    if (!adminSessionPayload?.adminAuthenticated) return false;
+    return String(adminSessionPayload.staff?.department || "").trim().toUpperCase() === "COMMAND";
+  }, [adminHostRuntime, adminSessionPayload]);
 
   const systemTone: "live" | "at_risk" | "down" | "unknown" = useMemo(() => {
     if (summary.downCount > 0) return "down";
@@ -366,11 +437,26 @@ export default function CavbotGlobalFooter() {
                 role="menu"
                 aria-label="Human resources links"
               >
+                <div className={styles.developerHeader}>
+                  <div className={styles.developerTitle}>Human Resources</div>
+                  <button
+                    type="button"
+                    className={styles.developerClose}
+                    aria-label="Close human resources panel"
+                    onClick={() => {
+                      if (humanResourcesDetailsRef.current) {
+                        humanResourcesDetailsRef.current.open = false;
+                      }
+                    }}
+                  >
+                    <span className="cb-closeIcon" aria-hidden="true" />
+                  </button>
+                </div>
                 <div className={styles.developerLinks}>
-                  {HUMAN_RESOURCES_LINKS.map((item) => (
+                  {humanResourcesLinks.map((item) => (
                     <Link
                       key={item.href}
-                      href={item.href}
+                      href={item.resolvedHref}
                       className={styles.developerLink}
                       onClick={() => {
                         if (humanResourcesDetailsRef.current) {
@@ -556,6 +642,29 @@ export default function CavbotGlobalFooter() {
                 )}
               </div>
             </div>
+
+            {canOpenSettings ? (
+              <div className={styles.metric}>
+                <Link
+                  href={settingsHref}
+                  className={styles.metricButton}
+                  aria-label="HQ settings"
+                  title="HQ settings"
+                >
+                  <span className={styles.metricIcon}>
+                    <Image
+                      src="/icons/app/settings-svgrepo-com.svg"
+                      alt=""
+                      aria-hidden="true"
+                      width={14}
+                      height={14}
+                      className={`${styles.metricIconImage} ${styles.metricIconImageSettings}`}
+                      unoptimized
+                    />
+                  </span>
+                </Link>
+              </div>
+            ) : null}
           </div>
         </div>
       </footer>

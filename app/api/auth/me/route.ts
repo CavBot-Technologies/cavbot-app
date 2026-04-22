@@ -17,6 +17,8 @@ import {
   planTierTokenFromPlanId,
   resolveEffectivePlanId,
 } from "@/lib/accountPlan.server";
+import { getStaffProfileByUserId, maskStaffCode } from "@/lib/admin/staff";
+import { resolveAdminDepartment } from "@/lib/admin/access";
 
 const DEFAULT_CAVCLOUD_COLLAB_POLICY = {
   allowAdminsManageCollaboration: false,
@@ -222,6 +224,7 @@ function buildDegradedAuthMePayloadFromSession(sess: CavbotSession) {
       ...user,
       initials,
     },
+    staff: null,
     account,
     membership,
     policy: {
@@ -272,6 +275,7 @@ export async function GET(req: Request) {
     }
 
     const initials = deriveInitials(user.displayName, user.username);
+    const staffProfile = await getStaffProfileByUserId(userId).catch(() => null);
 
     let membership: MembershipRecord | null = null;
     let account: PrismaAccount | null = null;
@@ -356,6 +360,15 @@ export async function GET(req: Request) {
           ...user,
           initials,
         },
+        staff: staffProfile
+          ? {
+              id: staffProfile.id,
+              active: staffProfile.status === "ACTIVE",
+              positionTitle: staffProfile.positionTitle,
+              department: resolveAdminDepartment(staffProfile),
+              maskedStaffCode: maskStaffCode(staffProfile.staffCode),
+            }
+          : null,
         account: accountWithComputed ?? account,
         membership,
         policy: {

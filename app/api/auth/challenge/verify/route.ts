@@ -24,6 +24,7 @@ import {
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { readCoarseRequestGeo } from "@/lib/requestGeo";
 import { getAccountDisciplineState } from "@/lib/admin/accountDiscipline.server";
+import { getUserDisciplineState } from "@/lib/admin/userDiscipline.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -188,6 +189,15 @@ export async function POST(req: NextRequest) {
 
     const active = pickPrimaryMembership(memberships);
     if (!active) return json({ ok: false, error: "NO_MEMBERSHIP", message: "No workspace membership found." }, 403);
+    {
+      const discipline = await getUserDisciplineState(user.id);
+      if (discipline?.status === "REVOKED") {
+        return json({ ok: false, error: "USER_REVOKED", message: "This user access has been revoked." }, 403);
+      }
+      if (discipline?.status === "SUSPENDED") {
+        return json({ ok: false, error: "USER_SUSPENDED", message: "This user access is temporarily suspended." }, 403);
+      }
+    }
     {
       const discipline = await getAccountDisciplineState(active.accountId);
       if (discipline?.status === "REVOKED") {

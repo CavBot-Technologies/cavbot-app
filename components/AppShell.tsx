@@ -6,7 +6,17 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  Suspense,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import type { CavPadSite } from "./CavPad";
 import { CavGuardModal } from "./CavGuardModal";
 import { CavBotVerifyModal } from "./CavBotVerifyModal";
@@ -98,9 +108,33 @@ type PlanSnapshot = {
   ts: number;
 };
 
+type AppShellPlanContextValue = {
+  planTier: PlanTier;
+  planResolved: boolean;
+  memberRole: MemberRole;
+  trialActive: boolean;
+};
+
+const AppShellPlanContext = createContext<AppShellPlanContextValue>({
+  planTier: "FREE",
+  planResolved: false,
+  memberRole: null,
+  trialActive: false,
+});
+
+export function useAppShellPlan() {
+  return useContext(AppShellPlanContext);
+}
+
 const SHELL_PLAN_SNAPSHOT_KEY = "cb_shell_plan_snapshot_v1";
 const PLAN_CONTEXT_KEY = "cb_plan_context_v1";
+const SHELL_PLAN_EVENT = "cb:shell-plan";
 let shellPlanSnapshotCache: PlanSnapshot | null = null;
+
+type ApiJSONOptions = {
+  guardMode?: "interactive" | "passive";
+  onPassiveAuthLoss?: (() => void) | null;
+};
 
 function coercePlanTier(input: unknown): PlanTier {
   const value = String(input || "").trim().toUpperCase();
@@ -180,6 +214,9 @@ function persistShellPlanSnapshot(snapshot: PlanSnapshot) {
   try {
     globalThis.__cbLocalStore.setItem(SHELL_PLAN_SNAPSHOT_KEY, JSON.stringify(snapshot));
   } catch {}
+  try {
+    window.dispatchEvent(new CustomEvent(SHELL_PLAN_EVENT, { detail: snapshot }));
+  } catch {}
 }
 
 
@@ -192,6 +229,15 @@ function planRank(t: PlanTier) {
 
 function canAccess(current: PlanTier, required: "FREE" | "PREMIUM" | "PREMIUM_PLUS") {
   return planRank(current) >= planRank(required as PlanTier);
+}
+
+function isAuthRequiredLikeResponse(status: number, payload: unknown) {
+  const decision = readGuardDecisionFromPayload(payload);
+  if (decision?.actionId === "AUTH_REQUIRED") return true;
+  if (status === 401) return true;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const errorCode = String((payload as Record<string, unknown>).error || "").trim().toUpperCase();
+  return errorCode === "AUTH_REQUIRED" || errorCode === "UNAUTHORIZED" || errorCode === "SESSION_REVOKED" || errorCode === "EXPIRED";
 }
 
 
@@ -404,7 +450,7 @@ function resolvePlanTierFromAccount(account: AccountTier): PlanTier {
 }
 
 
-async function apiJSON<T>(url: string, init?: RequestInit): Promise<T> {
+async function apiJSON<T>(url: string, init?: RequestInit, options?: ApiJSONOptions): Promise<T> {
   const res = await fetch(url, {
     ...init,
     headers: {
@@ -422,7 +468,13 @@ async function apiJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const guardDecision = readGuardDecisionFromPayload(data);
   if (!res.ok || data?.ok === false) {
     if (guardDecision) {
-      emitGuardDecisionFromPayload(data);
+      if (options?.guardMode !== "passive") {
+        emitGuardDecisionFromPayload(data);
+      } else if (isAuthRequiredLikeResponse(res.status, data)) {
+        options?.onPassiveAuthLoss?.();
+      }
+    } else if (options?.guardMode === "passive" && isAuthRequiredLikeResponse(res.status, data)) {
+      options?.onPassiveAuthLoss?.();
     }
     const msg = data?.message || data?.error || "Request failed";
     throw Object.assign(new Error(String(msg)), { status: res.status, data, guardDecision });
@@ -517,6 +569,8 @@ export default function AppShell({
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifView] = useState<"panel" | "modal" | "full">("panel");
   const [notifCount, setNotifCount] = useState(0);
+  const [staffChatEnabled, setStaffChatEnabled] = useState(false);
+  const [staffChatUnreadCount, setStaffChatUnreadCount] = useState(0);
 
 
   const [notifItems, setNotifItems] = useState<NotifItem[]>([]);
@@ -553,7 +607,7 @@ export default function AppShell({
 
 
   // ===== Plan widget (SIDEBAR footer) =====
-  const bootSnapshot = shellPlanSnapshotCache;
+  const bootSnapshot = useMemo(() => shellPlanSnapshotCache ?? readShellPlanSnapshot(), []);
   const [planTier, setPlanTier] = useState<PlanTier>(bootSnapshot?.planTier || "FREE");
   const [memberRole, setMemberRole] = useState<MemberRole>(bootSnapshot?.memberRole || null);
   const [planResolved, setPlanResolved] = useState<boolean>(Boolean(bootSnapshot));
@@ -670,6 +724,11 @@ export default function AppShell({
     router.replace(dismissHref);
   }, [pathname, resetCavGuardModal, router, searchParamsSerialized]);
 
+  const authLoginHref = useMemo(() => {
+    const currentHref = normalizeGuardReturnPath(`${pathname}${searchParamsSerialized ? `?${searchParamsSerialized}` : ""}`) || "/";
+    return `/auth?mode=login&next=${encodeURIComponent(currentHref)}`;
+  }, [pathname, searchParamsSerialized]);
+
   const requestCaverify = useCallback(
     (reason: string) =>
       new Promise<{ ok: boolean }>((resolve) => {
@@ -751,27 +810,31 @@ export default function AppShell({
         plan: options?.plan || planTier,
         flags: options?.flags || null,
       });
+      const dismissHref = actionId === "AUTH_REQUIRED"
+        ? normalizeGuardReturnPath(options?.dismissHref) || authLoginHref
+        : normalizeGuardReturnPath(options?.dismissHref);
       void openCavGuardDecision(
         decision,
         options?.retryAction || null,
-        normalizeGuardReturnPath(options?.dismissHref),
+        dismissHref,
       );
     },
-    [memberRole, openCavGuardDecision, planTier],
+    [authLoginHref, memberRole, openCavGuardDecision, planTier],
   );
 
   useEffect(() => {
     function onGuardEvent(event: Event) {
       const detail = (event as CustomEvent<{ decision?: CavGuardDecision | null }>).detail || {};
       if (!detail.decision) return;
-      void openCavGuardDecision(detail.decision);
+      const dismissHref = detail.decision.actionId === "AUTH_REQUIRED" ? authLoginHref : null;
+      void openCavGuardDecision(detail.decision, null, dismissHref);
     }
 
     window.addEventListener(CAV_GUARD_DECISION_EVENT, onGuardEvent as EventListener);
     return () => {
       window.removeEventListener(CAV_GUARD_DECISION_EVENT, onGuardEvent as EventListener);
     };
-  }, [openCavGuardDecision]);
+  }, [authLoginHref, openCavGuardDecision]);
 
   const showCavPad = useMemo(() => {
     return !(
@@ -1320,9 +1383,12 @@ export default function AppShell({
         setProfileUsername(nextUsername);
         setInitials(nextInitials);
         persistAccountInitials(nextInitials);
+        setStaffChatEnabled(Boolean(data?.staff?.active));
         if (typeof data?.user?.publicProfileEnabled === "boolean") {
           setProfilePublicEnabled(data.user.publicProfileEnabled);
         }
+      } else {
+        setStaffChatEnabled(false);
       }
 
       // Tier: prefer tierEffective
@@ -1444,6 +1510,19 @@ export default function AppShell({
     return () => {
       window.removeEventListener("cb:auth:refresh", onRefresh as EventListener);
     };
+  }, [requestAuthRefresh]);
+
+  const handlePassiveAuthLoss = useCallback(() => {
+    setSessionAuthenticated(false);
+    setMemberRole(null);
+    setStaffChatEnabled(false);
+    setStaffChatUnreadCount(0);
+    setNotifOpen(false);
+    setNotifItems([]);
+    setNotifCount(0);
+    lastUnreadRef.current = 0;
+    cavPadPendingOpenRef.current = false;
+    void requestAuthRefresh({ force: true });
   }, [requestAuthRefresh]);
 
   useEffect(() => {
@@ -1628,6 +1707,12 @@ export default function AppShell({
     openCavGuardByAction("AUTH_REQUIRED");
   }
 
+  function onStaffChatOpen() {
+    recordClickIntent("/admin-internal/chat", "staff-chat-open");
+    recordNavigationStart("/admin-internal/chat", "router.push");
+    router.push("/admin-internal/chat");
+  }
+
   function onNotificationsViewAll(event: ReactMouseEvent<HTMLAnchorElement>) {
     if (notificationsEnabled) return;
     event.preventDefault();
@@ -1727,7 +1812,10 @@ export default function AppShell({
       nextCursor?: string | null;
     };
 
-    const data = await apiJSON<NotificationResponse>(`/api/notifications?${q}`);
+    const data = await apiJSON<NotificationResponse>(`/api/notifications?${q}`, undefined, {
+      guardMode: "passive",
+      onPassiveAuthLoss: handlePassiveAuthLoss,
+    });
 
     const items = (data.notifications || [])
       .filter((row) => !isBackendOnlyNotificationRaw(row))
@@ -1741,7 +1829,7 @@ export default function AppShell({
     // keep bubble accurate while open (real-time feel)
     const unreadCount = visible.reduce((acc, x) => acc + (x.unread ? 1 : 0), 0);
     setNotifCount(unreadCount);
-  }, [notificationsEnabled]);
+  }, [handlePassiveAuthLoss, notificationsEnabled]);
 
 
   async function markRead(ids: string[]) {
@@ -1927,6 +2015,7 @@ export default function AppShell({
 
     async function tick() {
       try {
+        if (document.visibilityState === "hidden") return;
         const res = await fetch("/api/notifications/unread-count", {
           method: "GET",
           cache: "no-store",
@@ -1936,7 +2025,10 @@ export default function AppShell({
 
         const data = await res.json().catch(() => ({}));
         if (!alive) return;
-        emitGuardDecisionFromPayload(data);
+        if (isAuthRequiredLikeResponse(res.status, data)) {
+          handlePassiveAuthLoss();
+          return;
+        }
         if (!res.ok || data?.ok === false) {
           setNotifCount(0);
           return;
@@ -1975,7 +2067,12 @@ export default function AppShell({
               type NotificationToastResponse = { ok: true; notifications: NotificationRaw[] };
 
               const list = await apiJSON<NotificationToastResponse>(
-                `/api/notifications?unread=1&limit=1`
+                `/api/notifications?unread=1&limit=1`,
+                undefined,
+                {
+                  guardMode: "passive",
+                  onPassiveAuthLoss: handlePassiveAuthLoss,
+                },
               );
 
 
@@ -2004,7 +2101,9 @@ export default function AppShell({
     }
 
 
-    tick();
+    if (document.visibilityState === "visible") {
+      tick();
+    }
     const t = window.setInterval(() => tick(), 5000);
 
 
@@ -2016,7 +2115,45 @@ export default function AppShell({
       window.clearInterval(t);
       if (notifToastTimer.current) window.clearTimeout(notifToastTimer.current);
     };
-  }, [notifOpen, notificationsEnabled]);
+  }, [handlePassiveAuthLoss, notifOpen, notificationsEnabled]);
+
+  useEffect(() => {
+    if (!staffChatEnabled || !sessionAuthenticated) {
+      setStaffChatUnreadCount(0);
+      return;
+    }
+
+    let mounted = true;
+
+    const loadUnread = async () => {
+      try {
+        const res = await fetch("/api/admin/chat/unread", {
+          method: "GET",
+          cache: "no-store",
+          credentials: "include",
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!mounted) return;
+        if (!res.ok || !payload?.ok) {
+          setStaffChatUnreadCount(0);
+          return;
+        }
+        setStaffChatUnreadCount(Number(payload?.unreadCount || 0));
+      } catch {
+        if (mounted) setStaffChatUnreadCount(0);
+      }
+    };
+
+    void loadUnread();
+    const timer = window.setInterval(() => {
+      void loadUnread();
+    }, 20000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(timer);
+    };
+  }, [sessionAuthenticated, staffChatEnabled]);
 
   useEffect(() => {
     if (!notificationsEnabled) {
@@ -2028,13 +2165,17 @@ export default function AppShell({
     let mounted = true;
     async function refreshNow() {
       try {
+        if (document.visibilityState === "hidden") return;
         const res = await fetch("/api/notifications/unread-count", {
           method: "GET",
           cache: "no-store",
         });
         const data = await res.json().catch(() => ({}));
         if (!mounted) return;
-        emitGuardDecisionFromPayload(data);
+        if (isAuthRequiredLikeResponse(res.status, data)) {
+          handlePassiveAuthLoss();
+          return;
+        }
         if (!res.ok || data?.ok === false) {
           setNotifCount(0);
           return;
@@ -2053,7 +2194,10 @@ export default function AppShell({
           notifications: NotificationRaw[];
           nextCursor?: string | null;
         };
-        const data = await apiJSON<NotificationResponse>(`/api/notifications?${q}`);
+        const data = await apiJSON<NotificationResponse>(`/api/notifications?${q}`, undefined, {
+          guardMode: "passive",
+          onPassiveAuthLoss: handlePassiveAuthLoss,
+        });
         if (!mounted) return;
         const items = (data.notifications || [])
           .filter((row) => !isBackendOnlyNotificationRaw(row))
@@ -2073,7 +2217,14 @@ export default function AppShell({
       mounted = false;
       window.removeEventListener("cb:notifications:refresh", onRefreshEvent as EventListener);
     };
-  }, [notifOpen, notifUnreadOnly, notificationsEnabled]);
+  }, [handlePassiveAuthLoss, notifOpen, notifUnreadOnly, notificationsEnabled]);
+
+  const shellPlanContextValue = useMemo<AppShellPlanContextValue>(() => ({
+    planTier,
+    planResolved,
+    memberRole,
+    trialActive,
+  }), [planTier, planResolved, memberRole, trialActive]);
 
   // Hydration safety valve: keep shell purely client-rendered after mount.
   if (!clientMounted) {
@@ -2081,11 +2232,12 @@ export default function AppShell({
   }
 
   return (
-    <div
-      className={`cb-shell${isCavbotPage ? " cb-route-cavbot" : ""}`}
-      data-cavbot-page-type="console"
-      data-shell-subtitle={subtitle || undefined}
-    >
+    <AppShellPlanContext.Provider value={shellPlanContextValue}>
+      <div
+        className={`cb-shell${isCavbotPage ? " cb-route-cavbot" : ""}`}
+        data-cavbot-page-type="console"
+        data-shell-subtitle={subtitle || undefined}
+      >
       <Suspense fallback={null}>
         <SearchParamsBridge onChange={setSearchParamsSerialized} />
       </Suspense>
@@ -2438,8 +2590,8 @@ export default function AppShell({
                 />
               ) : null}
 
-              {showCavPad ? (
-                <button
+	              {showCavPad ? (
+	                <button
                   className="cb-icon-btn-top"
                   type="button"
                   aria-label="Open CavPad"
@@ -2459,11 +2611,30 @@ export default function AppShell({
                   title="CavPad"
                 >
                   <IconCavPad />
-                </button>
+	                </button>
+	              ) : null}
+
+              {staffChatEnabled ? (
+                <div className="cb-notif-wrap">
+                  <button
+                    className="cb-icon-btn-top cb-notif-btn"
+                    type="button"
+                    aria-label="Open CavChat"
+                    onClick={onStaffChatOpen}
+                    title="CavChat"
+                  >
+                    <IconStaffChat />
+                    {staffChatUnreadCount > 0 ? (
+                      <span className="cb-notif-bubble" aria-label={`${staffChatUnreadCount} unread staff messages`}>
+                        {staffChatUnreadCount > 99 ? "99+" : String(staffChatUnreadCount)}
+                      </span>
+                    ) : null}
+                  </button>
+                </div>
               ) : null}
 
 
-              {/* NOTIFICATIONS */}
+	              {/* NOTIFICATIONS */}
 <div className="cb-notif-wrap" ref={notifWrapRef}>
 	  <button
 	    className="cb-icon-btn-top cb-notif-btn"
@@ -2713,7 +2884,8 @@ export default function AppShell({
           {children || null}
         </main>
       </div>
-    </div>
+      </div>
+    </AppShellPlanContext.Provider>
   );
 }
 
@@ -2770,6 +2942,18 @@ function IconBell() {
       priority
       unoptimized
     />
+  );
+}
+
+function IconStaffChat() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+      <path
+        d="M4.75 5.25A2.75 2.75 0 0 1 7.5 2.5h7a2.75 2.75 0 0 1 2.75 2.75v5.5a2.75 2.75 0 0 1-2.75 2.75H10.2L6.6 17.1a.85.85 0 0 1-1.45-.6V13.5h-.4A2.75 2.75 0 0 1 2 10.75v-5.5a2.75 2.75 0 0 1 2.75-2.75Zm2.75 3.1a.9.9 0 1 0 0 1.8h7a.9.9 0 1 0 0-1.8Zm0-2.75a.9.9 0 1 0 0 1.8h4.5a.9.9 0 1 0 0-1.8Zm0 5.5a.9.9 0 1 0 0 1.8h4a.9.9 0 1 0 0-1.8Z"
+        fill="currentColor"
+        opacity="0.94"
+      />
+    </svg>
   );
 }
 

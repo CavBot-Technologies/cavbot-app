@@ -5546,86 +5546,6 @@ function seedFS(): FolderNode {
   };
 }
 
-const SELF_TEST_FOLDER_PATH = "/.cavcode-self-test";
-const DIAGNOSTICS_SELF_TEST_FILES: Array<{ name: string; lang: Lang; content: string }> = [
-  {
-    name: "ts-error.ts",
-    lang: "typescript",
-    content: `const typedNumber: number = "untyped";`,
-  },
-  {
-    name: "ts-quickfix.tsx",
-    lang: "typescript",
-    content: `import { useMemo } from "react";
-
-export default function QuickFixExample() {
-  return <div>CavAi Fixes</div>;
-}`,
-  },
-  {
-    name: "ts-alias.ts",
-    lang: "typescript",
-    content: `import { default as layout } from "@/app/layout";
-console.log(layout);`,
-  },
-  {
-    name: "valid.html",
-    lang: "html",
-    content: `<!DOCTYPE html>
-<html lang="en">
-  <body>
-    <button type="button">Valid</button>
-  </body>
-</html>`,
-  },
-  {
-    name: "invalid.html",
-    lang: "html",
-    content: `<div>
-  <span>Missing closing tags`,
-  },
-];
-
-function injectDiagnosticsSelfTestFiles(root: FolderNode): FolderNode {
-  const clone = safeClone(root);
-  let folder = findNodeByPath(clone, SELF_TEST_FOLDER_PATH);
-  if (!folder) {
-    folder = {
-      id: uid("fld"),
-      kind: "folder",
-      name: ".cavcode-self-test",
-      path: SELF_TEST_FOLDER_PATH,
-      children: [],
-    };
-    clone.children = [...clone.children, folder];
-  }
-  if (!isFolder(folder)) return clone;
-
-  folder.children = DIAGNOSTICS_SELF_TEST_FILES.map((fileDef) => {
-    const filePath = joinPath(SELF_TEST_FOLDER_PATH, fileDef.name);
-    const existing = findNodeByPath(clone, filePath);
-    if (existing && isFile(existing)) {
-      return {
-        ...existing,
-        lang: fileDef.lang,
-        content: fileDef.content,
-        name: fileDef.name,
-        path: filePath,
-      };
-    }
-    return {
-      id: uid("file"),
-      kind: "file",
-      name: fileDef.name,
-      lang: fileDef.lang,
-      path: filePath,
-      content: fileDef.content,
-    };
-  });
-
-  return clone;
-}
-
 function cloneNodeWithNewIds(node: FolderNode | FileNode, parentPath: string): FolderNode | FileNode {
   if (node.kind === "file") {
     return {
@@ -9679,41 +9599,6 @@ export default function CavCodePage() {
     if (didMountRef.current) return;
     window.requestAnimationFrame(() => setBooting(false));
   }, [fsReady, activeFile]);
-
-  const runDiagnosticsSelfTest = useCallback(() => {
-    let targetId: string | null = null;
-    setFS((prev) => {
-      const next = injectDiagnosticsSelfTestFiles(prev);
-      const candidate = findNodeByPath(next, `${SELF_TEST_FOLDER_PATH}/ts-error.ts`);
-      if (candidate && isFile(candidate)) {
-        targetId = candidate.id;
-      }
-      return next;
-    });
-    setActivity("explorer");
-    if (targetId) {
-      setSelectedId(targetId);
-      setActiveFileId(targetId);
-    }
-    pushToast("Diagnostics self-test workspace is ready.", "good");
-    return {
-      files: DIAGNOSTICS_SELF_TEST_FILES.map((f) => `${SELF_TEST_FOLDER_PATH}/${f.name}`),
-    };
-  }, [setFS, setSelectedId, setActiveFileId, setActivity, pushToast]);
-
-  useEffect(() => {
-    if (!isClient) return;
-    type WindowWithSelfTest = Window & { __CAVCODE_SELF_TEST?: { run: () => unknown } };
-    const win = window as WindowWithSelfTest;
-    const payload = { run: runDiagnosticsSelfTest };
-    win.__CAVCODE_SELF_TEST = payload;
-    console.info("CavCode diagnostics self-test ready. Run window.__CAVCODE_SELF_TEST.run() in CavTools.");
-    return () => {
-      if (win.__CAVCODE_SELF_TEST === payload) {
-        win.__CAVCODE_SELF_TEST = undefined;
-      }
-    };
-  }, [isClient, runDiagnosticsSelfTest]);
 
   /* =========================
     Explorer actions
@@ -14700,13 +14585,17 @@ export default function CavCodePage() {
                 </div>
 
                 <div className="cc-search">
-                  <input
-                    id="cc-search"
-                    className="cc-search-in"
-                    placeholder="Search files (Cmd/Ctrl+P)"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
+                  <div className="cc-search-shell">
+                    <div className="cc-search-kicker mono">Quick Open</div>
+                    <div className="cc-search-note">Search the workspace with the new CavCode sidebar surface.</div>
+                    <input
+                      id="cc-search"
+                      className="cc-search-in"
+                      placeholder="Search files (Cmd/Ctrl+P)"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
                   <div className="cc-search-results">
                     {searchQuery.trim() ? (
                       searchHits.length ? (
