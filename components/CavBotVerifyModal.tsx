@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Image from "next/image";
+import { createPortal } from "react-dom";
 
 import styles from "./CavBotVerifyModal.module.css";
 
@@ -70,6 +71,8 @@ type CavBotVerifyModalProps = {
   route: string;
   sessionId?: string;
   identifierHint?: string;
+  brandTitle?: string;
+  brandSubtitle?: string;
   onClose: () => void;
   onVerified: (value: VerifyModalSuccess) => void;
 };
@@ -216,6 +219,7 @@ async function postJson<T>(url: string, body: Record<string, unknown>) {
 
 export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
   const { open, actionType, route, onClose, onVerified } = props;
+  const [portalReady, setPortalReady] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [mode, setMode] = React.useState<"challenge" | "otp">("challenge");
@@ -287,6 +291,22 @@ export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
     },
     [actionType, route, sessionId],
   );
+
+  React.useEffect(() => {
+    setPortalReady(true);
+    return () => {
+      setPortalReady(false);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!portalReady || !open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open, portalReady]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -521,10 +541,12 @@ export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
     }
   }, [actionType, challenge?.sessionId, onVerified, otpChallengeId, otpCode, sessionId]);
 
-  if (!open) return null;
+  if (!open || !portalReady) return null;
 
   const challengePrompt = s(challenge?.prompt);
   const showChallengePrompt = challengePrompt && challengePrompt !== "Quick check to protect CavBot.";
+  const brandTitle = s(props.brandTitle) || "Caverify";
+  const brandSubtitle = s(props.brandSubtitle) || "Drag the correct tile to complete the CavBot wordmark.";
   const render = challenge?.render;
   const wordmarkViewBox = render?.viewBox || DEFAULT_WORDMARK_VIEWBOX;
   const slotGlyph = render?.slotGlyph || DEFAULT_SLOT_GLYPH;
@@ -537,7 +559,7 @@ export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
     height: `${Math.max(8, (slot.height / viewBoxMetrics.height) * 100)}%`,
   };
 
-  return (
+  const modalNode = (
     <div className={styles.overlay}>
       <div className={styles.card} role="dialog" aria-modal="true" aria-labelledby="cbv-title">
         <div className={styles.top}>
@@ -550,9 +572,9 @@ export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
             </div>
             <div className={styles.verifyMeta}>
               <h2 className={styles.title} id="cbv-title">
-                Caverify
+                {brandTitle}
               </h2>
-              <p className={styles.sub}>Drag the correct tile to complete the CavBot wordmark.</p>
+              <p className={styles.sub}>{brandSubtitle}</p>
             </div>
           </div>
           <button type="button" className={styles.closeBtn} onClick={onClose} disabled={submitting || otpBusy}>
@@ -670,4 +692,6 @@ export function CavBotVerifyModal(props: CavBotVerifyModalProps) {
       </div>
     </div>
   );
+
+  return createPortal(modalNode, document.body);
 }

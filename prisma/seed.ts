@@ -33,6 +33,10 @@ function normalizeStaffCodeString(value: string) {
   return `CAV-${digits.padStart(6, "0").slice(-6)}`;
 }
 
+function isRetiredStaffCode(value: string) {
+  return normalizeStaffCodeString(value) === "CAV-000001";
+}
+
 function parseStaffCodeNumber(value: string) {
   const digits = String(value || "").replace(/\D+/g, "");
   if (!digits) return 0;
@@ -169,6 +173,11 @@ async function main() {
       .trim()
       .toLowerCase();
     if (user.email === ownerEmailForAdmin) {
+      const ownerStaffCode = normalizeStaffCodeString(String(process.env.CAVBOT_ADMIN_STAFF_CODE || ""));
+      if (!ownerStaffCode || isRetiredStaffCode(ownerStaffCode)) {
+        throw new Error("CAVBOT_ADMIN_STAFF_CODE must be set to a non-retired staff code.");
+      }
+      const ownerStaffFloor = parseStaffCodeNumber(ownerStaffCode) || 1;
       const existingStaffSequence = await prisma.staffSequence.findUnique({
         where: { key: "staff" },
         select: { lastValue: true },
@@ -177,14 +186,14 @@ async function main() {
         await prisma.staffSequence.create({
           data: {
             key: "staff",
-            lastValue: 1,
+            lastValue: ownerStaffFloor,
           },
         });
-      } else if (existingStaffSequence.lastValue < 1) {
+      } else if (existingStaffSequence.lastValue < ownerStaffFloor) {
         await prisma.staffSequence.update({
           where: { key: "staff" },
           data: {
-            lastValue: 1,
+            lastValue: ownerStaffFloor,
           },
         });
       }
@@ -192,7 +201,7 @@ async function main() {
       await prisma.staffProfile.upsert({
         where: { userId: user.id },
         update: {
-          staffCode: normalizeStaffCode(1),
+          staffCode: ownerStaffCode,
           systemRole: "OWNER",
           positionTitle: String(process.env.ADMIN_OWNER_POSITION_TITLE || process.env.CAVBOT_OWNER_POSITION_TITLE || "Founder & CEO"),
           status: "ACTIVE",
@@ -207,7 +216,7 @@ async function main() {
         },
         create: {
           userId: user.id,
-          staffCode: normalizeStaffCode(1),
+          staffCode: ownerStaffCode,
           systemRole: "OWNER",
           positionTitle: String(process.env.ADMIN_OWNER_POSITION_TITLE || process.env.CAVBOT_OWNER_POSITION_TITLE || "Founder & CEO"),
           status: "ACTIVE",
@@ -232,6 +241,9 @@ async function main() {
 
       if (founder?.id) {
         const founderStaffCode = normalizeStaffCodeString(String(process.env.CAVBOT_FOUNDER_STAFF_CODE || ""));
+        if (founderStaffCode && isRetiredStaffCode(founderStaffCode)) {
+          throw new Error("CAVBOT_FOUNDER_STAFF_CODE uses a retired staff code.");
+        }
         const founderTitle = String(process.env.CAVBOT_FOUNDER_POSITION_TITLE || "Founder & CEO");
         const founderFloor = parseStaffCodeNumber(founderStaffCode);
 

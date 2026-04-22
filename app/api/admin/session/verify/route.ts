@@ -1,0 +1,166 @@
+import "server-only";
+
+import { createHash } from "crypto";
+import { NextRequest, NextResponse } from "next/server";
+
+import { assertWriteOrigin, getSession, requireUser } from "@/lib/apiAuth";
+import { resolveAdminNextPath } from "@/lib/admin/access";
+import { adminSessionCookieOptions, createAdminSessionToken } from "@/lib/admin/session";
+import { getAuthPool, findAuthTokenByHash, markAuthTokenUsed } from "@/lib/authDb";
+import { ensureStaffProfileForUser, maskStaffCode } from "@/lib/admin/staff";
+import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
+import { writeAdminAuditLog } from "@/lib/admin/audit";
+import { prisma } from "@/lib/prisma";
+import { readSanitizedJson } from "@/lib/security/userInput";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const NO_STORE_HEADERS: Record<string, string> = {
+  "Cache-Control": "no-store, max-age=0",
+  Pragma: "no-cache",
+  Expires: "0",
+  Vary: "Cookie",
+};
+
+function json<T>(payload: T, init?: number | ResponseInit) {
+  const base = typeof init === "number" ? { status: init } : init ?? {};
+  return NextResponse.json(payload, {
+    ...base,
+    headers: { ...(base.headers || {}), ...NO_STORE_HEADERS },
+  });
+}
+
+function sha256Hex(value: string) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function pickClientIp(req: Request) {
+  return String(
+    req.headers.get("cf-connecting-ip")
+    || req.headers.get("true-client-ip")
+    || req.headers.get("x-forwarded-for")
+    || req.headers.get("x-real-ip")
+    || "",
+  ).split(",")[0].trim();
+}
+
+type Body = {
+  challengeId?: unknown;
+  code?: unknown;
+};
+
+export async function POST(req: NextRequest) {
+  try {
+    assertWriteOrigin(req);
+
+    const session = await getSession(req);
+    if (!session) return json({ ok: false, error: "AUTH_REQUIRED" }, 401);
+    requireUser(session);
+
+    const user = await prisma.user.findUnique({
+      where: { id: session.sub },
+      select: { email: true },
+    });
+    const staff = await ensureStaffProfileForUser(session.sub, user?.email || null);
+    if (!staff || staff.status !== "ACTIVE") {
+      return json({ ok: false, error: "STAFF_NOT_ACTIVE" }, 403);
+    }
+
+    const ip = pickClientIp(req);
+    const limitKey = `admin:verify:${staff.userId}:${ip}`;
+    const limit = consumeInMemoryRateLimit({
+      key: limitKey,
+      limit: 10,
+      windowMs: 10 * 60_000,
+    });
+    if (!limit.allowed) {
+      return json({ ok: false, error: "RATE_LIMITED", retryAfterSec: limit.retryAfterSec }, 429);
+    }
+
+    const body = (await readSanitizedJson(req, {} as Body)) as Body;
+    const challengeId = String(body?.challengeId || "").trim();
+    const code = String(body?.code || "").trim();
+    if (!challengeId || !/^\d{6}$/.test(code)) {
+      return json({ ok: false, error: "BAD_INPUT" }, 400);
+    }
+
+    const token = await findAuthTokenByHash(getAuthPool(), sha256Hex(challengeId));
+    if (!token || token.type !== "EMAIL_RECOVERY") {
+      return json({ ok: false, error: "CHALLENGE_NOT_FOUND" }, 404);
+    }
+    if (token.userId !== staff.userId) {
+      return json({ ok: false, error: "CHALLENGE_SCOPE_MISMATCH" }, 403);
+    }
+    if (token.usedAt) {
+      return json({ ok: false, error: "CHALLENGE_USED" }, 409);
+    }
+    if (token.expiresAt.getTime() <= Date.now()) {
+      return json({ ok: false, error: "CHALLENGE_EXPIRED" }, 410);
+    }
+
+    const meta = (token.metaJson || {}) as Record<string, unknown>;
+    if (String(meta.purpose || "").trim() !== "admin_step_up") {
+      return json({ ok: false, error: "BAD_CHALLENGE" }, 400);
+    }
+    if (String(meta.staffId || "").trim() !== staff.id) {
+      return json({ ok: false, error: "CHALLENGE_SCOPE_MISMATCH" }, 403);
+    }
+
+    const expectedHash = String(meta.codeHash || "").trim();
+    if (!expectedHash || expectedHash !== sha256Hex(code)) {
+      return json({ ok: false, error: "INVALID_CODE" }, 403);
+    }
+
+    const adminToken = await createAdminSessionToken({
+      userId: staff.userId,
+      staffId: staff.id,
+      staffCode: staff.staffCode,
+      role: staff.systemRole,
+      stepUpMethod: "email",
+    });
+    const nextPath = resolveAdminNextPath(staff, String(meta.nextPath || "/"));
+
+    await markAuthTokenUsed(getAuthPool(), token.id);
+    await Promise.all([
+      prisma.staffProfile.update({
+        where: { id: staff.id },
+        data: {
+          lastAdminLoginAt: new Date(),
+          lastAdminStepUpAt: new Date(),
+          onboardingStatus: "COMPLETED",
+        },
+      }),
+      writeAdminAuditLog({
+        actorStaffId: staff.id,
+        actorUserId: staff.userId,
+        action: "STAFF_SIGNED_IN",
+        actionLabel: "Staff admin sign-in completed",
+        entityType: "staff_profile",
+        entityId: staff.id,
+        entityLabel: maskStaffCode(staff.staffCode),
+        request: req,
+        metaJson: {
+          nextPath,
+        },
+      }),
+    ]);
+
+    const response = json({
+      ok: true,
+      nextPath,
+      staff: {
+        id: staff.id,
+        staffCode: maskStaffCode(staff.staffCode),
+        systemRole: staff.systemRole,
+        positionTitle: staff.positionTitle,
+      },
+    });
+
+    const { name, ...cookieOptions } = adminSessionCookieOptions(req);
+    response.cookies.set(name, adminToken, cookieOptions);
+    return response;
+  } catch {
+    return json({ ok: false, error: "ADMIN_VERIFY_FAILED" }, 500);
+  }
+}

@@ -112,7 +112,7 @@ type FolderNode = {
 type Node = FileNode | FolderNode;
 
 type GitCompareMode = "staged" | "unstaged";
-type TabKind = "file" | "skills" | "keyboard-shortcuts" | "git-compare-single" | "git-compare-aggregate";
+type TabKind = "file" | "skills" | "git-compare-single" | "git-compare-aggregate";
 
 type Tab = {
   id: string;
@@ -139,19 +139,7 @@ type Problem = {
 type PanelTab = "problems" | "output" | "debug" | "terminal" | "ports" | "git" | "run";
 type Activity = "explorer" | "search" | "scm" | "changes" | "extensions" | "live" | "run" | "settings" | "ai";
 
-type ThemeOption =
-  | "cavbot-default"
-  | "cavbot-light"
-  | "cavbot-lime"
-  | "cavbot-classic"
-  | "cavbot-dark"
-  | "cavbot-cobalt"
-  | "cavbot-ember"
-  | "cavbot-obsidian"
-  | "cavbot-mocha"
-  | "cavbot-graphite"
-  | "cavbot-nord"
-  | "cavbot-dawn";
+type ThemeOption = "cavbot-default" | "cavbot-light" | "cavbot-lime" | "cavbot-classic" | "cavbot-dark";
 type CavenComposerEnterBehavior = "enter" | "meta_enter";
 type CavenReasoningLevel = "low" | "medium" | "high" | "extra_high";
 type CavenInferenceSpeed = "standard" | "fast";
@@ -220,7 +208,6 @@ type IdeAgentCard = {
   name: string;
   summary: string;
   iconSrc: string;
-  iconBackground?: string | null;
   actionKey: string;
   surface: "cavcode" | "center" | "all";
   defaultInstalled: boolean;
@@ -272,33 +259,10 @@ type CustomCavenAgentRecord = {
   triggers: string[];
   instructions: string;
   iconSvg: string;
-  iconBackground: string | null;
   createdAt: string;
-  publicationRequested: boolean;
-  publicationRequestedAt: string | null;
-};
-
-type PublishedOperatorAgentRecord = {
-  id: string;
-  sourceAgentId: string;
-  sourceUserId: string;
-  sourceAccountId: string;
-  ownerName: string;
-  ownerUsername: string | null;
-  name: string;
-  summary: string;
-  actionKey: string;
-  surface: "cavcode" | "center" | "all";
-  triggers: string[];
-  instructions: string;
-  iconSvg: string;
-  iconBackground: string | null;
-  publishedAt: string;
-  updatedAt: string;
 };
 
 type AgentBuilderAiMode = "help_write" | "generate_agent";
-type AgentCreationSource = "manual" | "generate_with_cavai" | "help_write_with_cavai";
 type CommitMessageAiMode = "help_write" | "generate_message";
 type AgentBuilderReasoningLevel = "low" | "medium" | "high" | "extra_high";
 type AgentBuilderControlMenu = "model" | "reasoning" | null;
@@ -314,660 +278,18 @@ type AgentBuilderDraftResult = {
   surface: "cavcode" | "center" | "all";
 };
 
-type ShortcutDefinition = {
-  id: string;
-  command: string;
-  when: string;
-  source: string;
-  mac: string[][];
-  win: string[][];
-  keywords?: string[];
-};
-
-type ThemeOptionDefinition = {
-  value: ThemeOption;
-  label: string;
-  hint: string;
-  accent: string;
-  accentSoft: string;
-  accentWash: string;
-  previewBackground: string;
-  previewBorder: string;
-  previewText: string;
-  previewLine: string;
-  tokens: {
-    keyword: string;
-    string: string;
-    number: string;
-    type: string;
-    comment: string;
-  };
-  monaco: {
-    base: "vs" | "vs-dark";
-    inherit: true;
-    rules: Array<{ token: string; foreground: string }>;
-    colors: Record<string, string>;
-  };
-};
-
-const THEME_OPTIONS: ThemeOptionDefinition[] = [
-  {
-    value: "cavbot-default",
-    label: "CavBot Default",
-    hint: "Balanced CavBot dark",
-    accent: "#B9C85A",
-    accentSoft: "rgba(185,200,90,.30)",
-    accentWash: "rgba(185,200,90,.12)",
-    previewBackground: "#070A16",
-    previewBorder: "#2A3352",
-    previewText: "#EAF0FF",
-    previewLine: "#5A6475",
-    tokens: {
-      comment: "#98A3B3",
-      string: "#C6E48B",
-      keyword: "#8B5CFF",
-      number: "#FFCC66",
-      type: "#B9C85A",
-    },
-    monaco: {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "98A3B3" },
-        { token: "string", foreground: "C6E48B" },
-        { token: "keyword", foreground: "8B5CFF" },
-        { token: "number", foreground: "FFCC66" },
-        { token: "type.identifier", foreground: "B9C85A" },
-      ],
-      colors: {
-        "editor.background": "#070A16",
-        "editor.foreground": "#EAF0FF",
-        "editorLineNumber.foreground": "#5A6475",
-        "editorLineNumber.activeForeground": "#B9C85A",
-        "editorCursor.foreground": "#B9C85A",
-        "editor.selectionBackground": "#2A1F55",
-        "editor.inactiveSelectionBackground": "#1A1730",
-        "editorIndentGuide.background": "#20253A",
-        "editorIndentGuide.activeBackground": "#343B58",
-        "editorWidget.background": "#0A0F22",
-        "editorSuggestWidget.background": "#0A0F22",
-        "editorSuggestWidget.border": "#2A3352",
-        "editorHoverWidget.background": "#0A0F22",
-        "editorHoverWidget.border": "#2A3352",
-        "peekView.border": "#2A3352",
-        "inputValidation.errorBorder": "#2A3352",
-        "editorError.foreground": "#FF4D4D",
-        "editorWarning.foreground": "#FFCC66",
-      },
-    },
-  },
-  {
-    value: "cavbot-light",
-    label: "CavBot Light",
-    hint: "Bright studio canvas",
-    accent: "#4EA8FF",
-    accentSoft: "rgba(78,168,255,.28)",
-    accentWash: "rgba(78,168,255,.12)",
-    previewBackground: "#F7F8FC",
-    previewBorder: "#D0D7E6",
-    previewText: "#0B0D12",
-    previewLine: "#9AA2B2",
-    tokens: {
-      comment: "#6B7280",
-      string: "#2F6F3E",
-      keyword: "#6D47FF",
-      number: "#8A5A00",
-      type: "#5C7A2D",
-    },
-    monaco: {
-      base: "vs",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "6B7280" },
-        { token: "string", foreground: "2F6F3E" },
-        { token: "keyword", foreground: "6D47FF" },
-        { token: "number", foreground: "8A5A00" },
-        { token: "type.identifier", foreground: "5C7A2D" },
-      ],
-      colors: {
-        "editor.background": "#F7F8FC",
-        "editor.foreground": "#0B0D12",
-        "editorLineNumber.foreground": "#9AA2B2",
-        "editorLineNumber.activeForeground": "#5C7A2D",
-        "editorCursor.foreground": "#5C7A2D",
-        "editor.selectionBackground": "#E2DAFF",
-        "editor.inactiveSelectionBackground": "#F0ECFA",
-        "editorIndentGuide.background": "#E2E6EF",
-        "editorIndentGuide.activeBackground": "#C9D1E3",
-        "editorWidget.background": "#FFFFFF",
-        "editorSuggestWidget.background": "#FFFFFF",
-        "editorSuggestWidget.border": "#D0D7E6",
-        "editorHoverWidget.background": "#FFFFFF",
-        "editorHoverWidget.border": "#D0D7E6",
-        "peekView.border": "#D0D7E6",
-        "inputValidation.errorBorder": "#D0D7E6",
-        "editorError.foreground": "#D92D2D",
-        "editorWarning.foreground": "#B06B00",
-      },
-    },
-  },
-  {
-    value: "cavbot-lime",
-    label: "CavBot Lime",
-    hint: "Green ops cockpit",
-    accent: "#B9C85A",
-    accentSoft: "rgba(185,200,90,.30)",
-    accentWash: "rgba(185,200,90,.12)",
-    previewBackground: "#030F07",
-    previewBorder: "rgba(185,200,90,.45)",
-    previewText: "#E9F6D3",
-    previewLine: "#3F6C48",
-    tokens: {
-      comment: "#79B567",
-      string: "#C5F09B",
-      keyword: "#D5DCA0",
-      number: "#A7D87E",
-      type: "#B9C85A",
-    },
-    monaco: {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "79B567" },
-        { token: "string", foreground: "C5F09B" },
-        { token: "keyword", foreground: "D5DCA0" },
-        { token: "number", foreground: "A7D87E" },
-        { token: "type.identifier", foreground: "B9C85A" },
-      ],
-      colors: {
-        "editor.background": "#030F07",
-        "editor.foreground": "#E9F6D3",
-        "editorLineNumber.foreground": "#3F6C48",
-        "editorLineNumber.activeForeground": "#C7E394",
-        "editorCursor.foreground": "#B9C85A",
-        "editor.selectionBackground": "rgba(185,200,90,0.3)",
-        "editor.inactiveSelectionBackground": "rgba(185,200,90,0.08)",
-        "editorLineHighlightBackground": "rgba(185,200,90,0.1)",
-        "editorIndentGuide.background": "rgba(116,148,116,0.65)",
-        "editorIndentGuide.activeBackground": "rgba(185,200,90,0.75)",
-        "editorWidget.background": "#04140A",
-        "editorSuggestWidget.background": "#04140A",
-        "editorSuggestWidget.border": "rgba(185,200,90,0.45)",
-        "editorHoverWidget.background": "#04140A",
-        "editorHoverWidget.border": "rgba(185,200,90,0.45)",
-        "peekView.border": "rgba(185,200,90,0.45)",
-        "inputValidation.errorBorder": "rgba(185,200,90,0.45)",
-        "editorError.foreground": "#FF5B5B",
-        "editorWarning.foreground": "#FFCC66",
-      },
-    },
-  },
-  {
-    value: "cavbot-classic",
-    label: "CavBot Classic",
-    hint: "Familiar editor baseline",
-    accent: "#8B5CFF",
-    accentSoft: "rgba(139,92,255,.30)",
-    accentWash: "rgba(139,92,255,.14)",
-    previewBackground: "#1E1E1E",
-    previewBorder: "#3F3F46",
-    previewText: "#D4D4D4",
-    previewLine: "#858585",
-    tokens: {
-      comment: "#6A9955",
-      string: "#CE9178",
-      keyword: "#569CD6",
-      number: "#B5CEA8",
-      type: "#4EC9B0",
-    },
-    monaco: {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "6A9955" },
-        { token: "string", foreground: "CE9178" },
-        { token: "keyword", foreground: "569CD6" },
-        { token: "number", foreground: "B5CEA8" },
-        { token: "type.identifier", foreground: "4EC9B0" },
-      ],
-      colors: {
-        "editor.background": "#1E1E1E",
-        "editor.foreground": "#D4D4D4",
-        "editorLineNumber.foreground": "#858585",
-        "editorLineNumber.activeForeground": "#C3E88D",
-        "editorCursor.foreground": "#AEAFAD",
-        "editor.selectionBackground": "#094771",
-        "editor.inactiveSelectionBackground": "#2A2D2E",
-        "editorLineHighlightBackground": "#2A2D2E",
-        "editorIndentGuide.background": "#404040",
-        "editorIndentGuide.activeBackground": "#707070",
-        "editorWidget.background": "#252526",
-        "editorSuggestWidget.background": "#252526",
-        "editorSuggestWidget.border": "#3F3F46",
-        "editorHoverWidget.background": "#252526",
-        "editorHoverWidget.border": "#3F3F46",
-        "peekView.border": "#3F3F46",
-        "inputValidation.errorBorder": "#3F3F46",
-        "editorError.foreground": "#F44747",
-        "editorWarning.foreground": "#FF8800",
-      },
-    },
-  },
-  {
-    value: "cavbot-dark",
-    label: "CavBot Dark",
-    hint: "Deep black and cobalt",
-    accent: "#2F81F7",
-    accentSoft: "rgba(47,129,247,.30)",
-    accentWash: "rgba(47,129,247,.12)",
-    previewBackground: "#01030F",
-    previewBorder: "rgba(121,185,255,.35)",
-    previewText: "#DFE8FF",
-    previewLine: "#4B5465",
-    tokens: {
-      comment: "#7D9BCF",
-      string: "#C6D8FF",
-      keyword: "#79B9FF",
-      number: "#B0C6FF",
-      type: "#81B1E0",
-    },
-    monaco: {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "7D9BCF" },
-        { token: "string", foreground: "C6D8FF" },
-        { token: "keyword", foreground: "79B9FF" },
-        { token: "number", foreground: "B0C6FF" },
-        { token: "type.identifier", foreground: "81B1E0" },
-      ],
-      colors: {
-        "editor.background": "#01030F",
-        "editor.foreground": "#DFE8FF",
-        "editorLineNumber.foreground": "#4B5465",
-        "editorLineNumber.activeForeground": "#99B1D8",
-        "editorCursor.foreground": "#C6D8FF",
-        "editor.selectionBackground": "rgba(121,185,255,0.18)",
-        "editor.inactiveSelectionBackground": "rgba(121,185,255,0.08)",
-        "editorLineHighlightBackground": "rgba(121,185,255,0.08)",
-        "editorIndentGuide.background": "rgba(70,82,110,0.55)",
-        "editorIndentGuide.activeBackground": "rgba(121,185,255,0.6)",
-        "editorWidget.background": "#050715",
-        "editorSuggestWidget.background": "#050715",
-        "editorSuggestWidget.border": "rgba(121,185,255,0.35)",
-        "editorHoverWidget.background": "#050715",
-        "editorHoverWidget.border": "rgba(121,185,255,0.35)",
-        "peekView.border": "rgba(121,185,255,0.35)",
-        "inputValidation.errorBorder": "rgba(121,185,255,0.35)",
-        "editorError.foreground": "#FF6F6F",
-        "editorWarning.foreground": "#FFC66D",
-      },
-    },
-  },
-  {
-    value: "cavbot-cobalt",
-    label: "CavBot Cobalt",
-    hint: "Electric blue control room",
-    accent: "#59B7FF",
-    accentSoft: "rgba(89,183,255,.30)",
-    accentWash: "rgba(89,183,255,.12)",
-    previewBackground: "#04142A",
-    previewBorder: "#1F4D7A",
-    previewText: "#E8F2FF",
-    previewLine: "#66829D",
-    tokens: {
-      comment: "#6B88A6",
-      string: "#9BD3FF",
-      keyword: "#6CB8FF",
-      number: "#FFC46B",
-      type: "#7FE8FF",
-    },
-    monaco: {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "6B88A6" },
-        { token: "string", foreground: "9BD3FF" },
-        { token: "keyword", foreground: "6CB8FF" },
-        { token: "number", foreground: "FFC46B" },
-        { token: "type.identifier", foreground: "7FE8FF" },
-      ],
-      colors: {
-        "editor.background": "#04142A",
-        "editor.foreground": "#E8F2FF",
-        "editorLineNumber.foreground": "#597089",
-        "editorLineNumber.activeForeground": "#8ED7FF",
-        "editorCursor.foreground": "#7FE8FF",
-        "editor.selectionBackground": "rgba(89,183,255,0.22)",
-        "editor.inactiveSelectionBackground": "rgba(89,183,255,0.1)",
-        "editorLineHighlightBackground": "rgba(89,183,255,0.08)",
-        "editorIndentGuide.background": "rgba(73,103,136,0.55)",
-        "editorIndentGuide.activeBackground": "rgba(89,183,255,0.72)",
-        "editorWidget.background": "#071B33",
-        "editorSuggestWidget.background": "#071B33",
-        "editorSuggestWidget.border": "#1F4D7A",
-        "editorHoverWidget.background": "#071B33",
-        "editorHoverWidget.border": "#1F4D7A",
-        "peekView.border": "#1F4D7A",
-        "inputValidation.errorBorder": "#1F4D7A",
-        "editorError.foreground": "#FF7373",
-        "editorWarning.foreground": "#FFC46B",
-      },
-    },
-  },
-  {
-    value: "cavbot-ember",
-    label: "CavBot Ember",
-    hint: "Warm red incident deck",
-    accent: "#FF7B72",
-    accentSoft: "rgba(255,123,114,.28)",
-    accentWash: "rgba(255,123,114,.12)",
-    previewBackground: "#220607",
-    previewBorder: "#6C2622",
-    previewText: "#FFE7E1",
-    previewLine: "#9B6D68",
-    tokens: {
-      comment: "#B68A84",
-      string: "#FFB27F",
-      keyword: "#FF7B72",
-      number: "#FFD280",
-      type: "#F5E96E",
-    },
-    monaco: {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "B68A84" },
-        { token: "string", foreground: "FFB27F" },
-        { token: "keyword", foreground: "FF7B72" },
-        { token: "number", foreground: "FFD280" },
-        { token: "type.identifier", foreground: "F5E96E" },
-      ],
-      colors: {
-        "editor.background": "#220607",
-        "editor.foreground": "#FFE7E1",
-        "editorLineNumber.foreground": "#8E5F5A",
-        "editorLineNumber.activeForeground": "#FFB27F",
-        "editorCursor.foreground": "#FF9D78",
-        "editor.selectionBackground": "rgba(255,123,114,0.22)",
-        "editor.inactiveSelectionBackground": "rgba(255,123,114,0.1)",
-        "editorLineHighlightBackground": "rgba(255,123,114,0.08)",
-        "editorIndentGuide.background": "rgba(120,69,64,0.55)",
-        "editorIndentGuide.activeBackground": "rgba(255,123,114,0.72)",
-        "editorWidget.background": "#2A090A",
-        "editorSuggestWidget.background": "#2A090A",
-        "editorSuggestWidget.border": "#6C2622",
-        "editorHoverWidget.background": "#2A090A",
-        "editorHoverWidget.border": "#6C2622",
-        "peekView.border": "#6C2622",
-        "inputValidation.errorBorder": "#6C2622",
-        "editorError.foreground": "#FF8F87",
-        "editorWarning.foreground": "#FFD280",
-      },
-    },
-  },
-  {
-    value: "cavbot-obsidian",
-    label: "CavBot Obsidian",
-    hint: "High-contrast black glass",
-    accent: "#79E7D4",
-    accentSoft: "rgba(121,231,212,.28)",
-    accentWash: "rgba(121,231,212,.12)",
-    previewBackground: "#000000",
-    previewBorder: "#1D3835",
-    previewText: "#E6F6F5",
-    previewLine: "#58706E",
-    tokens: {
-      comment: "#648381",
-      string: "#9FE7C8",
-      keyword: "#7FE7FF",
-      number: "#F5D77A",
-      type: "#89FFCF",
-    },
-    monaco: {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "648381" },
-        { token: "string", foreground: "9FE7C8" },
-        { token: "keyword", foreground: "7FE7FF" },
-        { token: "number", foreground: "F5D77A" },
-        { token: "type.identifier", foreground: "89FFCF" },
-      ],
-      colors: {
-        "editor.background": "#000000",
-        "editor.foreground": "#E6F6F5",
-        "editorLineNumber.foreground": "#506867",
-        "editorLineNumber.activeForeground": "#8CF2E5",
-        "editorCursor.foreground": "#79E7D4",
-        "editor.selectionBackground": "rgba(121,231,212,0.18)",
-        "editor.inactiveSelectionBackground": "rgba(121,231,212,0.08)",
-        "editorLineHighlightBackground": "rgba(121,231,212,0.06)",
-        "editorIndentGuide.background": "rgba(64,91,88,0.52)",
-        "editorIndentGuide.activeBackground": "rgba(121,231,212,0.68)",
-        "editorWidget.background": "#050807",
-        "editorSuggestWidget.background": "#050807",
-        "editorSuggestWidget.border": "#1D3835",
-        "editorHoverWidget.background": "#050807",
-        "editorHoverWidget.border": "#1D3835",
-        "peekView.border": "#1D3835",
-        "inputValidation.errorBorder": "#1D3835",
-        "editorError.foreground": "#FF8C82",
-        "editorWarning.foreground": "#F5D77A",
-      },
-    },
-  },
-  {
-    value: "cavbot-mocha",
-    label: "CavBot Mocha",
-    hint: "Warm brown editorial deck",
-    accent: "#D8A46C",
-    accentSoft: "rgba(216,164,108,.28)",
-    accentWash: "rgba(216,164,108,.12)",
-    previewBackground: "#1B140E",
-    previewBorder: "#6D533A",
-    previewText: "#F6EBDD",
-    previewLine: "#8E7964",
-    tokens: {
-      comment: "#A38C72",
-      string: "#CFE7A3",
-      keyword: "#E48A5B",
-      number: "#F3C977",
-      type: "#C6A96D",
-    },
-    monaco: {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "A38C72" },
-        { token: "string", foreground: "CFE7A3" },
-        { token: "keyword", foreground: "E48A5B" },
-        { token: "number", foreground: "F3C977" },
-        { token: "type.identifier", foreground: "C6A96D" },
-      ],
-      colors: {
-        "editor.background": "#1B140E",
-        "editor.foreground": "#F6EBDD",
-        "editorLineNumber.foreground": "#75604D",
-        "editorLineNumber.activeForeground": "#F0C58E",
-        "editorCursor.foreground": "#D8A46C",
-        "editor.selectionBackground": "rgba(216,164,108,0.2)",
-        "editor.inactiveSelectionBackground": "rgba(216,164,108,0.08)",
-        "editorLineHighlightBackground": "rgba(216,164,108,0.06)",
-        "editorIndentGuide.background": "rgba(104,82,63,0.52)",
-        "editorIndentGuide.activeBackground": "rgba(216,164,108,0.68)",
-        "editorWidget.background": "#241A13",
-        "editorSuggestWidget.background": "#241A13",
-        "editorSuggestWidget.border": "#6D533A",
-        "editorHoverWidget.background": "#241A13",
-        "editorHoverWidget.border": "#6D533A",
-        "peekView.border": "#6D533A",
-        "inputValidation.errorBorder": "#6D533A",
-        "editorError.foreground": "#FF8F76",
-        "editorWarning.foreground": "#F3C977",
-      },
-    },
-  },
-  {
-    value: "cavbot-graphite",
-    label: "CavBot Graphite",
-    hint: "Neutral graphite terminal",
-    accent: "#9AB6FF",
-    accentSoft: "rgba(154,182,255,.28)",
-    accentWash: "rgba(154,182,255,.12)",
-    previewBackground: "#111318",
-    previewBorder: "#3A4354",
-    previewText: "#EEF2F8",
-    previewLine: "#737D90",
-    tokens: {
-      comment: "#7E8796",
-      string: "#A8C6B4",
-      keyword: "#9AB6FF",
-      number: "#E3BF7A",
-      type: "#7DD3C7",
-    },
-    monaco: {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "7E8796" },
-        { token: "string", foreground: "A8C6B4" },
-        { token: "keyword", foreground: "9AB6FF" },
-        { token: "number", foreground: "E3BF7A" },
-        { token: "type.identifier", foreground: "7DD3C7" },
-      ],
-      colors: {
-        "editor.background": "#111318",
-        "editor.foreground": "#EEF2F8",
-        "editorLineNumber.foreground": "#667083",
-        "editorLineNumber.activeForeground": "#B5CBFF",
-        "editorCursor.foreground": "#9AB6FF",
-        "editor.selectionBackground": "rgba(154,182,255,0.18)",
-        "editor.inactiveSelectionBackground": "rgba(154,182,255,0.08)",
-        "editorLineHighlightBackground": "rgba(154,182,255,0.06)",
-        "editorIndentGuide.background": "rgba(82,92,110,0.52)",
-        "editorIndentGuide.activeBackground": "rgba(154,182,255,0.62)",
-        "editorWidget.background": "#171A20",
-        "editorSuggestWidget.background": "#171A20",
-        "editorSuggestWidget.border": "#3A4354",
-        "editorHoverWidget.background": "#171A20",
-        "editorHoverWidget.border": "#3A4354",
-        "peekView.border": "#3A4354",
-        "inputValidation.errorBorder": "#3A4354",
-        "editorError.foreground": "#FF8C82",
-        "editorWarning.foreground": "#E3BF7A",
-      },
-    },
-  },
-  {
-    value: "cavbot-nord",
-    label: "CavBot Nord",
-    hint: "Cool slate clarity",
-    accent: "#88C0D0",
-    accentSoft: "rgba(136,192,208,.28)",
-    accentWash: "rgba(136,192,208,.12)",
-    previewBackground: "#2E3440",
-    previewBorder: "#4C566A",
-    previewText: "#ECEFF4",
-    previewLine: "#667388",
-    tokens: {
-      comment: "#6B7A90",
-      string: "#A3BE8C",
-      keyword: "#81A1C1",
-      number: "#EBCB8B",
-      type: "#8FBCBB",
-    },
-    monaco: {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "6B7A90" },
-        { token: "string", foreground: "A3BE8C" },
-        { token: "keyword", foreground: "81A1C1" },
-        { token: "number", foreground: "EBCB8B" },
-        { token: "type.identifier", foreground: "8FBCBB" },
-      ],
-      colors: {
-        "editor.background": "#2E3440",
-        "editor.foreground": "#ECEFF4",
-        "editorLineNumber.foreground": "#657186",
-        "editorLineNumber.activeForeground": "#88C0D0",
-        "editorCursor.foreground": "#88C0D0",
-        "editor.selectionBackground": "rgba(129,161,193,0.22)",
-        "editor.inactiveSelectionBackground": "rgba(129,161,193,0.1)",
-        "editorLineHighlightBackground": "rgba(129,161,193,0.08)",
-        "editorIndentGuide.background": "rgba(76,86,106,0.58)",
-        "editorIndentGuide.activeBackground": "rgba(136,192,208,0.74)",
-        "editorWidget.background": "#343B48",
-        "editorSuggestWidget.background": "#343B48",
-        "editorSuggestWidget.border": "#4C566A",
-        "editorHoverWidget.background": "#343B48",
-        "editorHoverWidget.border": "#4C566A",
-        "peekView.border": "#4C566A",
-        "inputValidation.errorBorder": "#4C566A",
-        "editorError.foreground": "#BF616A",
-        "editorWarning.foreground": "#D08770",
-      },
-    },
-  },
-  {
-    value: "cavbot-dawn",
-    label: "CavBot Dawn",
-    hint: "Soft daylight editing",
-    accent: "#7A48C6",
-    accentSoft: "rgba(122,72,198,.24)",
-    accentWash: "rgba(122,72,198,.1)",
-    previewBackground: "#FFF8EF",
-    previewBorder: "#D8CFC1",
-    previewText: "#2B2620",
-    previewLine: "#988F84",
-    tokens: {
-      comment: "#8A7F74",
-      string: "#3E7D4E",
-      keyword: "#7A48C6",
-      number: "#A15C13",
-      type: "#2E6F9E",
-    },
-    monaco: {
-      base: "vs",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "8A7F74" },
-        { token: "string", foreground: "3E7D4E" },
-        { token: "keyword", foreground: "7A48C6" },
-        { token: "number", foreground: "A15C13" },
-        { token: "type.identifier", foreground: "2E6F9E" },
-      ],
-      colors: {
-        "editor.background": "#FFF8EF",
-        "editor.foreground": "#2B2620",
-        "editorLineNumber.foreground": "#A29A90",
-        "editorLineNumber.activeForeground": "#7A48C6",
-        "editorCursor.foreground": "#7A48C6",
-        "editor.selectionBackground": "#EBDFFF",
-        "editor.inactiveSelectionBackground": "#F4ECFF",
-        "editorLineHighlightBackground": "#F6F1E9",
-        "editorIndentGuide.background": "#DDD5C8",
-        "editorIndentGuide.activeBackground": "#C3B4E3",
-        "editorWidget.background": "#FFFFFF",
-        "editorSuggestWidget.background": "#FFFFFF",
-        "editorSuggestWidget.border": "#D8CFC1",
-        "editorHoverWidget.background": "#FFFFFF",
-        "editorHoverWidget.border": "#D8CFC1",
-        "peekView.border": "#D8CFC1",
-        "inputValidation.errorBorder": "#D8CFC1",
-        "editorError.foreground": "#C44536",
-        "editorWarning.foreground": "#A15C13",
-      },
-    },
-  },
+const THEME_OPTIONS: Array<{ value: ThemeOption; label: string }> = [
+  { value: "cavbot-default", label: "CavBot Default" },
+  { value: "cavbot-light", label: "CavBot Light" },
+  { value: "cavbot-lime", label: "CavBot Lime" },
+  { value: "cavbot-classic", label: "CavBot Classic" },
+  { value: "cavbot-dark", label: "CavBot Dark" },
 ];
 const THEME_VALUES = THEME_OPTIONS.map((option) => option.value);
 
 const CAVCODE_WORKSPACE_STATE_SAVE_DEBOUNCE_MS = 650;
 const CAVEN_CUSTOM_AGENT_ICON_SRC = "/icons/app/cavcode/agents/custom-agent.svg";
 const MAX_CUSTOM_AGENT_ICON_SVG_CHARS = 120_000;
-const DEFAULT_CUSTOM_AGENT_ICON_BACKGROUND = "#4EA8FF";
 const AGENT_CREATE_PROMPT_HINT_INTERVAL_MS = 6800;
 const AGENT_CREATE_PROMPT_HINTS_EMPTY = [
   "Create a frontend QA agent that checks accessibility, responsiveness, and spacing before merge.",
@@ -1032,7 +354,6 @@ const CAVEN_GENERAL_MODEL_BASE_IDS = [
 ] as const;
 
 const CAVCODE_SKILLS_TAB_ID = "__cavcode_skills__";
-const CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID = "__cavcode_keyboard_shortcuts__";
 const CAVCODE_SKILLS_TAB_META: Record<SkillsPageView, { path: string; name: string; lang: string }> = {
   agents: {
     path: "/.cavcode/caven-agents",
@@ -1050,222 +371,6 @@ const CAVCODE_SKILLS_TAB_META: Record<SkillsPageView, { path: string; name: stri
     lang: "ide",
   },
 };
-const CAVCODE_KEYBOARD_SHORTCUTS_TAB: Tab = {
-  id: CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID,
-  path: "/.cavcode/keyboard-shortcuts",
-  name: "Keyboard Shortcuts",
-  lang: "keybindings",
-  kind: "keyboard-shortcuts",
-};
-const CAVCODE_SHORTCUTS: ShortcutDefinition[] = [
-  {
-    id: "save",
-    command: "Save workspace",
-    when: "Anywhere inside CavCode",
-    source: "CavCode",
-    mac: [["⌘", "S"]],
-    win: [["Ctrl", "S"]],
-    keywords: ["save", "persist", "workspace"],
-  },
-  {
-    id: "open-settings",
-    command: "Open settings",
-    when: "Workbench",
-    source: "CavCode",
-    mac: [["⌘", ","]],
-    win: [["Ctrl", ","]],
-    keywords: ["settings", "preferences"],
-  },
-  {
-    id: "open-keyboard-shortcuts",
-    command: "Open keyboard shortcuts",
-    when: "Workbench",
-    source: "CavCode",
-    mac: [["⌘", "K"], ["⌘", "S"]],
-    win: [["Ctrl", "K"], ["Ctrl", "S"]],
-    keywords: ["keyboard", "shortcuts", "keybindings"],
-  },
-  {
-    id: "toggle-sidebar",
-    command: "Toggle sidebar",
-    when: "Workbench",
-    source: "CavCode",
-    mac: [["⌘", "B"]],
-    win: [["Ctrl", "B"]],
-    keywords: ["sidebar", "layout"],
-  },
-  {
-    id: "quick-open",
-    command: "Quick open search",
-    when: "Workbench",
-    source: "CavCode",
-    mac: [["⌘", "P"]],
-    win: [["Ctrl", "P"]],
-    keywords: ["quick open", "search", "files"],
-  },
-  {
-    id: "focus-explorer",
-    command: "Focus explorer",
-    when: "Workbench",
-    source: "CavCode",
-    mac: [["⌘", "⇧", "E"]],
-    win: [["Ctrl", "Shift", "E"]],
-    keywords: ["explorer", "files", "sidebar"],
-  },
-  {
-    id: "focus-search",
-    command: "Focus search panel",
-    when: "Workbench",
-    source: "CavCode",
-    mac: [["⌘", "⇧", "F"]],
-    win: [["Ctrl", "Shift", "F"]],
-    keywords: ["search", "find", "sidebar"],
-  },
-  {
-    id: "focus-source-control",
-    command: "Focus source control",
-    when: "Workbench",
-    source: "CavCode",
-    mac: [["⌘", "⇧", "G"]],
-    win: [["Ctrl", "Shift", "G"]],
-    keywords: ["git", "source control", "changes"],
-  },
-  {
-    id: "focus-run-debug",
-    command: "Focus run and debug",
-    when: "Workbench",
-    source: "CavCode",
-    mac: [["⌘", "⇧", "D"]],
-    win: [["Ctrl", "Shift", "D"]],
-    keywords: ["run", "debug"],
-  },
-  {
-    id: "split-editor-right",
-    command: "Split editor right",
-    when: "Workbench",
-    source: "CavCode",
-    mac: [["⌘", "\\"]],
-    win: [["Ctrl", "\\"]],
-    keywords: ["split", "editor", "layout"],
-  },
-  {
-    id: "toggle-panel",
-    command: "Toggle lower panel",
-    when: "Workbench",
-    source: "CavCode",
-    mac: [["⌘", "J"]],
-    win: [["Ctrl", "J"]],
-    keywords: ["panel", "terminal", "problems"],
-  },
-  {
-    id: "find",
-    command: "Find in active editor",
-    when: "Editor",
-    source: "Editor",
-    mac: [["⌘", "F"]],
-    win: [["Ctrl", "F"]],
-    keywords: ["find", "search", "editor"],
-  },
-  {
-    id: "replace",
-    command: "Replace in active editor",
-    when: "Editor",
-    source: "Editor",
-    mac: [["⌘", "H"]],
-    win: [["Ctrl", "H"]],
-    keywords: ["replace", "editor"],
-  },
-  {
-    id: "quick-fix",
-    command: "Quick fix or CavAi fix",
-    when: "Editor diagnostics",
-    source: "Editor + CavAi",
-    mac: [["⌘", "."]],
-    win: [["Ctrl", "."]],
-    keywords: ["quick fix", "fix", "diagnostics"],
-  },
-  {
-    id: "organize-imports",
-    command: "Organize imports",
-    when: "Editor",
-    source: "Editor",
-    mac: [["⌘", "⇧", "O"]],
-    win: [["Ctrl", "Shift", "O"]],
-    keywords: ["imports", "organize"],
-  },
-  {
-    id: "rename-node",
-    command: "Rename selected file or folder",
-    when: "Explorer selection",
-    source: "CavCode",
-    mac: [["F2"]],
-    win: [["F2"]],
-    keywords: ["rename", "file", "folder"],
-  },
-  {
-    id: "delete-node",
-    command: "Delete selected file or folder",
-    when: "Explorer selection",
-    source: "CavCode",
-    mac: [["Delete"]],
-    win: [["Delete"]],
-    keywords: ["delete", "remove", "file", "folder"],
-  },
-  {
-    id: "dismiss-ui",
-    command: "Dismiss rename, menus, and transient UI",
-    when: "Transient surfaces",
-    source: "CavCode",
-    mac: [["Esc"]],
-    win: [["Esc"]],
-    keywords: ["escape", "dismiss", "close"],
-  },
-  {
-    id: "terminal-run",
-    command: "Run terminal command",
-    when: "Terminal input",
-    source: "CavCode",
-    mac: [["Return"]],
-    win: [["Enter"]],
-    keywords: ["terminal", "run", "enter"],
-  },
-  {
-    id: "terminal-clear",
-    command: "Clear terminal input",
-    when: "Terminal input",
-    source: "CavCode",
-    mac: [["Esc"]],
-    win: [["Esc"]],
-    keywords: ["terminal", "clear"],
-  },
-  {
-    id: "terminal-history-up",
-    command: "Previous terminal command",
-    when: "Terminal input",
-    source: "CavCode",
-    mac: [["↑"]],
-    win: [["↑"]],
-    keywords: ["terminal", "history", "up"],
-  },
-  {
-    id: "terminal-history-down",
-    command: "Next terminal command",
-    when: "Terminal input",
-    source: "CavCode",
-    mac: [["↓"]],
-    win: [["↓"]],
-    keywords: ["terminal", "history", "down"],
-  },
-  {
-    id: "terminal-complete",
-    command: "Autocomplete known terminal command",
-    when: "Terminal input",
-    source: "CavCode",
-    mac: [["Tab"]],
-    win: [["Tab"]],
-    keywords: ["terminal", "autocomplete", "tab"],
-  },
-];
 const CAVCODE_AGENT_CATALOG: IdeAgentCard[] = [
   {
     id: "error_explainer",
@@ -1770,19 +875,6 @@ function normalizeInstalledAgentIdsFromUnknown(
   return [...orderedBuiltIn, ...orderedCustom];
 }
 
-function normalizeAgentIdListFromUnknown(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set<string>();
-  const rows: string[] = [];
-  for (const row of value) {
-    const id = String(row || "").trim().toLowerCase();
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    rows.push(id);
-  }
-  return rows;
-}
-
 function toAgentSlug(input: string) {
   return String(input || "")
     .trim()
@@ -2220,233 +1312,6 @@ function normalizeAgentIconSvgFromUnknown(value: unknown): string {
   return raw;
 }
 
-function clampByte(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(255, Math.round(value)));
-}
-
-function toHexChannel(value: number): string {
-  return clampByte(value).toString(16).padStart(2, "0");
-}
-
-function rgbToHex(r: number, g: number, b: number): string {
-  return `#${toHexChannel(r)}${toHexChannel(g)}${toHexChannel(b)}`.toUpperCase();
-}
-
-function parseRgbChannel(raw: string): number | null {
-  const value = String(raw || "").trim();
-  if (!value) return null;
-  if (value.endsWith("%")) {
-    const parsed = Number.parseFloat(value.slice(0, -1));
-    if (!Number.isFinite(parsed)) return null;
-    return clampByte((parsed / 100) * 255);
-  }
-  const parsed = Number.parseFloat(value);
-  if (!Number.isFinite(parsed)) return null;
-  return clampByte(parsed);
-}
-
-function parseAlphaChannel(raw: string): number | null {
-  const value = String(raw || "").trim();
-  if (!value) return null;
-  if (value.endsWith("%")) {
-    const parsed = Number.parseFloat(value.slice(0, -1));
-    if (!Number.isFinite(parsed)) return null;
-    return Math.max(0, Math.min(1, parsed / 100));
-  }
-  const parsed = Number.parseFloat(value);
-  if (!Number.isFinite(parsed)) return null;
-  return Math.max(0, Math.min(1, parsed));
-}
-
-function hueToRgbChannel(p: number, q: number, t: number): number {
-  let value = t;
-  if (value < 0) value += 1;
-  if (value > 1) value -= 1;
-  if (value < 1 / 6) return p + (q - p) * 6 * value;
-  if (value < 1 / 2) return q;
-  if (value < 2 / 3) return p + (q - p) * (2 / 3 - value) * 6;
-  return p;
-}
-
-function hslToHex(h: number, s: number, l: number): string {
-  const hue = ((h % 360) + 360) % 360 / 360;
-  const saturation = Math.max(0, Math.min(1, s));
-  const lightness = Math.max(0, Math.min(1, l));
-  if (saturation === 0) {
-    const gray = clampByte(lightness * 255);
-    return rgbToHex(gray, gray, gray);
-  }
-  const q = lightness < 0.5
-    ? lightness * (1 + saturation)
-    : lightness + saturation - lightness * saturation;
-  const p = 2 * lightness - q;
-  return rgbToHex(
-    hueToRgbChannel(p, q, hue + 1 / 3) * 255,
-    hueToRgbChannel(p, q, hue) * 255,
-    hueToRgbChannel(p, q, hue - 1 / 3) * 255,
-  );
-}
-
-function normalizeAgentColorHexFromUnknown(value: unknown): string {
-  const raw = String(value ?? "").trim();
-  if (!raw) return "";
-  const normalized = raw.replace(/\s+/g, "").toLowerCase();
-  if (
-    !normalized
-    || normalized === "none"
-    || normalized === "transparent"
-    || normalized === "currentcolor"
-    || normalized === "inherit"
-    || normalized.startsWith("url(")
-  ) {
-    return "";
-  }
-  const hexMatch = normalized.match(/^#([a-f0-9]{3}|[a-f0-9]{4}|[a-f0-9]{6}|[a-f0-9]{8})$/i);
-  if (hexMatch) {
-    const token = hexMatch[1];
-    if (token.length === 3 || token.length === 4) {
-      const expanded = token.slice(0, 3).split("").map((part) => `${part}${part}`).join("");
-      return `#${expanded}`.toUpperCase();
-    }
-    return `#${token.slice(0, 6)}`.toUpperCase();
-  }
-
-  const rgbMatch = normalized.match(/^rgba?\(([^)]+)\)$/i);
-  if (rgbMatch) {
-    const parts = rgbMatch[1].split(",").map((part) => part.trim()).filter(Boolean);
-    if (parts.length < 3) return "";
-    const r = parseRgbChannel(parts[0]);
-    const g = parseRgbChannel(parts[1]);
-    const b = parseRgbChannel(parts[2]);
-    if (r == null || g == null || b == null) return "";
-    if (parts[3] != null) {
-      const alpha = parseAlphaChannel(parts[3]);
-      if (alpha != null && alpha <= 0) return "";
-    }
-    return rgbToHex(r, g, b);
-  }
-
-  const hslMatch = normalized.match(/^hsla?\(([^)]+)\)$/i);
-  if (hslMatch) {
-    const parts = hslMatch[1].split(",").map((part) => part.trim()).filter(Boolean);
-    if (parts.length < 3) return "";
-    const hue = Number.parseFloat(parts[0]);
-    const saturation = Number.parseFloat(parts[1].replace("%", ""));
-    const lightness = Number.parseFloat(parts[2].replace("%", ""));
-    if (!Number.isFinite(hue) || !Number.isFinite(saturation) || !Number.isFinite(lightness)) return "";
-    if (parts[3] != null) {
-      const alpha = parseAlphaChannel(parts[3]);
-      if (alpha != null && alpha <= 0) return "";
-    }
-    return hslToHex(hue, saturation / 100, lightness / 100);
-  }
-
-  if (!normalized.startsWith("#") && /^[a-f0-9]{3,8}$/i.test(normalized)) {
-    return normalizeAgentColorHexFromUnknown(`#${normalized}`);
-  }
-  return "";
-}
-
-function hexToRgbTuple(hex: string): [number, number, number] | null {
-  const normalized = normalizeAgentColorHexFromUnknown(hex);
-  if (!normalized) return null;
-  const token = normalized.slice(1);
-  return [
-    Number.parseInt(token.slice(0, 2), 16),
-    Number.parseInt(token.slice(2, 4), 16),
-    Number.parseInt(token.slice(4, 6), 16),
-  ];
-}
-
-function mixAgentHexColors(hex: string, target: string, amount: number): string {
-  const left = hexToRgbTuple(hex);
-  const right = hexToRgbTuple(target);
-  if (!left || !right) return normalizeAgentColorHexFromUnknown(hex) || "";
-  const weight = Math.max(0, Math.min(1, amount));
-  return rgbToHex(
-    left[0] + (right[0] - left[0]) * weight,
-    left[1] + (right[1] - left[1]) * weight,
-    left[2] + (right[2] - left[2]) * weight,
-  );
-}
-
-function rgbaFromAgentHex(hex: string, alpha: number): string {
-  const rgb = hexToRgbTuple(hex);
-  if (!rgb) return `rgba(78,168,255,${alpha})`;
-  const safeAlpha = Math.max(0, Math.min(1, alpha));
-  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${safeAlpha})`;
-}
-
-function scoreSvgPaletteColor(hex: string, count: number): number {
-  const rgb = hexToRgbTuple(hex);
-  if (!rgb) return count;
-  const [r, g, b] = rgb;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const saturation = (max - min) / 255;
-  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-  let score = count * 100 + saturation * 20;
-  if (luminance < 0.08 || luminance > 0.94) score -= 14;
-  if (saturation < 0.08) score -= 10;
-  return score;
-}
-
-function extractSvgPalette(svg: string): string[] {
-  const clean = normalizeAgentIconSvgFromUnknown(svg);
-  if (!clean) return [];
-  const hits = new Map<string, number>();
-  const rawValues: string[] = [];
-  const attrPattern = /\b(?:fill|stroke|stop-color|color)\s*=\s*["']([^"']+)["']/gi;
-  const stylePattern = /\bstyle\s*=\s*["']([^"']+)["']/gi;
-  const styleColorPattern = /\b(?:fill|stroke|stop-color|color)\s*:\s*([^;]+)/gi;
-
-  let match: RegExpExecArray | null = null;
-  while ((match = attrPattern.exec(clean))) {
-    rawValues.push(match[1] || "");
-  }
-  while ((match = stylePattern.exec(clean))) {
-    const style = match[1] || "";
-    let styleMatch: RegExpExecArray | null = null;
-    while ((styleMatch = styleColorPattern.exec(style))) {
-      rawValues.push(styleMatch[1] || "");
-    }
-  }
-
-  for (const rawValue of rawValues) {
-    const color = normalizeAgentColorHexFromUnknown(rawValue);
-    if (!color) continue;
-    hits.set(color, (hits.get(color) || 0) + 1);
-  }
-
-  return [...hits.entries()]
-    .sort((a, b) => scoreSvgPaletteColor(b[0], b[1]) - scoreSvgPaletteColor(a[0], a[1]) || b[1] - a[1])
-    .map(([color]) => color)
-    .slice(0, 6);
-}
-
-function pickDefaultAgentIconBackground(palette: readonly string[]): string {
-  for (const color of palette) {
-    const rgb = hexToRgbTuple(color);
-    if (!rgb) continue;
-    const max = Math.max(rgb[0], rgb[1], rgb[2]);
-    const min = Math.min(rgb[0], rgb[1], rgb[2]);
-    const saturation = (max - min) / 255;
-    const luminance = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
-    if (saturation >= 0.08 && luminance >= 0.12 && luminance <= 0.9) return color;
-  }
-  return palette[0] || DEFAULT_CUSTOM_AGENT_ICON_BACKGROUND;
-}
-
-function buildAgentIconSurfaceStyle(hex: string | null | undefined): React.CSSProperties | undefined {
-  const color = normalizeAgentColorHexFromUnknown(hex);
-  if (!color) return undefined;
-  return {
-    ["--cc-agent-icon-bg" as const]: `linear-gradient(135deg, ${mixAgentHexColors(color, "#FFFFFF", 0.16)}, ${mixAgentHexColors(color, "#050915", 0.12)})`,
-    ["--cc-agent-icon-border" as const]: rgbaFromAgentHex(mixAgentHexColors(color, "#FFFFFF", 0.28), 0.58),
-  } as React.CSSProperties & Record<"--cc-agent-icon-bg" | "--cc-agent-icon-border", string>;
-}
-
 function svgToDataUri(svg: string): string {
   const clean = normalizeAgentIconSvgFromUnknown(svg);
   if (!clean) return CAVEN_CUSTOM_AGENT_ICON_SRC;
@@ -2482,14 +1347,7 @@ function normalizeCustomAgentsFromUnknown(
       ? row.triggers.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 12)
       : [];
     const iconSvg = normalizeAgentIconSvgFromUnknown(row.iconSvg);
-    const iconBackground = normalizeAgentColorHexFromUnknown(row.iconBackground) || null;
     const createdAt = String(row.createdAt || "").trim() || new Date().toISOString();
-    const publicationRequested = row.publicationRequested === true;
-    const publicationRequestedAt = publicationRequested
-      ? (Number.isFinite(Date.parse(String(row.publicationRequestedAt || "").trim()))
-        ? new Date(String(row.publicationRequestedAt || "").trim()).toISOString()
-        : createdAt)
-      : null;
     rows.push({
       id,
       name,
@@ -2499,78 +1357,7 @@ function normalizeCustomAgentsFromUnknown(
       triggers,
       instructions,
       iconSvg,
-      iconBackground,
       createdAt,
-      publicationRequested,
-      publicationRequestedAt,
-    });
-    seen.add(id);
-  }
-  return rows;
-}
-
-function normalizePublishedOperatorAgentsFromUnknown(value: unknown): PublishedOperatorAgentRecord[] {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set<string>();
-  const rows: PublishedOperatorAgentRecord[] = [];
-  for (const raw of value) {
-    if (!raw || typeof raw !== "object") continue;
-    const row = raw as Record<string, unknown>;
-    const id = String(row.id || "").trim().toLowerCase();
-    const sourceAgentId = String(row.sourceAgentId || "").trim().toLowerCase();
-    const sourceUserId = String(row.sourceUserId || "").trim();
-    const sourceAccountId = String(row.sourceAccountId || "").trim();
-    const name = String(row.name || "").trim().replace(/\s+/g, " ");
-    const summary = String(row.summary || "").trim().replace(/\s+/g, " ");
-    const instructions = String(row.instructions || "").trim();
-    const actionKey = String(row.actionKey || "").trim().toLowerCase();
-    if (
-      !id
-      || !sourceAgentId
-      || !sourceUserId
-      || !sourceAccountId
-      || !name
-      || !summary
-      || !instructions
-      || !actionKey
-      || seen.has(id)
-      || !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(id)
-      || !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(sourceAgentId)
-      || !/^[a-z0-9][a-z0-9_]{1,63}$/.test(actionKey)
-    ) {
-      continue;
-    }
-    const surface = row.surface === "center" ? "center" : row.surface === "cavcode" ? "cavcode" : "all";
-    const triggers = Array.isArray(row.triggers)
-      ? row.triggers.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 12)
-      : [];
-    const iconSvg = normalizeAgentIconSvgFromUnknown(row.iconSvg);
-    const iconBackground = normalizeAgentColorHexFromUnknown(row.iconBackground) || null;
-    const publishedAtRaw = String(row.publishedAt || "").trim();
-    const updatedAtRaw = String(row.updatedAt || "").trim();
-    const publishedAt = Number.isFinite(Date.parse(publishedAtRaw))
-      ? new Date(publishedAtRaw).toISOString()
-      : new Date().toISOString();
-    const updatedAt = Number.isFinite(Date.parse(updatedAtRaw))
-      ? new Date(updatedAtRaw).toISOString()
-      : publishedAt;
-    rows.push({
-      id,
-      sourceAgentId,
-      sourceUserId,
-      sourceAccountId,
-      ownerName: String(row.ownerName || "").trim() || "Operator",
-      ownerUsername: String(row.ownerUsername || "").trim() || null,
-      name,
-      summary,
-      actionKey,
-      surface,
-      triggers,
-      instructions,
-      iconSvg,
-      iconBackground,
-      publishedAt,
-      updatedAt,
     });
     seen.add(id);
   }
@@ -2603,20 +1390,6 @@ function customAgentToCard(record: CustomCavenAgentRecord): IdeAgentCard {
     name: record.name,
     summary: record.summary,
     iconSrc: svgToDataUri(record.iconSvg),
-    iconBackground: record.iconBackground,
-    actionKey: record.actionKey,
-    surface: record.surface,
-    defaultInstalled: false,
-  };
-}
-
-function publishedOperatorAgentToCard(record: PublishedOperatorAgentRecord): IdeAgentCard {
-  return {
-    id: record.id,
-    name: record.name,
-    summary: record.summary,
-    iconSrc: svgToDataUri(record.iconSvg),
-    iconBackground: record.iconBackground,
     actionKey: record.actionKey,
     surface: record.surface,
     defaultInstalled: false,
@@ -2654,14 +1427,6 @@ function toSkillsTab(view: SkillsPageView = "agents"): Tab {
   };
 }
 
-function toKeyboardShortcutsTab(): Tab {
-  return { ...CAVCODE_KEYBOARD_SHORTCUTS_TAB };
-}
-
-function shortcutChordsForPlatform(entry: ShortcutDefinition, isMac: boolean) {
-  return isMac ? entry.mac : entry.win;
-}
-
 /* =========================
   System virtual files
   - Backed by DB (via /api/profile/readme)
@@ -2678,7 +1443,6 @@ const SYS_PROFILE_PATH = "/system/profile";
 const SYS_README_PATH = "/system/profile/README.md";
 const SYS_CAVEN_PATH = "/system/caven";
 const SYS_CAVEN_CONFIG_PATH = "/system/caven/config.toml";
-const PROFILE_README_SAVE_RETRY_MS = 15_000;
 
 /* =========================
   Utils
@@ -2788,14 +1552,6 @@ function normalizeTabsForWorkspace(root: FolderNode, rawTabs: unknown): Tab[] {
       out.push(toSkillsTab(skillsPageViewFromTabLike(entry)));
       continue;
     }
-    if (
-      (tabId === CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID || tabKind === "keyboard-shortcuts")
-      && !seen.has(CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID)
-    ) {
-      seen.add(CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID);
-      out.push(toKeyboardShortcutsTab());
-      continue;
-    }
 
     const byId = entry.id ? findFileById(root, String(entry.id)) : null;
     const byPath = !byId && entry.path ? findNodeByPath(root, String(entry.path)) : null;
@@ -2828,14 +1584,11 @@ function parseWorkspaceSnapshot(raw: unknown): CavCodeWorkspaceSnapshot | null {
   const tabs = normalizeTabsForWorkspace(nextFs, record.tabs);
   const activeRaw = String(record.activeFileId || "").trim();
   const activeNode = activeRaw ? findNode(nextFs, activeRaw) : null;
-  const activeFileId =
-    activeRaw === CAVCODE_SKILLS_TAB_ID && tabs.some((tab) => tab.id === CAVCODE_SKILLS_TAB_ID)
-      ? CAVCODE_SKILLS_TAB_ID
-      : activeRaw === CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID && tabs.some((tab) => tab.id === CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID)
-        ? CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID
-        : activeNode && isFile(activeNode) && !isSystemPath(activeNode.path)
-          ? activeRaw
-          : "";
+  const activeFileId = activeRaw === CAVCODE_SKILLS_TAB_ID && tabs.some((tab) => tab.id === CAVCODE_SKILLS_TAB_ID)
+    ? CAVCODE_SKILLS_TAB_ID
+    : activeNode && isFile(activeNode) && !isSystemPath(activeNode.path)
+      ? activeRaw
+      : "";
   const activeProjectRootPathRaw = String(record.activeProjectRootPath || "").trim();
   const projectRootNode = activeProjectRootPathRaw ? findNodeByPath(nextFs, activeProjectRootPathRaw) : null;
   const activeProjectRootPath =
@@ -5395,54 +4148,9 @@ function IconGearGlyph({ className, size }: { className?: string; size?: number 
         fillRule="evenodd"
         clipRule="evenodd"
         d="m4.929 4.93.001-.002.002.001.527-.528a.575.575 0 0 1 .786-.025l1.21 1.061c.332.305.774.492 1.26.492.514 0 .98-.21 1.316-.548.318-.32.52-.754.539-1.235h.004l.105-1.607a.575.575 0 0 1 .574-.537h.746V2v.002h.747c.303 0 .554.235.574.537l.105 1.607h.005c.019.484.223.92.544 1.24.336.335.8.543 1.312.543.492 0 .94-.192 1.272-.504l1.196-1.05a.575.575 0 0 1 .786.026l.528.528.002-.002v.002l-.001.002.528.527a.575.575 0 0 1 .026.786l-1.06 1.212a1.85 1.85 0 0 0-.492 1.258c0 .515.21.98.548 1.317.32.318.753.52 1.235.539v.004l1.606.105c.303.02.538.271.538.574V12H22v.002h-.002v.746a.575.575 0 0 1-.537.574l-1.607.107v.001c-.484.02-.92.223-1.24.544-.335.336-.543.8-.543 1.312 0 .486.187.928.493 1.26h-.002l1.062 1.211c.2.228.188.572-.026.786l-.528.528v.002h-.001l-.528.527a.575.575 0 0 1-.785.026l-1.168-1.021a1.851 1.851 0 0 0-1.302-.534c-.515 0-.98.21-1.317.548-.318.32-.52.755-.54 1.238h-.004l-.105 1.607a.575.575 0 0 1-.54.536H11.22a.575.575 0 0 1-.54-.536l-.105-1.607h-.004a1.851 1.851 0 0 0-.545-1.244 1.851 1.851 0 0 0-1.31-.542c-.504 0-.96.2-1.295.526l-1.177 1.03a.575.575 0 0 1-.785-.027l-.528-.528-.001-.001-.528-.528a.575.575 0 0 1-.026-.786l1.062-1.21-.001-.001a1.85 1.85 0 0 0 .493-1.26c0-.515-.21-.98-.548-1.317a1.85 1.85 0 0 0-1.236-.539v-.001l-1.607-.107a.575.575 0 0 1-.537-.574v-.746H2V12h.001v-.747c0-.303.235-.554.538-.574l1.606-.105v-.004a1.851 1.851 0 0 0 1.242-.545c.335-.336.542-.8.542-1.31 0-.49-.19-.935-.499-1.267L4.376 6.244a.575.575 0 0 1 .026-.786l.528-.527-.001-.002zM16.286 12a4.286 4.286 0 1 1-8.572 0 4.286 4.286 0 0 1 8.572 0z"
-        fill="currentColor"
+        fill="#000000"
       />
     </svg>
-  );
-}
-
-function IconThemeGlyph({ className, size }: { className?: string; size?: number }) {
-  const iconSize = Number.isFinite(size) ? Math.max(8, Math.round(size as number)) : 18;
-  return (
-    <Image
-      className={className}
-      src="/icons/app/cavcode/palette-svgrepo-com.svg"
-      alt=""
-      width={iconSize}
-      height={iconSize}
-      aria-hidden="true"
-      unoptimized
-    />
-  );
-}
-
-function IconKeyboardGlyph({ className, size }: { className?: string; size?: number }) {
-  const iconSize = Number.isFinite(size) ? Math.max(8, Math.round(size as number)) : 18;
-  return (
-    <Image
-      className={className}
-      src="/icons/app/cavcode/keyboard-svgrepo-com.svg"
-      alt=""
-      width={iconSize}
-      height={iconSize}
-      aria-hidden="true"
-      unoptimized
-    />
-  );
-}
-
-function IconCollaboratorsGlyph({ className, size }: { className?: string; size?: number }) {
-  const iconSize = Number.isFinite(size) ? Math.max(8, Math.round(size as number)) : 18;
-  return (
-    <Image
-      className={className}
-      src="/icons/app/cavcode/team-svgrepo-com.svg"
-      alt=""
-      width={iconSize}
-      height={iconSize}
-      aria-hidden="true"
-      unoptimized
-    />
   );
 }
 
@@ -5649,8 +4357,6 @@ export default function CavCodePage() {
 
   // settings
   const [settings, setSettings] = useState<EditorSettings>(DEFAULT_SETTINGS);
-  const [settingsSection, setSettingsSection] = useState<"editor" | "theme" | "collaborators">("editor");
-  const [keyboardShortcutsQuery, setKeyboardShortcutsQuery] = useState("");
   const [skillsPageView, setSkillsPageView] = useState<SkillsPageView>("agents");
   const [cavenIdeSettings, setCavenIdeSettings] = useState<CavenIdeSettings>(DEFAULT_CAVEN_IDE_SETTINGS);
   const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">("free");
@@ -5666,9 +4372,6 @@ export default function CavCodePage() {
   const [projectCollabUserId, setProjectCollabUserId] = useState<string>("");
   const [projectCollabRole, setProjectCollabRole] = useState<"VIEWER" | "EDITOR" | "ADMIN">("VIEWER");
   const [projectCollabSubmitting, setProjectCollabSubmitting] = useState<boolean>(false);
-  const keyboardShortcutsSearchRef = useRef<HTMLInputElement | null>(null);
-  const shortcutChordRef = useRef<string>("");
-  const shortcutChordTimerRef = useRef<number | null>(null);
 
   // inline rename
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -5684,18 +4387,9 @@ export default function CavCodePage() {
   const [createAgentTriggers, setCreateAgentTriggers] = useState("");
   const [createAgentInstructions, setCreateAgentInstructions] = useState("");
   const [createAgentSurface, setCreateAgentSurface] = useState<"cavcode" | "center" | "all">("all");
-  const [createAgentPublicationRequested, setCreateAgentPublicationRequested] = useState(true);
-  const [createAgentPublicationInfoOpen, setCreateAgentPublicationInfoOpen] = useState(false);
   const [createAgentIconSvg, setCreateAgentIconSvg] = useState("");
-  const [createAgentIconBackground, setCreateAgentIconBackground] = useState("");
-  const [createAgentIconPalette, setCreateAgentIconPalette] = useState<string[]>([]);
-  const [createAgentColorInput, setCreateAgentColorInput] = useState("");
-  const [createAgentColorMenuOpen, setCreateAgentColorMenuOpen] = useState(false);
   const [createAgentError, setCreateAgentError] = useState("");
   const createAgentIconInputRef = useRef<HTMLInputElement | null>(null);
-  const createAgentColorInputRef = useRef<HTMLInputElement | null>(null);
-  const createAgentColorNativeInputRef = useRef<HTMLInputElement | null>(null);
-  const createAgentColorMenuRef = useRef<HTMLDivElement | null>(null);
   const [createAgentAiBusy, setCreateAgentAiBusy] = useState(false);
   const [createAgentAiMenuOpen, setCreateAgentAiMenuOpen] = useState(false);
   const [createAgentAiPromptOpen, setCreateAgentAiPromptOpen] = useState(false);
@@ -5714,8 +4408,6 @@ export default function CavCodePage() {
   const [createAgentAiReasoningLevel, setCreateAgentAiReasoningLevel] =
     useState<AgentBuilderReasoningLevel>("medium");
   const [createAgentAiSessionId, setCreateAgentAiSessionId] = useState("");
-  const [createAgentCreationSource, setCreateAgentCreationSource] = useState<AgentCreationSource>("manual");
-  const [createAgentCreationPrompt, setCreateAgentCreationPrompt] = useState("");
   const [createAgentAiModelsLoaded, setCreateAgentAiModelsLoaded] = useState(false);
   const createAgentAiControlsRef = useRef<HTMLDivElement | null>(null);
   const createAgentAiHelpPromptInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -5723,12 +4415,9 @@ export default function CavCodePage() {
   const [agentRegistrySnapshot, setAgentRegistrySnapshot] = useState<AgentRegistrySnapshot>({
     ...EMPTY_AGENT_REGISTRY_SNAPSHOT,
   });
-  const [publishedAgents, setPublishedAgents] = useState<PublishedOperatorAgentRecord[]>([]);
-  const [ownedPublishedSourceAgentIds, setOwnedPublishedSourceAgentIds] = useState<string[]>([]);
   const agentRegistrySnapshotRef = useRef<AgentRegistrySnapshot>({
     ...EMPTY_AGENT_REGISTRY_SNAPSHOT,
   });
-  const ownedPublishedSourceAgentIdsRef = useRef<string[]>([]);
   const [installedAgentIds, setInstalledAgentIds] = useState<string[]>([...DEFAULT_INSTALLED_AGENT_IDS]);
   const installedAgentIdsRef = useRef<string[]>([...DEFAULT_INSTALLED_AGENT_IDS]);
   const [loadingAgents, setLoadingAgents] = useState(false);
@@ -5746,13 +4435,11 @@ export default function CavCodePage() {
   const [changesHeaderMenuOpen, setChangesHeaderMenuOpen] = useState(false);
   const [explorerHeaderMenuOpen, setExplorerHeaderMenuOpen] = useState(false);
   const [runHeaderMenuOpen, setRunHeaderMenuOpen] = useState(false);
-  const [settingsHeaderMenuOpen, setSettingsHeaderMenuOpen] = useState(false);
   const panelViewMenuRef = useRef<HTMLDivElement | null>(null);
   const scmHeaderMenuRef = useRef<HTMLDivElement | null>(null);
   const changesHeaderMenuRef = useRef<HTMLDivElement | null>(null);
   const explorerHeaderMenuRef = useRef<HTMLDivElement | null>(null);
   const runHeaderMenuRef = useRef<HTMLDivElement | null>(null);
-  const settingsHeaderMenuRef = useRef<HTMLDivElement | null>(null);
   const [runDebugExpanded, setRunDebugExpanded] = useState(false);
 
   // problems
@@ -5918,18 +4605,10 @@ export default function CavCodePage() {
   });
   const sysOpenRef = useRef(false);
   const cloudOpenRef = useRef("");
-  const sysAutosaveRef = useRef<{
-    timer: number | null;
-    lastSavedHash: string;
-    lastSavedRevision: number;
-    unavailableUntil: number;
-    lastUnavailableMessage: string;
-  }>({
+  const sysAutosaveRef = useRef<{ timer: number | null; lastSavedHash: string; lastSavedRevision: number }>({
     timer: null,
     lastSavedHash: "",
     lastSavedRevision: 0,
-    unavailableUntil: 0,
-    lastUnavailableMessage: "",
   });
 
   // Monaco refs
@@ -6053,28 +4732,6 @@ export default function CavCodePage() {
     if (toastTimer.current) timerOwner.clearTimeout(toastTimer.current);
     toastTimer.current = timerOwner.setTimeout(() => setToast(null), 2600);
   }, []);
-
-  const clearProfileReadmeStorageUnavailable = useCallback(() => {
-    sysAutosaveRef.current.unavailableUntil = 0;
-    sysAutosaveRef.current.lastUnavailableMessage = "";
-  }, []);
-
-  const markProfileReadmeStorageUnavailable = useCallback(
-    (payload?: Record<string, unknown> | null, opts?: { notify?: boolean }) => {
-      const retryAfterRaw = Number(payload?.retryAfterMs);
-      const retryAfterMs =
-        Number.isFinite(retryAfterRaw) && Number.isInteger(retryAfterRaw) && retryAfterRaw >= 1_000
-          ? Math.trunc(retryAfterRaw)
-          : PROFILE_README_SAVE_RETRY_MS;
-      const message = String(payload?.message || "Profile README storage is temporarily unavailable.").trim();
-      sysAutosaveRef.current.unavailableUntil = Date.now() + retryAfterMs;
-      sysAutosaveRef.current.lastUnavailableMessage = message;
-      if (opts?.notify !== false) {
-        pushToast(message, "watch");
-      }
-    },
-    [pushToast],
-  );
 
   const persistWorkspaceSnapshotToServer = useCallback(
     async (snapshot: CavCodeWorkspaceSnapshot): Promise<boolean> => {
@@ -6620,29 +5277,6 @@ export default function CavCodePage() {
     () => Boolean(activeTab && (activeTab.kind === "skills" || activeTab.id === CAVCODE_SKILLS_TAB_ID)),
     [activeTab]
   );
-  const activeKeyboardShortcutsTab = useMemo(
-    () => Boolean(activeTab && (activeTab.kind === "keyboard-shortcuts" || activeTab.id === CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID)),
-    [activeTab]
-  );
-  const isMacPlatform =
-    typeof navigator !== "undefined" && String(navigator.platform || "").toLowerCase().includes("mac");
-  const filteredKeyboardShortcuts = useMemo(() => {
-    const query = keyboardShortcutsQuery.trim().toLowerCase();
-    if (!query) return CAVCODE_SHORTCUTS;
-    return CAVCODE_SHORTCUTS.filter((entry) => {
-      const haystack = [
-        entry.command,
-        entry.when,
-        entry.source,
-        ...(entry.keywords || []),
-        entry.mac.flat().join(" "),
-        entry.win.flat().join(" "),
-      ]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(query);
-    });
-  }, [keyboardShortcutsQuery]);
   const tabsBarActiveId = splitLayout !== "single" && activePane === "secondary" ? secondaryFileId || activeFileId : activeFileId;
   useEffect(() => {
     if (!activeSkillsTab || !activeTab) return;
@@ -6650,20 +5284,7 @@ export default function CavCodePage() {
     if (nextView === skillsPageView) return;
     setSkillsPageView(nextView);
   }, [activeSkillsTab, activeTab, skillsPageView]);
-  useEffect(() => {
-    if (!activeKeyboardShortcutsTab) return;
-    const timer = window.setTimeout(() => {
-      keyboardShortcutsSearchRef.current?.focus();
-      keyboardShortcutsSearchRef.current?.select();
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [activeKeyboardShortcutsTab]);
   const customAgentIdSet = useMemo(() => new Set(customAgents.map((agent) => agent.id)), [customAgents]);
-  const publishedAgentIdSet = useMemo(() => new Set(publishedAgents.map((agent) => agent.id)), [publishedAgents]);
-  const ownedPublishedSourceAgentIdSet = useMemo(
-    () => new Set(ownedPublishedSourceAgentIds.map((id) => String(id || "").trim().toLowerCase()).filter(Boolean)),
-    [ownedPublishedSourceAgentIds]
-  );
   const installedAgentSet = useMemo(() => new Set(installedAgentIds), [installedAgentIds]);
   const builtInRegistryCards = useMemo(
     () => flattenBuiltInRegistryCards(agentRegistrySnapshot),
@@ -6685,10 +5306,6 @@ export default function CavCodePage() {
     return map;
   }, [builtInRegistryCards]);
   const customAgentCards = useMemo(() => customAgents.map((agent) => customAgentToCard(agent)), [customAgents]);
-  const publishedAgentCards = useMemo(
-    () => publishedAgents.map((agent) => publishedOperatorAgentToCard(agent)),
-    [publishedAgents]
-  );
   const normalizedAgentSearchQuery = useMemo(
     () => agentsSearchQuery.trim().toLowerCase(),
     [agentsSearchQuery]
@@ -6701,220 +5318,6 @@ export default function CavCodePage() {
   const visibleCustomAgents = useMemo(
     () => customAgentCards.filter((agent) => matchesAgentQuery(agent)),
     [customAgentCards, matchesAgentQuery]
-  );
-  const visiblePublishedAgents = useMemo(
-    () => publishedAgentCards.filter((agent) => (agent.surface === "all" || agent.surface === "cavcode") && matchesAgentQuery(agent)),
-    [matchesAgentQuery, publishedAgentCards]
-  );
-  const describeAgentPlacement = useCallback((surface: "cavcode" | "center" | "all") => {
-    if (surface === "center") return "CavAi only";
-    if (surface === "cavcode") return "Caven only";
-    return "All surfaces";
-  }, []);
-  const resolveCustomAgentPublicationState = useCallback((agent: CustomCavenAgentRecord): "private" | "review" | "published" => {
-    if (ownedPublishedSourceAgentIdSet.has(agent.id)) return "published";
-    if (agent.publicationRequested) return "review";
-    return "private";
-  }, [ownedPublishedSourceAgentIdSet]);
-  const renderAgentManageTrigger = (args: {
-    agentId: string;
-    agentName: string;
-    status: "private" | "review" | "approved";
-    reviewLabel?: string;
-  }) => {
-    const menuOpen = agentManageMenuId === args.agentId;
-    const currentManagedCustomAgent = menuOpen ? managedCustomAgent : null;
-    const currentManagedPublishedAgent = menuOpen ? managedPublishedAgent : null;
-    const currentManagedBuiltInAgent = menuOpen ? managedBuiltInAgent : null;
-    const agentName = currentManagedCustomAgent?.name || currentManagedPublishedAgent?.name || currentManagedBuiltInAgent?.name || args.agentName;
-    const agentSummary = currentManagedCustomAgent?.summary || currentManagedPublishedAgent?.summary || currentManagedBuiltInAgent?.summary || "";
-    const placementLabel = currentManagedCustomAgent
-      ? describeAgentPlacement(currentManagedCustomAgent.surface)
-      : currentManagedPublishedAgent
-        ? describeAgentPlacement(currentManagedPublishedAgent.surface)
-        : null;
-    const statusLabel = managedCustomAgentPublicationState === "published"
-      ? "Approved by HQ"
-      : managedCustomAgentPublicationState === "review"
-        ? "In review"
-        : currentManagedCustomAgent
-          ? "Private"
-          : currentManagedPublishedAgent
-            ? "Published operator agent"
-            : "Installed";
-    return (
-      <span className={`cc-skills-cardActionWrap ${menuOpen ? "is-open" : ""}`} data-agent-manage-id={args.agentId}>
-        <span className={`cc-skills-cardActionStatus is-${args.status}`} aria-hidden="true">
-          {args.status === "review" ? (
-            <span className="cc-skills-cardActionStatusText">{args.reviewLabel || "In review"}</span>
-          ) : args.status === "private" ? (
-            <LockIcon width={15} height={15} aria-hidden="true" />
-          ) : (
-            <svg className="cc-skills-cardActionStatusCheck" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-              <path
-                d="M3.25 8.5L6.5 11.75L12.75 4.75"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.9"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          )}
-        </span>
-        <button
-          type="button"
-          className="cc-skills-cardIconBtn is-installed cc-skills-cardManageBtn"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            setAgentManageMenuId((prev) => (prev === args.agentId ? "" : args.agentId));
-          }}
-          disabled={Boolean(savingAgentId)}
-          title={`Manage ${agentName}`}
-          aria-label={`Manage ${agentName}`}
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          aria-controls={menuOpen ? `cc-agent-manage-menu-${args.agentId}` : undefined}
-        >
-          <svg className="cc-skills-cardManageDots" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-            <circle cx="3.5" cy="8" r="1.2" fill="currentColor" />
-            <circle cx="8" cy="8" r="1.2" fill="currentColor" />
-            <circle cx="12.5" cy="8" r="1.2" fill="currentColor" />
-          </svg>
-        </button>
-        {menuOpen && (currentManagedCustomAgent || currentManagedPublishedAgent || currentManagedBuiltInAgent) ? (
-          <div
-            id={`cc-agent-manage-menu-${args.agentId}`}
-            className="cc-skills-cardManageMenu cc-agentManageInlineMenu"
-            role="menu"
-            aria-label={`Manage ${agentName}`}
-          >
-            <div className="cc-popover-title">Manage {agentName}</div>
-            <div className="cc-agentManageInlineMeta">
-              <span className="cc-agentManageInlineStatus">{statusLabel}</span>
-              {placementLabel ? <span className="cc-agentManageInlinePlacement">{placementLabel}</span> : null}
-            </div>
-            {agentSummary ? <div className="cc-agentManageInlineSummary">{agentSummary}</div> : null}
-
-            <button
-              type="button"
-              className={`cc-pm-item ${managedAgentInstalled ? "cc-pm-itemDanger" : ""}`}
-              role="menuitem"
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                setAgentManageMenuId("");
-                toggleAgentInstalled(args.agentId, !managedAgentInstalled);
-              }}
-              disabled={Boolean(savingAgentId)}
-            >
-              {managedAgentInstalled ? "Disable agent" : "Enable agent"}
-            </button>
-
-            {currentManagedCustomAgent ? (
-              <>
-                {managedCustomAgentPublicationState === "private" ? (
-                  <button
-                    type="button"
-                    className="cc-pm-item"
-                    role="menuitem"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      requestCustomAgentPublication(args.agentId);
-                    }}
-                    disabled={Boolean(savingAgentId)}
-                  >
-                    Send for review
-                  </button>
-                ) : null}
-
-                <button
-                  type="button"
-                  className="cc-pm-item"
-                  role="menuitem"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      moveCustomAgentSurface(args.agentId, "cavcode");
-                    }}
-                    disabled={Boolean(savingAgentId) || currentManagedCustomAgent.surface === "cavcode"}
-                  >
-                    Change surface to Caven
-                  </button>
-                <button
-                  type="button"
-                  className="cc-pm-item"
-                  role="menuitem"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      moveCustomAgentSurface(args.agentId, "center");
-                    }}
-                    disabled={Boolean(savingAgentId) || currentManagedCustomAgent.surface === "center"}
-                  >
-                    Change surface to CavAi
-                  </button>
-                <button
-                  type="button"
-                  className="cc-pm-item"
-                  role="menuitem"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      moveCustomAgentSurface(args.agentId, "all");
-                    }}
-                    disabled={Boolean(savingAgentId) || currentManagedCustomAgent.surface === "all"}
-                  >
-                    Change surface to all surfaces
-                  </button>
-                <button
-                  type="button"
-                  className="cc-pm-item cc-pm-itemDanger"
-                  role="menuitem"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    deleteCustomAgent(args.agentId);
-                  }}
-                  disabled={Boolean(savingAgentId)}
-                >
-                  Delete agent
-                </button>
-              </>
-            ) : null}
-
-            {managedCustomAgentPublicationState === "review" ? (
-              <div className="cc-agentManageInlineNote">HQ review is pending.</div>
-            ) : null}
-            {managedCustomAgentPublicationState === "published" ? (
-              <div className="cc-agentManageInlineNote">Approved and published for operators.</div>
-            ) : null}
-          </div>
-        ) : null}
-      </span>
-    );
-  };
-  const managedCustomAgent = useMemo(
-    () => customAgents.find((agent) => agent.id === agentManageMenuId) || null,
-    [agentManageMenuId, customAgents]
-  );
-  const managedPublishedAgent = useMemo(
-    () => publishedAgents.find((agent) => agent.id === agentManageMenuId) || null,
-    [agentManageMenuId, publishedAgents]
-  );
-  const managedBuiltInAgent = useMemo(
-    () => (agentManageMenuId ? builtInRegistryById.get(agentManageMenuId) || null : null),
-    [agentManageMenuId, builtInRegistryById]
-  );
-  const managedCustomAgentPublicationState = useMemo(
-    () => (managedCustomAgent ? resolveCustomAgentPublicationState(managedCustomAgent) : null),
-    [managedCustomAgent, resolveCustomAgentPublicationState]
-  );
-  const managedAgentInstalled = useMemo(
-    () => Boolean(agentManageMenuId && installedAgentSet.has(agentManageMenuId)),
-    [agentManageMenuId, installedAgentSet]
   );
   const cavenNativeUnlockedCards = useMemo(() => {
     const seen = new Set<string>();
@@ -6987,8 +5390,6 @@ export default function CavCodePage() {
     settings: Record<string, unknown>;
     fallbackInstalled: string[];
     agentRegistry?: unknown;
-    publishedAgents?: unknown;
-    ownedPublishedSourceAgentIds?: unknown;
     planId?: unknown;
   }) => {
     const nextRegistrySnapshot = args.agentRegistry !== undefined
@@ -7003,24 +5404,16 @@ export default function CavCodePage() {
     const nextBuiltInIds = flattenBuiltInRegistryCards(nextRegistrySnapshot).map((card) => card.id);
     const nextBuiltInIdSet = new Set(nextBuiltInIds);
     const nextCustomAgents = normalizeCustomAgentsFromUnknown(args.settings.customAgents, nextBuiltInIdSet);
-    const nextPublishedAgents = normalizePublishedOperatorAgentsFromUnknown(args.publishedAgents);
-    const nextOwnedPublishedSourceAgentIds = args.ownedPublishedSourceAgentIds !== undefined
-      ? normalizeAgentIdListFromUnknown(args.ownedPublishedSourceAgentIds)
-      : ownedPublishedSourceAgentIdsRef.current;
     const customIdSet = new Set(nextCustomAgents.map((agent) => agent.id));
-    const publishedIdSet = new Set(nextPublishedAgents.map((agent) => agent.id));
     const normalizedInstalled = normalizeInstalledAgentIdsFromUnknown(
       args.settings.installedAgentIds,
       args.fallbackInstalled,
-      new Set([...customIdSet, ...publishedIdSet]),
+      customIdSet,
       nextBuiltInIds
     );
     const normalizedEditorSettings = normalizeEditorSettingsFromUnknown(args.settings.editorSettings);
     const normalizedCavenIdeSettings = normalizeCavenIdeSettingsFromUnknown(args.settings);
     setCustomAgents(nextCustomAgents);
-    setPublishedAgents(nextPublishedAgents);
-    setOwnedPublishedSourceAgentIds(nextOwnedPublishedSourceAgentIds);
-    ownedPublishedSourceAgentIdsRef.current = nextOwnedPublishedSourceAgentIds;
     setInstalledAgentIds(normalizedInstalled);
     setSettings(normalizedEditorSettings);
     setCavenIdeSettings(normalizedCavenIdeSettings);
@@ -7065,8 +5458,6 @@ export default function CavCodePage() {
         ok?: boolean;
         settings?: unknown;
         agentRegistry?: unknown;
-        publishedAgents?: unknown;
-        ownedPublishedSourceAgentIds?: unknown;
         planId?: unknown;
         message?: unknown;
       };
@@ -7078,8 +5469,6 @@ export default function CavCodePage() {
         settings,
         fallbackInstalled: installedAgentIdsRef.current,
         agentRegistry: body.agentRegistry,
-        publishedAgents: body.publishedAgents,
-        ownedPublishedSourceAgentIds: body.ownedPublishedSourceAgentIds,
         planId: body.planId,
       });
       if (!silent) pushToast("Agents list refreshed.", "good");
@@ -7119,8 +5508,6 @@ export default function CavCodePage() {
           ok?: boolean;
           settings?: unknown;
           agentRegistry?: unknown;
-          publishedAgents?: unknown;
-          ownedPublishedSourceAgentIds?: unknown;
           planId?: unknown;
           message?: unknown;
         };
@@ -7132,8 +5519,6 @@ export default function CavCodePage() {
           settings,
           fallbackInstalled: installedAgentIds,
           agentRegistry: body.agentRegistry,
-          publishedAgents: body.publishedAgents,
-          ownedPublishedSourceAgentIds: body.ownedPublishedSourceAgentIds,
           planId: body.planId,
         });
       } catch (err) {
@@ -7151,24 +5536,24 @@ export default function CavCodePage() {
 
   useEffect(() => {
     if (!agentManageMenuId) return;
-    const onDown = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target) {
+    const onMouseDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
         setAgentManageMenuId("");
         return;
       }
-      const wrap = target.closest("[data-agent-manage-id]") as HTMLElement | null;
-      if (wrap?.dataset.agentManageId === agentManageMenuId) return;
+      const root = target.closest(`[data-agent-manage-id="${agentManageMenuId}"]`);
+      if (root) return;
       setAgentManageMenuId("");
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setAgentManageMenuId("");
     };
-    window.addEventListener("mousedown", onDown);
+    window.addEventListener("mousedown", onMouseDown);
     window.addEventListener("keydown", onKeyDown);
     return () => {
-      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [agentManageMenuId]);
@@ -7176,10 +5561,9 @@ export default function CavCodePage() {
   const toggleAgentInstalled = useCallback((agentId: string, install: boolean) => {
     if (savingAgentId) return;
     const customAgent = customAgents.find((row) => row.id === agentId) || null;
-    const publishedAgent = publishedAgents.find((row) => row.id === agentId) || null;
     const builtInAgent = builtInRegistryById.get(agentId) || null;
-    const agentName = customAgent?.name || publishedAgent?.name || builtInAgent?.name || "Agent";
-    if (!customAgent && !publishedAgent && !builtInAgent) return;
+    const agentName = customAgent?.name || builtInAgent?.name || "Agent";
+    if (!customAgent && !builtInAgent) return;
     if (install && builtInAgent?.locked) {
       const required = requiredPlanLabel(builtInAgent.minimumPlan);
       pushToast(`${agentName} requires ${required}.`, "watch");
@@ -7190,11 +5574,10 @@ export default function CavCodePage() {
     else nextSet.delete(agentId);
     const orderedBuiltIn = knownBuiltInAgentIds.filter((id) => nextSet.has(id));
     const orderedCustom = customAgents.map((row) => row.id).filter((id) => nextSet.has(id));
-    const orderedPublished = publishedAgents.map((row) => row.id).filter((id) => nextSet.has(id));
     const orderedUnknown = installedAgentIds.filter(
-      (id) => !knownBuiltInAgentIdSet.has(id) && !customAgentIdSet.has(id) && !publishedAgentIdSet.has(id) && nextSet.has(id)
+      (id) => !knownBuiltInAgentIdSet.has(id) && !customAgentIdSet.has(id) && nextSet.has(id)
     );
-    const nextIds = [...orderedBuiltIn, ...orderedCustom, ...orderedPublished, ...orderedUnknown];
+    const nextIds = [...orderedBuiltIn, ...orderedCustom, ...orderedUnknown];
     const prevIds = [...installedAgentIds];
     setInstalledAgentIds(nextIds);
 
@@ -7218,8 +5601,6 @@ export default function CavCodePage() {
           ok?: boolean;
           settings?: unknown;
           agentRegistry?: unknown;
-          publishedAgents?: unknown;
-          ownedPublishedSourceAgentIds?: unknown;
           planId?: unknown;
           message?: unknown;
         };
@@ -7231,8 +5612,6 @@ export default function CavCodePage() {
           settings,
           fallbackInstalled: nextIds,
           agentRegistry: body.agentRegistry,
-          publishedAgents: body.publishedAgents,
-          ownedPublishedSourceAgentIds: body.ownedPublishedSourceAgentIds,
           planId: body.planId,
         });
         pushToast(`${agentName} ${install ? "installed" : "uninstalled"}.`, "good");
@@ -7251,8 +5630,6 @@ export default function CavCodePage() {
     installedAgentIds,
     knownBuiltInAgentIds,
     knownBuiltInAgentIdSet,
-    publishedAgentIdSet,
-    publishedAgents,
     pushToast,
     savingAgentId,
   ]);
@@ -7285,8 +5662,6 @@ export default function CavCodePage() {
           ok?: boolean;
           settings?: unknown;
           agentRegistry?: unknown;
-          publishedAgents?: unknown;
-          ownedPublishedSourceAgentIds?: unknown;
           planId?: unknown;
           message?: unknown;
         };
@@ -7298,8 +5673,6 @@ export default function CavCodePage() {
           settings,
           fallbackInstalled: args.nextInstalledIds,
           agentRegistry: body.agentRegistry,
-          publishedAgents: body.publishedAgents,
-          ownedPublishedSourceAgentIds: body.ownedPublishedSourceAgentIds,
           planId: body.planId,
         });
         pushToast(args.successToast, "good");
@@ -7365,38 +5738,6 @@ export default function CavCodePage() {
       },
     });
   }, [customAgents, installedAgentIds, persistCustomAgentRegistry, savingAgentId]);
-
-  const requestCustomAgentPublication = useCallback((agentId: string) => {
-    if (savingAgentId) return;
-    const previousCustom = [...customAgents];
-    const previousInstalled = [...installedAgentIds];
-    const target = customAgents.find((agent) => agent.id === agentId);
-    if (!target) return;
-    if (target.publicationRequested || ownedPublishedSourceAgentIdSet.has(agentId)) return;
-
-    const requestedAt = new Date().toISOString();
-    const nextCustom = customAgents.map((agent) =>
-      agent.id === agentId
-        ? {
-            ...agent,
-            publicationRequested: true,
-            publicationRequestedAt: requestedAt,
-          }
-        : agent
-    );
-    setCustomAgents(nextCustom);
-    setAgentManageMenuId("");
-    persistCustomAgentRegistry({
-      targetAgentId: agentId,
-      nextCustomAgents: nextCustom,
-      nextInstalledIds: previousInstalled,
-      successToast: `${target.name} sent to HQ for review.`,
-      onRollback: () => {
-        setCustomAgents(previousCustom);
-        setInstalledAgentIds(previousInstalled);
-      },
-    });
-  }, [customAgents, installedAgentIds, ownedPublishedSourceAgentIdSet, persistCustomAgentRegistry, savingAgentId]);
 
   const createAgentAiModelLabel = useMemo(
     () =>
@@ -7623,12 +5964,6 @@ export default function CavCodePage() {
       setCreateAgentTriggers(parsedDraft.triggers.join(", "));
       setCreateAgentInstructions(parsedDraft.instructions);
       setCreateAgentSurface(parsedDraft.surface);
-      setCreateAgentCreationSource(mode === "generate_agent" ? "generate_with_cavai" : "help_write_with_cavai");
-      setCreateAgentCreationPrompt(
-        mode === "help_write"
-          ? helpPrompt
-          : "Generate a complete, production-ready agent profile from current draft context."
-      );
       pushToast(mode === "generate_agent" ? "CavAi generated your agent draft." : "CavAi updated your draft.", "good");
     } catch (err) {
       pushToast(err instanceof Error ? err.message : "CavAi could not generate this agent.", "bad");
@@ -7847,55 +6182,6 @@ export default function CavCodePage() {
     };
   }, [createAgentAiControlMenu, createAgentAiMenuOpen, createAgentAiPromptOpen, createAgentOpen]);
 
-  const commitCreateAgentIconBackground = useCallback((value: string) => {
-    const normalized = normalizeAgentColorHexFromUnknown(value);
-    if (!normalized) {
-      const fallback = createAgentIconBackground || pickDefaultAgentIconBackground(createAgentIconPalette);
-      setCreateAgentColorInput(fallback);
-      return false;
-    }
-    setCreateAgentIconBackground(normalized);
-    setCreateAgentColorInput(normalized);
-    return true;
-  }, [createAgentIconBackground, createAgentIconPalette]);
-
-  useEffect(() => {
-    if (!createAgentOpen) return;
-    if (!createAgentIconSvg) {
-      setCreateAgentColorMenuOpen(false);
-      return;
-    }
-    if (!createAgentColorMenuOpen) return;
-    const timer = window.setTimeout(() => createAgentColorInputRef.current?.focus(), 0);
-    return () => window.clearTimeout(timer);
-  }, [createAgentColorMenuOpen, createAgentIconSvg, createAgentOpen]);
-
-  useEffect(() => {
-    if (!createAgentOpen) return;
-    if (!createAgentColorMenuOpen) return;
-
-    const closeMenu = () => setCreateAgentColorMenuOpen(false);
-
-    function onPointerDown(event: MouseEvent) {
-      const target = event.target as Element | null;
-      if (!target) return;
-      if (target.closest("[data-agent-create-color='true']")) return;
-      closeMenu();
-    }
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      closeMenu();
-    }
-
-    window.addEventListener("mousedown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("mousedown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [createAgentColorMenuOpen, createAgentOpen]);
-
   const closeCreateAgent = useCallback(() => {
     setCreateAgentOpen(false);
     setCreateAgentName("");
@@ -7903,13 +6189,7 @@ export default function CavCodePage() {
     setCreateAgentTriggers("");
     setCreateAgentInstructions("");
     setCreateAgentSurface("all");
-    setCreateAgentPublicationRequested(true);
-    setCreateAgentPublicationInfoOpen(false);
     setCreateAgentIconSvg("");
-    setCreateAgentIconBackground("");
-    setCreateAgentIconPalette([]);
-    setCreateAgentColorInput("");
-    setCreateAgentColorMenuOpen(false);
     if (createAgentIconInputRef.current) createAgentIconInputRef.current.value = "";
     setCreateAgentError("");
     setCreateAgentAiBusy(false);
@@ -7919,8 +6199,6 @@ export default function CavCodePage() {
     setCreateAgentAiPromptHint("");
     setCreateAgentAiControlMenu(null);
     setCreateAgentAiWorkingMode(null);
-    setCreateAgentCreationSource("manual");
-    setCreateAgentCreationPrompt("");
   }, []);
 
   const onCreateAgentIconUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -7949,13 +6227,7 @@ export default function CavCodePage() {
         input.value = "";
         return;
       }
-      const palette = extractSvgPalette(normalized);
-      const defaultColor = pickDefaultAgentIconBackground(palette);
       setCreateAgentIconSvg(normalized);
-      setCreateAgentIconPalette(palette);
-      setCreateAgentIconBackground(defaultColor);
-      setCreateAgentColorInput(defaultColor);
-      setCreateAgentColorMenuOpen(false);
       setCreateAgentError("");
     } catch {
       setCreateAgentError("Failed to read icon file.");
@@ -7969,7 +6241,6 @@ export default function CavCodePage() {
     const summary = createAgentSummary.trim().replace(/\s+/g, " ");
     const instructions = createAgentInstructions.trim();
     const iconSvg = normalizeAgentIconSvgFromUnknown(createAgentIconSvg);
-    const iconBackground = normalizeAgentColorHexFromUnknown(createAgentIconBackground) || null;
     const triggerList = createAgentTriggers
       .split(/[\n,]/g)
       .map((row) => row.trim())
@@ -8007,10 +6278,7 @@ export default function CavCodePage() {
       triggers: triggerList,
       instructions,
       iconSvg,
-      iconBackground,
       createdAt: new Date().toISOString(),
-      publicationRequested: createAgentPublicationRequested,
-      publicationRequestedAt: createAgentPublicationRequested ? new Date().toISOString() : null,
     };
 
     const nextCustomAgents = [record, ...customAgents];
@@ -8034,24 +6302,12 @@ export default function CavCodePage() {
           body: JSON.stringify({
             customAgents: nextCustomAgents,
             installedAgentIds: nextInstalled,
-            agentTelemetry: [
-              {
-                agentId: record.id,
-                creationSource: createAgentCreationSource,
-                creationPrompt: createAgentCreationPrompt || null,
-                generationSessionId: String(createAgentAiSessionId || "").trim() || null,
-                creationOrigin: "cavcode",
-                generatedWithCavAi: createAgentCreationSource !== "manual",
-              },
-            ],
           }),
         });
         const body = (await res.json().catch(() => ({}))) as {
           ok?: boolean;
           settings?: unknown;
           agentRegistry?: unknown;
-          publishedAgents?: unknown;
-          ownedPublishedSourceAgentIds?: unknown;
           planId?: unknown;
           message?: unknown;
         };
@@ -8063,18 +6319,11 @@ export default function CavCodePage() {
           settings,
           fallbackInstalled: nextInstalled,
           agentRegistry: body.agentRegistry,
-          publishedAgents: body.publishedAgents,
-          ownedPublishedSourceAgentIds: body.ownedPublishedSourceAgentIds,
           planId: body.planId,
         });
         setAgentsSearchQuery("");
         closeCreateAgent();
-        pushToast(
-          createAgentPublicationRequested
-            ? `${name} created, installed, and sent to HQ for review.`
-            : `${name} created and installed.`,
-          "good"
-        );
+        pushToast(`${name} created and installed.`, "good");
       } catch (err) {
         setCustomAgents(previousCustom);
         setInstalledAgentIds(previousInstalled);
@@ -8087,13 +6336,8 @@ export default function CavCodePage() {
     applyAgentSettingsFromServer,
     closeCreateAgent,
     createAgentInstructions,
-    createAgentIconBackground,
     createAgentIconSvg,
-    createAgentAiSessionId,
-    createAgentCreationPrompt,
-    createAgentCreationSource,
     createAgentName,
-    createAgentPublicationRequested,
     createAgentSummary,
     createAgentSurface,
     createAgentTriggers,
@@ -8316,15 +6560,9 @@ export default function CavCodePage() {
     if (!resolvedPath) return false;
     const target = findNodeByPath(fs, resolvedPath);
     if (!target || !isFile(target)) return false;
-    setSelectedId(target.id);
-    if (splitLayout !== "single" && activePane === "secondary") {
-      setSecondaryFileId(target.id);
-      return true;
-    }
-    setActivePane("primary");
-    setActiveFileId(target.id);
+    openFile(target);
     return true;
-  }, [activePane, fs, resolveWorkspaceFilePathForAi, splitLayout]);
+  }, [fs, openFile, resolveWorkspaceFilePathForAi]);
 
   const uploadWorkspaceFilesFromCaven = useCallback(async (rawFiles: File[]): Promise<CavenWorkspaceUploadFileRef[]> => {
     const files = Array.isArray(rawFiles) ? rawFiles : [];
@@ -8520,30 +6758,6 @@ export default function CavCodePage() {
     setActiveFileId(SYS_CAVEN_CONFIG_ID);
     setActivePane("primary");
   }, [cavenConfigToml, sysProfileReadme.loaded, sysProfileReadme.markdown]);
-  const openKeyboardShortcutsTab = useCallback(() => {
-    setSettingsHeaderMenuOpen(false);
-    setTabs((prev) => {
-      if (prev.some((tab) => tab.id === CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID)) return prev;
-      return [...prev, toKeyboardShortcutsTab()];
-    });
-    setActivePane("primary");
-    setActiveFileId(CAVCODE_KEYBOARD_SHORTCUTS_TAB_ID);
-    setSidebarOpen(true);
-    setActivity("settings");
-  }, []);
-  const scrollSettingsSection = useCallback((section: "editor" | "theme" | "collaborators") => {
-    setSettingsSection(section);
-  }, []);
-  const openSettingsSection = useCallback((section: "editor" | "theme" | "collaborators") => {
-    setSettingsHeaderMenuOpen(false);
-    setSettingsSection(section);
-  }, []);
-  const openSettingsSidebar = useCallback(() => {
-    setSettingsHeaderMenuOpen(false);
-    setSidebarOpen(true);
-    setActivity("settings");
-    scrollSettingsSection("editor");
-  }, [scrollSettingsSection]);
 
   const applyAiProposedCodeToWorkspaceFile = useCallback(async (args: { filePath: string; code: string }) => {
     const resolvedPath = resolveWorkspaceFilePathForAi(args.filePath);
@@ -8831,16 +7045,10 @@ export default function CavCodePage() {
       sysOpenRef.current = true;
       setActivity("explorer");
       setOpenFolders((p) => ({ ...p, root: true, [SYS_ROOT_ID]: true, [SYS_PROFILE_ID]: true }));
-      setSelectedId(node.id);
-      if (splitLayout !== "single" && activePane === "secondary") {
-        setSecondaryFileId(node.id);
-      } else {
-        setActivePane("primary");
-        setActiveFileId(node.id);
-      }
+      openFile(node);
       window.setTimeout(() => editorRef.current?.focus?.(), 0);
     } catch {}
-  }, [activePane, fs, fsReady, isClient, splitLayout, sysProfileReadme.loaded]);
+  }, [isClient, fsReady, sysProfileReadme.loaded, fs, openFile]);
 
   /* =========================
     Deep link: /cavcode?file=/path/to/file
@@ -9503,30 +7711,6 @@ export default function CavCodePage() {
   }, [runHeaderMenuOpen]);
 
   useEffect(() => {
-    if (!settingsHeaderMenuOpen) return;
-    const onDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        setSettingsHeaderMenuOpen(false);
-        return;
-      }
-      const root = settingsHeaderMenuRef.current;
-      if (root && root.contains(target)) return;
-      setSettingsHeaderMenuOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setSettingsHeaderMenuOpen(false);
-    };
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [settingsHeaderMenuOpen]);
-
-  useEffect(() => {
     if (!panelOpen) setPanelViewMenuOpen(false);
   }, [panelOpen]);
 
@@ -9550,10 +7734,6 @@ export default function CavCodePage() {
 
   useEffect(() => {
     if (activity !== "run") setRunHeaderMenuOpen(false);
-  }, [activity]);
-
-  useEffect(() => {
-    if (activity !== "settings") setSettingsHeaderMenuOpen(false);
   }, [activity]);
 
   useEffect(() => {
@@ -10748,13 +8928,6 @@ export default function CavCodePage() {
         pushToast("README too large (max 64KB).", "bad");
         return;
       }
-      if (sysAutosaveRef.current.unavailableUntil > Date.now()) {
-        pushToast(
-          sysAutosaveRef.current.lastUnavailableMessage || "Profile README storage is temporarily unavailable.",
-          "watch",
-        );
-        return;
-      }
       try {
         const expectedRevision = Math.max(0, Math.trunc(Number(sysAutosaveRef.current.lastSavedRevision || 0)));
         const res = await fetch("/api/profile/readme", {
@@ -10769,7 +8942,6 @@ export default function CavCodePage() {
         const j = (await res.json().catch(() => null)) as unknown;
         const r = j && typeof j === "object" ? (j as Record<string, unknown>) : null;
         if (r && r.ok === true) {
-          clearProfileReadmeStorageUnavailable();
           const revisionRaw = Number(r.revision);
           const revision =
             Number.isFinite(revisionRaw) && Number.isInteger(revisionRaw) && revisionRaw >= 0
@@ -10784,7 +8956,6 @@ export default function CavCodePage() {
           }
           pushToast("Saved.", "good");
         } else if (r && r.error === "REVISION_CONFLICT") {
-          clearProfileReadmeStorageUnavailable();
           const currentRevisionRaw = Number(r.currentRevision);
           const currentRevision =
             Number.isFinite(currentRevisionRaw) && Number.isInteger(currentRevisionRaw) && currentRevisionRaw >= 0
@@ -10794,13 +8965,11 @@ export default function CavCodePage() {
           setSysProfileReadme({ markdown: md, loaded: true, revision: currentRevision });
           publishSysProfileReadme(md, currentRevision);
           pushToast("README changed in another tab. Save again to apply your latest edit.", "watch");
-        } else if (r && r.error === "README_STORAGE_UNAVAILABLE") {
-          markProfileReadmeStorageUnavailable(r);
         } else {
           pushToast(String(r?.message || "Save failed."), "bad");
         }
       } catch {
-        markProfileReadmeStorageUnavailable(null);
+        pushToast("Save failed.", "bad");
       }
       return;
     }
@@ -10853,9 +9022,7 @@ export default function CavCodePage() {
     activeFile,
     activeFileId,
     activeProjectRootPath,
-    clearProfileReadmeStorageUnavailable,
     fs,
-    markProfileReadmeStorageUnavailable,
     tabs,
     setSysProfileReadme,
     markFileSaved,
@@ -10875,7 +9042,6 @@ export default function CavCodePage() {
     const md = String(f.content ?? "");
     const h = hashString(md);
     if (h === sysAutosaveRef.current.lastSavedHash) return;
-    if (sysAutosaveRef.current.unavailableUntil > Date.now()) return;
 
     const ref = sysAutosaveRef.current;
     if (ref.timer) window.clearTimeout(ref.timer);
@@ -10888,7 +9054,6 @@ export default function CavCodePage() {
       const latestMd = String(latest.content ?? "");
       const latestHash = hashString(latestMd);
       if (latestHash === ref.lastSavedHash) return;
-      if (ref.unavailableUntil > Date.now()) return;
       if (Buffer.byteLength(latestMd, "utf8") > 64 * 1024) return; // don't spam API; user will see size error on hard save
 
       try {
@@ -10905,7 +9070,6 @@ export default function CavCodePage() {
         const j = (await res.json().catch(() => null)) as unknown;
         const r = j && typeof j === "object" ? (j as Record<string, unknown>) : null;
         if (r && r.ok === true) {
-          clearProfileReadmeStorageUnavailable();
           const revisionRaw = Number(r.revision);
           const revision =
             Number.isFinite(revisionRaw) && Number.isInteger(revisionRaw) && revisionRaw >= 0
@@ -10917,17 +9081,12 @@ export default function CavCodePage() {
           publishSysProfileReadme(latestMd, revision);
           markFileSaved(latest.id, latestMd);
         } else if (r && r.error === "REVISION_CONFLICT") {
-          clearProfileReadmeStorageUnavailable();
           const currentRevisionRaw = Number(r.currentRevision);
           if (Number.isFinite(currentRevisionRaw) && Number.isInteger(currentRevisionRaw) && currentRevisionRaw >= 0) {
             ref.lastSavedRevision = Math.trunc(currentRevisionRaw);
           }
-        } else if (r && r.error === "README_STORAGE_UNAVAILABLE") {
-          markProfileReadmeStorageUnavailable(r, { notify: false });
         }
-      } catch {
-        markProfileReadmeStorageUnavailable(null, { notify: false });
-      }
+      } catch {}
     }, 650);
     const timerId = ref.timer;
 
@@ -10935,7 +9094,7 @@ export default function CavCodePage() {
       if (timerId) window.clearTimeout(timerId);
       if (ref.timer === timerId) ref.timer = null;
     };
-  }, [activeFile, clearProfileReadmeStorageUnavailable, markFileSaved, markProfileReadmeStorageUnavailable, settings.autosave, fs]);
+  }, [activeFile, markFileSaved, settings.autosave, fs]);
 
   /* =========================
     Editor content updates (autosave)
@@ -10987,7 +9146,7 @@ export default function CavCodePage() {
     const nextTabId = String(tabId || "").trim();
     if (!nextTabId) return;
     const nextTab = tabs.find((tab) => tab.id === nextTabId);
-    const allowSecondaryTarget = !nextTab || (nextTab.kind !== "skills" && nextTab.kind !== "keyboard-shortcuts");
+    const allowSecondaryTarget = !nextTab || nextTab.kind !== "skills";
     if (splitLayout !== "single" && activePane === "secondary" && allowSecondaryTarget) {
       setSecondaryFileId(nextTabId);
       return;
@@ -12864,9 +11023,168 @@ export default function CavCodePage() {
       }
     } catch {}
 
-    for (const themeOption of THEME_OPTIONS) {
-      monaco.editor.defineTheme(themeOption.value, themeOption.monaco);
-    }
+    monaco.editor.defineTheme("cavbot-default", {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "98A3B3" },
+        { token: "string", foreground: "C6E48B" },
+        { token: "keyword", foreground: "8B5CFF" },
+        { token: "number", foreground: "FFCC66" },
+        { token: "type.identifier", foreground: "B9C85A" },
+      ],
+      colors: {
+        "editor.background": "#070A16",
+        "editor.foreground": "#EAF0FF",
+        "editorLineNumber.foreground": "#5A6475",
+        "editorLineNumber.activeForeground": "#B9C85A",
+        "editorCursor.foreground": "#B9C85A",
+        "editor.selectionBackground": "#2A1F55",
+        "editor.inactiveSelectionBackground": "#1A1730",
+        "editorIndentGuide.background": "#20253A",
+        "editorIndentGuide.activeBackground": "#343B58",
+        "editorWidget.background": "#0A0F22",
+        "editorSuggestWidget.background": "#0A0F22",
+        "editorSuggestWidget.border": "#2A3352",
+        "editorHoverWidget.background": "#0A0F22",
+        "editorHoverWidget.border": "#2A3352",
+        "peekView.border": "#2A3352",
+        "inputValidation.errorBorder": "#2A3352",
+        "editorError.foreground": "#FF4D4D",
+        "editorWarning.foreground": "#FFCC66",
+      },
+    });
+
+    monaco.editor.defineTheme("cavbot-light", {
+      base: "vs",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "6B7280" },
+        { token: "string", foreground: "2F6F3E" },
+        { token: "keyword", foreground: "6D47FF" },
+        { token: "number", foreground: "8A5A00" },
+        { token: "type.identifier", foreground: "5C7A2D" },
+      ],
+      colors: {
+        "editor.background": "#F7F8FC",
+        "editor.foreground": "#0B0D12",
+        "editorLineNumber.foreground": "#9AA2B2",
+        "editorLineNumber.activeForeground": "#5C7A2D",
+        "editorCursor.foreground": "#5C7A2D",
+        "editor.selectionBackground": "#E2DAFF",
+        "editor.inactiveSelectionBackground": "#F0ECFA",
+        "editorIndentGuide.background": "#E2E6EF",
+        "editorIndentGuide.activeBackground": "#C9D1E3",
+        "editorWidget.background": "#FFFFFF",
+        "editorSuggestWidget.background": "#FFFFFF",
+        "editorSuggestWidget.border": "#D0D7E6",
+        "editorHoverWidget.background": "#FFFFFF",
+        "editorHoverWidget.border": "#D0D7E6",
+        "peekView.border": "#D0D7E6",
+        "inputValidation.errorBorder": "#D0D7E6",
+        "editorError.foreground": "#D92D2D",
+        "editorWarning.foreground": "#B06B00",
+      },
+    });
+
+    monaco.editor.defineTheme("cavbot-lime", {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "79b567" },
+        { token: "string", foreground: "c5f09b" },
+        { token: "keyword", foreground: "d5dca0" },
+        { token: "number", foreground: "a7d87e" },
+        { token: "type.identifier", foreground: "b9c85a" },
+      ],
+      colors: {
+        "editor.background": "#030f07",
+        "editor.foreground": "#e9f6d3",
+        "editorLineNumber.foreground": "#3f6c48",
+        "editorLineNumber.activeForeground": "#c7e394",
+        "editorCursor.foreground": "#b9c85a",
+        "editor.selectionBackground": "rgba(185,200,90,0.3)",
+        "editor.inactiveSelectionBackground": "rgba(185,200,90,0.08)",
+        "editorLineHighlightBackground": "rgba(185,200,90,0.1)",
+        "editorIndentGuide.background": "rgba(116,148,116,0.65)",
+        "editorIndentGuide.activeBackground": "rgba(185,200,90,0.75)",
+        "editorWidget.background": "#04140a",
+        "editorSuggestWidget.background": "#04140a",
+        "editorSuggestWidget.border": "rgba(185,200,90,0.45)",
+        "editorHoverWidget.background": "#04140a",
+        "editorHoverWidget.border": "rgba(185,200,90,0.45)",
+        "peekView.border": "rgba(185,200,90,0.45)",
+        "inputValidation.errorBorder": "rgba(185,200,90,0.45)",
+        "editorError.foreground": "#ff5b5b",
+        "editorWarning.foreground": "#ffcc66",
+      },
+    });
+
+    monaco.editor.defineTheme("cavbot-classic", {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "6a9955" },
+        { token: "string", foreground: "ce9178" },
+        { token: "keyword", foreground: "569cd6" },
+        { token: "number", foreground: "b5cea8" },
+        { token: "type.identifier", foreground: "4ec9b0" },
+      ],
+      colors: {
+        "editor.background": "#1e1e1e",
+        "editor.foreground": "#d4d4d4",
+        "editorLineNumber.foreground": "#858585",
+        "editorLineNumber.activeForeground": "#c3e88d",
+        "editorCursor.foreground": "#aeafad",
+        "editor.selectionBackground": "#094771",
+        "editor.inactiveSelectionBackground": "#2a2d2e",
+        "editorLineHighlightBackground": "#2a2d2e",
+        "editorIndentGuide.background": "#404040",
+        "editorIndentGuide.activeBackground": "#707070",
+        "editorWidget.background": "#252526",
+        "editorSuggestWidget.background": "#252526",
+        "editorSuggestWidget.border": "#3f3f46",
+        "editorHoverWidget.background": "#252526",
+        "editorHoverWidget.border": "#3f3f46",
+        "peekView.border": "#3f3f46",
+        "inputValidation.errorBorder": "#3f3f46",
+        "editorError.foreground": "#f44747",
+        "editorWarning.foreground": "#ff8800",
+      },
+    });
+
+    monaco.editor.defineTheme("cavbot-dark", {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "7d9bcf" },
+        { token: "string", foreground: "c6d8ff" },
+        { token: "keyword", foreground: "79b9ff" },
+        { token: "number", foreground: "b0c6ff" },
+        { token: "type.identifier", foreground: "81b1e0" },
+      ],
+      colors: {
+        "editor.background": "#01030f",
+        "editor.foreground": "#dfe8ff",
+        "editorLineNumber.foreground": "#4b5465",
+        "editorLineNumber.activeForeground": "#99b1d8",
+        "editorCursor.foreground": "#c6d8ff",
+        "editor.selectionBackground": "rgba(121,185,255,0.18)",
+        "editor.inactiveSelectionBackground": "rgba(121,185,255,0.08)",
+        "editorLineHighlightBackground": "rgba(121,185,255,0.08)",
+        "editorIndentGuide.background": "rgba(70,82,110,0.55)",
+        "editorIndentGuide.activeBackground": "rgba(121,185,255,0.6)",
+        "editorWidget.background": "#050715",
+        "editorSuggestWidget.background": "#050715",
+        "editorSuggestWidget.border": "rgba(121,185,255,0.35)",
+        "editorHoverWidget.background": "#050715",
+        "editorHoverWidget.border": "rgba(121,185,255,0.35)",
+        "peekView.border": "rgba(121,185,255,0.35)",
+        "inputValidation.errorBorder": "rgba(121,185,255,0.35)",
+        "editorError.foreground": "#ff6f6f",
+        "editorWarning.foreground": "#ffc66d",
+      },
+    });
 
     monaco.editor.setTheme(settings.theme);
 
@@ -13297,23 +11615,6 @@ export default function CavCodePage() {
     } catch {}
   }
 
-  const clearShortcutChord = useCallback(() => {
-    shortcutChordRef.current = "";
-    if (shortcutChordTimerRef.current) {
-      window.clearTimeout(shortcutChordTimerRef.current);
-      shortcutChordTimerRef.current = null;
-    }
-  }, []);
-
-  const armShortcutChord = useCallback((chord: string) => {
-    clearShortcutChord();
-    shortcutChordRef.current = chord;
-    shortcutChordTimerRef.current = window.setTimeout(() => {
-      clearShortcutChord();
-    }, 1500);
-  }, [clearShortcutChord]);
-  useEffect(() => () => clearShortcutChord(), [clearShortcutChord]);
-
   /* =========================
     Keyboard (VS-grade)
     - Added:
@@ -13323,112 +11624,33 @@ export default function CavCodePage() {
     const onKeyDown = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toLowerCase().includes("mac");
       const mod = isMac ? e.metaKey : e.ctrlKey;
-      const key = String(e.key || "").toLowerCase();
-
-      if (shortcutChordRef.current === "mod+k") {
-        if (mod && !e.shiftKey && !e.altKey && key === "s") {
-          e.preventDefault();
-          e.stopPropagation();
-          clearShortcutChord();
-          openKeyboardShortcutsTab();
-          return;
-        }
-        if (!["meta", "control", "shift", "alt"].includes(key)) {
-          clearShortcutChord();
-        }
-      }
 
       // Always capture Cmd/Ctrl+S inside CavCode (including Monaco/editor inputs)
       // so browser/system "Save Page" never opens here.
-      if (mod && !e.shiftKey && !e.altKey && key === "s") {
+      if (mod && e.key.toLowerCase() === "s") {
         e.preventDefault();
         e.stopPropagation();
         void saveNow();
         return;
       }
 
-      if (mod && !e.shiftKey && !e.altKey && key === ",") {
-        e.preventDefault();
-        e.stopPropagation();
-        clearShortcutChord();
-        openSettingsSidebar();
-        return;
-      }
-
-      if (mod && !e.shiftKey && !e.altKey && key === "k") {
-        e.preventDefault();
-        e.stopPropagation();
-        armShortcutChord("mod+k");
-        return;
-      }
-
-      if (mod && !e.altKey && e.shiftKey && key === "e") {
-        e.preventDefault();
-        setSidebarOpen(true);
-        setActivity("explorer");
-        return;
-      }
-
-      if (mod && !e.altKey && e.shiftKey && key === "f") {
-        e.preventDefault();
-        setSidebarOpen(true);
-        setActivity("search");
-        const el = document.getElementById("cc-search") as HTMLInputElement | null;
-        window.setTimeout(() => el?.focus(), 0);
-        return;
-      }
-
-      if (mod && !e.altKey && e.shiftKey && key === "g") {
-        e.preventDefault();
-        setSidebarOpen(true);
-        setActivity("scm");
-        return;
-      }
-
-      if (mod && !e.altKey && e.shiftKey && key === "d") {
-        e.preventDefault();
-        setSidebarOpen(true);
-        setActivity("run");
-        return;
-      }
-
-      if (mod && !e.shiftKey && !e.altKey && e.key === "\\") {
-        e.preventDefault();
-        setSidebarOpen(true);
-        if (splitLayout === "right") {
-          setSplitLayout("single");
-          setActivePane("primary");
-        } else {
-          setSplitLayout("right");
-          setSecondaryFileId((prev) => {
-            if (prev) return prev;
-            const fallback = String(activeFileId || "").trim();
-            if (fallback) return fallback;
-            return String(tabs[tabs.length - 1]?.id || "").trim();
-          });
-        }
-        return;
-      }
-
       if (isTypingTarget(e.target)) return;
 
-      if (mod && key === "b") {
+      if (mod && e.key.toLowerCase() === "b") {
         e.preventDefault();
         setSidebarOpen((p) => !p);
         return;
       }
 
-      if (mod && key === "p") {
+      if (mod && e.key.toLowerCase() === "p") {
         e.preventDefault();
-        clearShortcutChord();
-        setSidebarOpen(true);
         setActivity("search");
         const el = document.getElementById("cc-search") as HTMLInputElement | null;
         window.setTimeout(() => el?.focus(), 0);
         return;
       }
 
-      if (mod && key === "f") {
+      if (mod && e.key.toLowerCase() === "f") {
         e.preventDefault();
         openMonacoFind("find");
         setPanelOpen(false);
@@ -13436,7 +11658,7 @@ export default function CavCodePage() {
       }
 
       // Optional: VS Code replace shortcut (Cmd/Ctrl+H) -> replace widget
-      if (mod && key === "h") {
+      if (mod && e.key.toLowerCase() === "h") {
         e.preventDefault();
         openMonacoFind("replace");
         setPanelOpen(false);
@@ -13460,7 +11682,7 @@ export default function CavCodePage() {
         return;
       }
 
-      if (mod && key === "j") {
+      if (mod && e.key.toLowerCase() === "j") {
         e.preventDefault();
         setPanelOpen((p) => !p);
         return;
@@ -13496,12 +11718,6 @@ export default function CavCodePage() {
     settings,
     deleteNode,
     saveNow,
-    armShortcutChord,
-    clearShortcutChord,
-    openKeyboardShortcutsTab,
-    openSettingsSidebar,
-    splitLayout,
-    tabs,
   ]);
 
   /* =========================
@@ -14193,83 +12409,6 @@ export default function CavCodePage() {
     );
   }
 
-  function renderKeyboardShortcutsPage() {
-    return (
-      <div className="cc-shortcutsPage" role="region" aria-label="Keyboard Shortcuts">
-        <div className="cc-shortcutsToolbar">
-          <div className="cc-shortcutsTitleWrap">
-            <div className="cc-shortcutsTitle">Keyboard Shortcuts</div>
-            <div className="cc-shortcutsSub">
-              CavCode workbench, editor, explorer, and terminal keybindings.
-            </div>
-          </div>
-          <input
-            ref={keyboardShortcutsSearchRef}
-            className="cc-shortcutsSearch"
-            value={keyboardShortcutsQuery}
-            onChange={(event) => setKeyboardShortcutsQuery(event.currentTarget.value)}
-            placeholder="Type to search in keybindings"
-            aria-label="Search keyboard shortcuts"
-          />
-        </div>
-
-        <div className="cc-shortcutsTable" role="table" aria-label="Keyboard shortcuts table">
-          <div className="cc-shortcutsHead" role="rowgroup">
-            <div className="cc-shortcutsRow cc-shortcutsRowHead" role="row">
-              <span role="columnheader">Command</span>
-              <span role="columnheader">Keybinding</span>
-              <span role="columnheader">When</span>
-              <span role="columnheader">Source</span>
-            </div>
-          </div>
-          <div className="cc-shortcutsBody" role="rowgroup">
-            {filteredKeyboardShortcuts.length ? (
-              filteredKeyboardShortcuts.map((entry) => {
-                const chords = shortcutChordsForPlatform(entry, isMacPlatform);
-                return (
-                  <div key={entry.id} className="cc-shortcutsRow" role="row">
-                    <div className="cc-shortcutsCommand" role="cell">
-                      {entry.command}
-                    </div>
-                    <div className="cc-shortcutsBinding" role="cell">
-                      {chords.map((chord, chordIndex) => (
-                        <React.Fragment key={`${entry.id}-${chordIndex}`}>
-                          <span className="cc-shortcutsChord">
-                            {chord.map((segment) => (
-                              <span key={`${entry.id}-${chordIndex}-${segment}`} className="cc-shortcutsKey">
-                                {segment}
-                              </span>
-                            ))}
-                          </span>
-                          {chordIndex < chords.length - 1 ? (
-                            <span className="cc-shortcutsThen" aria-hidden="true">
-                              then
-                            </span>
-                          ) : null}
-                        </React.Fragment>
-                      ))}
-                    </div>
-                    <div className="cc-shortcutsWhen" role="cell">
-                      {entry.when}
-                    </div>
-                    <div className="cc-shortcutsSource" role="cell">
-                      {entry.source}
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="cc-shortcutsEmpty">
-                <div className="cc-editor-empty-title">No matching keybindings.</div>
-                <div className="cc-editor-empty-sub">Try a command, area, or key like save, sidebar, or Ctrl.</div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   /* =========================
     Render IDE
   ========================= */
@@ -14546,7 +12685,7 @@ export default function CavCodePage() {
               </button>
 
               <button
-                className="cc-pm-item cc-pm-itemDanger"
+                className="cc-pm-item"
                 role="menuitem"
                 onClick={async () => {
                   setProfileOpen(false);
@@ -14570,7 +12709,7 @@ export default function CavCodePage() {
             </div>
           ) : null}
 
-          <button className={`cc-act cc-act-underprofile ${activity === "settings" ? "is-on" : ""}`} onClick={openSettingsSidebar} title="Settings">
+          <button className={`cc-act cc-act-underprofile ${activity === "settings" ? "is-on" : ""}`} onClick={() => setActivity("settings")} title="Settings">
             <IconGear />
           </button>
         </aside>
@@ -14580,7 +12719,7 @@ export default function CavCodePage() {
           <aside className="cc-sidebar" aria-label="Primary Sidebar">
             {activity === "explorer" ? (
               <>
-                <div className={`cc-sidebar-head ${explorerHeaderMenuOpen ? "is-menu-open" : ""}`}>
+                <div className="cc-sidebar-head">
                   <div className="cc-side-title">EXPLORER</div>
                   <br />
                   <div className="cc-side-actions" aria-label="Explorer Actions">
@@ -14596,15 +12735,7 @@ export default function CavCodePage() {
                     <button className="cc-side-icbtn" onClick={collapseAll} title="Collapse All">
                       <IconCollapseAll />
                     </button>
-                    <div className={`cc-side-menuShell ${explorerHeaderMenuOpen ? "is-open" : ""}`} ref={explorerHeaderMenuRef}>
-                      {explorerHeaderMenuOpen ? (
-                        <button
-                          type="button"
-                          className="cc-side-menuOverlay"
-                          aria-label="Dismiss explorer actions menu"
-                          onClick={() => setExplorerHeaderMenuOpen(false)}
-                        />
-                      ) : null}
+                    <div className="cc-side-menuShell" ref={explorerHeaderMenuRef}>
                       <button
                         className={`cc-side-icbtn ${explorerHeaderMenuOpen ? "is-on" : ""}`}
                         type="button"
@@ -14688,7 +12819,9 @@ export default function CavCodePage() {
                 </div>
 
                 <div className="cc-search">
-                  <div className="cc-search-bar">
+                  <div className="cc-search-shell">
+                    <div className="cc-search-kicker mono">Quick Open</div>
+                    <div className="cc-search-note">Search the workspace with the new CavCode sidebar surface.</div>
                     <input
                       id="cc-search"
                       className="cc-search-in"
@@ -14732,18 +12865,10 @@ export default function CavCodePage() {
 	              </>
 	            ) : activity === "scm" ? (
 	              <>
-	                <div className={`cc-sidebar-head ${scmHeaderMenuOpen ? "is-menu-open" : ""}`}>
+	                <div className="cc-sidebar-head">
 	                  <div className="cc-side-title">SOURCE CONTROL</div>
                     <div className="cc-side-actions">
-                      <div className={`cc-side-menuShell ${scmHeaderMenuOpen ? "is-open" : ""}`} ref={scmHeaderMenuRef}>
-                        {scmHeaderMenuOpen ? (
-                          <button
-                            type="button"
-                            className="cc-side-menuOverlay"
-                            aria-label="Dismiss source control menu"
-                            onClick={() => setScmHeaderMenuOpen(false)}
-                          />
-                        ) : null}
+                      <div className="cc-side-menuShell" ref={scmHeaderMenuRef}>
                         <button
                           className={`cc-side-menuBtn ${scmHeaderMenuOpen ? "is-on" : ""}`}
                           type="button"
@@ -14823,18 +12948,10 @@ export default function CavCodePage() {
 	              </>
 	            ) : activity === "changes" ? (
               <>
-                <div className={`cc-sidebar-head ${changesHeaderMenuOpen ? "is-menu-open" : ""}`}>
+                <div className="cc-sidebar-head">
                   <div className="cc-side-title">CHANGES</div>
                   <div className="cc-side-actions">
-                    <div className={`cc-side-menuShell ${changesHeaderMenuOpen ? "is-open" : ""}`} ref={changesHeaderMenuRef}>
-                      {changesHeaderMenuOpen ? (
-                        <button
-                          type="button"
-                          className="cc-side-menuOverlay"
-                          aria-label="Dismiss changes menu"
-                          onClick={() => setChangesHeaderMenuOpen(false)}
-                        />
-                      ) : null}
+                    <div className="cc-side-menuShell" ref={changesHeaderMenuRef}>
                       <button
                         className={`cc-side-menuBtn ${changesHeaderMenuOpen ? "is-on" : ""}`}
                         type="button"
@@ -15183,396 +13300,210 @@ export default function CavCodePage() {
               />
             ) : activity === "settings" ? (
               <>
-                <div className={`cc-sidebar-head ${settingsHeaderMenuOpen ? "is-menu-open" : ""}`}>
+                <div className="cc-sidebar-head">
                   <div className="cc-side-title">SETTINGS</div>
-                  <div className="cc-side-actions">
-                    <div className={`cc-side-menuShell ${settingsHeaderMenuOpen ? "is-open" : ""}`} ref={settingsHeaderMenuRef}>
-                      {settingsHeaderMenuOpen ? (
-                        <button
-                          type="button"
-                          className="cc-side-menuOverlay"
-                          aria-label="Dismiss settings menu"
-                          onClick={() => setSettingsHeaderMenuOpen(false)}
-                        />
-                      ) : null}
-                      <button
-                        className={`cc-side-menuBtn ${settingsHeaderMenuOpen ? "is-on" : ""}`}
-                        type="button"
-                        aria-haspopup="menu"
-                        aria-expanded={settingsHeaderMenuOpen}
-                        aria-label="Settings actions"
-                        onClick={() => setSettingsHeaderMenuOpen((prev) => !prev)}
-                      >
-                        <IconMenuDots />
-                      </button>
-                      {settingsHeaderMenuOpen ? (
-                        <div className="cc-side-menu" role="menu" aria-label="Settings menu">
-                          <button
-                            className="cc-side-menuItem cc-side-menuItemWithIcon"
-                            role="menuitem"
-                            type="button"
-                            onClick={() => openSettingsSection("editor")}
-                          >
-                            <IconGearGlyph className="cc-act-svg" size={14} />
-                            <span className="cc-side-menuItemLabel">Editor</span>
-                          </button>
-                          <button
-                            className="cc-side-menuItem cc-side-menuItemWithIcon"
-                            role="menuitem"
-                            type="button"
-                            onClick={() => openSettingsSection("theme")}
-                          >
-                            <IconThemeGlyph className="cc-act-svg" size={14} />
-                            <span className="cc-side-menuItemLabel">Theme</span>
-                          </button>
-                          <button
-                            className="cc-side-menuItem cc-side-menuItemWithIcon"
-                            role="menuitem"
-                            type="button"
-                            onClick={openKeyboardShortcutsTab}
-                          >
-                            <IconKeyboardGlyph className="cc-act-svg" size={14} />
-                            <span className="cc-side-menuItemLabel">Keyboard Shortcuts</span>
-                            <span className="cc-side-menuItemKey">{isMacPlatform ? "⌘K ⌘S" : "Ctrl+K Ctrl+S"}</span>
-                          </button>
-                          <button
-                            className="cc-side-menuItem cc-side-menuItemWithIcon"
-                            role="menuitem"
-                            type="button"
-                            onClick={() => openSettingsSection("collaborators")}
-                          >
-                            <IconCollaboratorsGlyph className="cc-act-svg" size={14} />
-                            <span className="cc-side-menuItemLabel">Project Collaborators</span>
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
                 </div>
 
                 <div className="cc-settings">
-                  {settingsSection === "editor" ? (
-                    <div className="cc-set-card cc-set-cardSettings">
-                      <div className="cc-set-head">
-                        <div>
-                          <div className="cc-set-title">Editor</div>
-                          <div className="cc-set-note">Keep CavCode tight, readable, and consistent across your workspace.</div>
-                        </div>
+                  <div className="cc-set-card">
+                    <div className="cc-set-title">Editor</div>
+
+                    <label className="cc-set-row">
+                      <span className="cc-set-label">Font Size</span>
+                      <input
+                        className="cc-set-input"
+                        type="number"
+                        min={10}
+                        max={22}
+                        value={settings.fontSize}
+                        onChange={(e) => setSettings((s) => ({ ...s, fontSize: Math.max(10, Math.min(22, Number(e.target.value) || 12)) }))}
+                      />
+                    </label>
+
+                    <label className="cc-set-row">
+                      <span className="cc-set-label">Tab Size</span>
+                      <input
+                        className="cc-set-input"
+                        type="number"
+                        min={2}
+                        max={8}
+                        value={settings.tabSize}
+                        onChange={(e) => setSettings((s) => ({ ...s, tabSize: Math.max(2, Math.min(8, Number(e.target.value) || 2)) }))}
+                      />
+                    </label>
+
+                    <label className="cc-set-row">
+                      <span className="cc-set-label">Word Wrap</span>
+                      <input
+                        type="checkbox"
+                        checked={settings.wordWrap}
+                        onChange={(e) => setSettings((s) => ({ ...s, wordWrap: e.target.checked }))}
+                      />
+                    </label>
+
+                    <label className="cc-set-row">
+                      <span className="cc-set-label">Minimap</span>
+                      <input
+                        type="checkbox"
+                        checked={settings.minimap}
+                        onChange={(e) => setSettings((s) => ({ ...s, minimap: e.target.checked }))}
+                      />
+                    </label>
+
+                    <label className="cc-set-row">
+                      <span className="cc-set-label">Format on Save</span>
+                      <input
+                        type="checkbox"
+                        checked={settings.formatOnSave}
+                        onChange={(e) => setSettings((s) => ({ ...s, formatOnSave: e.target.checked }))}
+                      />
+                    </label>
+
+                    <label className="cc-set-row">
+                      <span className="cc-set-label">Autosave</span>
+                      <input
+                        type="checkbox"
+                        checked={settings.autosave}
+                        onChange={(e) => setSettings((s) => ({ ...s, autosave: e.target.checked }))}
+                      />
+                    </label>
+
+                    <label className="cc-set-row">
+                      <span className="cc-set-label">Sync to CavCloud</span>
+                      <input
+                        type="checkbox"
+                        checked={settings.syncToCavcloud}
+                        onChange={(e) => setSettings((s) => ({ ...s, syncToCavcloud: e.target.checked }))}
+                      />
+                    </label>
+
+                    <label className="cc-set-row">
+                      <span className="cc-set-label">Theme</span>
+                      <select
+                        className="cc-set-input"
+                        value={settings.theme}
+                        onChange={(e) => {
+                          const next = e.target.value as ThemeOption;
+                          const safeTheme = THEME_VALUES.includes(next) ? next : settings.theme;
+                          setSettings((s) => ({ ...s, theme: safeTheme }));
+                        }}
+                      >
+                        {THEME_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="cc-set-row">
+                      <span className="cc-set-label">Telemetry</span>
+                      <input
+                        type="checkbox"
+                        checked={settings.telemetry}
+                        onChange={(e) => setSettings((s) => ({ ...s, telemetry: e.target.checked }))}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="cc-set-card">
+                    <div className="cc-set-title">Project Collaborators</div>
+                    {!projectIdFromQuery ? (
+                      <div className="cc-set-note">
+                        Open CavCode with a project context to manage collaborators.
                       </div>
-
-                      <div className="cc-set-stack">
-                        <div className="cc-set-row cc-set-rowDetailed">
-                          <div className="cc-set-copy">
-                            <span className="cc-set-label">Font Size</span>
-                            <span className="cc-set-note">Editor text scale for active files, diffs, and inline diagnostics.</span>
-                          </div>
-                          <div className="cc-set-stepper" role="group" aria-label="Font Size">
-                            <span className="cc-set-stepperValue" aria-live="polite">{settings.fontSize}</span>
-                            <span className="cc-set-stepperButtons">
-                              <button
-                                type="button"
-                                className="cc-set-stepperBtn"
-                                aria-label="Increase font size"
-                                onClick={() => setSettings((s) => ({ ...s, fontSize: Math.max(10, Math.min(22, s.fontSize + 1)) }))}
-                              >
-                                <Image src="/icons/app/arrow-square-up-svgrepo-com.svg" alt="" width={12} height={12} aria-hidden="true" />
-                              </button>
-                              <button
-                                type="button"
-                                className="cc-set-stepperBtn"
-                                aria-label="Decrease font size"
-                                onClick={() => setSettings((s) => ({ ...s, fontSize: Math.max(10, Math.min(22, s.fontSize - 1)) }))}
-                              >
-                                <Image src="/icons/app/arrow-square-down-svgrepo-com.svg" alt="" width={12} height={12} aria-hidden="true" />
-                              </button>
-                            </span>
-                          </div>
+                    ) : (
+                      <>
+                        <div className="cc-set-note">
+                          {`Project #${projectIdFromQuery}`}
                         </div>
 
-                        <div className="cc-set-row cc-set-rowDetailed">
-                          <div className="cc-set-copy">
-                            <span className="cc-set-label">Tab Size</span>
-                            <span className="cc-set-note">Default indentation width for tabs and inserted spaces.</span>
-                          </div>
-                          <div className="cc-set-stepper" role="group" aria-label="Tab Size">
-                            <span className="cc-set-stepperValue" aria-live="polite">{settings.tabSize}</span>
-                            <span className="cc-set-stepperButtons">
-                              <button
-                                type="button"
-                                className="cc-set-stepperBtn"
-                                aria-label="Increase tab size"
-                                onClick={() => setSettings((s) => ({ ...s, tabSize: Math.max(2, Math.min(8, s.tabSize + 1)) }))}
-                              >
-                                <Image src="/icons/app/arrow-square-up-svgrepo-com.svg" alt="" width={12} height={12} aria-hidden="true" />
-                              </button>
-                              <button
-                                type="button"
-                                className="cc-set-stepperBtn"
-                                aria-label="Decrease tab size"
-                                onClick={() => setSettings((s) => ({ ...s, tabSize: Math.max(2, Math.min(8, s.tabSize - 1)) }))}
-                              >
-                                <Image src="/icons/app/arrow-square-down-svgrepo-com.svg" alt="" width={12} height={12} aria-hidden="true" />
-                              </button>
-                            </span>
-                          </div>
+                        <label className="cc-set-row cc-set-rowStack">
+                          <span className="cc-set-label">Workspace member</span>
+                          <select
+                            className="cc-set-input cc-set-inputWide"
+                            value={projectCollabUserId}
+                            onChange={(e) => setProjectCollabUserId(e.target.value)}
+                            disabled={projectCollabBusy || projectCollabSubmitting || !workspaceMemberOptions.length}
+                          >
+                            {workspaceMemberOptions.length ? null : <option value="">No workspace members</option>}
+                            {workspaceMemberOptions.map((member) => (
+                              <option key={member.userId} value={member.userId}>
+                                {member.displayName ? `${member.displayName} (${member.email})` : member.email}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="cc-set-row cc-set-rowStack">
+                          <span className="cc-set-label">Role</span>
+                          <select
+                            className="cc-set-input cc-set-inputWide"
+                            value={projectCollabRole}
+                            onChange={(e) => {
+                              const next = String(e.target.value || "").toUpperCase();
+                              setProjectCollabRole(next === "EDITOR" || next === "ADMIN" ? next : "VIEWER");
+                            }}
+                            disabled={projectCollabBusy || projectCollabSubmitting}
+                          >
+                            <option value="VIEWER">Viewer</option>
+                            <option value="EDITOR">Editor</option>
+                            <option value="ADMIN">Admin</option>
+                          </select>
+                        </label>
+
+                        <div className="cc-run-actions">
+                          <button
+                            className="cc-run-btn cc-run-btn2"
+                            onClick={() => void addProjectCollaborator()}
+                            disabled={projectCollabBusy || projectCollabSubmitting || !projectCollabUserId}
+                          >
+                            {projectCollabSubmitting ? "Saving..." : "Save collaborator"}
+                          </button>
                         </div>
 
-                        <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
-                          <span className="cc-set-copy">
-                            <span className="cc-set-label">Word Wrap</span>
-                            <span className="cc-set-note">Wrap long lines inside the editor viewport.</span>
-                          </span>
-                          <input
-                            className="cc-set-toggle"
-                            type="checkbox"
-                            checked={settings.wordWrap}
-                            onChange={(e) => setSettings((s) => ({ ...s, wordWrap: e.target.checked }))}
-                          />
-                        </label>
+                        {projectCollabError ? <div className="cc-set-note is-error">{projectCollabError}</div> : null}
+                        {projectCollabStatus ? <div className="cc-set-note is-success">{projectCollabStatus}</div> : null}
 
-                        <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
-                          <span className="cc-set-copy">
-                            <span className="cc-set-label">Minimap</span>
-                            <span className="cc-set-note">Keep the overview map visible for fast scanning.</span>
-                          </span>
-                          <input
-                            className="cc-set-toggle"
-                            type="checkbox"
-                            checked={settings.minimap}
-                            onChange={(e) => setSettings((s) => ({ ...s, minimap: e.target.checked }))}
-                          />
-                        </label>
-
-                        <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
-                          <span className="cc-set-copy">
-                            <span className="cc-set-label">Format on Save</span>
-                            <span className="cc-set-note">Apply automatic formatting whenever a save is triggered.</span>
-                          </span>
-                          <input
-                            className="cc-set-toggle"
-                            type="checkbox"
-                            checked={settings.formatOnSave}
-                            onChange={(e) => setSettings((s) => ({ ...s, formatOnSave: e.target.checked }))}
-                          />
-                        </label>
-
-                        <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
-                          <span className="cc-set-copy">
-                            <span className="cc-set-label">Autosave</span>
-                            <span className="cc-set-note">Write changes automatically to CavBot persistence while you work.</span>
-                          </span>
-                          <input
-                            className="cc-set-toggle"
-                            type="checkbox"
-                            checked={settings.autosave}
-                            onChange={(e) => setSettings((s) => ({ ...s, autosave: e.target.checked }))}
-                          />
-                        </label>
-
-                        <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
-                          <span className="cc-set-copy">
-                            <span className="cc-set-label">Sync to CavCloud</span>
-                            <span className="cc-set-note">Mirror CavCode settings into your CavCloud-linked workspace profile.</span>
-                          </span>
-                          <input
-                            className="cc-set-toggle"
-                            type="checkbox"
-                            checked={settings.syncToCavcloud}
-                            onChange={(e) => setSettings((s) => ({ ...s, syncToCavcloud: e.target.checked }))}
-                          />
-                        </label>
-
-                        <label className="cc-set-row cc-set-rowDetailed cc-set-rowToggle">
-                          <span className="cc-set-copy">
-                            <span className="cc-set-label">Telemetry</span>
-                            <span className="cc-set-note">Share editor diagnostics and behavior signals with CavBot telemetry.</span>
-                          </span>
-                          <input
-                            className="cc-set-toggle"
-                            type="checkbox"
-                            checked={settings.telemetry}
-                            onChange={(e) => setSettings((s) => ({ ...s, telemetry: e.target.checked }))}
-                          />
-                        </label>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {settingsSection === "theme" ? (
-                    <div className="cc-set-card cc-set-cardSettings">
-                      <div className="cc-set-head">
-                        <div>
-                          <div className="cc-set-title">Theme</div>
-                          <div className="cc-set-note">12 professional CavCode themes.</div>
-                        </div>
-                      </div>
-
-                      <div className="cc-set-stack">
-                        <div className="cc-set-row cc-set-rowTheme">
-                          <div className="cc-themeList" role="list" aria-label="CavCode themes">
-                            {THEME_OPTIONS.map((option) => (
-                              <button
-                                key={option.value}
-                                type="button"
-                                className={`cc-themeCard ${settings.theme === option.value ? "is-on" : ""}`}
-                                data-theme-value={option.value}
-                                onClick={() => setSettings((s) => ({ ...s, theme: option.value }))}
-                                style={{
-                                  "--cc-theme-card-bg": option.previewBackground,
-                                  "--cc-theme-card-border": option.previewBorder,
-                                  "--cc-theme-card-fg": option.previewText,
-                                  "--cc-theme-card-line": option.previewLine,
-                                  "--cc-theme-card-accent": option.accent,
-                                  "--cc-theme-card-keyword": option.tokens.keyword,
-                                  "--cc-theme-card-string": option.tokens.string,
-                                  "--cc-theme-card-number": option.tokens.number,
-                                  "--cc-theme-card-type": option.tokens.type,
-                                  "--cc-theme-card-comment": option.tokens.comment,
-                                } as React.CSSProperties}
-                              >
-                                <span className="cc-themeCardMeta">
-                                  <span className="cc-themeCardTitleWrap">
-                                    <span className="cc-themeCardName">{option.label}</span>
-                                    <span className="cc-themeCardHint">{option.hint}</span>
-                                  </span>
-                                  <span className="cc-themeCardDot" aria-hidden="true" />
-                                </span>
-                                <span className="cc-themeCardCode" aria-hidden="true">
-                                  <span className="cc-themeCardCodeLine is-comment">{`// ${option.value}`}</span>
-                                  <span className="cc-themeCardCodeLine">
-                                    <span className="tok-keyword">const</span>{" "}
-                                    <span className="tok-type">accent</span>{" "}
-                                    ={" "}
-                                    <span className="tok-string">{JSON.stringify(option.label)}</span>
-                                  </span>
-                                  <span className="cc-themeCardCodeLine">
-                                    <span className="tok-keyword">return</span>{" "}
-                                    <span className="tok-number">12</span>
-                                  </span>
-                                </span>
-                              </button>
+                        <div className="cc-set-subtitle">Current collaborators</div>
+                        {projectCollaborators.length ? (
+                          <div className="cc-collabList">
+                            {projectCollaborators.map((collaborator) => (
+                              <div key={collaborator.userId} className="cc-collabRow">
+                                <div>
+                                  <div className="cc-collabName">
+                                    {collaborator.displayName || collaborator.email || collaborator.userId}
+                                  </div>
+                                  <div className="cc-collabMeta">{collaborator.role}</div>
+                                </div>
+                                <button
+                                  className="cc-run-btn cc-collabRevokeBtn"
+                                  onClick={() => void revokeProjectCollaborator(collaborator.userId)}
+                                  disabled={projectCollabBusy || projectCollabSubmitting}
+                                >
+                                  Revoke
+                                </button>
+                              </div>
                             ))}
                           </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {settingsSection === "collaborators" ? (
-                    <div className="cc-set-card cc-set-cardSettings">
-                      <div className="cc-set-head">
-                        <div>
-                          <div className="cc-set-title">Project Collaborators</div>
-                          <div className="cc-set-note">Invite workspace members into this project without leaving CavCode.</div>
-                        </div>
-                      </div>
-                      {!projectIdFromQuery ? (
-                        <div className="cc-set-note">
-                          Open CavCode with a project context to manage collaborators.
-                        </div>
-                      ) : (
-                        <>
+                        ) : (
                           <div className="cc-set-note">
-                            {`Project #${projectIdFromQuery}`}
+                            {projectCollabBusy ? "Loading collaborators..." : "No project collaborators set."}
                           </div>
+                        )}
 
-                          <label className="cc-set-row cc-set-rowStack">
-                            <span className="cc-set-label">Workspace member</span>
-                            <span className="cc-set-selectWrap">
-                              <select
-                                className="cc-set-input cc-set-inputWide cc-set-select"
-                                value={projectCollabUserId}
-                                onChange={(e) => setProjectCollabUserId(e.target.value)}
-                                disabled={projectCollabBusy || projectCollabSubmitting || !workspaceMemberOptions.length}
-                              >
-                                {workspaceMemberOptions.length ? null : <option value="">No workspace members</option>}
-                                {workspaceMemberOptions.map((member) => (
-                                  <option key={member.userId} value={member.userId}>
-                                    {member.displayName ? `${member.displayName} (${member.email})` : member.email}
-                                  </option>
-                                ))}
-                              </select>
-                              <span className="cc-set-selectChevron" aria-hidden="true">
-                                <Image src="/icons/app/cavcode/arrow-down-svgrepo-com.svg" alt="" width={10} height={10} />
-                              </span>
-                            </span>
-                          </label>
-
-                          <label className="cc-set-row cc-set-rowStack">
-                            <span className="cc-set-label">Role</span>
-                            <span className="cc-set-selectWrap">
-                              <select
-                                className="cc-set-input cc-set-inputWide cc-set-select"
-                                value={projectCollabRole}
-                                onChange={(e) => {
-                                  const next = String(e.target.value || "").toUpperCase();
-                                  setProjectCollabRole(next === "EDITOR" || next === "ADMIN" ? next : "VIEWER");
-                                }}
-                                disabled={projectCollabBusy || projectCollabSubmitting}
-                              >
-                                <option value="VIEWER">Viewer</option>
-                                <option value="EDITOR">Editor</option>
-                                <option value="ADMIN">Admin</option>
-                              </select>
-                              <span className="cc-set-selectChevron" aria-hidden="true">
-                                <Image src="/icons/app/cavcode/arrow-down-svgrepo-com.svg" alt="" width={10} height={10} />
-                              </span>
-                            </span>
-                          </label>
-
-                          <div className="cc-run-actions">
-                            <button
-                              className="cc-run-btn cc-run-btn2"
-                              onClick={() => void addProjectCollaborator()}
-                              disabled={projectCollabBusy || projectCollabSubmitting || !projectCollabUserId}
-                            >
-                              {projectCollabSubmitting ? "Saving..." : "Save collaborator"}
-                            </button>
-                          </div>
-
-                          {projectCollabError ? <div className="cc-set-note is-error">{projectCollabError}</div> : null}
-                          {projectCollabStatus ? <div className="cc-set-note is-success">{projectCollabStatus}</div> : null}
-
-                          <div className="cc-set-subtitle">Current collaborators</div>
-                          {projectCollaborators.length ? (
-                            <div className="cc-collabList">
-                              {projectCollaborators.map((collaborator) => (
-                                <div key={collaborator.userId} className="cc-collabRow">
-                                  <div>
-                                    <div className="cc-collabName">
-                                      {collaborator.displayName || collaborator.email || collaborator.userId}
-                                    </div>
-                                    <div className="cc-collabMeta">{collaborator.role}</div>
-                                  </div>
-                                  <button
-                                    className="cc-run-btn cc-collabRevokeBtn"
-                                    onClick={() => void revokeProjectCollaborator(collaborator.userId)}
-                                    disabled={projectCollabBusy || projectCollabSubmitting}
-                                  >
-                                    Revoke
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="cc-set-note">
-                              {projectCollabBusy ? "Loading collaborators..." : "No project collaborators set."}
-                            </div>
-                          )}
-
-                          <div className="cc-run-actions">
-                            <button
-                              className="cc-run-btn"
-                              onClick={() => void loadProjectCollaborators()}
-                              disabled={projectCollabBusy || projectCollabSubmitting}
-                            >
-                              {projectCollabBusy ? "Refreshing..." : "Refresh"}
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ) : null}
+                        <div className="cc-run-actions">
+                          <button
+                            className="cc-run-btn"
+                            onClick={() => void loadProjectCollaborators()}
+                            disabled={projectCollabBusy || projectCollabSubmitting}
+                          >
+                            {projectCollabBusy ? "Refreshing..." : "Refresh"}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </>
             ) : activity === "live" ? (
@@ -15595,18 +13526,10 @@ export default function CavCodePage() {
               </>
             ) : activity === "run" ? (
               <>
-                <div className={`cc-sidebar-head ${runHeaderMenuOpen ? "is-menu-open" : ""}`}>
+                <div className="cc-sidebar-head">
                   <div className="cc-side-title">RUN &amp; DEBUG</div>
                   <div className="cc-side-actions">
-                    <div className={`cc-side-menuShell ${runHeaderMenuOpen ? "is-open" : ""}`} ref={runHeaderMenuRef}>
-                      {runHeaderMenuOpen ? (
-                        <button
-                          type="button"
-                          className="cc-side-menuOverlay"
-                          aria-label="Dismiss run and debug menu"
-                          onClick={() => setRunHeaderMenuOpen(false)}
-                        />
-                      ) : null}
+                    <div className="cc-side-menuShell" ref={runHeaderMenuRef}>
                       <button
                         className={`cc-side-menuBtn ${runHeaderMenuOpen ? "is-on" : ""}`}
                         type="button"
@@ -15707,7 +13630,7 @@ export default function CavCodePage() {
         ) : null}
 
         {/* Workbench */}
-        <section className={`cc-workbench${panelExpanded && panelOpen && !activeSkillsTab && !activeKeyboardShortcutsTab ? " is-panel-maximized" : ""}`} aria-label="Workbench">
+        <section className={`cc-workbench${panelExpanded && panelOpen && !activeSkillsTab ? " is-panel-maximized" : ""}`} aria-label="Workbench">
           {/* Tabs (browser tabs, not pills) */}
           <div className="cc-tabshead">
             <div
@@ -15788,8 +13711,6 @@ export default function CavCodePage() {
                       <span className="cc-tab-ic" aria-hidden="true">
                         {t.kind === "skills" ? (
                           <IconGearGlyph className="cc-tab-gear" size={14} />
-                        ) : t.kind === "keyboard-shortcuts" ? (
-                          <IconKeyboardGlyph className="cc-tab-gear" size={14} />
                         ) : t.kind === "git-compare-single" || t.kind === "git-compare-aggregate" ? (
                           <Image
                             className="cc-tab-gear"
@@ -15896,17 +13817,6 @@ export default function CavCodePage() {
                       </button>
                     </>
                     ) : (
-                    <div className="cc-agentCreateToolbar">
-                    <button
-                      type="button"
-                      className="cc-agentCreateBackBtn"
-                      onClick={() => closeCreateAgent()}
-                      aria-label="Back to agents"
-                      title="Back to agents"
-                      disabled={createAgentAiBusy || Boolean(savingAgentId)}
-                    >
-                      <span className="cc-agentCreateBackIcon" aria-hidden="true" />
-                    </button>
                     <div className="cc-agentCreateAiControls" data-agent-create-ai="true" ref={createAgentAiControlsRef}>
                       <div className={`cc-agentCreateAiControl ${createAgentAiControlMenu === "model" ? "is-open" : ""}`}>
                         <button
@@ -16119,479 +14029,128 @@ export default function CavCodePage() {
                         ) : null}
                       </div>
                     </div>
-                    </div>
                   )) : null}
                 </div>
 
-                {skillsPageView === "agents" && createAgentOpen ? (() => {
-                  const draftName = createAgentName.trim() || "Untitled Agent";
-                  const draftSummary =
-                    createAgentSummary.trim()
-                    || "Give your agent a clear mission so people know exactly when to bring it in.";
-                  const createAgentBusy = Boolean(savingAgentId);
-
-                  return (
-                    <section className="cc-agentCreatePanel" role="region" aria-label="Create Agent">
-                      <div className="cc-agentCreatePanelInner">
-                        <header className="cc-agentCreateHero">
-                          <div className="cc-agentCreateHeadWrap">
-                            <div className="cc-agentCreateHead">
-                              <div>
-                                <h3>Create Agent</h3>
-                              </div>
-                            </div>
-                            <p className="cc-agentCreateSub">
-                              Shape an install-ready specialist with a clear role, operating voice, and launch surface.
-                            </p>
-                          </div>
-
-                          <div className="cc-agentCreateIdentityCard">
-                            <div className="cc-agentCreateIdentityMedia">
-                              <button
-                                type="button"
-                                className="cc-agentCreateIconBox cc-agentCreateIconBox--hero"
-                                onClick={() => createAgentIconInputRef.current?.click()}
-                                aria-label="Upload agent icon"
-                                style={createAgentIconSvg && createAgentIconBackground
-                                  ? {
-                                      background: createAgentIconBackground,
-                                      borderColor: rgbaFromAgentHex(
-                                        mixAgentHexColors(createAgentIconBackground, "#FFFFFF", 0.22),
-                                        0.32,
-                                      ),
-                                    }
-                                  : undefined}
-                              >
-                                {createAgentIconSvg ? (
-                                  <Image
-                                    src={svgToDataUri(createAgentIconSvg)}
-                                    alt=""
-                                    width={70}
-                                    height={70}
-                                    className="cc-agentCreateIconPreview"
-                                    unoptimized
-                                    aria-hidden="true"
-                                  />
-                                ) : (
-                                  <span className="cc-agentCreateIconPlaceholderGlyph" aria-hidden="true" />
-                                )}
-                              </button>
-
-                              {createAgentIconSvg ? (
-                                <div
-                                  className="cc-agentCreateColorWrap"
-                                  data-agent-create-color="true"
-                                  ref={createAgentColorMenuRef}
-                                >
-                                  <button
-                                    type="button"
-                                    className={`cc-agentCreateColorBtn ${createAgentColorMenuOpen ? "is-open" : ""}`}
-                                    onClick={() => setCreateAgentColorMenuOpen((prev) => !prev)}
-                                    aria-label="Choose agent icon background color"
-                                    aria-haspopup="dialog"
-                                    aria-expanded={createAgentColorMenuOpen}
-                                  >
-                                    <svg viewBox="0 0 20 20" aria-hidden="true" className="cc-agentCreateColorBtnGlyph">
-                                      <defs>
-                                        <linearGradient id="cc-agent-create-color-wheel-primary" x1="3.2" y1="3.4" x2="16.3" y2="16.4" gradientUnits="userSpaceOnUse">
-                                          <stop offset="0" stopColor="#FF5A5F" />
-                                          <stop offset=".32" stopColor="#FFB44C" />
-                                          <stop offset=".66" stopColor="#45D37B" />
-                                          <stop offset="1" stopColor="#4EA8FF" />
-                                        </linearGradient>
-                                        <linearGradient id="cc-agent-create-color-wheel-accent" x1="15.9" y1="4" x2="4.1" y2="15.7" gradientUnits="userSpaceOnUse">
-                                          <stop offset="0" stopColor="#8E6BFF" />
-                                          <stop offset=".52" stopColor="#FF57C3" />
-                                          <stop offset="1" stopColor="#FF7A4F" />
-                                        </linearGradient>
-                                      </defs>
-                                      <circle cx="10" cy="10" r="6.95" fill="none" stroke="url(#cc-agent-create-color-wheel-primary)" strokeWidth="3.1" />
-                                      <path
-                                        d="M10 3.05a6.95 6.95 0 0 1 6.3 9.82"
-                                        fill="none"
-                                        stroke="url(#cc-agent-create-color-wheel-accent)"
-                                        strokeWidth="3.1"
-                                        strokeLinecap="round"
-                                      />
-                                      <circle cx="10" cy="10" r="2.2" fill="#F8FBFF" />
-                                    </svg>
-                                  </button>
-                                  {createAgentColorMenuOpen ? (
-                                    <div className="cc-agentCreateColorMenu" role="dialog" aria-label="Agent icon color">
-                                      <button
-                                        type="button"
-                                        className="cc-agentCreateColorPreview"
-                                        onClick={() => createAgentColorNativeInputRef.current?.click()}
-                                        style={{ background: createAgentIconBackground || DEFAULT_CUSTOM_AGENT_ICON_BACKGROUND }}
-                                        aria-label="Open color picker"
-                                      >
-                                      </button>
-                                      <input
-                                        ref={createAgentColorNativeInputRef}
-                                        className="cc-agentCreateColorNativeInput"
-                                        type="color"
-                                        value={createAgentIconBackground || DEFAULT_CUSTOM_AGENT_ICON_BACKGROUND}
-                                        onChange={(event) => {
-                                          const next = normalizeAgentColorHexFromUnknown(event.currentTarget.value)
-                                            || DEFAULT_CUSTOM_AGENT_ICON_BACKGROUND;
-                                          setCreateAgentIconBackground(next);
-                                          setCreateAgentColorInput(next);
-                                        }}
-                                        tabIndex={-1}
-                                        aria-hidden="true"
-                                      />
-                                      <label className="cc-agentCreateColorField" htmlFor="cc-agent-create-color-input">
-                                        <span className="cc-agentCreateColorFieldLabel">Hex</span>
-                                        <span className="cc-agentCreateColorFieldControl">
-                                          <input
-                                            ref={createAgentColorInputRef}
-                                            id="cc-agent-create-color-input"
-                                            className="cc-agentCreateColorHexInput"
-                                            value={createAgentColorInput}
-                                            onChange={(event) => {
-                                              const next = String(event.currentTarget.value || "").slice(0, 9);
-                                              setCreateAgentColorInput(next);
-                                              const normalized = normalizeAgentColorHexFromUnknown(next);
-                                              if (normalized) setCreateAgentIconBackground(normalized);
-                                            }}
-                                            onBlur={() => {
-                                              void commitCreateAgentIconBackground(createAgentColorInput);
-                                            }}
-                                            onKeyDown={(event) => {
-                                              if (event.key !== "Enter") return;
-                                              event.preventDefault();
-                                              void commitCreateAgentIconBackground(createAgentColorInput);
-                                            }}
-                                            placeholder="#4EA8FF"
-                                            spellCheck={false}
-                                            autoCapitalize="off"
-                                            autoCorrect="off"
-                                          />
-                                          <button
-                                            type="button"
-                                            className="cc-agentCreateColorFieldChevron"
-                                            onClick={() => createAgentColorNativeInputRef.current?.click()}
-                                            aria-label="Open color picker"
-                                          >
-                                            <span className="cc-agentCreateColorFieldChevronGlyph" aria-hidden="true" />
-                                          </button>
-                                        </span>
-                                      </label>
-                                      {createAgentIconPalette.length ? (
-                                        <div className="cc-agentCreateColorSwatches" aria-label="Detected icon colors">
-                                          {createAgentIconPalette.map((color) => (
-                                            <button
-                                              key={color}
-                                              type="button"
-                                              className={`cc-agentCreateColorSwatch ${
-                                                color === createAgentIconBackground ? "is-active" : ""
-                                              }`}
-                                              onClick={() => {
-                                                setCreateAgentIconBackground(color);
-                                                setCreateAgentColorInput(color);
-                                              }}
-                                              title={color}
-                                              aria-label={`Use ${color} for the icon background`}
-                                              style={{ background: color }}
-                                            />
-                                          ))}
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                            </div>
-
-                            <div className="cc-agentCreateIdentityBody">
-                              <div className="cc-agentCreateIdentityKicker">Agent avatar</div>
-                              <div className="cc-agentCreateIdentityNameRow">
-                                <h4 className="cc-agentCreateIdentityName">{draftName}</h4>
-                              </div>
-                              <p className="cc-agentCreateIdentitySummary">{draftSummary}</p>
-                            </div>
-
-                            <input
-                              ref={createAgentIconInputRef}
-                              id="cc-agent-create-icon-input"
-                              className="cc-agentCreateIconInput"
-                              type="file"
-                              accept=".svg,image/svg+xml"
-                              onChange={(event) => void onCreateAgentIconUpload(event)}
-                            />
-                          </div>
-                        </header>
-
-                        <form
-                          className="cc-agentCreateForm"
-                          onSubmit={(event) => {
-                            event.preventDefault();
-                            createCustomAgent();
-                          }}
-                        >
-                          <section className="cc-agentCreateSection" aria-labelledby="cc-agent-create-identity-title">
-                            <div className="cc-agentCreateSectionHead">
-                              <div>
-                                <span className="cc-agentCreateSectionEyebrow">Identity</span>
-                                <h4 id="cc-agent-create-identity-title">How the agent shows up</h4>
-                              </div>
-                              <p className="cc-agentCreateSectionNote">
-                                Make the role easy to read before anyone opens the agent.
-                              </p>
-                            </div>
-                            <div className="cc-agentCreateFieldGrid">
-                              <div className="cc-agentCreateField">
-                                <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-name">Name</label>
-                                <p id="cc-agent-create-name-note" className="cc-agentCreateFieldNote">
-                                  Short, sharp, and easy to scan inside the agent shelf.
-                                </p>
-                                <input
-                                  id="cc-agent-create-name"
-                                  className="cc-agentCreateInput"
-                                  aria-describedby="cc-agent-create-name-note"
-                                  value={createAgentName}
-                                  onChange={(event) => {
-                                    setCreateAgentName(event.currentTarget.value);
-                                    if (createAgentError) setCreateAgentError("");
-                                  }}
-                                  placeholder="Error Explainer"
-                                  maxLength={64}
-                                />
-                              </div>
-
-                              <div className="cc-agentCreateField cc-agentCreateField--wide">
-                                <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-summary">Description</label>
-                                <p id="cc-agent-create-summary-note" className="cc-agentCreateFieldNote">
-                                  Summarize the outcome this agent owns for the team.
-                                </p>
-                                <textarea
-                                  id="cc-agent-create-summary"
-                                  className="cc-agentCreateInput cc-agentCreateTextarea cc-agentCreateTextarea--short"
-                                  aria-describedby="cc-agent-create-summary-note"
-                                  value={createAgentSummary}
-                                  onChange={(event) => {
-                                    setCreateAgentSummary(event.currentTarget.value);
-                                    if (createAgentError) setCreateAgentError("");
-                                  }}
-                                  placeholder="Explain failures, isolate root cause, and suggest safe next steps."
-                                  rows={3}
-                                  maxLength={220}
-                                />
-                              </div>
-                            </div>
-                          </section>
-
-                          <section className="cc-agentCreateSection" aria-labelledby="cc-agent-create-behavior-title">
-                            <div className="cc-agentCreateSectionHead">
-                              <div>
-                                <span className="cc-agentCreateSectionEyebrow">Behavior</span>
-                                <h4 id="cc-agent-create-behavior-title">How the agent should think and respond</h4>
-                              </div>
-                              <p className="cc-agentCreateSectionNote">
-                                Capture the cues that wake it up and the rules it should follow.
-                              </p>
-                            </div>
-                            <div className="cc-agentCreateFieldGrid">
-                              <div className="cc-agentCreateField">
-                                <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-triggers">Trigger phrases</label>
-                                <p id="cc-agent-create-triggers-note" className="cc-agentCreateFieldNote">
-                                  Add phrases users naturally say when they need this specialist.
-                                </p>
-                                <input
-                                  id="cc-agent-create-triggers"
-                                  className="cc-agentCreateInput"
-                                  aria-describedby="cc-agent-create-triggers-note"
-                                  value={createAgentTriggers}
-                                  onChange={(event) => {
-                                    setCreateAgentTriggers(event.currentTarget.value);
-                                    if (createAgentError) setCreateAgentError("");
-                                  }}
-                                  placeholder="e.g. explain stack trace, summarize PR, debug failing test"
-                                  maxLength={240}
-                                />
-                              </div>
-
-                              <div className="cc-agentCreateField cc-agentCreateField--wide">
-                                <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-instructions">Instructions</label>
-                                <p id="cc-agent-create-instructions-note" className="cc-agentCreateFieldNote">
-                                  Define the agent&apos;s operating principles, tone, guardrails, and output expectations.
-                                </p>
-                                <textarea
-                                  id="cc-agent-create-instructions"
-                                  className="cc-agentCreateInput cc-agentCreateTextarea cc-agentCreateTextarea--tall"
-                                  aria-describedby="cc-agent-create-instructions-note"
-                                  value={createAgentInstructions}
-                                  onChange={(event) => {
-                                    setCreateAgentInstructions(event.currentTarget.value);
-                                    if (createAgentError) setCreateAgentError("");
-                                  }}
-                                  placeholder="You are a precise debugging partner. Explain the failure, identify the likely root cause, and propose the safest next move before suggesting larger changes."
-                                  rows={7}
-                                  maxLength={2400}
-                                />
-                              </div>
-                            </div>
-                          </section>
-
-                          <fieldset className="cc-agentCreateSection cc-agentCreateSection--surface" aria-describedby="cc-agent-create-surface-note">
-                            <legend className="cc-agentCreateSectionLegend">Placement</legend>
-                            <div className="cc-agentCreateSectionHead">
-                              <div>
-                                <span className="cc-agentCreateSectionEyebrow">Placement</span>
-                                <h4 className="cc-agentCreateSectionTitle">Choose the launch surface</h4>
-                              </div>
-                              <p id="cc-agent-create-surface-note" className="cc-agentCreateSectionNote">
-                                Decide where users can meet this agent.
-                              </p>
-                            </div>
-                            <div className="cc-agentCreateSurfaceGrid">
-                              <label className={`cc-agentCreateSurfaceCard ${createAgentSurface === "all" ? "is-selected" : ""}`}>
-                                <input
-                                  className="cc-agentCreateSurfaceInput"
-                                  type="radio"
-                                  name="cc-agent-create-surface"
-                                  value="all"
-                                  checked={createAgentSurface === "all"}
-                                  onChange={() => {
-                                    setCreateAgentSurface("all");
-                                    if (createAgentError) setCreateAgentError("");
-                                  }}
-                                />
-                                <span className="cc-agentCreateSurfaceCardTop">
-                                  <span className="cc-agentCreateSurfaceKicker">Everywhere</span>
-                                  <span className="cc-agentCreateSurfaceCheck" aria-hidden="true" />
-                                </span>
-                                <span className="cc-agentCreateSurfaceTitle">All surfaces</span>
-                                <span className="cc-agentCreateSurfaceDesc">
-                                  Install once and keep the agent available anywhere Caven appears.
-                                </span>
-                              </label>
-
-                              <label className={`cc-agentCreateSurfaceCard ${createAgentSurface === "cavcode" ? "is-selected" : ""}`}>
-                                <input
-                                  className="cc-agentCreateSurfaceInput"
-                                  type="radio"
-                                  name="cc-agent-create-surface"
-                                  value="cavcode"
-                                  checked={createAgentSurface === "cavcode"}
-                                  onChange={() => {
-                                    setCreateAgentSurface("cavcode");
-                                    if (createAgentError) setCreateAgentError("");
-                                  }}
-                                />
-                                <span className="cc-agentCreateSurfaceCardTop">
-                                  <span className="cc-agentCreateSurfaceKicker">Workspace</span>
-                                  <span className="cc-agentCreateSurfaceCheck" aria-hidden="true" />
-                                </span>
-                                <span className="cc-agentCreateSurfaceTitle">Caven</span>
-                                <span className="cc-agentCreateSurfaceDesc">
-                                  Keep the agent focused on hands-on creation and workspace execution inside Caven.
-                                </span>
-                              </label>
-
-                              <label className={`cc-agentCreateSurfaceCard ${createAgentSurface === "center" ? "is-selected" : ""}`}>
-                                <input
-                                  className="cc-agentCreateSurfaceInput"
-                                  type="radio"
-                                  name="cc-agent-create-surface"
-                                  value="center"
-                                  checked={createAgentSurface === "center"}
-                                  onChange={() => {
-                                    setCreateAgentSurface("center");
-                                    if (createAgentError) setCreateAgentError("");
-                                  }}
-                                />
-                                <span className="cc-agentCreateSurfaceCardTop">
-                                  <span className="cc-agentCreateSurfaceKicker">Conversation</span>
-                                  <span className="cc-agentCreateSurfaceCheck" aria-hidden="true" />
-                                </span>
-                                <span className="cc-agentCreateSurfaceTitle">CavAi</span>
-                                <span className="cc-agentCreateSurfaceDesc">
-                                  Reserve the agent for conversational planning, guidance, and centered collaboration.
-                                </span>
-                              </label>
-                            </div>
-                          </fieldset>
-
-                          <section className="cc-agentCreateSection cc-agentCreateSection--review" aria-labelledby="cc-agent-create-review-title">
-                            <div className="cc-agentCreateSectionHead cc-agentCreateSectionHead--tight">
-                              <div>
-                                <span className="cc-agentCreateSectionEyebrow">Review</span>
-                                <h4 id="cc-agent-create-review-title">Submit for publication</h4>
-                              </div>
-                              <p className="cc-agentCreateSectionNote">
-                                Private unless you submit it to CavBot HQ for review.
-                              </p>
-                            </div>
-                            <div className="cc-agentCreateReviewCard">
-                              <label className={`cc-agentCreateReviewToggle ${createAgentPublicationRequested ? "is-on" : ""}`}>
-                                <input
-                                  className="cc-agentCreateReviewToggleInput"
-                                  type="checkbox"
-                                  checked={createAgentPublicationRequested}
-                                  onChange={(event) => setCreateAgentPublicationRequested(event.currentTarget.checked)}
-                                />
-                                <span className="cc-agentCreateReviewToggleBox" aria-hidden="true">
-                                  <span className="cc-agentCreateReviewToggleTick" />
-                                </span>
-                                <span className="cc-agentCreateReviewToggleCopy">
-                                  <span className="cc-agentCreateReviewToggleTitle">
-                                    I agree to allow CavBot HQ to access, review, and verify this agent before it is considered for public release.
-                                  </span>
-                                </span>
-                              </label>
-                              <button
-                                type="button"
-                                className={`cc-agentCreateReviewInfoBtn ${createAgentPublicationInfoOpen ? "is-open" : ""}`}
-                                onClick={() => setCreateAgentPublicationInfoOpen((prev) => !prev)}
-                                aria-label="Publication review information"
-                                aria-expanded={createAgentPublicationInfoOpen}
-                              >
-                                <span aria-hidden="true" className="cc-agentCreateReviewInfoBtnIcon" />
-                              </button>
-                            </div>
-                            {createAgentPublicationInfoOpen ? (
-                              <div className="cc-agentCreateReviewInfoPanel" role="note">
-                                <div className="cc-agentCreateReviewInfoTitle">Review terms</div>
-                                <p>
-                                  CavBot retains the submitted profile, icon, triggers, and instructions for review.
-                                </p>
-                                <p>
-                                  If approved, CavBot can publish an operator-ready copy under <strong>Published by other operators</strong>.
-                                </p>
-                                <p>
-                                  Submit only content you authorize CavBot to review and publish. Never include secrets or private credentials.
-                                </p>
-                              </div>
-                            ) : null}
-                          </section>
-
-                          {createAgentError ? <div className="cc-agentCreateError" role="alert">{createAgentError}</div> : null}
-
-                          <div className="cc-agentCreateActions">
-                            <div className="cc-agentCreateActionsRow">
-                              <button
-                                type="button"
-                                className="cc-agentCreateBtn"
-                                onClick={() => closeCreateAgent()}
-                                disabled={createAgentBusy}
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                type="submit"
-                                className="cc-agentCreateBtn cc-agentCreateBtnPrimary"
-                                disabled={createAgentBusy}
-                              >
-                                {createAgentBusy ? "Creating..." : "Create Agent"}
-                              </button>
-                            </div>
-                          </div>
-                        </form>
+                {skillsPageView === "agents" && createAgentOpen ? (
+                  <section className="cc-agentCreatePanel" role="region" aria-label="Create Agent">
+                    <div className="cc-agentCreatePanelInner">
+                      <div className="cc-agentCreateHead">
+                        <h3>Create Agent</h3>
                       </div>
-                    </section>
-                  );
-                })() : null}
+                      <p className="cc-agentCreateSub">Define an agent profile and install it instantly in Caven.</p>
+                      <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-icon-input">Icon (SVG only)</label>
+                      <div className="cc-agentCreateIconRow">
+                        <button
+                          type="button"
+                          className="cc-agentCreateIconBox"
+                          onClick={() => createAgentIconInputRef.current?.click()}
+                          aria-label="Upload agent icon"
+                        >
+                          {createAgentIconSvg ? (
+                            <Image
+                              src={svgToDataUri(createAgentIconSvg)}
+                              alt=""
+                              width={70}
+                              height={70}
+                              className="cc-agentCreateIconPreview"
+                              unoptimized
+                              aria-hidden="true"
+                            />
+                          ) : (
+                            <span
+                              className="cc-agentCreateIconPlaceholderGlyph"
+                              aria-hidden="true"
+                            />
+                          )}
+                        </button>
+                        <input
+                          ref={createAgentIconInputRef}
+                          id="cc-agent-create-icon-input"
+                          className="cc-agentCreateIconInput"
+                          type="file"
+                          accept=".svg,image/svg+xml"
+                          onChange={(event) => void onCreateAgentIconUpload(event)}
+                        />
+                      </div>
+                      <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-name">Name</label>
+                      <input
+                        id="cc-agent-create-name"
+                        className="cc-agentCreateInput"
+                        value={createAgentName}
+                        onChange={(event) => {
+                          setCreateAgentName(event.currentTarget.value);
+                          if (createAgentError) setCreateAgentError("");
+                        }}
+                        placeholder="Agent name"
+                        maxLength={64}
+                      />
+                      <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-summary">Description</label>
+                      <textarea
+                        id="cc-agent-create-summary"
+                        className="cc-agentCreateInput cc-agentCreateTextarea"
+                        value={createAgentSummary}
+                        onChange={(event) => {
+                          setCreateAgentSummary(event.currentTarget.value);
+                          if (createAgentError) setCreateAgentError("");
+                        }}
+                        placeholder="What this agent does"
+                        rows={2}
+                        maxLength={220}
+                      />
+                      <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-triggers">Trigger phrases</label>
+                      <input
+                        id="cc-agent-create-triggers"
+                        className="cc-agentCreateInput"
+                        value={createAgentTriggers}
+                        onChange={(event) => setCreateAgentTriggers(event.currentTarget.value)}
+                        placeholder="e.g. explain stack trace, summarize PR"
+                        maxLength={240}
+                      />
+                      <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-instructions">Instructions</label>
+                      <textarea
+                        id="cc-agent-create-instructions"
+                        className="cc-agentCreateInput cc-agentCreateTextarea"
+                        value={createAgentInstructions}
+                        onChange={(event) => {
+                          setCreateAgentInstructions(event.currentTarget.value);
+                          if (createAgentError) setCreateAgentError("");
+                        }}
+                        placeholder="Core system instructions for this agent."
+                        rows={5}
+                        maxLength={2400}
+                      />
+                      <label className="cc-agentCreateLabel" htmlFor="cc-agent-create-surface">Surface</label>
+                      <select
+                        id="cc-agent-create-surface"
+                        className="cc-agentCreateInput cc-agentCreateSelect"
+                        value={createAgentSurface}
+                        onChange={(event) =>
+                          setCreateAgentSurface(
+                            event.currentTarget.value === "center"
+                              ? "center"
+                              : event.currentTarget.value === "cavcode"
+                                ? "cavcode"
+                                : "all"
+                          )
+                        }
+                      >
+                        <option value="all">All surfaces</option>
+                        <option value="cavcode">Caven</option>
+                        <option value="center">CavAi</option>
+                      </select>
+                      {createAgentError ? <div className="cc-agentCreateError">{createAgentError}</div> : null}
+                      <div className="cc-agentCreateActions">
+                        <button type="button" className="cc-agentCreateBtn" onClick={() => closeCreateAgent()}>
+                          Cancel
+                        </button>
+                        <button type="button" className="cc-agentCreateBtn cc-agentCreateBtnPrimary" onClick={() => createCustomAgent()}>
+                          Create Agent
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+                ) : null}
 
                 {skillsPageView === "agents" && !createAgentOpen ? (
                   <>
@@ -16610,11 +14169,50 @@ export default function CavCodePage() {
                           <div className="cc-skills-cardBody">
                             <div className="cc-skills-cardTitle">{agent.name}</div>
                           </div>
-                          {renderAgentManageTrigger({
-                            agentId: agent.id,
-                            agentName: agent.name,
-                            status: "approved",
-                          })}
+                          <span className="cc-skills-cardActionWrap" data-agent-manage-id={agent.id}>
+                            <button
+                              type="button"
+                              className="cc-skills-cardIconBtn is-installed cc-skills-cardManageBtn"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setAgentManageMenuId((prev) => (prev === agent.id ? "" : agent.id));
+                              }}
+                              disabled={Boolean(savingAgentId)}
+                              title={`Manage ${agent.name}`}
+                              aria-label={`Manage ${agent.name}`}
+                            >
+                              <svg className="cc-skills-cardManageCheck" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                <path
+                                  d="M3.25 8.5L6.5 11.75L12.75 4.75"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.9"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                              <svg className="cc-skills-cardManageDots" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                <circle cx="3.5" cy="8" r="1.2" fill="currentColor" />
+                                <circle cx="8" cy="8" r="1.2" fill="currentColor" />
+                                <circle cx="12.5" cy="8" r="1.2" fill="currentColor" />
+                              </svg>
+                            </button>
+                            {agentManageMenuId === agent.id ? (
+                              <div className="cc-skills-cardManageMenu" role="menu" onClick={(event) => event.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  className="cc-skills-cardManageMenuItem"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setAgentManageMenuId("");
+                                    toggleAgentInstalled(agent.id, false);
+                                  }}
+                                >
+                                  Uninstall
+                                </button>
+                              </div>
+                            ) : null}
+                          </span>
                         </article>
                       ))}
                       {!cavenInstalledAgents.length ? <div className="cc-skills-empty">No installed agents match your search.</div> : null}
@@ -16661,11 +14259,50 @@ export default function CavCodePage() {
                           <div className="cc-skills-cardBody">
                             <div className="cc-skills-cardTitle">{agent.name}</div>
                           </div>
-                          {renderAgentManageTrigger({
-                            agentId: agent.id,
-                            agentName: agent.name,
-                            status: "approved",
-                          })}
+                          <span className="cc-skills-cardActionWrap" data-agent-manage-id={agent.id}>
+                            <button
+                              type="button"
+                              className="cc-skills-cardIconBtn is-installed cc-skills-cardManageBtn"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setAgentManageMenuId((prev) => (prev === agent.id ? "" : agent.id));
+                              }}
+                              disabled={Boolean(savingAgentId)}
+                              title={`Manage ${agent.name}`}
+                              aria-label={`Manage ${agent.name}`}
+                            >
+                              <svg className="cc-skills-cardManageCheck" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                <path
+                                  d="M3.25 8.5L6.5 11.75L12.75 4.75"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.9"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                              <svg className="cc-skills-cardManageDots" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                <circle cx="3.5" cy="8" r="1.2" fill="currentColor" />
+                                <circle cx="8" cy="8" r="1.2" fill="currentColor" />
+                                <circle cx="12.5" cy="8" r="1.2" fill="currentColor" />
+                              </svg>
+                            </button>
+                            {agentManageMenuId === agent.id ? (
+                              <div className="cc-skills-cardManageMenu" role="menu" onClick={(event) => event.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  className="cc-skills-cardManageMenuItem"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setAgentManageMenuId("");
+                                    toggleAgentInstalled(agent.id, false);
+                                  }}
+                                >
+                                  Uninstall
+                                </button>
+                              </div>
+                            ) : null}
+                          </span>
                         </article>
                       ))}
                       {cavenSupportAvailableAgents.map((agent) => (
@@ -16793,87 +14430,122 @@ export default function CavCodePage() {
                           </div>
                         </div>
                       </button>
-                      {visibleCustomAgents.map((agent) => {
-                        const row = customAgents.find((item) => item.id === agent.id) || null;
-                        const publicationState = row ? resolveCustomAgentPublicationState(row) : "private";
-                        const placementLabel = describeAgentPlacement(row?.surface || agent.surface);
-                        return (
-                          <article key={agent.id} className="cc-skills-card" title={agent.summary}>
-                            <span
-                              className="cc-skills-cardIcon"
-                              data-agent-id={agent.id}
-                              aria-hidden="true"
-                              style={buildAgentIconSurfaceStyle(agent.iconBackground)}
-                            >
-                              <Image src={agent.iconSrc} alt="" width={22} height={22} unoptimized />
-                            </span>
-                            <div className="cc-skills-cardBody">
-                              <div className="cc-skills-cardTitle">{agent.name}</div>
-                              <div className="cc-skills-cardSummary">{agent.summary}</div>
-                              <div className="cc-skills-cardMeta">{placementLabel}</div>
-                            </div>
-                            {renderAgentManageTrigger({
-                              agentId: agent.id,
-                              agentName: agent.name,
-                              status: publicationState === "published" ? "approved" : publicationState,
-                              reviewLabel: "In review",
-                            })}
-                          </article>
-                        );
-                      })}
-                    </div>
-
-                    <div className="cc-skills-sectionLabel">Published by other operators</div>
-                    <div className="cc-skills-grid">
-                      {visiblePublishedAgents.map((agent) => {
-                        const published = publishedAgents.find((row) => row.id === agent.id) || null;
-                        return (
-                          <article key={agent.id} className="cc-skills-card" title={agent.summary}>
-                            <span
-                              className="cc-skills-cardIcon"
-                              data-agent-id={agent.id}
-                              aria-hidden="true"
-                              style={buildAgentIconSurfaceStyle(agent.iconBackground)}
-                            >
-                              <Image src={agent.iconSrc} alt="" width={22} height={22} unoptimized />
-                            </span>
-                            <div className="cc-skills-cardBody">
-                              <div className="cc-skills-cardTitle">{agent.name}</div>
-                              <div className="cc-skills-cardSummary">{agent.summary}</div>
-                            <div className="cc-skills-cardMeta">
-                              {published?.ownerUsername ? `by @${published.ownerUsername}` : `by ${published?.ownerName || "Operator"}`}
-                            </div>
+                      {visibleCustomAgents.map((agent) => (
+                        <article key={agent.id} className="cc-skills-card" title={agent.summary}>
+                          <span className="cc-skills-cardIcon" data-agent-id={agent.id} aria-hidden="true">
+                            <Image src={agent.iconSrc} alt="" width={22} height={22} unoptimized />
+                          </span>
+                          <div className="cc-skills-cardBody">
+                            <div className="cc-skills-cardTitle">{agent.name}</div>
                           </div>
                           {installedAgentSet.has(agent.id) ? (
-                            renderAgentManageTrigger({
-                              agentId: agent.id,
-                              agentName: agent.name,
-                              status: "approved",
-                            })
+                            <span className="cc-skills-cardActionWrap" data-agent-manage-id={agent.id}>
+                              <button
+                                type="button"
+                                className="cc-skills-cardIconBtn is-installed cc-skills-cardManageBtn"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setAgentManageMenuId((prev) => (prev === agent.id ? "" : agent.id));
+                                }}
+                                disabled={Boolean(savingAgentId)}
+                                title={`Manage ${agent.name}`}
+                                aria-label={`Manage ${agent.name}`}
+                              >
+                                <svg className="cc-skills-cardManageCheck" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                  <path
+                                    d="M3.25 8.5L6.5 11.75L12.75 4.75"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.9"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                                <svg className="cc-skills-cardManageDots" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                  <circle cx="3.5" cy="8" r="1.2" fill="currentColor" />
+                                  <circle cx="8" cy="8" r="1.2" fill="currentColor" />
+                                  <circle cx="12.5" cy="8" r="1.2" fill="currentColor" />
+                                </svg>
+                              </button>
+                              {agentManageMenuId === agent.id ? (
+                                <div className="cc-skills-cardManageMenu" role="menu" onClick={(event) => event.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    className="cc-skills-cardManageMenuItem"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setAgentManageMenuId("");
+                                      toggleAgentInstalled(agent.id, false);
+                                    }}
+                                  >
+                                    Uninstall
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="cc-skills-cardManageMenuItem"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      moveCustomAgentSurface(agent.id, "cavcode");
+                                    }}
+                                    disabled={agent.surface === "cavcode"}
+                                  >
+                                    Move to Caven
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="cc-skills-cardManageMenuItem"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      moveCustomAgentSurface(agent.id, "center");
+                                    }}
+                                    disabled={agent.surface === "center"}
+                                  >
+                                    Move to CavAi
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="cc-skills-cardManageMenuItem"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      moveCustomAgentSurface(agent.id, "all");
+                                    }}
+                                    disabled={agent.surface === "all"}
+                                  >
+                                    Move to All Surfaces
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="cc-skills-cardManageMenuItem cc-skills-cardManageMenuItemDanger"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      deleteCustomAgent(agent.id);
+                                    }}
+                                  >
+                                    Delete Agent
+                                  </button>
+                                </div>
+                              ) : null}
+                            </span>
                           ) : (
                             <button
                               type="button"
-                                className="cc-skills-cardIconBtn"
-                                onClick={() => toggleAgentInstalled(agent.id, true)}
-                                disabled={Boolean(savingAgentId)}
-                                title={`Install ${agent.name}`}
-                                aria-label={`Install ${agent.name}`}
-                              >
-                                <Image
-                                  src="/icons/app/cavcode/plus-large-svgrepo-com.svg"
-                                  alt=""
-                                  width={15}
-                                  height={15}
-                                  aria-hidden="true"
-                                />
-                              </button>
-                            )}
-                          </article>
-                        );
-                      })}
-                      {!visiblePublishedAgents.length ? (
-                        <div className="cc-skills-empty">No published operator agents match your search yet.</div>
-                      ) : null}
+                              className="cc-skills-cardIconBtn"
+                              onClick={() => toggleAgentInstalled(agent.id, true)}
+                              disabled={Boolean(savingAgentId)}
+                              title={`Install ${agent.name}`}
+                              aria-label={`Install ${agent.name}`}
+                            >
+                              <Image
+                                src="/icons/app/cavcode/plus-large-svgrepo-com.svg"
+                                alt=""
+                                width={15}
+                                height={15}
+                                aria-hidden="true"
+                              />
+                            </button>
+                          )}
+                        </article>
+                      ))}
                     </div>
                   </>
                 ) : skillsPageView === "general" ? (
@@ -17107,8 +14779,6 @@ export default function CavCodePage() {
                   </>
                 ) : null}
               </div>
-            ) : activeKeyboardShortcutsTab ? (
-              renderKeyboardShortcutsPage()
             ) : (
               <div
                 className={`cc-editor-panes ${splitLayout === "right" ? "is-right" : splitLayout === "down" ? "is-down" : "is-single"}`}
@@ -18882,7 +16552,7 @@ export default function CavCodePage() {
           <footer className="cc-status" aria-label="Status Bar">
             <div className="cc-status-left">
               <button className="cc-sbtn" onClick={() => setSidebarOpen((p) => !p)} title="Toggle Sidebar (Cmd/Ctrl+B)">
-                SIDEBAR
+                {sidebarOpen ? "SIDEBAR" : "SIDEBAR OFF"}
               </button>
               <span className="cc-sbadge cc-sbadge-static" aria-label="Cursor position">
                 Ln {cursorPos.line}, Col {cursorPos.col}
@@ -18951,6 +16621,7 @@ export default function CavCodePage() {
               </button>
             </div>
           </footer>
+
           {cloudConnectOpen ? (
             <div className="cc-modal cc-cloudConnect-modal">
               <div className="cc-modal-card cc-cloudConnect-card" role="dialog" aria-modal="true">

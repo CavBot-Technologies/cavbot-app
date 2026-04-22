@@ -123,6 +123,12 @@
   margin-top: 18px;
 }
 
+.pay-stage.hq-auth-loading .pay-processing h1,
+.pay-stage.hq-auth-loading .pay-processing h1.greeting{
+  font-size: 20px;
+  letter-spacing: .06em;
+}
+
 .pay-sub{
   margin: 10px 0 0;
   color: rgba(197,206,231,.78);

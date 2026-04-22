@@ -122,12 +122,12 @@ model User {
   cavpadSettings                  CavPadSettings[]
   workspaceAccessRequests         WorkspaceAccessRequest[]      @relation("WorkspaceAccessRequester")
   workspaceAccessRequestsResolved WorkspaceAccessRequest[]      @relation("WorkspaceAccessResolver")
-  coderCreditWallets             CoderCreditWallet[]
-  coderCreditLedgerEntries       CoderCreditLedger[]
-  coderUsageSnapshots            CoderUsageSnapshot[]
-  coderPlanEvents                CoderPlanEvent[]
-  coderContextSnapshots          CoderContextSnapshot[]
-  staffProfile                   StaffProfile?
+  coderCreditWallets              CoderCreditWallet[]
+  coderCreditLedgerEntries        CoderCreditLedger[]
+  coderUsageSnapshots             CoderUsageSnapshot[]
+  coderPlanEvents                 CoderPlanEvent[]
+  coderContextSnapshots           CoderContextSnapshot[]
+  staffProfile                    StaffProfile?
 
   @@index([createdAt])
   @@index([lastLoginAt])
@@ -1423,20 +1423,20 @@ model AuthToken {
 }
 
 model SignupWelcomeEmail {
-  id                  String   @id @default(cuid())
-  userId              String   @unique
+  id                  String    @id @default(cuid())
+  userId              String    @unique
   email               String
-  templateRef         String   @default("cavbot-sign-up") @db.VarChar(160)
-  status              String   @default("PENDING") @db.VarChar(24)
-  attemptCount        Int      @default(0)
+  templateRef         String    @default("cavbot-sign-up") @db.VarChar(160)
+  status              String    @default("PENDING") @db.VarChar(24)
+  attemptCount        Int       @default(0)
   lastAttemptedAt     DateTime?
   processingStartedAt DateTime?
-  processingToken     String?  @db.VarChar(96)
+  processingToken     String?   @db.VarChar(96)
   sentAt              DateTime?
-  resendMessageId     String?  @db.VarChar(191)
-  failureReason       String?  @db.Text
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  resendMessageId     String?   @db.VarChar(191)
+  failureReason       String?   @db.Text
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -2090,9 +2090,9 @@ model CavAiRun {
 
   findings    CavAiFinding[]
   insightPack CavAiInsightPack?
-  fixPlans    CavAiFixPlan[]   @relation("CavAiRunFixPlans")
-  narrations  CavAiNarration[] @relation("CavAiRunNarrations")
-  usageLogs   CavAiUsageLog[]  @relation("CavAiRunUsageLogs")
+  fixPlans    CavAiFixPlan[]    @relation("CavAiRunFixPlans")
+  narrations  CavAiNarration[]  @relation("CavAiRunNarrations")
+  usageLogs   CavAiUsageLog[]   @relation("CavAiRunUsageLogs")
 
   @@index([accountId, origin, createdAt])
   @@index([accountId, origin, inputHash, createdAt])
@@ -2212,18 +2212,18 @@ model CavAiUsageLog {
 }
 
 model CavAiSession {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   accountId     String
   userId        String
-  surface       String   @db.VarChar(32)
-  title         String   @db.VarChar(220)
-  contextLabel  String?  @db.VarChar(220)
+  surface       String    @db.VarChar(32)
+  title         String    @db.VarChar(220)
+  contextLabel  String?   @db.VarChar(220)
   contextJson   Json?
-  workspaceId   String?  @db.VarChar(160)
+  workspaceId   String?   @db.VarChar(160)
   projectId     Int?
-  origin        String?  @db.Text
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  origin        String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
   lastMessageAt DateTime?
 
   messages  CavAiMessage[]         @relation("CavAiSessionMessages")
@@ -2263,20 +2263,20 @@ model CavAiMessage {
 }
 
 model CavAiMessageFeedback {
-  id           String   @id @default(cuid())
-  accountId    String
-  sessionId    String
-  messageId    String
-  userId       String
-  reaction     String?  @db.VarChar(16)
-  copyCount    Int      @default(0)
-  shareCount   Int      @default(0)
-  retryCount   Int      @default(0)
-  lastCopiedAt DateTime?
-  lastSharedAt DateTime?
+  id            String    @id @default(cuid())
+  accountId     String
+  sessionId     String
+  messageId     String
+  userId        String
+  reaction      String?   @db.VarChar(16)
+  copyCount     Int       @default(0)
+  shareCount    Int       @default(0)
+  retryCount    Int       @default(0)
+  lastCopiedAt  DateTime?
+  lastSharedAt  DateTime?
   lastRetriedAt DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   session CavAiSession @relation("CavAiSessionFeedback", fields: [sessionId], references: [id], onDelete: Cascade)
   message CavAiMessage @relation("CavAiMessageFeedback", fields: [messageId], references: [id], onDelete: Cascade)
@@ -2287,29 +2287,29 @@ model CavAiMessageFeedback {
 }
 
 model CavAiReasoningTrace {
-  id               String   @id @default(cuid())
-  accountId        String
-  userId           String
-  sessionId        String?
-  requestId        String   @db.VarChar(120)
-  surface          String   @db.VarChar(32)
-  action           String   @db.VarChar(120)
-  taskType         String   @db.VarChar(64)
-  actionClass      String   @db.VarChar(64)
-  provider         String   @db.VarChar(32)
-  model            String   @db.VarChar(120)
-  reasoningLevel   String   @db.VarChar(24)
-  researchMode     Boolean  @default(false)
-  durationMs       Int      @default(0)
-  showReasoningChip Boolean @default(false)
-  repairAttempted  Boolean  @default(false)
-  repairApplied    Boolean  @default(false)
-  qualityJson      Json?
-  safeSummaryJson  Json?
+  id                 String   @id @default(cuid())
+  accountId          String
+  userId             String
+  sessionId          String?
+  requestId          String   @db.VarChar(120)
+  surface            String   @db.VarChar(32)
+  action             String   @db.VarChar(120)
+  taskType           String   @db.VarChar(64)
+  actionClass        String   @db.VarChar(64)
+  provider           String   @db.VarChar(32)
+  model              String   @db.VarChar(120)
+  reasoningLevel     String   @db.VarChar(24)
+  researchMode       Boolean  @default(false)
+  durationMs         Int      @default(0)
+  showReasoningChip  Boolean  @default(false)
+  repairAttempted    Boolean  @default(false)
+  repairApplied      Boolean  @default(false)
+  qualityJson        Json?
+  safeSummaryJson    Json?
   contextSignalsJson Json?
-  checksJson       Json?
-  answerPathJson   Json?
-  createdAt        DateTime @default(now())
+  checksJson         Json?
+  answerPathJson     Json?
+  createdAt          DateTime @default(now())
 
   @@index([accountId, requestId])
   @@index([accountId, sessionId, createdAt])
@@ -2317,20 +2317,20 @@ model CavAiReasoningTrace {
 }
 
 model CavAiToolCall {
-  id          String   @id @default(cuid())
-  accountId   String
-  userId      String
-  sessionId   String?
-  requestId   String   @db.VarChar(120)
-  surface     String   @db.VarChar(32)
-  action      String   @db.VarChar(120)
-  toolId      String   @db.VarChar(80)
-  status      String   @db.VarChar(24)
-  latencyMs   Int?
-  inputJson   Json?
-  outputJson  Json?
-  errorCode   String?  @db.VarChar(120)
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  accountId  String
+  userId     String
+  sessionId  String?
+  requestId  String   @db.VarChar(120)
+  surface    String   @db.VarChar(32)
+  action     String   @db.VarChar(120)
+  toolId     String   @db.VarChar(80)
+  status     String   @db.VarChar(24)
+  latencyMs  Int?
+  inputJson  Json?
+  outputJson Json?
+  errorCode  String?  @db.VarChar(120)
+  createdAt  DateTime @default(now())
 
   @@index([accountId, requestId, createdAt])
   @@index([accountId, sessionId, createdAt])
@@ -2338,32 +2338,32 @@ model CavAiToolCall {
 }
 
 model CoderCreditWallet {
-  id                String   @id @default(cuid())
-  accountId         String
-  userId            String
-  planTier          String   @db.VarChar(32)
-  billingCycleStart DateTime
-  billingCycleEnd   DateTime
-  monthlyAllocation Int      @default(0)
-  rolloverAllocation Int     @default(0)
-  totalAvailable    Int      @default(0)
-  totalUsed         Int      @default(0)
-  totalRemaining    Int      @default(0)
-  stagedModeEnabled Boolean  @default(false)
-  stage1Allocation  Int      @default(0)
-  stage1Used        Int      @default(0)
-  stage1ExhaustedAt DateTime?
-  cooldownEndsAt    DateTime?
-  stage2Allocation  Int      @default(0)
-  stage2Used        Int      @default(0)
-  exhaustedAt       DateTime?
-  resetSource       String?  @db.VarChar(64)
-  lastRecomputedAt  DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                 String    @id @default(cuid())
+  accountId          String
+  userId             String
+  planTier           String    @db.VarChar(32)
+  billingCycleStart  DateTime
+  billingCycleEnd    DateTime
+  monthlyAllocation  Int       @default(0)
+  rolloverAllocation Int       @default(0)
+  totalAvailable     Int       @default(0)
+  totalUsed          Int       @default(0)
+  totalRemaining     Int       @default(0)
+  stagedModeEnabled  Boolean   @default(false)
+  stage1Allocation   Int       @default(0)
+  stage1Used         Int       @default(0)
+  stage1ExhaustedAt  DateTime?
+  cooldownEndsAt     DateTime?
+  stage2Allocation   Int       @default(0)
+  stage2Used         Int       @default(0)
+  exhaustedAt        DateTime?
+  resetSource        String?   @db.VarChar(64)
+  lastRecomputedAt   DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  account        Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account        Account              @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   ledgerEntries  CoderCreditLedger[]
   usageSnapshots CoderUsageSnapshot[]
 
@@ -2375,27 +2375,27 @@ model CoderCreditWallet {
 }
 
 model CoderCreditLedger {
-  id                String   @id @default(cuid())
-  walletId          String
-  accountId         String
-  userId            String
-  conversationId    String?  @db.VarChar(120)
-  taskId            String?  @db.VarChar(120)
-  requestId         String   @db.VarChar(120)
-  modelName         String   @db.VarChar(120)
-  rawInputTokens    Int      @default(0)
-  rawContextTokens  Int      @default(0)
-  rawOutputTokens   Int      @default(0)
-  compactionTokens  Int      @default(0)
-  runtimeSeconds    Int      @default(0)
-  estimatedCredits  Int      @default(0)
-  creditsCharged    Int      @default(0)
-  chargeReason      String   @db.VarChar(64)
-  chargeState       String   @db.VarChar(24)
-  reservedAt        DateTime?
-  finalizedAt       DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id               String    @id @default(cuid())
+  walletId         String
+  accountId        String
+  userId           String
+  conversationId   String?   @db.VarChar(120)
+  taskId           String?   @db.VarChar(120)
+  requestId        String    @db.VarChar(120)
+  modelName        String    @db.VarChar(120)
+  rawInputTokens   Int       @default(0)
+  rawContextTokens Int       @default(0)
+  rawOutputTokens  Int       @default(0)
+  compactionTokens Int       @default(0)
+  runtimeSeconds   Int       @default(0)
+  estimatedCredits Int       @default(0)
+  creditsCharged   Int       @default(0)
+  chargeReason     String    @db.VarChar(64)
+  chargeState      String    @db.VarChar(24)
+  reservedAt       DateTime?
+  finalizedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   wallet  CoderCreditWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
   account Account           @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -2410,16 +2410,16 @@ model CoderCreditLedger {
 }
 
 model CoderUsageSnapshot {
-  id               String   @id @default(cuid())
-  walletId         String?
-  accountId        String
-  userId           String
-  billingCycleStart DateTime
-  percentUsed      Float    @default(0)
-  percentRemaining Float    @default(100)
+  id                 String   @id @default(cuid())
+  walletId           String?
+  accountId          String
+  userId             String
+  billingCycleStart  DateTime
+  percentUsed        Float    @default(0)
+  percentRemaining   Float    @default(100)
   estimatedTasksLeft Int?
-  updatedAt        DateTime @updatedAt
-  createdAt        DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  createdAt          DateTime @default(now())
 
   wallet  CoderCreditWallet? @relation(fields: [walletId], references: [id], onDelete: SetNull)
   account Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -2450,17 +2450,17 @@ model CoderPlanEvent {
 }
 
 model CoderContextSnapshot {
-  id                  String   @id @default(cuid())
-  accountId           String
-  userId              String
-  sessionId           String?  @db.VarChar(120)
-  conversationId      String?  @db.VarChar(120)
-  activeModel         String   @db.VarChar(120)
-  currentContextTokens Int     @default(0)
-  maxContextTokens    Int      @default(0)
-  percentFull         Float    @default(0)
-  compactionCount     Int      @default(0)
-  createdAt           DateTime @default(now())
+  id                   String   @id @default(cuid())
+  accountId            String
+  userId               String
+  sessionId            String?  @db.VarChar(120)
+  conversationId       String?  @db.VarChar(120)
+  activeModel          String   @db.VarChar(120)
+  currentContextTokens Int      @default(0)
+  maxContextTokens     Int      @default(0)
+  percentFull          Float    @default(0)
+  compactionCount      Int      @default(0)
+  createdAt            DateTime @default(now())
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -2471,21 +2471,21 @@ model CoderContextSnapshot {
 }
 
 model CavAiRetryEvent {
-  id                  String   @id @default(cuid())
-  accountId           String
-  userId              String
-  sessionId           String
-  requestId           String   @db.VarChar(120)
-  surface             String   @db.VarChar(32)
-  action              String   @db.VarChar(120)
-  taskType            String?  @db.VarChar(64)
-  sourceMessageId     String?  @db.VarChar(120)
-  sourceSessionId     String?  @db.VarChar(120)
-  model               String?  @db.VarChar(120)
-  reasoningLevel      String?  @db.VarChar(24)
-  researchMode        Boolean  @default(false)
-  contextJson         Json?
-  createdAt           DateTime @default(now())
+  id              String   @id @default(cuid())
+  accountId       String
+  userId          String
+  sessionId       String
+  requestId       String   @db.VarChar(120)
+  surface         String   @db.VarChar(32)
+  action          String   @db.VarChar(120)
+  taskType        String?  @db.VarChar(64)
+  sourceMessageId String?  @db.VarChar(120)
+  sourceSessionId String?  @db.VarChar(120)
+  model           String?  @db.VarChar(120)
+  reasoningLevel  String?  @db.VarChar(24)
+  researchMode    Boolean  @default(false)
+  contextJson     Json?
+  createdAt       DateTime @default(now())
 
   @@index([accountId, sessionId, createdAt])
   @@index([accountId, requestId])
@@ -2493,23 +2493,23 @@ model CavAiRetryEvent {
 }
 
 model CavAiModelSelectionEvent {
-  id                 String   @id @default(cuid())
-  accountId          String
-  userId             String
-  sessionId          String?
-  requestId          String   @db.VarChar(120)
-  surface            String   @db.VarChar(32)
-  action             String   @db.VarChar(120)
-  taskType           String?  @db.VarChar(64)
-  actionClass        String   @db.VarChar(64)
-  planId             String   @db.VarChar(32)
-  requestedModel     String?  @db.VarChar(120)
-  resolvedModel      String   @db.VarChar(120)
-  providerId         String   @db.VarChar(32)
-  reasoningLevel     String   @db.VarChar(24)
-  manualSelection    Boolean  @default(false)
-  fallbackReason     String?  @db.VarChar(160)
-  createdAt          DateTime @default(now())
+  id              String   @id @default(cuid())
+  accountId       String
+  userId          String
+  sessionId       String?
+  requestId       String   @db.VarChar(120)
+  surface         String   @db.VarChar(32)
+  action          String   @db.VarChar(120)
+  taskType        String?  @db.VarChar(64)
+  actionClass     String   @db.VarChar(64)
+  planId          String   @db.VarChar(32)
+  requestedModel  String?  @db.VarChar(120)
+  resolvedModel   String   @db.VarChar(120)
+  providerId      String   @db.VarChar(32)
+  reasoningLevel  String   @db.VarChar(24)
+  manualSelection Boolean  @default(false)
+  fallbackReason  String?  @db.VarChar(160)
+  createdAt       DateTime @default(now())
 
   @@index([accountId, requestId, createdAt])
   @@index([accountId, sessionId, createdAt])
@@ -2529,20 +2529,20 @@ model CavAiUserMemorySetting {
 }
 
 model CavAiUserMemoryFact {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   accountId       String
   userId          String
-  factKey         String   @db.VarChar(120)
-  factValue       String   @db.Text
-  category        String   @db.VarChar(40)
-  confidence      Float    @default(0.6)
-  isSensitive     Boolean  @default(false)
-  sourceSessionId String?  @db.VarChar(120)
-  sourceMessageId String?  @db.VarChar(120)
+  factKey         String    @db.VarChar(120)
+  factValue       String    @db.Text
+  category        String    @db.VarChar(40)
+  confidence      Float     @default(0.6)
+  isSensitive     Boolean   @default(false)
+  sourceSessionId String?   @db.VarChar(120)
+  sourceMessageId String?   @db.VarChar(120)
   lastUsedAt      DateTime?
   deletedAt       DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@unique([accountId, userId, factKey])
   @@index([accountId, userId, category, updatedAt])
@@ -2567,21 +2567,21 @@ model CavAiUserMemoryEvent {
 }
 
 model CavAiShareArtifact {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   accountId         String
   userId            String
   sessionId         String
-  mode              String   @db.VarChar(24)
-  targetIdentity    String?  @db.VarChar(200)
-  internalUrl       String?  @db.Text
-  externalUrl       String?  @db.Text
-  externalTokenHash String?  @db.VarChar(64)
+  mode              String    @db.VarChar(24)
+  targetIdentity    String?   @db.VarChar(200)
+  internalUrl       String?   @db.Text
+  externalUrl       String?   @db.Text
+  externalTokenHash String?   @db.VarChar(64)
   expiresAt         DateTime?
   revokedAt         DateTime?
-  viewCount         Int      @default(0)
+  viewCount         Int       @default(0)
   lastViewedAt      DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@index([accountId, sessionId, createdAt])
   @@index([accountId, userId, createdAt])
@@ -2615,22 +2615,22 @@ model CavAiRouteManifestSnapshot {
 }
 
 model CavAiWebsiteKnowledgeGraph {
-  id            String   @id @default(cuid())
-  accountId     String
-  userId        String
-  requestId     String?  @db.VarChar(120)
-  source        String   @db.VarChar(40)
-  sourceRef     String?  @db.VarChar(180)
-  workspaceId   String?  @db.VarChar(160)
-  projectId     Int?
-  siteId        String?  @db.VarChar(120)
-  origin        String?  @db.Text
-  graphVersion  String   @db.VarChar(40)
-  graphJson     Json
-  signalJson    Json?
-  summaryJson   Json?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(cuid())
+  accountId    String
+  userId       String
+  requestId    String?  @db.VarChar(120)
+  source       String   @db.VarChar(40)
+  sourceRef    String?  @db.VarChar(180)
+  workspaceId  String?  @db.VarChar(160)
+  projectId    Int?
+  siteId       String?  @db.VarChar(120)
+  origin       String?  @db.Text
+  graphVersion String   @db.VarChar(40)
+  graphJson    Json
+  signalJson   Json?
+  summaryJson  Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([accountId, createdAt])
   @@index([accountId, projectId, createdAt])
@@ -2639,31 +2639,31 @@ model CavAiWebsiteKnowledgeGraph {
 }
 
 model CavAiAgentJob {
-  id             String   @id @default(cuid())
-  accountId      String
-  userId         String
-  sessionId      String?  @db.VarChar(120)
-  requestId      String?  @db.VarChar(120)
-  surface        String   @db.VarChar(32)
-  jobType        String   @db.VarChar(48)
-  taskType       String?  @db.VarChar(64)
-  goal           String   @db.Text
-  state          String   @db.VarChar(40)
-  status         String   @db.VarChar(24)
-  progressPct    Int      @default(0)
-  workspaceId    String?  @db.VarChar(160)
-  projectId      Int?
-  siteId         String?  @db.VarChar(120)
-  origin         String?  @db.Text
-  contextJson    Json?
-  resultJson     Json?
-  errorCode      String?  @db.VarChar(120)
-  errorMessage   String?  @db.Text
-  startedAt      DateTime?
-  completedAt    DateTime?
+  id              String    @id @default(cuid())
+  accountId       String
+  userId          String
+  sessionId       String?   @db.VarChar(120)
+  requestId       String?   @db.VarChar(120)
+  surface         String    @db.VarChar(32)
+  jobType         String    @db.VarChar(48)
+  taskType        String?   @db.VarChar(64)
+  goal            String    @db.Text
+  state           String    @db.VarChar(40)
+  status          String    @db.VarChar(24)
+  progressPct     Int       @default(0)
+  workspaceId     String?   @db.VarChar(160)
+  projectId       Int?
+  siteId          String?   @db.VarChar(120)
+  origin          String?   @db.Text
+  contextJson     Json?
+  resultJson      Json?
+  errorCode       String?   @db.VarChar(120)
+  errorMessage    String?   @db.Text
+  startedAt       DateTime?
+  completedAt     DateTime?
   lastHeartbeatAt DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   events CavAiAgentJobEvent[]
 
@@ -2676,15 +2676,15 @@ model CavAiAgentJob {
 }
 
 model CavAiAgentJobEvent {
-  id          String   @id @default(cuid())
-  accountId   String
-  userId      String
-  jobId       String
-  state       String   @db.VarChar(40)
-  status      String   @db.VarChar(24)
-  step        String   @db.VarChar(120)
-  detailJson  Json?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  accountId  String
+  userId     String
+  jobId      String
+  state      String   @db.VarChar(40)
+  status     String   @db.VarChar(24)
+  step       String   @db.VarChar(120)
+  detailJson Json?
+  createdAt  DateTime @default(now())
 
   job CavAiAgentJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
@@ -2886,23 +2886,23 @@ model AuditLog {
 }
 
 model StaffProfile {
-  id                String               @id @default(cuid())
-  userId            String               @unique
-  staffCode         String               @unique @db.VarChar(16)
-  systemRole        StaffSystemRole      @default(MEMBER)
-  positionTitle     String               @default("Staff") @db.VarChar(120)
-  status            StaffStatus          @default(INVITED)
+  id                String                @id @default(cuid())
+  userId            String                @unique
+  staffCode         String                @unique @db.VarChar(16)
+  systemRole        StaffSystemRole       @default(MEMBER)
+  positionTitle     String                @default("Staff") @db.VarChar(120)
+  status            StaffStatus           @default(INVITED)
   onboardingStatus  StaffOnboardingStatus @default(PENDING)
-  invitedEmail      String?              @db.VarChar(191)
+  invitedEmail      String?               @db.VarChar(191)
   invitedByUserId   String?
   createdByUserId   String?
-  notes             String?              @db.Text
-  scopes            String[]             @default([])
+  notes             String?               @db.Text
+  scopes            String[]              @default([])
   metadataJson      Json?
   lastAdminLoginAt  DateTime?
   lastAdminStepUpAt DateTime?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -2913,24 +2913,24 @@ model StaffProfile {
 }
 
 model StaffInvite {
-  id                 String          @id @default(cuid())
+  id                 String            @id @default(cuid())
   email              String
-  normalizedEmail    String          @db.VarChar(191)
-  tokenHash          String          @unique @db.VarChar(128)
-  systemRole         StaffSystemRole @default(MEMBER)
-  positionTitle      String          @db.VarChar(120)
+  normalizedEmail    String            @db.VarChar(191)
+  tokenHash          String            @unique @db.VarChar(128)
+  systemRole         StaffSystemRole   @default(MEMBER)
+  positionTitle      String            @db.VarChar(120)
   status             StaffInviteStatus @default(PENDING)
   invitedByUserId    String?
-  invitedByStaffCode String?         @db.VarChar(16)
+  invitedByStaffCode String?           @db.VarChar(16)
   inviteeUserId      String?
   acceptedStaffId    String?
   expiresAt          DateTime
   acceptedAt         DateTime?
   revokedAt          DateTime?
-  message            String?         @db.Text
+  message            String?           @db.Text
   metaJson           Json?
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
   @@index([normalizedEmail, status])
   @@index([status, expiresAt])
@@ -2944,23 +2944,23 @@ model StaffSequence {
 }
 
 model AdminAuditLog {
-  id          String        @id @default(cuid())
+  id           String        @id @default(cuid())
   actorStaffId String?
-  actorUserId String?
-  action      String        @db.VarChar(64)
-  actionLabel String        @db.VarChar(160)
-  entityType  String        @db.VarChar(64)
-  entityId    String?       @db.VarChar(191)
-  entityLabel String?       @db.VarChar(191)
-  severity    AuditSeverity @default(info)
-  ip          String?       @db.VarChar(96)
-  userAgent   String?       @db.Text
-  requestHost String?       @db.VarChar(191)
-  sessionKey  String?       @db.VarChar(120)
-  beforeJson  Json?
-  afterJson   Json?
-  metaJson    Json?
-  createdAt   DateTime      @default(now())
+  actorUserId  String?
+  action       String        @db.VarChar(64)
+  actionLabel  String        @db.VarChar(160)
+  entityType   String        @db.VarChar(64)
+  entityId     String?       @db.VarChar(191)
+  entityLabel  String?       @db.VarChar(191)
+  severity     AuditSeverity @default(info)
+  ip           String?       @db.VarChar(96)
+  userAgent    String?       @db.Text
+  requestHost  String?       @db.VarChar(191)
+  sessionKey   String?       @db.VarChar(120)
+  beforeJson   Json?
+  afterJson    Json?
+  metaJson     Json?
+  createdAt    DateTime      @default(now())
 
   @@index([actorStaffId, createdAt])
   @@index([actorUserId, createdAt])
@@ -2970,24 +2970,24 @@ model AdminAuditLog {
 }
 
 model AdminEvent {
-  id           String   @id @default(cuid())
-  name         String   @db.VarChar(80)
-  actorStaffId String?
-  actorUserId  String?
+  id            String   @id @default(cuid())
+  name          String   @db.VarChar(80)
+  actorStaffId  String?
+  actorUserId   String?
   subjectUserId String?
-  accountId    String?
-  projectId    Int?
-  siteId       String?
-  origin       String?  @db.Text
-  sessionKey   String?  @db.VarChar(120)
-  planTier     String?  @db.VarChar(32)
-  environment  String?  @db.VarChar(40)
-  status       String?  @db.VarChar(40)
-  result       String?  @db.VarChar(40)
-  country      String?  @db.VarChar(8)
-  region       String?  @db.VarChar(80)
-  metaJson     Json?
-  createdAt    DateTime @default(now())
+  accountId     String?
+  projectId     Int?
+  siteId        String?
+  origin        String?  @db.Text
+  sessionKey    String?  @db.VarChar(120)
+  planTier      String?  @db.VarChar(32)
+  environment   String?  @db.VarChar(40)
+  status        String?  @db.VarChar(40)
+  result        String?  @db.VarChar(40)
+  country       String?  @db.VarChar(8)
+  region        String?  @db.VarChar(80)
+  metaJson      Json?
+  createdAt     DateTime @default(now())
 
   @@index([name, createdAt])
   @@index([accountId, createdAt])
@@ -3023,6 +3023,310 @@ model AdminMetricRollup {
   @@index([accountId, bucket, bucketStart])
   @@index([projectId, bucket, bucketStart])
   @@index([siteId, bucket, bucketStart])
+}
+
+model AdminAccountDiscipline {
+  accountId          String                @id
+  status             AdminDisciplineStatus @default(ACTIVE)
+  violationCount     Int                   @default(0)
+  suspendedUntil     DateTime?
+  suspendedAt        DateTime?
+  suspendedByStaffId String?
+  suspensionDays     Int?
+  revokedAt          DateTime?
+  revokedByStaffId   String?
+  note               String?               @db.Text
+  metadataJson       Json?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@index([status, updatedAt])
+  @@index([suspendedUntil])
+}
+
+model AdminUserDiscipline {
+  userId                 String                @id
+  status                 AdminDisciplineStatus @default(ACTIVE)
+  violationCount         Int                   @default(0)
+  suspendedUntil         DateTime?
+  suspendedAt            DateTime?
+  suspendedByStaffId     String?
+  suspensionDays         Int?
+  revokedAt              DateTime?
+  revokedByStaffId       String?
+  lastRecoveryResetAt    DateTime?
+  lastSessionKillAt      DateTime?
+  lastIdentityReviewAt   DateTime?
+  lastIdentityReviewById String?
+  note                   String?               @db.Text
+  metadataJson           Json?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+
+  @@index([status, updatedAt])
+  @@index([suspendedUntil])
+}
+
+model AdminEntityNote {
+  id                  String   @id @default(cuid())
+  entityType          String   @db.VarChar(40)
+  entityId            String   @db.VarChar(191)
+  authorStaffId       String?
+  authorUserId        String?
+  customerVisibleNote Boolean  @default(false)
+  body                String   @db.Text
+  caseId              String?
+  metaJson            Json?
+  createdAt           DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([caseId, createdAt])
+  @@index([authorStaffId, createdAt])
+}
+
+model AdminBillingAdjustment {
+  id               String                     @id @default(cuid())
+  accountId        String                     @db.VarChar(191)
+  userId           String?                    @db.VarChar(191)
+  kind             AdminBillingAdjustmentKind
+  amountCents      Int?
+  currency         String                     @default("USD") @db.VarChar(12)
+  reason           String                     @db.VarChar(160)
+  note             String?                    @db.Text
+  createdByStaffId String?
+  createdByUserId  String?
+  metaJson         Json?
+  createdAt        DateTime                   @default(now())
+
+  @@index([accountId, createdAt])
+  @@index([userId, createdAt])
+  @@index([kind, createdAt])
+}
+
+model AdminCase {
+  id                 String            @id @default(cuid())
+  caseCode           String            @unique @db.VarChar(24)
+  queue              AdminCaseQueue
+  status             AdminCaseStatus   @default(OPEN)
+  priority           AdminCasePriority @default(MEDIUM)
+  sourceKey          String?           @unique @db.VarChar(191)
+  subject            String            @db.VarChar(180)
+  description        String?           @db.Text
+  accountId          String?           @db.VarChar(191)
+  userId             String?           @db.VarChar(191)
+  linkedThreadId     String?           @db.VarChar(191)
+  linkedCampaignId   String?           @db.VarChar(191)
+  assigneeStaffId    String?
+  assigneeUserId     String?
+  slaDueAt           DateTime?
+  customerNotifiedAt DateTime?
+  outcome            String?           @db.Text
+  metaJson           Json?
+  openedAt           DateTime          @default(now())
+  resolvedAt         DateTime?
+  closedAt           DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  notes AdminCaseNote[]
+
+  @@index([queue, status, priority])
+  @@index([assigneeStaffId, status, updatedAt])
+  @@index([accountId, status, updatedAt])
+  @@index([userId, status, updatedAt])
+  @@index([slaDueAt, status])
+}
+
+model AdminCaseNote {
+  id                  String   @id @default(cuid())
+  caseId              String
+  authorStaffId       String?
+  authorUserId        String?
+  customerVisibleNote Boolean  @default(false)
+  body                String   @db.Text
+  metaJson            Json?
+  createdAt           DateTime @default(now())
+
+  case AdminCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, createdAt])
+  @@index([authorStaffId, createdAt])
+}
+
+model AdminBroadcastCampaign {
+  id                  String               @id @default(cuid())
+  title               String               @db.VarChar(160)
+  body                String               @db.Text
+  status              AdminBroadcastStatus @default(DRAFT)
+  audienceType        String               @db.VarChar(40)
+  targetDepartments   String[]             @default([])
+  targetAccountIds    String[]             @default([])
+  targetUserIds       String[]             @default([])
+  channels            String[]             @default([])
+  ctaLabel            String?              @db.VarChar(80)
+  ctaHref             String?
+  dismissalPolicy     String?              @db.VarChar(80)
+  dismissAt           DateTime?
+  scheduledFor        DateTime?
+  deliveryWindowStart DateTime?
+  deliveryWindowEnd   DateTime?
+  sentAt              DateTime?
+  canceledAt          DateTime?
+  createdByStaffId    String?
+  createdByUserId     String?
+  metaJson            Json?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  deliveries AdminBroadcastDelivery[]
+
+  @@index([status, scheduledFor])
+  @@index([createdByStaffId, createdAt])
+  @@index([audienceType, createdAt])
+  @@map("AdminBroadcastCampaignV2")
+}
+
+model AdminBroadcastDelivery {
+  id                 String    @id @default(cuid())
+  campaignId         String
+  recipientUserId    String    @db.VarChar(191)
+  recipientAccountId String?   @db.VarChar(191)
+  channel            String    @db.VarChar(24)
+  status             String    @default("PENDING") @db.VarChar(24)
+  deliveredAt        DateTime?
+  readAt             DateTime?
+  notificationId     String?   @db.VarChar(191)
+  threadId           String?   @db.VarChar(191)
+  messageId          String?   @db.VarChar(191)
+  errorMessage       String?   @db.Text
+  metaJson           Json?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  campaign AdminBroadcastCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, recipientUserId, channel])
+  @@index([recipientUserId, status, createdAt])
+  @@index([status, createdAt])
+  @@map("AdminBroadcastDeliveryV2")
+}
+
+model AdminChatBox {
+  id                   String           @id @default(cuid())
+  slug                 String           @unique @db.VarChar(64)
+  label                String           @db.VarChar(120)
+  description          String?          @db.Text
+  kind                 AdminChatBoxKind @default(ORG)
+  allowedDepartments   String[]         @default([])
+  oversightDepartments String[]         @default([])
+  isSystem             Boolean          @default(false)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  threads AdminChatThread[]
+
+  @@index([kind, createdAt])
+}
+
+model AdminChatThread {
+  id               String                @id @default(cuid())
+  boxId            String?
+  directKey        String?               @unique @db.VarChar(191)
+  subject          String                @db.VarChar(180)
+  status           AdminChatThreadStatus @default(ACTIVE)
+  isDirect         Boolean               @default(false)
+  createdByUserId  String?
+  createdByStaffId String?
+  lastMessageAt    DateTime?
+  archivedAt       DateTime?
+  metaJson         Json?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  box          AdminChatBox?          @relation(fields: [boxId], references: [id], onDelete: SetNull)
+  participants AdminChatParticipant[]
+  messages     AdminChatMessage[]
+  drafts       AdminChatDraft[]
+
+  @@index([boxId, updatedAt])
+  @@index([isDirect, updatedAt])
+  @@index([status, lastMessageAt])
+}
+
+model AdminChatParticipant {
+  id                String                   @id @default(cuid())
+  threadId          String
+  userId            String                   @db.VarChar(191)
+  staffId           String?
+  role              AdminChatParticipantRole @default(MEMBER)
+  lastReadMessageId String?                  @db.VarChar(191)
+  readAt            DateTime?
+  isArchived        Boolean                  @default(false)
+  isMuted           Boolean                  @default(false)
+  joinedAt          DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  thread AdminChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, userId])
+  @@index([userId, isArchived, updatedAt])
+  @@index([threadId, updatedAt])
+}
+
+model AdminChatMessage {
+  id                  String               @id @default(cuid())
+  threadId            String
+  senderUserId        String               @db.VarChar(191)
+  senderStaffId       String?
+  kind                AdminChatMessageKind @default(MESSAGE)
+  bodyStorage         AdminChatBodyStorage @default(INLINE)
+  previewText         String?              @db.VarChar(320)
+  searchText          String?              @db.Text
+  bodyText            String?              @db.Text
+  bodyR2Key           String?              @db.VarChar(191)
+  broadcastCampaignId String?              @db.VarChar(191)
+  caseId              String?              @db.VarChar(191)
+  metaJson            Json?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  editedAt            DateTime?
+  deletedAt           DateTime?
+
+  thread      AdminChatThread       @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  attachments AdminChatAttachment[]
+
+  @@index([threadId, createdAt])
+  @@index([senderUserId, createdAt])
+}
+
+model AdminChatAttachment {
+  id               String   @id @default(cuid())
+  messageId        String
+  uploadedByUserId String?  @db.VarChar(191)
+  fileName         String   @db.VarChar(191)
+  contentType      String   @db.VarChar(120)
+  sizeBytes        BigInt   @default(0)
+  objectKey        String   @db.VarChar(191)
+  createdAt        DateTime @default(now())
+
+  message AdminChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId, createdAt])
+}
+
+model AdminChatDraft {
+  id            String   @id @default(cuid())
+  threadId      String
+  userId        String   @db.VarChar(191)
+  body          String?  @db.Text
+  attachmentIds String[] @default([])
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  thread AdminChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, userId])
+  @@index([userId, updatedAt])
 }
 
 model UsernameHistory {
@@ -3068,6 +3372,79 @@ model StripeEvent {
   @@index([accountId])
   @@index([createdAt])
   @@index([type])
+}
+
+enum AdminDisciplineStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum AdminBillingAdjustmentKind {
+  CREDIT
+  COMP
+  TRIAL_EXTENSION
+  PLAN_OVERRIDE
+}
+
+enum AdminCaseQueue {
+  BILLING_OPS
+  TRUST_AND_SAFETY
+  CUSTOMER_SUCCESS
+  BROADCASTS
+  APPROVALS
+  FOUNDER
+}
+
+enum AdminCaseStatus {
+  OPEN
+  IN_PROGRESS
+  PENDING_EXTERNAL
+  RESOLVED
+  CLOSED
+}
+
+enum AdminCasePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AdminBroadcastStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELED
+  FAILED
+}
+
+enum AdminChatBoxKind {
+  ORG
+  DIRECT
+}
+
+enum AdminChatThreadStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum AdminChatParticipantRole {
+  MEMBER
+  OWNER
+  OBSERVER
+}
+
+enum AdminChatMessageKind {
+  MESSAGE
+  SYSTEM
+  BROADCAST
+}
+
+enum AdminChatBodyStorage {
+  INLINE
+  R2
 }
 
 enum MemberRole {

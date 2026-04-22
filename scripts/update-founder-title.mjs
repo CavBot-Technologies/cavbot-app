@@ -1,18 +1,8 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-import dotenv from "dotenv";
+import fs from "fs";
 import pg from "pg";
+import dotenv from "dotenv";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const envPath = path.join(repoRoot, ".env.local");
-
-if (!fs.existsSync(envPath)) {
-  throw new Error(`Missing env file at ${envPath}`);
-}
-
-const env = dotenv.parse(fs.readFileSync(envPath));
+const env = dotenv.parse(fs.readFileSync("/Users/cmarvinpl/Documents/GitHub/cavbot-app/.env.local"));
 const founderEmail = String(env.CAVBOT_FOUNDER_EMAIL || "").trim().toLowerCase();
 const founderTitle = String(env.CAVBOT_FOUNDER_POSITION_TITLE || "Founder & CEO").trim();
 const founderCode = String(env.CAVBOT_FOUNDER_STAFF_CODE || "").trim();

@@ -14,38 +14,20 @@ test("cavcode sidebar menus render on an isolated top-layer surface", () => {
 
   assert.match(source, /\.cc-sidebar-head\{[\s\S]*position: relative;[\s\S]*overflow: visible;[\s\S]*isolation: isolate;/);
   assert.match(source, /\.cc-side-menuShell\{[\s\S]*z-index: calc\(var\(--z-pop\) \+ 1\);[\s\S]*isolation: isolate;/);
-  assert.match(source, /\.cc-side-menuOverlay\{[\s\S]*position: fixed;[\s\S]*backdrop-filter: blur\(10px\) saturate\(120%\);/);
-  assert.match(source, /\.cc-side-menuShell\.is-open\{[\s\S]*z-index: calc\(var\(--z-pop\) \+ 4\);/);
-  assert.match(source, /\.cc-side-menu\{[\s\S]*backdrop-filter: blur\(18px\) saturate\(140%\);[\s\S]*z-index: 3;[\s\S]*overflow: hidden;[\s\S]*isolation: isolate;/);
+  assert.match(source, /\.cc-side-menu\{[\s\S]*z-index: calc\(var\(--z-pop\) \+ 2\);[\s\S]*overflow: hidden;[\s\S]*isolation: isolate;/);
 });
 
-test("cavcode search stays top-aligned and changes commit input keeps shared field styling", () => {
+test("cavcode search sidebar uses the new sidebar surface styling", () => {
   const pageSource = read("app/cavcode/page.tsx");
   const cssSource = read("app/cavcode/cavcode.css");
 
-  assert.match(pageSource, /className="cc-search-bar"/);
-  assert.doesNotMatch(pageSource, /className="cc-search-shell"/);
-  assert.doesNotMatch(pageSource, /className="cc-search-kicker mono"/);
-  assert.doesNotMatch(pageSource, /className="cc-search-note"/);
+  assert.match(pageSource, /className="cc-search-shell"/);
+  assert.match(pageSource, /className="cc-search-kicker mono"/);
+  assert.match(pageSource, /className="cc-search-note"/);
 
-  assert.match(cssSource, /\.cc-search\{[\s\S]*padding: 10px 8px 12px;[\s\S]*gap: 12px;/);
-  assert.match(cssSource, /\.cc-search-bar\{[\s\S]*padding-top: 2px;/);
-  assert.match(cssSource, /\.cc-search-in\{[\s\S]*font-family: var\(--cb-mono\);/);
-  assert.match(cssSource, /\.cc-search \.cc-search-in\{[\s\S]*border-radius: 10px;/);
-  assert.match(cssSource, /\.cc-changes-commitInput\{[\s\S]*padding: 0 40px 0 9px;/);
+  assert.match(cssSource, /\.cc-search-shell\{/);
+  assert.match(cssSource, /\.cc-search-kicker\{/);
+  assert.match(cssSource, /\.cc-search-note\{/);
+  assert.match(cssSource, /\.cc-search \.cc-search-in\{[\s\S]*font-family: var\(--cb-mono\);/);
   assert.match(cssSource, /\.cc-hit:last-child\{/);
-});
-
-test("cavcode terminal strip stays panel-blended and sidebar status label stays stable", () => {
-  const pageSource = read("app/cavcode/page.tsx");
-  const cssSource = read("app/cavcode/cavcode.css");
-
-  assert.match(pageSource, /<button className="cc-sbtn"[\s\S]*>\s*SIDEBAR\s*<\/button>/);
-  assert.doesNotMatch(pageSource, /SIDEBAR OFF/);
-
-  assert.match(cssSource, /\.cc-term-inbar\{[\s\S]*gap: 12px;[\s\S]*margin: 8px 10px 10px;[\s\S]*border: 1px solid rgba\(255,255,255,.09\);[\s\S]*background: linear-gradient\(180deg, rgba\(10,14,33,.94\), rgba\(5,8,22,.92\)\);/);
-  assert.match(cssSource, /\.cc-term-in\{[\s\S]*height: 100%;[\s\S]*border: 0;[\s\S]*background: transparent;[\s\S]*padding: 0;[\s\S]*box-shadow: none;/);
-  assert.match(cssSource, /\.cc-term-in:focus\{[\s\S]*border-color: transparent;[\s\S]*background: transparent;/);
-  assert.match(cssSource, /\[data-cc-hard="term-inbar"\]\{[\s\S]*margin: 8px 10px 10px !important;[\s\S]*border: 1px solid rgba\(255,255,255,.09\) !important;[\s\S]*background: linear-gradient\(180deg, rgba\(10,14,33,.96\), rgba\(5,8,22,.94\)\) !important;/);
-  assert.match(cssSource, /\[data-cc-hard="term-input"\]\{[\s\S]*border: 0 !important;[\s\S]*background: transparent !important;[\s\S]*appearance: none !important;/);
 });

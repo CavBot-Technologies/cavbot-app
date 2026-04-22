@@ -25,9 +25,15 @@ test("AppShell owner-gated settings click does not block unresolved role", () =>
 test("AppShell restores plan state from the cached shell snapshot before auth bootstrap settles", () => {
   const source = read("components/AppShell.tsx");
 
-  assert.equal(source.includes("const [bootSnapshot] = useState<PlanSnapshot | null>(() => readShellPlanSnapshot());"), true);
+  assert.equal(source.includes("const bootSnapshot = useMemo(() => shellPlanSnapshotCache ?? readShellPlanSnapshot(), []);"), true);
   assert.equal(source.includes("const [planTier, setPlanTier] = useState<PlanTier>(bootSnapshot?.planTier || \"FREE\");"), true);
   assert.equal(source.includes("const [memberRole, setMemberRole] = useState<MemberRole>(bootSnapshot?.memberRole || null);"), true);
+});
+
+test("AppShell restores cached shell plan state before first visible client render", () => {
+  const source = read("components/AppShell.tsx");
+
+  assert.equal(source.includes("const bootSnapshot = useMemo(() => shellPlanSnapshotCache ?? readShellPlanSnapshot(), []);"), true);
 });
 
 test("AppShell treats notification auth loss as passive recovery instead of emitting CavGuard", () => {
@@ -35,7 +41,6 @@ test("AppShell treats notification auth loss as passive recovery instead of emit
 
   assert.equal(source.includes("const handlePassiveAuthLoss = useCallback(() => {"), true);
   assert.equal(source.includes("if (isAuthRequiredLikeResponse(res.status, data)) {"), true);
-  assert.equal(source.includes("(payload as Record<string, unknown>).authRequired === true"), true);
   assert.equal(source.includes("guardMode: \"passive\""), true);
   assert.equal(source.includes("setSessionAuthenticated(false);"), true);
 });

@@ -67,8 +67,13 @@ const AGENT_ID_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/;
 const AGENT_ACTION_KEY_RE = /^[a-z0-9][a-z0-9_]{1,63}$/;
 const MAX_TRIGGERS = 12;
 const MAX_LIST_LIMIT = 240;
+const REQUIRED_OPERATOR_AGENT_TABLES = [
+  "OperatorAgentPublicationQueue",
+  "OperatorPublishedAgent",
+] as const;
 
 let tablesReady = false;
+let tablesReadyPromise: Promise<void> | null = null;
 
 function s(value: unknown): string {
   return String(value ?? "").trim();
@@ -104,6 +109,23 @@ function normalizeTriggers(value: unknown): string[] {
     if (rows.length >= MAX_TRIGGERS) break;
   }
   return rows;
+}
+
+async function operatorAgentTablesExist(): Promise<boolean> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ table_name: string | null }>>(
+      Prisma.sql`
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = current_schema()
+          AND table_name IN (${Prisma.join(REQUIRED_OPERATOR_AGENT_TABLES.map((tableName) => Prisma.sql`${tableName}`), ", ")})
+      `,
+    );
+    const existing = new Set(rows.map((row) => s(row.table_name)));
+    return REQUIRED_OPERATOR_AGENT_TABLES.every((tableName) => existing.has(tableName));
+  } catch {
+    return false;
+  }
 }
 
 function publishedAgentIdForSource(userId: string, sourceAgentId: string): string {
@@ -171,6 +193,15 @@ function normalizePublishedAgentRow(row: RawPublishedOperatorAgentRow): Publishe
 
 async function ensureOperatorAgentTables() {
   if (tablesReady) return;
+  if (tablesReadyPromise) {
+    await tablesReadyPromise;
+    return;
+  }
+  tablesReadyPromise = (async () => {
+  if (await operatorAgentTablesExist()) {
+    tablesReady = true;
+    return;
+  }
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "OperatorAgentPublicationQueue" (
       "accountId" TEXT NOT NULL,
@@ -210,6 +241,11 @@ async function ensureOperatorAgentTables() {
     );
   `);
   tablesReady = true;
+  })().catch((error) => {
+    tablesReadyPromise = null;
+    throw error;
+  });
+  await tablesReadyPromise;
 }
 
 async function resolveOwnerIdentity(userId: string): Promise<OwnerIdentity> {

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import CdnBadgeEyes from "@/components/CdnBadgeEyes";
@@ -35,14 +35,10 @@ import {
 } from "@/src/lib/ai/model-catalog";
 import { toReasoningDisplayHelper, toReasoningDisplayLabel } from "@/src/lib/ai/reasoning-display";
 import { inferCenterActionFromPrompt } from "@/src/lib/ai/ai.center-routing";
-import { emitGuardDecisionFromPayload, readGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
+import { emitGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
 import { resolveUploadFileIcon } from "@/lib/cavai/uploadFileIcons";
-import { readBootClientPlanState, readBootClientProfileState } from "@/lib/clientAuthBootstrap";
-import { publishClientPlan, readBootClientPlanBootstrap, subscribeClientPlan } from "@/lib/clientPlan";
-import { resolveAccountDisplayName, resolveAccountPlanLabel } from "@/lib/profileIdentity";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
-import { buildCanonicalCavAiUrl } from "@/lib/cavai/url";
 import styles from "./CavAiWorkspace.module.css";
 
 export type AiCenterSurface = "general" | "workspace" | "console" | "cavcloud" | "cavsafe" | "cavpad" | "cavcode";
@@ -442,7 +438,6 @@ type CenterConfig = {
 };
 
 type ReasoningLevel = "low" | "medium" | "high" | "extra_high";
-type VoiceCaptureIntent = "dictate" | "speak";
 type ComposerMenu = "model" | "audio_model" | "reasoning" | "quick_actions" | "agent_mode" | null;
 type FloatingComposerMenuAnchor = {
   menu: Exclude<ComposerMenu, null>;
@@ -599,6 +594,12 @@ const PASSIVE_CENTER_UNAVAILABLE_ERRORS = new Set([
   "AI_SESSION_MESSAGES_UNAVAILABLE",
   "SESSION_HISTORY_UNAVAILABLE",
 ]);
+
+function isCenterLoadFailureMessage(value: unknown): boolean {
+  const normalized = s(value).toLowerCase();
+  if (!normalized) return false;
+  return normalized.includes("failed to load sessions") || normalized.includes("failed to load messages");
+}
 
 function isPassiveCenterUnavailablePayload(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -858,37 +859,6 @@ function toSpeechErrorMessage(error: unknown): string {
   return "";
 }
 
-function toVoiceCaptureErrorMessage(error: unknown): string {
-  if (error instanceof DOMException) {
-    if (error.name === "NotAllowedError" || error.name === "SecurityError") {
-      return "Microphone access was denied. Allow microphone access and try again.";
-    }
-    if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
-      return "No microphone was detected on this device.";
-    }
-    if (error.name === "NotReadableError" || error.name === "TrackStartError") {
-      return "Microphone access is busy in another app. Close the other app and try again.";
-    }
-  }
-  const message = toSpeechErrorMessage(error).trim();
-  if (!message) return "Voice capture failed.";
-  const lowered = message.toLowerCase();
-  if (
-    lowered.includes("permission denied")
-    || lowered.includes("notallowederror")
-    || lowered.includes("user denied")
-  ) {
-    return "Microphone access was denied. Allow microphone access and try again.";
-  }
-  if (
-    lowered.includes("microphone is not allowed in this document")
-    || lowered.includes("permissions policy violation")
-  ) {
-    return "Microphone access is blocked by the app security policy.";
-  }
-  return message;
-}
-
 function isSpeechPlaybackBlockedError(error: unknown): boolean {
   if (error instanceof DOMException && error.name === "NotAllowedError") return true;
   const message = toSpeechErrorMessage(error).toLowerCase();
@@ -932,22 +902,22 @@ function reasoningLevelsForPlan(planIdRaw: unknown): ReasoningLevel[] {
 
 function normalizePlanId(value: unknown): "free" | "premium" | "premium_plus" {
   const raw = s(value).toLowerCase();
-  if (raw === "premium_plus" || raw === "premium+") return "premium_plus";
+  if (raw === "premium_plus") return "premium_plus";
   if (raw === "premium") return "premium";
   return "free";
-}
-
-function resolveServerPlanId(
-  planIdRaw: unknown,
-  fallback: "free" | "premium" | "premium_plus"
-): "free" | "premium" | "premium_plus" {
-  return s(planIdRaw) ? normalizePlanId(planIdRaw) : fallback;
 }
 
 function maxImageAttachmentsForPlan(planId: "free" | "premium" | "premium_plus"): number {
   if (planId === "premium_plus") return MAX_IMAGE_ATTACHMENTS_PREMIUM_PLUS;
   if (planId === "premium") return MAX_IMAGE_ATTACHMENTS_PREMIUM;
   return 2;
+}
+
+function toPlanTierLabel(value: unknown): "Free" | "Premium" | "Premium+" {
+  const plan = normalizePlanId(value);
+  if (plan === "premium_plus") return "Premium+";
+  if (plan === "premium") return "Premium";
+  return "Free";
 }
 
 function planTierRank(plan: "free" | "premium" | "premium_plus"): number {
@@ -983,22 +953,27 @@ function centerPlanModelOptions(planIdRaw: unknown): CavAiModelOption[] {
   }));
 }
 
-function clampCenterModelOptionsToPlan(
+function mergeCenterModelOptionsWithPlan(
   options: CavAiModelOption[],
   planIdRaw: unknown
 ): CavAiModelOption[] {
-  const allowed = new Set(centerPlanModelIds(planIdRaw));
-  return normalizeCenterModelOptions(options.filter((option) => allowed.has(s(option.id))));
+  return normalizeCenterModelOptions([
+    ...centerPlanModelOptions(planIdRaw),
+    ...options,
+  ]);
 }
 
-function clampCenterReasoningLevelsToPlan(
+function mergeCenterReasoningLevelsWithPlan(
   options: ReasoningLevel[],
   planIdRaw: unknown
 ): ReasoningLevel[] {
-  const set = new Set<ReasoningLevel>(reasoningLevelsForPlan(planIdRaw));
+  const set = new Set<ReasoningLevel>([
+    ...reasoningLevelsForPlan(planIdRaw),
+    ...options,
+  ]);
   return REASONING_LEVEL_OPTIONS
     .map((option) => option.value)
-    .filter((level) => set.has(level) && options.includes(level));
+    .filter((level) => set.has(level));
 }
 
 function isPlanLocked(args: {
@@ -3457,13 +3432,16 @@ function buildCavAiSurfaceUrl(args: {
     }
     return `/cavcode?${qp.toString()}`;
   }
-  return buildCanonicalCavAiUrl({
-    surface: args.surface,
-    contextLabel: args.contextLabel,
-    workspaceId: args.workspaceId,
-    projectId: args.projectId,
-    origin: args.origin,
-  });
+
+  const qp = new URLSearchParams();
+  qp.set("surface", args.surface);
+  if (s(args.contextLabel)) qp.set("context", s(args.contextLabel));
+  if (s(args.workspaceId)) qp.set("workspaceId", s(args.workspaceId));
+  if (Number.isFinite(Number(args.projectId)) && Number(args.projectId) > 0) {
+    qp.set("projectId", String(Math.trunc(Number(args.projectId))));
+  }
+  if (s(args.origin)) qp.set("origin", s(args.origin));
+  return `/cavai?${qp.toString()}`;
 }
 
 function withSessionInCavAiHref(href: string, nextSessionId?: string | null): string {
@@ -3533,31 +3511,6 @@ function toHeroLineSurface(surface: AiCenterSurface): CavAiSurface {
   return surface;
 }
 
-function isAuthRequiredLikeResponse(status: number, payload: unknown) {
-  const decision = readGuardDecisionFromPayload(payload);
-  if (decision?.actionId === "AUTH_REQUIRED") return true;
-  if (status === 401) return true;
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
-  const errorCode = String((payload as Record<string, unknown>).error || "").trim().toUpperCase();
-  return errorCode === "AUTH_REQUIRED" || errorCode === "UNAUTHORIZED" || errorCode === "SESSION_REVOKED" || errorCode === "EXPIRED";
-}
-
-function isSessionUnavailableLikeResponse(status: number, payload: unknown) {
-  if (isAuthRequiredLikeResponse(status, payload)) return false;
-  if (status === 404) return true;
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
-  const errorCode = String((payload as Record<string, unknown>).error || "").trim().toUpperCase();
-  return errorCode === "SESSION_NOT_FOUND";
-}
-
-function readAuthMeAiReady(payload: unknown, fallbackValue: boolean) {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return fallbackValue;
-  const capabilities = (payload as Record<string, unknown>).capabilities;
-  if (!capabilities || typeof capabilities !== "object" || Array.isArray(capabilities)) return fallbackValue;
-  const aiReady = (capabilities as Record<string, unknown>).aiReady;
-  return typeof aiReady === "boolean" ? aiReady : fallbackValue;
-}
-
 export type CavAiCenterWorkspaceProps = {
   surface: AiCenterSurface;
   contextLabel?: string;
@@ -3579,7 +3532,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const isOpen = overlay ? Boolean(props.open) : true;
   const shouldWarm = isOpen || (overlay ? props.preload !== false : Boolean(props.preload));
   const config = CENTER_CONFIG[props.surface] || CENTER_CONFIG.workspace;
-  const explicitInitialSessionId = s(props.initialSessionId);
   const initialSessionScopeKey = useMemo(
     () =>
       buildCenterSessionScopeKey({
@@ -3589,12 +3541,26 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       }),
     [props.projectId, props.surface, props.workspaceId]
   );
+  const initialSessionCacheSnapshot = useMemo(
+    () => readCenterSessionCacheSnapshot(initialSessionScopeKey),
+    [initialSessionScopeKey]
+  );
+  const initialSessionCacheMessageMap = useMemo(() => {
+    const rows = initialSessionCacheSnapshot?.messageEntries || [];
+    return new Map(rows.map((entry) => [entry.sessionId, entry.messages] as const));
+  }, [initialSessionCacheSnapshot]);
+  const initialSessionId = s(props.initialSessionId) || s(initialSessionCacheSnapshot?.activeSessionId);
+  const initialSessionSummary = initialSessionCacheSnapshot?.sessions.find((item) => item.id === initialSessionId) || null;
+  const initialMessages = initialSessionCacheMessageMap.get(initialSessionId)
+    || buildSyntheticThreadFromSessionSummary(initialSessionSummary);
 
   const [prompt, setPrompt] = useState("");
-  const [sessions, setSessions] = useState<CavAiSessionSummary[]>([]);
-  const [sessionId, setSessionId] = useState(explicitInitialSessionId);
-  const [messages, setMessages] = useState<CavAiMessage[]>([]);
-  const [loadingMessages, setLoadingMessages] = useState(Boolean(explicitInitialSessionId));
+  const [sessions, setSessions] = useState<CavAiSessionSummary[]>(initialSessionCacheSnapshot?.sessions || []);
+  const [sessionId, setSessionId] = useState(initialSessionId);
+  const [messages, setMessages] = useState<CavAiMessage[]>(initialMessages);
+  const [loadingMessages, setLoadingMessages] = useState(
+    Boolean(initialSessionId && !initialSessionCacheMessageMap.has(initialSessionId))
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [sessionQuery, setSessionQuery] = useState("");
@@ -3613,8 +3579,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [accountProfileAvatar, setAccountProfileAvatar] = useState("");
   const [accountProfileTone, setAccountProfileTone] = useState("lime");
   const [accountProfilePublicEnabled, setAccountProfilePublicEnabled] = useState<boolean | null>(null);
-  const [accountTrialActive, setAccountTrialActive] = useState(false);
-  const [accountTrialDaysLeft, setAccountTrialDaysLeft] = useState(0);
   const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">("free");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authProbeReady, setAuthProbeReady] = useState(false);
@@ -3625,7 +3589,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [chatsExpanded, setChatsExpanded] = useState(true);
   const [images, setImages] = useState<CavAiImageAttachment[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<CavAiUploadedFileAttachment[]>([]);
-  const [modelOptions, setModelOptions] = useState<CavAiModelOption[]>(() => centerPlanModelOptions("free"));
+  const [modelOptions, setModelOptions] = useState<CavAiModelOption[]>([]);
   const [audioModelOptions, setAudioModelOptions] = useState<CavAiModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState(CAVAI_AUTO_MODEL_ID);
   const [researchMode, setResearchMode] = useState(false);
@@ -3660,16 +3624,13 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [cavCloudAttachItems, setCavCloudAttachItems] = useState<CavCloudAttachFileItem[]>([]);
   const [cavCloudAttachQuery, setCavCloudAttachQuery] = useState("");
   const [selectedAudioModel, setSelectedAudioModel] = useState("auto");
-  const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>("medium");
-  const [availableReasoningLevels, setAvailableReasoningLevels] = useState<ReasoningLevel[]>(
-    () => reasoningLevelsForPlan("free")
-  );
+  const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>("high");
+  const [availableReasoningLevels, setAvailableReasoningLevels] = useState<ReasoningLevel[]>(DEFAULT_REASONING_LEVELS);
   const [openHeaderModelMenu, setOpenHeaderModelMenu] = useState(false);
   const [openComposerMenu, setOpenComposerMenu] = useState<ComposerMenu>(null);
   const [transcribingAudio, setTranscribingAudio] = useState(false);
   const [recordingVoice, setRecordingVoice] = useState(false);
   const [processingVoice, setProcessingVoice] = useState(false);
-  const [activeVoiceCaptureIntent, setActiveVoiceCaptureIntent] = useState<VoiceCaptureIntent | null>(null);
   const [speakingMessageId, setSpeakingMessageId] = useState("");
   const [voiceOrbState, setVoiceOrbState] = useState<CavAiVoiceOrbMode>("idle");
   const [voiceOrbStream, setVoiceOrbStream] = useState<MediaStream | null>(null);
@@ -3699,10 +3660,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const threadRef = useRef<HTMLElement | null>(null);
   const inlineEditInputRef = useRef<HTMLTextAreaElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
-  const [profileIdentity, setProfileIdentity] = useState<CavAiIdentityInput>(() => ({
-    fullName: "",
-    username: "",
-  }));
+  const [profileIdentity, setProfileIdentity] = useState<CavAiIdentityInput>({ fullName: "", username: "" });
   const [heroLine, setHeroLine] = useState(CAVAI_SAFE_FALLBACK_LINE);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const imageStudioImportInputRef = useRef<HTMLInputElement | null>(null);
@@ -3733,17 +3691,14 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const agentModeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const headerModelMenuRef = useRef<HTMLDivElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
-  const mobileDrawerRef = useRef<HTMLElement | null>(null);
-  const mobileDrawerReturnFocusRef = useRef<HTMLElement | null>(null);
-  const activeSessionIdRef = useRef(explicitInitialSessionId);
-  const sessionMessageCacheRef = useRef<Map<string, CavAiMessage[]>>(new Map());
+  const activeSessionIdRef = useRef(initialSessionId);
+  const sessionMessageCacheRef = useRef<Map<string, CavAiMessage[]>>(new Map(initialSessionCacheMessageMap));
   const sessionMessageRequestRef = useRef<Map<string, Promise<CavAiMessage[]>>>(new Map());
   const preloadedIconSrcRef = useRef<Set<string>>(new Set());
   const warmSessionsKeyRef = useRef("");
   const appliedInitialSessionIdRef = useRef<string | null>(null);
   const warmedModelsRef = useRef(false);
   const warmedAuthProfileRef = useRef(false);
-  const confirmedAuthenticatedUserRef = useRef(false);
   const reasoningTickerRef = useRef<number | null>(null);
   const [agentRegistrySnapshot, setAgentRegistrySnapshot] = useState<AgentRegistrySnapshot>({
     ...EMPTY_AGENT_REGISTRY_SNAPSHOT,
@@ -3758,67 +3713,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [savingAgentId, setSavingAgentId] = useState("");
   const [agentModeQuery, setAgentModeQuery] = useState("");
   const [agentModeManageAgentId, setAgentModeManageAgentId] = useState("");
-  const isGuestPreviewMode = authProbeReady && !isAuthenticated;
-  const guestPreviewModelOptions = useMemo(
-    () => CAVAI_GUEST_PREVIEW_MODELS.map((row) => ({ id: row.id, label: row.label })),
-    [],
-  );
-  const guestPreviewReasoningLevels = useMemo(
-    () => REASONING_LEVEL_OPTIONS.map((row) => row.value),
-    [],
-  );
-
-  const resetCenterAgentRegistryState = useCallback(() => {
-    setAgentRegistrySnapshot({ ...EMPTY_AGENT_REGISTRY_SNAPSHOT });
-    agentRegistrySnapshotRef.current = { ...EMPTY_AGENT_REGISTRY_SNAPSHOT };
-    setInstalledAgentIds([]);
-    installedAgentIdsRef.current = [];
-    setCustomAgents([]);
-    setPublishedAgents([]);
-  }, []);
-
-  const resetImageStudioBootstrapState = useCallback(() => {
-    setImageStudioPresets([]);
-    setImageStudioRecent([]);
-    setImageStudioSaved([]);
-    setImageStudioHistory([]);
-    setSelectedImagePresetId("");
-    setImageStudioGalleryCloud([]);
-    setImageStudioGallerySafe([]);
-  }, []);
-
-  const applyUnauthenticatedCenterState = useCallback(() => {
-    confirmedAuthenticatedUserRef.current = false;
-    setIsAuthenticated(false);
-    setAccountProfilePublicEnabled(null);
-    setAccountProfileAvatar("");
-    setAccountProfileUsername("");
-    setAccountInitialFallback("");
-    setAccountProfileTone("lime");
-    setAccountTrialActive(false);
-    setAccountTrialDaysLeft(0);
-    setAccountPlanId("free");
-    publishClientPlan({ planId: "free" });
-    setModelOptions(guestPreviewModelOptions);
-    setAudioModelOptions([]);
-    setAvailableReasoningLevels(guestPreviewReasoningLevels);
-    setSessions([]);
-    sessionMessageCacheRef.current = new Map();
-    sessionMessageRequestRef.current.clear();
-    activeSessionIdRef.current = "";
-    setSessionId("");
-    setLoadingMessages(false);
-    setMessages([]);
-    setError("");
-    setCavCloudAttachItems([]);
-    resetCenterAgentRegistryState();
-    resetImageStudioBootstrapState();
-  }, [
-    guestPreviewModelOptions,
-    guestPreviewReasoningLevels,
-    resetCenterAgentRegistryState,
-    resetImageStudioBootstrapState,
-  ]);
+  const isGuestPreviewMode = !isAuthenticated;
 
   const expandHref = useMemo(() => {
     const fallbackHref = buildCavAiSurfaceUrl({
@@ -3865,38 +3760,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   useEffect(() => {
     installedAgentIdsRef.current = installedAgentIds;
   }, [installedAgentIds]);
-
-  useLayoutEffect(() => {
-    const boot = readBootClientPlanBootstrap();
-    const bootPlanState = readBootClientPlanState();
-    const bootProfileState = readBootClientProfileState();
-    const bootProfileUsername = s(bootProfileState?.username).toLowerCase();
-    setAccountInitialFallback(s(bootProfileState?.initials));
-    setAccountProfileUsername(bootProfileUsername);
-    setAccountProfileAvatar(s(bootProfileState?.avatarImage));
-    setAccountProfileTone(s(bootProfileState?.avatarTone).toLowerCase() || "lime");
-    setAccountProfilePublicEnabled(
-      typeof bootProfileState?.publicProfileEnabled === "boolean" ? bootProfileState.publicProfileEnabled : null
-    );
-    setProfileIdentity({
-      fullName: s(bootProfileState?.fullName),
-      username: bootProfileUsername,
-    });
-    setAccountPlanId(boot.planId);
-    setAccountTrialActive(Boolean(bootPlanState?.trialActive));
-    setAccountTrialDaysLeft(Number(bootPlanState?.trialDaysLeft || 0));
-    setModelOptions(centerPlanModelOptions(boot.planId));
-    setAvailableReasoningLevels(reasoningLevelsForPlan(boot.planId));
-  }, []);
-
-  useEffect(() => {
-    return subscribeClientPlan((planId) => {
-      const bootPlanState = readBootClientPlanState();
-      setAccountPlanId(planId);
-      setAccountTrialActive(Boolean(bootPlanState?.trialActive));
-      setAccountTrialDaysLeft(Number(bootPlanState?.trialDaysLeft || 0));
-    });
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -4152,47 +4015,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     }
   }, [isGuestPreviewMode, sessionId, sessionScopeKey, sessions]);
 
-  const clearUnavailableSession = useCallback((staleSessionId: string) => {
-    const normalized = s(staleSessionId);
-    if (!normalized) return;
-
-    const nextSessions = sessions.filter((row) => row.id !== normalized);
-    sessionMessageRequestRef.current.delete(normalized);
-    sessionMessageCacheRef.current = new Map(
-      Array.from(sessionMessageCacheRef.current.entries()).filter(([id]) => id !== normalized)
-    );
-    setSessions(nextSessions);
-
-    const activeSessionId = s(activeSessionIdRef.current);
-    if (activeSessionId !== normalized) {
-      setError("");
-      scheduleSessionCachePersist({ sessions: nextSessions });
-      return;
-    }
-
-    const nextActiveSessionId = s(nextSessions[0]?.id);
-    const nextCachedMessages = nextActiveSessionId
-      ? sessionMessageCacheRef.current.get(nextActiveSessionId) || null
-      : null;
-    activeSessionIdRef.current = nextActiveSessionId;
-    setSessionId(nextActiveSessionId);
-    setLoadingMessages(Boolean(nextActiveSessionId && !nextCachedMessages));
-    if (!nextActiveSessionId) {
-      setMessages([]);
-    } else {
-      if (nextCachedMessages) setMessages(nextCachedMessages);
-      else {
-        const summary = nextSessions.find((row) => row.id === nextActiveSessionId) || null;
-        setMessages(buildSyntheticThreadFromSessionSummary(summary));
-      }
-    }
-    setError("");
-    scheduleSessionCachePersist({
-      sessions: nextSessions,
-      activeSessionId: nextActiveSessionId,
-    });
-  }, [scheduleSessionCachePersist, sessions]);
-
   const overlayEmptyHeadline = "Hi there";
   const overlayEmptySubline = "How can I assist you?";
   const emptyHeadline = overlay ? overlayEmptyHeadline : heroLine || CAVAI_SAFE_FALLBACK_LINE;
@@ -4202,7 +4024,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const hasInlineEdit = Boolean(inlineEditDraft);
   const isEmptyThread = !messages.length && !loadingMessages && !hasPendingPrompt && !hasInlineEdit;
   const showVoiceOrb = voiceOrbState !== "idle";
-  const showOverlayGreeting = !(overlay && isEmptyThread && showVoiceOrb);
   const threadInnerClassName = [styles.centerThreadInner, isEmptyThread ? styles.centerThreadInnerEmpty : styles.centerThreadInnerChat]
     .filter(Boolean)
     .join(" ");
@@ -4221,16 +4042,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const sidebarCollapsedActive = !isPhoneLayout && sidebarCollapsed;
   const hasExistingThread = Boolean(sessionId || messages.length || currentSession || hasInlineEdit);
   const centerComposerInThread = !overlay && isEmptyThread && !isPhoneLayout;
-  const emptyStateClassName = [
-    styles.centerEmptyState,
-    centerComposerInThread ? styles.centerEmptyStateWithComposer : "",
-    overlay ? styles.centerEmptyStateOverlay : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
   const showSignedOutMobileLegal = !overlay && isPhoneLayout && authProbeReady && isGuestPreviewMode && isEmptyThread;
-  const showDesktopGuestAuthPanel = !overlay && !isPhoneLayout && isGuestPreviewMode && accountMenuOpen;
-  const showAuthenticatedAccountUi = authProbeReady && isAuthenticated;
   const installedAgentIdSet = useMemo(
     () => new Set(installedAgentIds.map((id) => s(id).toLowerCase())),
     [installedAgentIds]
@@ -4703,6 +4515,17 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     if (available.has(ALIBABA_QWEN_FLASH_MODEL_ID)) return ALIBABA_QWEN_FLASH_MODEL_ID;
     return ALIBABA_QWEN_PLUS_MODEL_ID;
   }, [modelMenuOptions, researchModeActive, selectedModel]);
+  const audioModelMenuOptions = useMemo(() => {
+    const options: CavAiModelOption[] = [{ id: "auto", label: "Auto transcription model" }];
+    for (const option of audioModelOptions) {
+      if (options.some((row) => row.id === option.id)) continue;
+      options.push({
+        id: option.id,
+        label: option.label || resolveAiModelLabel(option.id),
+      });
+    }
+    return options;
+  }, [audioModelOptions]);
   const reasoningMenuOptions = useMemo<CavAiReasoningSelectableOption[]>(
     () =>
       REASONING_LEVEL_OPTIONS
@@ -4722,6 +4545,9 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     if (selectedModel === CAVAI_AUTO_MODEL_ID) return resolveAiModelLabel(CAVAI_AUTO_MODEL_ID);
     return resolveAiModelLabel(selectedModel);
   }, [isGuestPreviewMode, modelMenuOptions, selectedModel]);
+  const selectedAudioModelLabel = useMemo(() => {
+    return "Voice";
+  }, []);
   const selectedReasoningLabel = useMemo(() => {
     const match = REASONING_LEVEL_OPTIONS.find((option) => option.value === reasoningLevel);
     return match?.label || toReasoningDisplayLabel(reasoningLevel);
@@ -4734,25 +4560,20 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const accountChipBackground = useMemo(() => resolveAccountToneBackground(accountProfileTone), [accountProfileTone]);
   const accountChipInk = useMemo(() => resolveAccountToneInk(accountProfileTone), [accountProfileTone]);
   const accountNameLabel = useMemo(() => {
-    return resolveAccountDisplayName({
-      fullName: profileIdentity.fullName,
-      displayName: profileIdentity.fullName,
-      username: accountProfileUsername || profileIdentity.username,
-      fallbackLabel: "CavBot",
-    });
+    const fullName = s(profileIdentity.fullName);
+    if (fullName) return fullName;
+    const username = normalizeInitialUsernameSource(s(accountProfileUsername || profileIdentity.username));
+    if (username) return `${username.slice(0, 1).toUpperCase()}${username.slice(1)}`;
+    return "CavBot Operator";
   }, [accountProfileUsername, profileIdentity.fullName, profileIdentity.username]);
-  const accountPlanLabel = useMemo(() => resolveAccountPlanLabel({
-    planId: accountPlanId,
-    trialActive: accountTrialActive,
-    trialDaysLeft: accountTrialDaysLeft,
-  }), [accountPlanId, accountTrialActive, accountTrialDaysLeft]);
+  const accountPlanLabel = useMemo(() => toPlanTierLabel(accountPlanId), [accountPlanId]);
   const publicProfileHref = useMemo(() => {
     return buildCanonicalPublicProfileHref(accountProfileUsername);
   }, [accountProfileUsername]);
-  const guestAccountNameLabel = "CavBot Operator";
-  const guestAccountPromptLabel = "Log in or create an account";
-  const guestAccountLabel = `${guestAccountNameLabel} · ${guestAccountPromptLabel}`;
-  const profileMenuLabel = useMemo(() => (accountProfilePublicEnabled ? "Public Profile" : "Private Profile"), [accountProfilePublicEnabled]);
+  const profileMenuLabel = useMemo(() => {
+    if (accountProfilePublicEnabled === null) return "Profile";
+    return accountProfilePublicEnabled ? "Public Profile" : "Private Profile";
+  }, [accountProfilePublicEnabled]);
   const clearReasoningTicker = useCallback(() => {
     if (typeof window === "undefined") return;
     if (reasoningTickerRef.current === null) return;
@@ -4819,33 +4640,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     node.style.overflowY = node.scrollHeight > maxHeight + 1 ? "auto" : "hidden";
   }, []);
 
-  const appendTranscriptToComposer = useCallback((transcriptRaw: string) => {
-    const transcript = s(transcriptRaw);
-    if (!transcript) {
-      setError("Voice input did not produce a transcript.");
-      return false;
-    }
-    setPrompt((prev) => {
-      const existing = s(prev);
-      const lockedImagePrompt =
-        Boolean(selectedImagePresetActivationLine)
-        && normalizeImageStudioActivationLine(existing) === normalizeImageStudioActivationLine(selectedImagePresetActivationLine);
-      if (lockedImagePrompt && selectedImagePresetActivationLine) {
-        const userText = extractImageStudioUserTextFromLockedPrompt(existing, selectedImagePresetActivationLine);
-        const nextUserText = userText ? `${userText}\n\n${transcript}` : transcript;
-        return buildLockedImageStudioPrompt(selectedImagePresetActivationLine, nextUserText);
-      }
-      return existing ? `${existing}\n\n${transcript}` : transcript;
-    });
-    if (typeof window !== "undefined") {
-      window.requestAnimationFrame(() => {
-        syncComposerInputHeight();
-        composerInputRef.current?.focus();
-      });
-    }
-    return true;
-  }, [selectedImagePresetActivationLine, syncComposerInputHeight]);
-
   useEffect(() => {
     activeSessionIdRef.current = sessionId;
     scheduleSessionCachePersist({ activeSessionId: sessionId });
@@ -4906,7 +4700,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [props.initialSessionId, scheduleSessionCachePersist]);
 
   const loadSessions = useCallback(async (): Promise<boolean> => {
-    if (!authProbeReady) return false;
     if (isGuestPreviewMode) return true;
     try {
       const res = await fetch(buildSessionsUrl({ limit: 60 }), {
@@ -4916,10 +4709,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       });
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ sessions?: CavAiSessionSummary[] }>;
       if (!res.ok || !body.ok) {
-        if (isAuthRequiredLikeResponse(res.status, body)) {
-          applyUnauthenticatedCenterState();
-          return true;
-        }
         emitGuardDecisionFromPayload(body);
         if (isPassiveCenterUnavailablePayload(body)) return true;
         throw new Error(s((body as { message?: unknown }).message) || CENTER_LOAD_SESSIONS_FAILED_MESSAGE);
@@ -4943,10 +4732,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : CENTER_LOAD_SESSIONS_FAILED_MESSAGE;
-      setError(message);
+      if (!isCenterLoadFailureMessage(message)) {
+        setError(message);
+      }
       return false;
     }
-  }, [applyUnauthenticatedCenterState, authProbeReady, isGuestPreviewMode]);
+  }, [isGuestPreviewMode]);
 
   const syncGuestSessionCacheToAccount = useCallback(async (): Promise<boolean> => {
     if (typeof window === "undefined") return false;
@@ -4998,7 +4789,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const fetchSessionMessages = useCallback(async (nextSessionId: string): Promise<CavAiMessage[]> => {
     const normalized = s(nextSessionId);
     if (!normalized) return [];
-    if (!authProbeReady) return [];
     if (isGuestPreviewMode) {
       const cached = sessionMessageCacheRef.current.get(normalized);
       if (cached) return cached;
@@ -5016,14 +4806,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       });
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ messages?: CavAiMessage[] }>;
       if (!res.ok || !body.ok) {
-        if (isAuthRequiredLikeResponse(res.status, body)) {
-          applyUnauthenticatedCenterState();
-          return [];
-        }
-        if (isSessionUnavailableLikeResponse(res.status, body)) {
-          clearUnavailableSession(normalized);
-          return [];
-        }
         emitGuardDecisionFromPayload(body);
         if (isPassiveCenterUnavailablePayload(body)) {
           const cachedRows = sessionMessageCacheRef.current.get(normalized);
@@ -5055,7 +4837,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         sessionMessageRequestRef.current.delete(normalized);
       }
     }
-  }, [applyUnauthenticatedCenterState, authProbeReady, clearUnavailableSession, isGuestPreviewMode, scheduleSessionCachePersist, sessions]);
+  }, [isGuestPreviewMode, scheduleSessionCachePersist, sessions]);
 
   const loadMessages = useCallback(async (nextSessionId: string) => {
     const normalized = s(nextSessionId);
@@ -5086,11 +4868,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
           if (s(activeSessionIdRef.current) !== normalized) return;
           setMessages(resolvedRows);
         })
-        .catch((err) => {
-          if (s(activeSessionIdRef.current) !== normalized) return;
-          const message = err instanceof Error ? err.message : CENTER_LOAD_MESSAGES_FAILED_MESSAGE;
-          // Keep stale cache visible when background refresh fails, but surface the retryable failure.
-          setError(message);
+        .catch(() => {
+          // Keep stale cache visible when background refresh fails.
         });
       return;
     } else {
@@ -5107,7 +4886,9 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       setMessages(resolvedRows);
     } catch (err) {
       const message = err instanceof Error ? err.message : CENTER_LOAD_MESSAGES_FAILED_MESSAGE;
-      setError(message);
+      if (!isCenterLoadFailureMessage(message)) {
+        setError(message);
+      }
     } finally {
       if (s(activeSessionIdRef.current) === normalized) {
         setLoadingMessages(false);
@@ -5133,12 +4914,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [fetchSessionMessages, isGuestPreviewMode, sessions]);
 
   const loadProviderModels = useCallback(async (): Promise<boolean> => {
-    if (!authProbeReady) return false;
     if (isGuestPreviewMode) {
       setAccountPlanId("free");
-      setModelOptions(guestPreviewModelOptions);
+      setModelOptions(CAVAI_GUEST_PREVIEW_MODELS.map((row) => ({ id: row.id, label: row.label })));
       setAudioModelOptions([]);
-      setAvailableReasoningLevels(guestPreviewReasoningLevels);
+      setAvailableReasoningLevels(REASONING_LEVEL_OPTIONS.map((row) => row.value));
       return true;
     }
     try {
@@ -5163,21 +4943,15 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         guardDecision?: unknown;
       };
       if (!res.ok || body.ok !== true) {
-        if (isAuthRequiredLikeResponse(res.status, body)) {
-          applyUnauthenticatedCenterState();
-          return true;
-        }
         emitGuardDecisionFromPayload(body);
-        setModelOptions(centerPlanModelOptions(accountPlanId));
-        setAvailableReasoningLevels(reasoningLevelsForPlan(accountPlanId));
+        setModelOptions((prev) => mergeCenterModelOptionsWithPlan(prev, accountPlanId));
+        setAvailableReasoningLevels((prev) => mergeCenterReasoningLevelsWithPlan(prev, accountPlanId));
         return false;
       }
-      const effectivePlanId = resolveServerPlanId(body.planId, accountPlanId);
+      const policyPlanId = normalizePlanId(body.planId);
+      const effectivePlanId =
+        planTierRank(policyPlanId) >= planTierRank(accountPlanId) ? policyPlanId : accountPlanId;
       setAccountPlanId(effectivePlanId);
-      publishClientPlan({
-        planId: effectivePlanId,
-        preserveStrongerCached: true,
-      });
       const hasCatalog = Boolean(body.modelCatalog && typeof body.modelCatalog === "object");
       const textOptions = Array.isArray(body.modelCatalog?.text)
         ? body.modelCatalog?.text.map((row) => toModelOption(row)).filter(Boolean) as CavAiModelOption[]
@@ -5186,8 +4960,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         ? body.modelCatalog?.image.map((row) => toModelOption(row)).filter(Boolean) as CavAiModelOption[]
         : [];
       if (hasCatalog) {
-        const nextOptions = clampCenterModelOptionsToPlan([...textOptions, ...imageOptions], effectivePlanId);
-        setModelOptions(nextOptions.length ? nextOptions : centerPlanModelOptions(effectivePlanId));
+        setModelOptions(mergeCenterModelOptionsWithPlan([...textOptions, ...imageOptions], effectivePlanId));
       } else {
         const fallbackOptions = [s(body.models?.chat), s(body.models?.reasoning)]
           .filter(Boolean)
@@ -5195,8 +4968,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
             id,
             label: resolveAiModelLabel(id),
           }));
-        const nextOptions = clampCenterModelOptionsToPlan(fallbackOptions, effectivePlanId);
-        setModelOptions(nextOptions.length ? nextOptions : centerPlanModelOptions(effectivePlanId));
+        setModelOptions(mergeCenterModelOptionsWithPlan(fallbackOptions, effectivePlanId));
       }
 
       const audioOptions = Array.isArray(body.modelCatalog?.audio)
@@ -5206,35 +4978,29 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
       const optionsFromPolicy = normalizeReasoningOptions(body.reasoning?.options);
       if (optionsFromPolicy.length) {
-        const nextReasoning = clampCenterReasoningLevelsToPlan(optionsFromPolicy, effectivePlanId);
-        setAvailableReasoningLevels(nextReasoning.length ? nextReasoning : reasoningLevelsForPlan(effectivePlanId));
+        setAvailableReasoningLevels(mergeCenterReasoningLevelsWithPlan(optionsFromPolicy, effectivePlanId));
       } else {
         const optionsFromMax = reasoningLevelsUpTo(body.reasoning?.maxLevel);
         const nextReasoning = optionsFromMax.length ? optionsFromMax : reasoningLevelsForPlan(effectivePlanId);
-        const nextReasoningLevels = clampCenterReasoningLevelsToPlan(nextReasoning, effectivePlanId);
-        setAvailableReasoningLevels(nextReasoningLevels.length ? nextReasoningLevels : reasoningLevelsForPlan(effectivePlanId));
+        setAvailableReasoningLevels(mergeCenterReasoningLevelsWithPlan(nextReasoning, effectivePlanId));
       }
       return true;
     } catch {
       // Best effort only.
-      setModelOptions(centerPlanModelOptions(accountPlanId));
-      setAvailableReasoningLevels(reasoningLevelsForPlan(accountPlanId));
+      setModelOptions((prev) => mergeCenterModelOptionsWithPlan(prev, accountPlanId));
+      setAvailableReasoningLevels((prev) => mergeCenterReasoningLevelsWithPlan(prev, accountPlanId));
       return false;
     }
-  }, [
-    accountPlanId,
-    applyUnauthenticatedCenterState,
-    authProbeReady,
-    guestPreviewModelOptions,
-    guestPreviewReasoningLevels,
-    isGuestPreviewMode,
-  ]);
+  }, [accountPlanId, isGuestPreviewMode]);
 
   const loadCavenAgentRegistry = useCallback(async (): Promise<boolean> => {
-    if (!authProbeReady) return false;
     if (isGuestPreviewMode) {
       setAccountPlanId("free");
-      resetCenterAgentRegistryState();
+      setAgentRegistrySnapshot({ ...EMPTY_AGENT_REGISTRY_SNAPSHOT });
+      agentRegistrySnapshotRef.current = { ...EMPTY_AGENT_REGISTRY_SNAPSHOT };
+      setInstalledAgentIds([]);
+      setCustomAgents([]);
+      setPublishedAgents([]);
       return true;
     }
     try {
@@ -5250,19 +5016,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         publishedAgents?: unknown;
         planId?: unknown;
       };
-      if (!res.ok || body.ok !== true || !body.settings || typeof body.settings !== "object") {
-        if (isAuthRequiredLikeResponse(res.status, body)) {
-          applyUnauthenticatedCenterState();
-          return true;
-        }
-        return false;
-      }
-      const effectivePlanId = normalizePlanId(body.planId);
-      setAccountPlanId(effectivePlanId);
-      publishClientPlan({
-        planId: effectivePlanId,
-        preserveStrongerCached: true,
-      });
+      if (!res.ok || body.ok !== true || !body.settings || typeof body.settings !== "object") return false;
+      setAccountPlanId(normalizePlanId(body.planId));
       const snapshot = normalizeAgentRegistrySnapshot(body.agentRegistry);
       setAgentRegistrySnapshot(snapshot);
       agentRegistrySnapshotRef.current = snapshot;
@@ -5289,12 +5044,15 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     } catch {
       return false;
     }
-  }, [applyUnauthenticatedCenterState, authProbeReady, isGuestPreviewMode, resetCenterAgentRegistryState]);
+  }, [isGuestPreviewMode]);
 
   const loadImageStudioBootstrap = useCallback(async (): Promise<boolean> => {
-    if (!authProbeReady) return false;
     if (isGuestPreviewMode) {
-      resetImageStudioBootstrapState();
+      setImageStudioPresets([]);
+      setImageStudioRecent([]);
+      setImageStudioSaved([]);
+      setImageStudioHistory([]);
+      setSelectedImagePresetId("");
       return true;
     }
     try {
@@ -5310,13 +5068,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         saved?: unknown[];
         history?: unknown[];
       };
-      if (!res.ok || body.ok !== true) {
-        if (isAuthRequiredLikeResponse(res.status, body)) {
-          applyUnauthenticatedCenterState();
-          return true;
-        }
-        return false;
-      }
+      if (!res.ok || body.ok !== true) return false;
       const presets = Array.isArray(body.presets)
         ? body.presets.map((row) => parseImageStudioPreset(row)).filter(Boolean) as ImageStudioPreset[]
         : [];
@@ -5341,10 +5093,9 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     } catch {
       return false;
     }
-  }, [applyUnauthenticatedCenterState, authProbeReady, isGuestPreviewMode, resetImageStudioBootstrapState]);
+  }, [isGuestPreviewMode]);
 
   const loadImageStudioHistoryView = useCallback(async (view: "recent" | "saved" | "history") => {
-    if (!authProbeReady) return false;
     if (isGuestPreviewMode) {
       if (view === "saved") setImageStudioSaved([]);
       else if (view === "history") setImageStudioHistory([]);
@@ -5361,13 +5112,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         ok?: boolean;
         rows?: unknown[];
       };
-      if (!res.ok || body.ok !== true) {
-        if (isAuthRequiredLikeResponse(res.status, body)) {
-          applyUnauthenticatedCenterState();
-          return true;
-        }
-        return false;
-      }
+      if (!res.ok || body.ok !== true) return false;
       const rows = Array.isArray(body.rows)
         ? body.rows.map((row) => parseImageStudioHistoryRow(row)).filter(Boolean) as ImageStudioHistoryRow[]
         : [];
@@ -5382,7 +5127,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     } catch {
       return false;
     }
-  }, [applyUnauthenticatedCenterState, authProbeReady, isGuestPreviewMode]);
+  }, [isGuestPreviewMode]);
 
   const loadImageStudioSourceGallery = useCallback(async (source: "cavcloud" | "cavsafe") => {
     if (isGuestPreviewMode) {
@@ -5466,7 +5211,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, []);
 
   useEffect(() => {
-    if (!shouldWarm || !authProbeReady) return;
+    if (!shouldWarm) return;
     if (isOpen) {
       warmSessionsKeyRef.current = sessionScopeKey;
       void loadSessions();
@@ -5480,10 +5225,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         warmSessionsKeyRef.current = "";
       }
     })();
-  }, [authProbeReady, isOpen, loadSessions, sessionScopeKey, shouldWarm]);
+  }, [isOpen, loadSessions, sessionScopeKey, shouldWarm]);
 
   useEffect(() => {
-    if (!shouldWarm || !authProbeReady) return;
+    if (!shouldWarm) return;
     if (isOpen) {
       void loadProviderModels();
       warmedModelsRef.current = true;
@@ -5495,17 +5240,17 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       const ok = await loadProviderModels();
       if (!ok) warmedModelsRef.current = false;
     })();
-  }, [authProbeReady, isOpen, loadProviderModels, shouldWarm]);
+  }, [isOpen, loadProviderModels, shouldWarm]);
 
   useEffect(() => {
-    if (!shouldWarm || !authProbeReady) return;
+    if (!shouldWarm) return;
     void loadCavenAgentRegistry();
-  }, [authProbeReady, loadCavenAgentRegistry, shouldWarm]);
+  }, [loadCavenAgentRegistry, shouldWarm]);
 
   useEffect(() => {
-    if (!shouldWarm || !authProbeReady) return;
+    if (!shouldWarm) return;
     void loadImageStudioBootstrap();
-  }, [authProbeReady, loadImageStudioBootstrap, shouldWarm]);
+  }, [loadImageStudioBootstrap, shouldWarm]);
 
   useEffect(() => {
     if (!shouldWarm) return;
@@ -5526,10 +5271,9 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [centerAgentBankCatalog, preloadIconSources, shouldWarm]);
 
   useEffect(() => {
-    if (!authProbeReady) return;
     if (openComposerMenu !== "agent_mode") return;
     void loadCavenAgentRegistry();
-  }, [authProbeReady, loadCavenAgentRegistry, openComposerMenu]);
+  }, [loadCavenAgentRegistry, openComposerMenu]);
 
   useEffect(() => {
     if (!imageStudioImportModalOpen) return;
@@ -5554,23 +5298,42 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [cavCloudAttachItems.length, cavCloudAttachModalOpen, loadCavCloudAttachItems]);
 
   useEffect(() => {
+    if (!shouldWarm || typeof window === "undefined") return;
+    const onFocus = () => {
+      void loadCavenAgentRegistry();
+      void loadImageStudioHistoryView(imageStudioHistoryView);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadCavenAgentRegistry();
+      void loadImageStudioHistoryView(imageStudioHistoryView);
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [imageStudioHistoryView, loadCavenAgentRegistry, loadImageStudioHistoryView, shouldWarm]);
+
+  useEffect(() => {
     setClientHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (!shouldWarm || !authProbeReady) return;
+    if (!shouldWarm) return;
     if (!sessionId) {
       setMessages([]);
       return;
     }
     void loadMessages(sessionId);
-  }, [authProbeReady, isOpen, loadMessages, sessionId, shouldWarm]);
+  }, [isOpen, loadMessages, sessionId, shouldWarm]);
 
   useEffect(() => {
-    if (!shouldWarm || !authProbeReady) return;
+    if (!shouldWarm) return;
     if (!sessions.length) return;
     prefetchSessionMessages(sessionId);
-  }, [authProbeReady, prefetchSessionMessages, sessionId, sessions.length, shouldWarm]);
+  }, [prefetchSessionMessages, sessionId, sessions.length, shouldWarm]);
 
   useEffect(() => {
     scheduleSessionCachePersist({
@@ -5610,8 +5373,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
   useEffect(() => {
     if (isGuestPreviewMode) return;
-    setModelOptions(centerPlanModelOptions(accountPlanId));
-    setAvailableReasoningLevels(reasoningLevelsForPlan(accountPlanId));
+    setModelOptions((prev) => mergeCenterModelOptionsWithPlan(prev, accountPlanId));
+    setAvailableReasoningLevels((prev) => mergeCenterReasoningLevelsWithPlan(prev, accountPlanId));
   }, [accountPlanId, isGuestPreviewMode]);
 
   useEffect(() => {
@@ -5629,21 +5392,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [isPhoneLayout, mobileDrawerOpen]);
 
   useEffect(() => {
-    if (!isPhoneLayout) return;
-    if (mobileDrawerOpen || accountMenuOpen) return;
-    if (typeof document === "undefined") return;
-    const drawer = mobileDrawerRef.current;
-    const active = document.activeElement;
-    if (!(active instanceof HTMLElement) || !drawer?.contains(active)) return;
-    const returnTarget = mobileDrawerReturnFocusRef.current;
-    if (returnTarget?.isConnected) {
-      returnTarget.focus();
-      return;
-    }
-    active.blur();
-  }, [accountMenuOpen, isPhoneLayout, mobileDrawerOpen]);
-
-  useEffect(() => {
     if (!shouldWarm) return;
     const syncIdentity = () => setProfileIdentity(readCavAiIdentityFromStorage());
     syncIdentity();
@@ -5654,155 +5402,80 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     };
   }, [shouldWarm]);
 
-  const refreshAuthProfile = useCallback(async (opts?: { cancelled?: () => boolean }): Promise<boolean> => {
-    const isCancelled = opts?.cancelled;
-    try {
-      const res = await fetch("/api/auth/me", {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
-      });
-      const body = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        authenticated?: boolean;
-        degraded?: boolean;
-        indeterminate?: boolean;
-        signedOut?: boolean;
-        session?: {
-          systemRole?: unknown;
-        } | null;
-        capabilities?: {
-          aiReady?: unknown;
-        } | null;
-        user?: {
-          displayName?: unknown;
-          username?: unknown;
-          initials?: unknown;
-          avatarTone?: unknown;
-          avatarImage?: unknown;
-          publicProfileEnabled?: unknown;
-        };
-        account?: {
-          tier?: unknown;
-          tierEffective?: unknown;
-          trialActive?: unknown;
-          trialDaysLeft?: unknown;
-        };
-      };
-      if (isCancelled?.()) return false;
-      const authIndeterminate = body.indeterminate === true;
-      if (authIndeterminate) {
-        // Preserve the last known auth state on transient backend failures.
-        return Boolean(confirmedAuthenticatedUserRef.current);
-      }
-      const systemRole = s(body.session?.systemRole).toLowerCase();
-      const hasUserPayload = Boolean(body.user && typeof body.user === "object");
-      const aiReady = readAuthMeAiReady(body, systemRole !== "system" && hasUserPayload);
-      const signedOut = body.signedOut === true;
-      const shouldApplyGuestFallback = isAuthRequiredLikeResponse(res.status, body)
-        || signedOut
-        || (res.ok && body.ok === true && body.authenticated === false)
-        || (res.ok && body.ok === true && body.authenticated === true && (systemRole === "system" || !hasUserPayload || !aiReady));
-      // Keep account history visible until the backend explicitly proves the viewer is signed out.
-      // A transient auth probe failure should not dump the user into guest preview and blank history.
-      if (shouldApplyGuestFallback) {
-        applyUnauthenticatedCenterState();
-        return false;
-      }
-      if (!res.ok || body.ok !== true || body.authenticated !== true) {
-        if (!confirmedAuthenticatedUserRef.current) {
-          applyUnauthenticatedCenterState();
-          return false;
-        }
-        return false;
-      }
-      confirmedAuthenticatedUserRef.current = true;
-      setIsAuthenticated(true);
-      setAccountProfileUsername(s(body.user?.username).toLowerCase());
-      setAccountInitialFallback(s(body.user?.initials));
-      setAccountProfileTone(s(body.user?.avatarTone).toLowerCase() || "lime");
-      setAccountProfileAvatar(s(body.user?.avatarImage));
-      const nextIdentity = rememberCavAiIdentity({
-        fullName: s(body.user?.displayName),
-        username: s(body.user?.username),
-      });
-      setProfileIdentity(nextIdentity);
-      if (typeof body.user?.publicProfileEnabled === "boolean") {
-        setAccountProfilePublicEnabled(body.user.publicProfileEnabled);
-      }
-      const authPlanId = normalizePlanId(body.account?.tierEffective ?? body.account?.tier);
-      setAccountPlanId(authPlanId);
-      const authTrialActive = Boolean(body.account?.trialActive);
-      const authTrialDaysLeftRaw = Number(body.account?.trialDaysLeft);
-      const authTrialDaysLeft =
-        authTrialActive && Number.isFinite(authTrialDaysLeftRaw) && authTrialDaysLeftRaw > 0
-          ? Math.max(0, Math.trunc(authTrialDaysLeftRaw))
-          : 0;
-      setAccountTrialActive(authTrialDaysLeft > 0);
-      setAccountTrialDaysLeft(authTrialDaysLeft);
-      publishClientPlan({
-        planId: authPlanId,
-        trialActive: authTrialDaysLeft > 0,
-        trialDaysLeft: authTrialDaysLeft,
-        preserveStrongerCached: true,
-      });
-      return true;
-    } catch {
-      if (isCancelled?.()) return false;
-      // Preserve the last known auth state on transient backend failures.
-      return Boolean(confirmedAuthenticatedUserRef.current);
-    } finally {
-      if (!isCancelled?.()) {
-        setAuthProbeReady(true);
-      }
-    }
-  }, [applyUnauthenticatedCenterState]);
-
   useEffect(() => {
     if (!shouldWarm) return;
     if (!isOpen && warmedAuthProfileRef.current) return;
     warmedAuthProfileRef.current = true;
     let cancelled = false;
-    void refreshAuthProfile({ cancelled: () => cancelled });
+    void (async () => {
+      try {
+        const res = await fetch("/api/auth/me", {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
+        const body = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          authenticated?: boolean;
+          degraded?: boolean;
+          indeterminate?: boolean;
+          signedOut?: boolean;
+          user?: {
+            displayName?: unknown;
+            username?: unknown;
+            initials?: unknown;
+            avatarTone?: unknown;
+            avatarImage?: unknown;
+            publicProfileEnabled?: unknown;
+          };
+          account?: {
+            tier?: unknown;
+            tierEffective?: unknown;
+          };
+        };
+        if (cancelled) return;
+        const authIndeterminate = body.indeterminate === true;
+        const signedOut = body.signedOut === true || res.status === 401 || res.status === 403;
+        if (authIndeterminate) {
+          return;
+        }
+        if (signedOut || !res.ok || body.ok !== true || body.authenticated !== true) {
+          setIsAuthenticated(false);
+          setAccountProfilePublicEnabled(null);
+          setAccountProfileAvatar("");
+          setAccountProfileUsername("");
+          setAccountInitialFallback("");
+          setAccountProfileTone("lime");
+          setAccountPlanId("free");
+          return;
+        }
+        setIsAuthenticated(true);
+        setAccountProfileUsername(s(body.user?.username).toLowerCase());
+        setAccountInitialFallback(s(body.user?.initials));
+        setAccountProfileTone(s(body.user?.avatarTone).toLowerCase() || "lime");
+        setAccountProfileAvatar(s(body.user?.avatarImage));
+        const nextIdentity = rememberCavAiIdentity({
+          fullName: s(body.user?.displayName),
+          username: s(body.user?.username),
+        });
+        setProfileIdentity(nextIdentity);
+        if (typeof body.user?.publicProfileEnabled === "boolean") {
+          setAccountProfilePublicEnabled(body.user.publicProfileEnabled);
+        }
+        const authPlanId = normalizePlanId(body.account?.tierEffective ?? body.account?.tier);
+        setAccountPlanId((prev) => (planTierRank(authPlanId) >= planTierRank(prev) ? authPlanId : prev));
+      } catch {
+        // Preserve the last known auth state on transient backend failures.
+      } finally {
+        if (!cancelled) {
+          setAuthProbeReady(true);
+        }
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [isOpen, refreshAuthProfile, shouldWarm]);
-
-  useEffect(() => {
-    if (!shouldWarm || typeof window === "undefined") return;
-    const refreshProtectedState = async () => {
-      const authenticated = await refreshAuthProfile();
-      if (!authenticated) return;
-      void loadSessions();
-      void loadProviderModels();
-      void loadCavenAgentRegistry();
-      void loadImageStudioHistoryView(imageStudioHistoryView);
-    };
-    const onFocus = () => {
-      void refreshProtectedState();
-    };
-    const onVisibilityChange = () => {
-      if (document.visibilityState !== "visible") return;
-      void refreshProtectedState();
-    };
-    window.addEventListener("pageshow", onFocus);
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      window.removeEventListener("pageshow", onFocus);
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [
-    imageStudioHistoryView,
-    loadCavenAgentRegistry,
-    loadImageStudioHistoryView,
-    loadProviderModels,
-    loadSessions,
-    refreshAuthProfile,
-    shouldWarm,
-  ]);
+  }, [isOpen, shouldWarm]);
 
   useEffect(() => {
     if (isAuthenticated) return;
@@ -5810,7 +5483,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (!shouldWarm || !authProbeReady || !isAuthenticated) return;
+    if (!shouldWarm || !isAuthenticated) return;
     if (guestSessionSyncAttemptedRef.current) return;
     if (!hasPendingGuestSessionSyncInStorage() && !hasGuestSessionCacheSnapshotsInStorage()) return;
     guestSessionSyncAttemptedRef.current = true;
@@ -5822,7 +5495,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       }
       void loadSessions();
     })();
-  }, [authProbeReady, isAuthenticated, loadSessions, shouldWarm, syncGuestSessionCacheToAccount]);
+  }, [isAuthenticated, loadSessions, shouldWarm, syncGuestSessionCacheToAccount]);
 
   useEffect(() => {
     if (!shouldWarm) return;
@@ -6284,13 +5957,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     setComposerQuickMode((prev) => (prev === "agent_mode" ? null : prev));
   }, [installedCenterAgents, manualAgentRef]);
 
-  const openMobileDrawer = useCallback((focusTarget?: HTMLElement | null) => {
+  const openMobileDrawer = useCallback(() => {
     if (!isPhoneLayout) return;
-    mobileDrawerReturnFocusRef.current = focusTarget?.isConnected
-      ? focusTarget
-      : typeof document !== "undefined" && document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
     setOpenHeaderModelMenu(false);
     setMobileDrawerOpen(true);
   }, [isPhoneLayout]);
@@ -6300,18 +5968,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     setAccountMenuOpen(false);
   }, []);
 
-  const toggleMobileDrawer = useCallback((focusTarget?: HTMLElement | null) => {
+  const toggleMobileDrawer = useCallback(() => {
     if (!isPhoneLayout) return;
-    if (!mobileDrawerOpen) {
-      mobileDrawerReturnFocusRef.current = focusTarget?.isConnected
-        ? focusTarget
-        : typeof document !== "undefined" && document.activeElement instanceof HTMLElement
-          ? document.activeElement
-          : null;
-    }
     setOpenHeaderModelMenu(false);
     setMobileDrawerOpen((prev) => !prev);
-  }, [isPhoneLayout, mobileDrawerOpen]);
+  }, [isPhoneLayout]);
 
   const openGuestAuthPanel = useCallback((opts?: { stage?: GuestAuthStage; closeDrawer?: boolean }) => {
     if (!isGuestPreviewMode) return;
@@ -6922,8 +6583,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
       if (!res.ok || !body.ok || !body.data) {
         emitGuardDecisionFromPayload(body);
-        const message = s((body as { message?: unknown }).message)
-          || "CavAi hit a temporary issue before it could finish the reply. Please retry.";
+        const message = s((body as { message?: unknown }).message) || "Assist request failed.";
         throw new Error(message);
       }
 
@@ -7054,11 +6714,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         setError("");
         return null;
       }
-      setError(
-        err instanceof Error
-          ? err.message
-          : "CavAi hit a temporary issue before it could finish the reply. Please retry."
-      );
+      setError(err instanceof Error ? err.message : "Assist request failed.");
       return null;
     } finally {
       if (requestAbortRef.current === controller) {
@@ -7950,12 +7606,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       if (!res.ok || !body.ok || !body.settings || typeof body.settings !== "object") {
         throw new Error(s(body.message) || "Failed to update Agent Mode settings.");
       }
-      const effectivePlanId = normalizePlanId(body.planId);
-      setAccountPlanId(effectivePlanId);
-      publishClientPlan({
-        planId: effectivePlanId,
-        preserveStrongerCached: true,
-      });
+      setAccountPlanId(normalizePlanId(body.planId));
       const snapshot = normalizeAgentRegistrySnapshot(body.agentRegistry);
       setAgentRegistrySnapshot(snapshot);
       agentRegistrySnapshotRef.current = snapshot;
@@ -8039,12 +7690,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       if (!res.ok || !body.ok || !body.settings || typeof body.settings !== "object") {
         throw new Error(s(body.message) || "Failed to update custom agents.");
       }
-      const effectivePlanId = normalizePlanId(body.planId);
-      setAccountPlanId(effectivePlanId);
-      publishClientPlan({
-        planId: effectivePlanId,
-        preserveStrongerCached: true,
-      });
+      setAccountPlanId(normalizePlanId(body.planId));
       const snapshot = normalizeAgentRegistrySnapshot(body.agentRegistry);
       setAgentRegistrySnapshot(snapshot);
       agentRegistrySnapshotRef.current = snapshot;
@@ -8598,43 +8244,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     };
   }, [playSpeechFromText]);
 
-  const processDictatedVoice = useCallback(async (blob: Blob) => {
+  const processCapturedVoice = useCallback(async (blob: Blob) => {
     if (!blob.size) {
       setError("No audio was captured.");
       setVoiceOrbState("idle");
-      setActiveVoiceCaptureIntent(null);
-      return;
-    }
-    setProcessingVoice(true);
-    setVoiceOrbState("processing");
-    try {
-      const extension = inferAudioFileExtension(blob.type);
-      const file = new File(
-        [blob],
-        `dictate-${Date.now().toString(36)}.${extension}`,
-        { type: blob.type || "audio/webm" }
-      );
-      const transcript = await transcribeAudioFile(file);
-      if (!appendTranscriptToComposer(transcript || "")) {
-        setVoiceOrbState("idle");
-        return;
-      }
-      setError("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Dictation failed.");
-      setVoiceOrbState("idle");
-    } finally {
-      setProcessingVoice(false);
-      setVoiceOrbState("idle");
-      setActiveVoiceCaptureIntent(null);
-    }
-  }, [appendTranscriptToComposer, transcribeAudioFile]);
-
-  const processSpokenVoice = useCallback(async (blob: Blob) => {
-    if (!blob.size) {
-      setError("No audio was captured.");
-      setVoiceOrbState("idle");
-      setActiveVoiceCaptureIntent(null);
       return;
     }
     setProcessingVoice(true);
@@ -8681,7 +8294,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     } finally {
       setProcessingVoice(false);
       setVoiceOrbState("idle");
-      setActiveVoiceCaptureIntent(null);
     }
   }, [onSubmit, playSpeechFromText, transcribeAudioFile, voiceReplyModel]);
 
@@ -8714,7 +8326,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     recorder.stop();
   }, []);
 
-  const startVoiceCapture = useCallback(async (intent: VoiceCaptureIntent) => {
+  const startVoiceCapture = useCallback(async () => {
     if (recordingVoice || processingVoice || transcribingAudio || submitting) return;
     if (typeof window === "undefined" || typeof navigator === "undefined") return;
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
@@ -8723,7 +8335,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     }
 
     setError("");
-    setActiveVoiceCaptureIntent(intent);
     setVoiceOrbState("listening");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -8747,7 +8358,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         setRecordingVoice(false);
         setProcessingVoice(false);
         setVoiceOrbState("idle");
-        setActiveVoiceCaptureIntent(null);
         setError("Voice capture failed.");
       };
 
@@ -8759,15 +8369,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         const blob = chunks.length ? new Blob(chunks, { type: fallbackType }) : null;
         if (!blob || !blob.size) {
           setVoiceOrbState("idle");
-          setActiveVoiceCaptureIntent(null);
           setError("No audio was captured.");
           return;
         }
-        if (intent === "dictate") {
-          void processDictatedVoice(blob);
-          return;
-        }
-        void processSpokenVoice(blob);
+        void processCapturedVoice(blob);
       };
 
       recorder.start(250);
@@ -8777,62 +8382,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       setRecordingVoice(false);
       setProcessingVoice(false);
       setVoiceOrbState("idle");
-      setActiveVoiceCaptureIntent(null);
-      setError(toVoiceCaptureErrorMessage(err));
+      setError(err instanceof Error ? err.message : "Voice capture failed.");
     }
-  }, [clearVoiceCapture, processDictatedVoice, processSpokenVoice, processingVoice, recordingVoice, submitting, transcribingAudio]);
+  }, [clearVoiceCapture, processCapturedVoice, processingVoice, recordingVoice, submitting, transcribingAudio]);
 
   const promptHasTypedInput = prompt.length > 0;
-  const dictateCaptureActive = recordingVoice && activeVoiceCaptureIntent === "dictate";
-  const speakCaptureActive = recordingVoice && activeVoiceCaptureIntent === "speak";
-  const voiceStatus = useMemo(() => {
-    if (dictateCaptureActive) {
-      return {
-        label: "Dictating",
-        detail: "Listening now. Tap Dictate again to turn this audio into text.",
-      };
-    }
-    if (speakCaptureActive) {
-      return {
-        label: "Speak",
-        detail: "Listening now. Tap Speak again to send and hear CavAi respond.",
-      };
-    }
-    if (transcribingAudio && activeVoiceCaptureIntent === "dictate") {
-      return {
-        label: "Transcribing",
-        detail: "Turning your audio into text for the composer.",
-      };
-    }
-    if (transcribingAudio || processingVoice) {
-      return {
-        label: "Thinking",
-        detail: "Transcribing your audio and preparing the reply.",
-      };
-    }
-    return null;
-  }, [activeVoiceCaptureIntent, dictateCaptureActive, processingVoice, speakCaptureActive, transcribingAudio]);
-  const onComposerDictateAction = useCallback(() => {
-    if (isGuestPreviewMode) {
-      setError("Dictate is locked in guest preview. Sign in to unlock voice input.");
-      return;
-    }
-    if (dictateCaptureActive) {
-      stopVoiceCapture();
-      return;
-    }
-    if (recordingVoice || processingVoice || transcribingAudio || submitting) return;
-    void startVoiceCapture("dictate");
-  }, [
-    dictateCaptureActive,
-    isGuestPreviewMode,
-    processingVoice,
-    recordingVoice,
-    startVoiceCapture,
-    stopVoiceCapture,
-    submitting,
-    transcribingAudio,
-  ]);
   const onComposerPrimaryAction = useCallback(() => {
     if (submitting) {
       onStop();
@@ -8845,12 +8399,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     if (isGuestPreviewMode) {
       return;
     }
-    if (speakCaptureActive) {
+    if (recordingVoice) {
       stopVoiceCapture();
       return;
     }
-    if (recordingVoice || processingVoice || transcribingAudio) return;
-    void startVoiceCapture("speak");
+    if (processingVoice || transcribingAudio) return;
+    void startVoiceCapture();
   }, [
     onStop,
     onSubmit,
@@ -8858,7 +8412,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     promptHasTypedInput,
     isGuestPreviewMode,
     recordingVoice,
-    speakCaptureActive,
     startVoiceCapture,
     stopVoiceCapture,
     submitting,
@@ -9686,16 +9239,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         message?: string;
       }>;
       if (!res.ok || !body.ok || !body.session) {
-        if (isAuthRequiredLikeResponse(res.status, body)) {
-          applyUnauthenticatedCenterState();
-          closeSessionActionModal();
-          return;
-        }
-        if (isSessionUnavailableLikeResponse(res.status, body)) {
-          clearUnavailableSession(sessionActionModal.session.id);
-          closeSessionActionModal();
-          return;
-        }
         emitGuardDecisionFromPayload(body);
         throw new Error(s((body as { message?: unknown }).message) || "Failed to rename chat.");
       }
@@ -9707,7 +9250,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       setError(err instanceof Error ? err.message : "Failed to rename chat.");
       setSessionActionBusy(false);
     }
-  }, [applyUnauthenticatedCenterState, clearUnavailableSession, closeSessionActionModal, renameDraftTitle, sessionActionModal]);
+  }, [closeSessionActionModal, renameDraftTitle, sessionActionModal]);
 
   const onDeleteSession = useCallback(async () => {
     if (!sessionActionModal || sessionActionModal.type !== "delete") return;
@@ -9727,7 +9270,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       }
       activeSessionIdRef.current = nextActiveSessionId;
       setSessionId(nextActiveSessionId);
-      setLoadingMessages(false);
       if (!nextActiveSessionId) {
         setMessages([]);
       } else {
@@ -9757,16 +9299,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       });
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ message?: string }>;
       if (!res.ok || !body.ok) {
-        if (isAuthRequiredLikeResponse(res.status, body)) {
-          applyUnauthenticatedCenterState();
-          closeSessionActionModal();
-          return;
-        }
-        if (isSessionUnavailableLikeResponse(res.status, body)) {
-          clearUnavailableSession(doomedSessionId);
-          closeSessionActionModal();
-          return;
-        }
         emitGuardDecisionFromPayload(body);
         throw new Error(s((body as { message?: unknown }).message) || "Failed to delete chat.");
       }
@@ -9774,7 +9306,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       if (s(sessionId) === doomedSessionId) {
         activeSessionIdRef.current = "";
         setSessionId("");
-        setLoadingMessages(false);
         setMessages([]);
       }
       closeSessionActionModal();
@@ -9783,7 +9314,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       setError(err instanceof Error ? err.message : "Failed to delete chat.");
       setSessionActionBusy(false);
     }
-  }, [applyUnauthenticatedCenterState, clearUnavailableSession, closeSessionActionModal, isGuestPreviewMode, loadSessions, scheduleSessionCachePersist, sessionActionModal, sessionId, sessions]);
+  }, [closeSessionActionModal, isGuestPreviewMode, loadSessions, scheduleSessionCachePersist, sessionActionModal, sessionId, sessions]);
 
   const onShareSession = useCallback(async () => {
     if (!sessionActionModal || sessionActionModal.type !== "share") return;
@@ -9811,16 +9342,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         message?: string;
       }>;
       if (!res.ok || !body.ok) {
-        if (isAuthRequiredLikeResponse(res.status, body)) {
-          applyUnauthenticatedCenterState();
-          closeSessionActionModal();
-          return;
-        }
-        if (isSessionUnavailableLikeResponse(res.status, body)) {
-          clearUnavailableSession(sessionActionModal.session.id);
-          closeSessionActionModal();
-          return;
-        }
         emitGuardDecisionFromPayload(body);
         throw new Error(s((body as { message?: unknown }).message) || "Failed to share chat.");
       }
@@ -9833,7 +9354,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       setError(err instanceof Error ? err.message : "Failed to share chat.");
       setSessionActionBusy(false);
     }
-  }, [applyUnauthenticatedCenterState, clearUnavailableSession, closeSessionActionModal, sessionActionModal, shareMode, shareTargetIdentity]);
+  }, [sessionActionModal, shareMode, shareTargetIdentity]);
 
   const onCopyShareUrl = useCallback(async () => {
     const url = s(shareResultUrl);
@@ -10057,7 +9578,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     return styles.centerWebResearchGlyphDeepResearch;
   }, [activeToolbarQuickMode]);
   const imageComposerModeActive = composerQuickMode === "create_image" || composerQuickMode === "edit_image";
-  const imageStudioMobileLayoutActive = !overlay && isPhoneLayout && imageComposerModeActive;
   const lockImageStudioPromptLine = imageComposerModeActive && Boolean(selectedImagePresetActivationLine);
   const lockedImageStudioPromptPrefix = lockImageStudioPromptLine
     ? `${selectedImagePresetActivationLine}\n`
@@ -10418,138 +9938,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     }
     return menuNode;
   }, [floatingComposerMenuStyle, openComposerMenu, shouldFloatComposerMenu, shouldPortalComposerMenu]);
-
-  const imageStudioPresetPanel = canUseCreateImage && !overlay && (composerQuickMode === "create_image" || composerQuickMode === "edit_image") ? (
-    <section className={styles.imageStudioModePanel} aria-label="Image Studio presets">
-      {composerQuickMode === "edit_image" && images[0] ? (
-        <div className={styles.imageStudioSourcePreview}>
-          <Image
-            src={images[0].dataUrl}
-            alt=""
-            width={52}
-            height={52}
-            unoptimized
-            className={styles.imageStudioSourcePreviewImage}
-          />
-          <div className={styles.imageStudioSourcePreviewMeta}>
-            <span className={styles.imageStudioSourcePreviewTitle}>Edit source ready</span>
-            <span className={styles.imageStudioSourcePreviewText}>{images[0].name}</span>
-          </div>
-        </div>
-      ) : null}
-
-      <div className={styles.imageStudioPresetShelf}>
-        <div className={[styles.imageStudioPresetShelfHead, styles.imageStudioPresetShelfHeadNoTitle].join(" ")}>
-          <div className={styles.imageStudioPresetShelfNav}>
-            <button
-              type="button"
-              className={styles.imageStudioPresetShelfNavBtn}
-              aria-label="Scroll presets left"
-              onClick={() => scrollImageStudioPresetRail("left")}
-            >
-              <span
-                className={[styles.imageStudioPresetShelfNavGlyph, styles.imageStudioPresetShelfNavGlyphLeft].join(" ")}
-                aria-hidden="true"
-              />
-            </button>
-            <button
-              type="button"
-              className={styles.imageStudioPresetShelfNavBtn}
-              aria-label="Scroll presets right"
-              onClick={() => scrollImageStudioPresetRail("right")}
-            >
-              <span
-                className={[styles.imageStudioPresetShelfNavGlyph, styles.imageStudioPresetShelfNavGlyphRight].join(" ")}
-                aria-hidden="true"
-              />
-            </button>
-          </div>
-        </div>
-        <div className={styles.imageStudioPresetRail} ref={imageStudioPresetRailRef}>
-          <button
-            type="button"
-            className={[
-              styles.imageStudioEditTile,
-              !canUseEditImage ? styles.imageStudioEditTileLocked : "",
-            ].filter(Boolean).join(" ")}
-            onClick={() => {
-              if (!canUseEditImage) return;
-              onImageStudioQuickAction("edit");
-            }}
-            aria-disabled={!canUseEditImage}
-            title={!canUseEditImage ? "Upgrade to Premium+" : undefined}
-          >
-            <span className={styles.imageStudioEditTileMedia} aria-hidden="true">
-              <Image
-                src="/icons/cavpad/upload-svgrepo-com.svg"
-                alt=""
-                width={28}
-                height={28}
-                unoptimized
-                className={styles.imageStudioEditTileUploadIcon}
-              />
-            </span>
-            <span className={styles.imageStudioEditTileMeta}>
-              <span className={styles.imageStudioEditTileTitle}>Edit image</span>
-              <span className={styles.imageStudioEditTileText}>Upload or import to transform.</span>
-            </span>
-          </button>
-          {imageStudioPresets.map((preset) => {
-            const isOn = selectedImagePresetId === preset.id;
-            return (
-              <button
-                key={preset.id}
-                type="button"
-                className={[
-                  styles.imageStudioPresetCard,
-                  isOn ? styles.imageStudioPresetCardOn : "",
-                  preset.locked ? styles.imageStudioPresetCardLocked : "",
-                ].filter(Boolean).join(" ")}
-                onClick={() => applyImageStudioPreset(preset)}
-              >
-                <span className={styles.imageStudioPresetMedia}>
-                  {preset.thumbnailUrl ? (
-                    <Image
-                      src={preset.thumbnailUrl}
-                      alt={preset.label}
-                      fill
-                      sizes="(max-width: 620px) 124px, 136px"
-                      unoptimized
-                      className={[
-                        styles.imageStudioPresetThumb,
-                        preset.slug === "realistic-tattoo" ? styles.imageStudioPresetThumbTattooFocus : "",
-                      ].filter(Boolean).join(" ")}
-                    />
-                  ) : (
-                    <span className={styles.imageStudioPresetThumbPlaceholder} aria-hidden="true" />
-                  )}
-                  {preset.locked ? (
-                    <span className={styles.imageStudioPresetLockOverlay} aria-hidden="true">
-                      <span className={styles.imageStudioPresetLockBadge}>
-                        <Image
-                          src="/icons/app/block-svgrepo-com.svg"
-                          alt=""
-                          width={14}
-                          height={14}
-                          unoptimized
-                          className={styles.imageStudioPresetLockBadgeIcon}
-                        />
-                      </span>
-                      <span className={styles.imageStudioPresetLockTooltip}>Premium+ required</span>
-                    </span>
-                  ) : null}
-                </span>
-                <span className={styles.imageStudioPresetMeta}>
-                  <span className={styles.imageStudioPresetLabel}>{preset.label}</span>
-                  {preset.subtitle ? <span className={styles.imageStudioPresetSubtitle}>{preset.subtitle}</span> : null}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  ) : null;
 
   const composerContent = (
     <>
@@ -11215,38 +10603,66 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
           <div className={styles.centerComposerRightTools}>
             {isGuestPreviewMode ? (
               <button
-                ref={composerAudioTriggerRef}
                 type="button"
                 className={[
                   styles.actionBtn,
                   styles.iconActionBtn,
                   styles.centerComposerIconBtn,
                   styles.centerComposerAudioBtn,
+                  styles.menuTriggerBtn,
                 ].join(" ")}
                 onClick={() => setError("Dictate is locked in guest preview. Sign in to unlock voice input.")}
-                aria-label="Dictate · User only (sign in)"
-                title="Dictate · User only (sign in)"
+                aria-label="Dictate / voice input · User only (sign in)"
+                title="Dictate / voice input · User only (sign in)"
               >
                 <CenterAudioGlyph className={[styles.centerInlineGlyph, styles.centerInlineGlyph18].join(" ")} />
               </button>
-            ) : null}
-            {!isGuestPreviewMode ? (
-              <button
-                ref={composerAudioTriggerRef}
-                type="button"
-                className={[
-                  styles.actionBtn,
-                  styles.iconActionBtn,
-                  styles.centerComposerIconBtn,
-                  styles.centerComposerAudioBtn,
-                ].join(" ")}
-                onClick={onComposerDictateAction}
-                aria-label={dictateCaptureActive ? "Stop dictate" : "Dictate"}
-                title={dictateCaptureActive ? "Stop Dictate" : "Dictate"}
-                disabled={speakCaptureActive || (!dictateCaptureActive && (processingVoice || transcribingAudio || submitting))}
-              >
-                <CenterAudioGlyph className={[styles.centerInlineGlyph, styles.centerInlineGlyph18].join(" ")} />
-              </button>
+            ) : audioModelMenuOptions.length > 1 ? (
+              <div className={[styles.iconMenuWrap, styles.centerComposerAudioMenuWrap].join(" ")}>
+                <button
+                  ref={composerAudioTriggerRef}
+                  type="button"
+                  className={[
+                    styles.actionBtn,
+                    styles.iconActionBtn,
+                    styles.centerComposerIconBtn,
+                    styles.centerComposerAudioBtn,
+                    styles.menuTriggerBtn,
+                  ].join(" ")}
+                  onClick={() => setOpenComposerMenu((prev) => (prev === "audio_model" ? null : "audio_model"))}
+                  aria-label={selectedAudioModelLabel}
+                  aria-haspopup="menu"
+                  aria-expanded={openComposerMenu === "audio_model"}
+                  title={selectedAudioModelLabel}
+                >
+                  <CenterAudioGlyph className={[styles.centerInlineGlyph, styles.centerInlineGlyph18].join(" ")} />
+                </button>
+                {openComposerMenu === "audio_model" ? (
+                  renderComposerMenuLayer({
+                    menu: "audio_model",
+                    className: styles.iconMenu,
+                    ariaLabel: "Transcription model selector",
+                    children: audioModelMenuOptions.map((option) => {
+                      const isOn = selectedAudioModel === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={isOn}
+                          className={[styles.iconMenuItem, isOn ? styles.iconMenuItemOn : ""].filter(Boolean).join(" ")}
+                          onClick={() => {
+                            setSelectedAudioModel(option.id);
+                            setOpenComposerMenu(null);
+                          }}
+                        >
+                          <span className={styles.iconMenuItemLabel}>{option.label}</span>
+                        </button>
+                      );
+                    }),
+                  })
+                ) : null}
+              </div>
             ) : null}
 
             <button
@@ -11265,29 +10681,29 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                   ? "Stop CavAi prompt"
                   : isGuestPreviewMode
                     ? "Send prompt to CavAi"
-                  : speakCaptureActive
-                    ? "Stop speak"
+                  : recordingVoice
+                    ? "Stop voice input"
                     : promptHasTypedInput
                       ? "Send prompt to CavAi"
-                      : "Speak"
+                      : "Start voice input"
               }
               title={
                 submitting
                   ? "Stop"
                   : isGuestPreviewMode
                     ? "Send"
-                  : speakCaptureActive
-                    ? "Stop Speak"
+                  : recordingVoice
+                    ? "Stop voice"
                     : promptHasTypedInput
                       ? "Send"
-                      : "Speak"
+                      : "Start voice"
               }
-              disabled={dictateCaptureActive || processingVoice || (isGuestPreviewMode && !promptHasTypedInput)}
+              disabled={processingVoice || (isGuestPreviewMode && !promptHasTypedInput)}
             >
               <span
                 className={[
                   styles.primaryBtnGlyph,
-                  submitting || speakCaptureActive
+                  submitting || recordingVoice
                     ? styles.primaryBtnGlyphStop
                     : promptHasTypedInput || isGuestPreviewMode
                       ? styles.primaryBtnGlyphRun
@@ -11302,15 +10718,139 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         </div>
       </div>
 
-      {voiceStatus ? (
-        <div className={styles.voiceStatusBar} role="status" aria-live="polite">
-          <span className={styles.voiceStatusDot} aria-hidden="true" />
-          <span className={styles.voiceStatusLabel}>{voiceStatus.label}</span>
-          <span className={styles.voiceStatusDetail}>{voiceStatus.detail}</span>
-        </div>
-      ) : null}
+      {transcribingAudio ? <div className={styles.metaText}>Transcribing audio...</div> : null}
 
-      {!imageStudioMobileLayoutActive ? imageStudioPresetPanel : null}
+      {canUseCreateImage && !overlay && (composerQuickMode === "create_image" || composerQuickMode === "edit_image") ? (
+        <section className={styles.imageStudioModePanel} aria-label="Image Studio presets">
+          {composerQuickMode === "edit_image" && images[0] ? (
+            <div className={styles.imageStudioSourcePreview}>
+              <Image
+                src={images[0].dataUrl}
+                alt=""
+                width={52}
+                height={52}
+                unoptimized
+                className={styles.imageStudioSourcePreviewImage}
+              />
+              <div className={styles.imageStudioSourcePreviewMeta}>
+                <span className={styles.imageStudioSourcePreviewTitle}>Edit source ready</span>
+                <span className={styles.imageStudioSourcePreviewText}>{images[0].name}</span>
+              </div>
+            </div>
+          ) : null}
+
+          <div className={styles.imageStudioPresetShelf}>
+            <div className={[styles.imageStudioPresetShelfHead, styles.imageStudioPresetShelfHeadNoTitle].join(" ")}>
+              <div className={styles.imageStudioPresetShelfNav}>
+                <button
+                  type="button"
+                  className={styles.imageStudioPresetShelfNavBtn}
+                  aria-label="Scroll presets left"
+                  onClick={() => scrollImageStudioPresetRail("left")}
+                >
+                  <span
+                    className={[styles.imageStudioPresetShelfNavGlyph, styles.imageStudioPresetShelfNavGlyphLeft].join(" ")}
+                    aria-hidden="true"
+                  />
+                </button>
+                <button
+                  type="button"
+                  className={styles.imageStudioPresetShelfNavBtn}
+                  aria-label="Scroll presets right"
+                  onClick={() => scrollImageStudioPresetRail("right")}
+                >
+                  <span
+                    className={[styles.imageStudioPresetShelfNavGlyph, styles.imageStudioPresetShelfNavGlyphRight].join(" ")}
+                    aria-hidden="true"
+                  />
+                </button>
+              </div>
+            </div>
+            <div className={styles.imageStudioPresetRail} ref={imageStudioPresetRailRef}>
+              <button
+                type="button"
+                className={[
+                  styles.imageStudioEditTile,
+                  !canUseEditImage ? styles.imageStudioEditTileLocked : "",
+                ].filter(Boolean).join(" ")}
+                onClick={() => {
+                  if (!canUseEditImage) return;
+                  onImageStudioQuickAction("edit");
+                }}
+                aria-disabled={!canUseEditImage}
+                title={!canUseEditImage ? "Upgrade to Premium+" : undefined}
+              >
+                <span className={styles.imageStudioEditTileMedia} aria-hidden="true">
+                  <Image
+                    src="/icons/cavpad/upload-svgrepo-com.svg"
+                    alt=""
+                    width={28}
+                    height={28}
+                    unoptimized
+                    className={styles.imageStudioEditTileUploadIcon}
+                  />
+                </span>
+                <span className={styles.imageStudioEditTileMeta}>
+                  <span className={styles.imageStudioEditTileTitle}>Edit image</span>
+                  <span className={styles.imageStudioEditTileText}>Upload or import to transform.</span>
+                </span>
+              </button>
+              {imageStudioPresets.map((preset) => {
+                const isOn = selectedImagePresetId === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={[
+                      styles.imageStudioPresetCard,
+                      isOn ? styles.imageStudioPresetCardOn : "",
+                      preset.locked ? styles.imageStudioPresetCardLocked : "",
+                    ].filter(Boolean).join(" ")}
+                    onClick={() => applyImageStudioPreset(preset)}
+                  >
+                    <span className={styles.imageStudioPresetMedia}>
+                      {preset.thumbnailUrl ? (
+                        <Image
+                          src={preset.thumbnailUrl}
+                          alt={preset.label}
+                          fill
+                          sizes="(max-width: 620px) 124px, 136px"
+                          unoptimized
+                          className={[
+                            styles.imageStudioPresetThumb,
+                            preset.slug === "realistic-tattoo" ? styles.imageStudioPresetThumbTattooFocus : "",
+                          ].filter(Boolean).join(" ")}
+                        />
+                      ) : (
+                        <span className={styles.imageStudioPresetThumbPlaceholder} aria-hidden="true" />
+                      )}
+                      {preset.locked ? (
+                        <span className={styles.imageStudioPresetLockOverlay} aria-hidden="true">
+                          <span className={styles.imageStudioPresetLockBadge}>
+                            <Image
+                              src="/icons/app/block-svgrepo-com.svg"
+                              alt=""
+                              width={14}
+                              height={14}
+                              unoptimized
+                              className={styles.imageStudioPresetLockBadgeIcon}
+                            />
+                          </span>
+                          <span className={styles.imageStudioPresetLockTooltip}>Premium+ required</span>
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className={styles.imageStudioPresetMeta}>
+                      <span className={styles.imageStudioPresetLabel}>{preset.label}</span>
+                      {preset.subtitle ? <span className={styles.imageStudioPresetSubtitle}>{preset.subtitle}</span> : null}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <input
         ref={imageInputRef}
@@ -11341,8 +10881,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   );
 
   const activeImageStudioGallery = imageStudioImportSource === "cavsafe" ? imageStudioGallerySafe : imageStudioGalleryCloud;
-  const showInlineError = Boolean(error);
-  const mobileDrawerHidden = !overlay && isPhoneLayout && !mobileDrawerOpen && !accountMenuOpen;
+  const showInlineError = Boolean(error) && !isCenterLoadFailureMessage(error);
+  const showDesktopGuestAuthPanel = !overlay && !isPhoneLayout && isGuestPreviewMode && accountMenuOpen;
   const renderGuestAuthPanel = (opts?: { docked?: boolean }) => (
     <div
       className={[
@@ -11565,10 +11105,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
   return (
     <div
-      className={[
-        overlay ? styles.centerOverlayRoot : styles.centerPageRoot,
-        imageStudioMobileLayoutActive ? styles.centerPageRootImageStudioMobile : "",
-      ].filter(Boolean).join(" ")}
+      className={overlay ? styles.centerOverlayRoot : styles.centerPageRoot}
       onClick={(event) => {
         if (!overlay) return;
         if (event.currentTarget !== event.target) return;
@@ -11603,7 +11140,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
         {!overlay ? (
           <aside
-            ref={mobileDrawerRef}
             className={[
               styles.centerSidebar,
               sidebarCollapsedActive ? styles.centerSidebarCollapsed : "",
@@ -11612,7 +11148,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
             id="cavai-mobile-drawer"
             aria-label="CavAi conversation history"
             aria-hidden={isPhoneLayout ? !mobileDrawerOpen && !accountMenuOpen : undefined}
-            {...(mobileDrawerHidden ? ({ inert: "" } as Record<string, unknown>) : {})}
           >
             <div className={styles.centerSidebarHead}>
               {sidebarCollapsedActive ? (
@@ -11748,8 +11283,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                       type="button"
                       className={[styles.centerSidebarActionBtn, styles.centerSidebarActionBtnPrimary].join(" ")}
                       onClick={() => openGuestAuthPanel({ closeDrawer: isPhoneLayout })}
-                      aria-label={guestAccountLabel}
-                      title={guestAccountLabel}
+                      aria-label="CavBot Operator"
+                      title="CavBot Operator"
                       aria-haspopup="dialog"
                       aria-expanded={accountMenuOpen}
                     >
@@ -11766,15 +11301,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                       >
                         <span className={styles.centerHeaderAccountInitials}>C</span>
                       </span>
-                      <span className={styles.centerSidebarAccountMeta}>
-                        <span className={styles.centerSidebarAccountName}>{guestAccountNameLabel}</span>
-                        <span className={styles.centerSidebarAccountPlan}>{guestAccountPromptLabel}</span>
-                      </span>
+                      <span className={styles.centerSidebarActionText}>CavBot Operator</span>
                     </button>
                     {accountMenuOpen && isPhoneLayout ? renderGuestAuthPanel() : null}
                   </div>
                   ) : null
-                ) : showAuthenticatedAccountUi ? (
+                ) : (
                   <div className={styles.centerHeaderAccountWrap} ref={accountMenuRef}>
                     <button
                       type="button"
@@ -11842,7 +11374,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                       </div>
                     ) : null}
                   </div>
-                ) : null}
+                )}
               </div>
             ) : null}
           </aside>
@@ -11851,7 +11383,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         <section
           className={[
             styles.centerMain,
-            imageStudioMobileLayoutActive ? styles.centerMainImageStudioMobile : "",
+            showDesktopGuestAuthPanel ? styles.centerMainWithGuestAuth : "",
           ].filter(Boolean).join(" ")}
           aria-label="CavAi chat workspace"
         >
@@ -11861,7 +11393,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
               <button
                 type="button"
                 className={[styles.centerIconBtn, styles.centerMobileMenuBtn].join(" ")}
-                onClick={(event) => toggleMobileDrawer(event.currentTarget)}
+                onClick={toggleMobileDrawer}
                 aria-label="Open navigation drawer"
                 title="Menu"
                 aria-expanded={mobileDrawerOpen}
@@ -12021,11 +11553,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                         >
                           Log in
                         </button>
-                      ) : showAuthenticatedAccountUi ? (
+                      ) : (
                         <button
                           type="button"
                           className={styles.centerHeaderAccountBtn}
-                          onClick={(event) => openMobileDrawer(event.currentTarget)}
+                          onClick={openMobileDrawer}
                           aria-label={`Account: ${accountNameLabel}`}
                           title="Account"
                         >
@@ -12055,7 +11587,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                             )}
                           </span>
                         </button>
-                      ) : null}
+                      )}
                     </div>
                   ) : null}
                 </>
@@ -12090,7 +11622,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
             </section>
           ) : null}
 
-          {showDesktopGuestAuthPanel ? renderGuestAuthPanel() : null}
+          {showDesktopGuestAuthPanel ? renderGuestAuthPanel({ docked: true }) : null}
 
           <section
             ref={threadRef}
@@ -12113,7 +11645,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
             <div className={threadInnerClassName}>
               {isEmptyThread ? (
                 <div
-                  className={emptyStateClassName}
+                  className={[
+                    styles.centerEmptyState,
+                    centerComposerInThread ? styles.centerEmptyStateWithComposer : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                 >
                   {!overlay ? (
                     <div className={styles.centerEmptyBadgeWrap}>
@@ -12122,29 +11659,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                       </div>
                     </div>
                   ) : null}
-                  {showOverlayGreeting ? (
-                    <>
-                      <h2 className={emptyTitleClassName}>
-                        {overlay ? (
-                          <span className={styles.centerEmptyTitleOverlayLead}>{emptyHeadline}</span>
-                        ) : (
-                          emptyHeadline
-                        )}
-                      </h2>
-                      {emptySubline ? (
-                        <p className={emptySublineClassName}>
-                          {overlay ? (
-                            <span className={styles.centerEmptyTextOverlayLine}>
-                              <span className={styles.centerEmptyTextOverlayPrompt}>{emptySubline}</span>
-                              <span className={styles.centerEmptyTextOverlayCursor} aria-hidden="true" />
-                            </span>
-                          ) : (
-                            emptySubline
-                          )}
-                        </p>
-                      ) : null}
-                    </>
-                  ) : null}
+                  <h2 className={emptyTitleClassName}>{emptyHeadline}</h2>
+                  {emptySubline ? <p className={emptySublineClassName}>{emptySubline}</p> : null}
                   {centerComposerInThread ? <div className={styles.centerInlineComposer}>{composerContent}</div> : null}
                 </div>
               ) : null}
@@ -13559,10 +13075,6 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                 </div>
               </section>
             </div>
-          ) : null}
-
-          {imageStudioMobileLayoutActive ? (
-            <div className={styles.centerImageStudioMobileShelfWrap}>{imageStudioPresetPanel}</div>
           ) : null}
 
           {showInlineError ? (

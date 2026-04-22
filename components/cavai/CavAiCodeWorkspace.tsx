@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CAVAI_SAFE_FALLBACK_LINE,
   pickAndRememberCavAiLine,
@@ -17,12 +17,11 @@ import {
   resolveAiModelLabel,
 } from "@/src/lib/ai/model-catalog";
 import { toReasoningDisplayHelper, toReasoningDisplayLabel } from "@/src/lib/ai/reasoning-display";
-import { emitGuardDecision, emitGuardDecisionFromPayload, readGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
+import { emitGuardDecision, emitGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
 import { buildCavGuardDecision } from "@/src/lib/cavguard/cavGuard.registry";
 import { track } from "@/lib/cavbotAnalytics";
 import CavAiVoiceOrb, { type CavAiVoiceOrbMode } from "@/components/cavai/CavAiVoiceOrb";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
-import { publishClientPlan, readBootClientPlanBootstrap, subscribeClientPlan } from "@/lib/clientPlan";
 import { CAVAI_UPLOAD_FILE_ICON_ASSETS, resolveUploadFileIcon } from "@/lib/cavai/uploadFileIcons";
 import styles from "./CavAiWorkspace.module.css";
 
@@ -259,15 +258,6 @@ type CavenRuntimeCustomAgent = {
   triggers: string[];
 };
 
-type PublishedRuntimeAgent = {
-  id: string;
-  name: string;
-  summary: string;
-  actionKey: string;
-  surface: "cavcode" | "center" | "all";
-  triggers: string[];
-};
-
 type CavenRuntimeAgentRef = {
   agentId: string;
   agentActionKey: string;
@@ -283,7 +273,6 @@ type ApiEnvelope<T> =
     };
 
 type ReasoningLevel = "low" | "medium" | "high" | "extra_high";
-type VoiceCaptureIntent = "dictate" | "speak";
 type CavenInferenceSpeed = "standard" | "fast";
 type ViewMode = "chat" | "history";
 type BadgeTone = "default" | "lime" | "red";
@@ -375,6 +364,7 @@ const REASONING_LEVEL_OPTIONS: Array<{ value: ReasoningLevel; label: string }> =
 ];
 const DEFAULT_REASONING_LEVELS: ReasoningLevel[] = ["low", "medium"];
 const CAVEN_AGENT_NAME = "Caven";
+const CAVEN_MODEL_ATTRIBUTION = "Powered by Qwen3-Coder";
 const CAVEN_AGENT_ID_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/;
 const CAVEN_AGENT_ACTION_KEY_RE = /^[a-z0-9][a-z0-9_]{1,63}$/;
 const CAVEN_DEFAULT_SETTINGS: CavenWorkspaceSettings = {
@@ -480,37 +470,6 @@ function s(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function toVoiceCaptureErrorMessage(error: unknown): string {
-  if (error instanceof DOMException) {
-    if (error.name === "NotAllowedError" || error.name === "SecurityError") {
-      return "Microphone access was denied. Allow microphone access and try again.";
-    }
-    if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
-      return "No microphone was detected on this device.";
-    }
-    if (error.name === "NotReadableError" || error.name === "TrackStartError") {
-      return "Microphone access is busy in another app. Close the other app and try again.";
-    }
-  }
-  const message = error instanceof Error ? s(error.message) : typeof error === "string" ? s(error) : "";
-  if (!message) return "Voice capture failed.";
-  const lowered = message.toLowerCase();
-  if (
-    lowered.includes("permission denied")
-    || lowered.includes("notallowederror")
-    || lowered.includes("user denied")
-  ) {
-    return "Microphone access was denied. Allow microphone access and try again.";
-  }
-  if (
-    lowered.includes("microphone is not allowed in this document")
-    || lowered.includes("permissions policy violation")
-  ) {
-    return "Microphone access is blocked by the app security policy.";
-  }
-  return message;
-}
-
 function toComposerEnterBehavior(value: unknown): CavenComposerEnterBehavior {
   const raw = s(value).toLowerCase();
   return raw === "meta_enter" ? "meta_enter" : "enter";
@@ -599,37 +558,6 @@ function normalizeRuntimeCustomAgents(value: unknown): CavenRuntimeCustomAgent[]
   return rows;
 }
 
-function normalizePublishedRuntimeAgents(value: unknown): PublishedRuntimeAgent[] {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set<string>();
-  const rows: PublishedRuntimeAgent[] = [];
-  for (const entry of value) {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
-    const row = entry as Record<string, unknown>;
-    const id = s(row.id).toLowerCase();
-    const actionKey = s(row.actionKey).toLowerCase();
-    if (!id || !actionKey || !CAVEN_AGENT_ID_RE.test(id) || !CAVEN_AGENT_ACTION_KEY_RE.test(actionKey) || seen.has(id)) {
-      continue;
-    }
-    seen.add(id);
-    const triggersRaw = Array.isArray(row.triggers) ? row.triggers : [];
-    const triggers = triggersRaw
-      .map((item) => s(item))
-      .filter(Boolean)
-      .slice(0, 12);
-    rows.push({
-      id,
-      name: s(row.name),
-      summary: s(row.summary),
-      actionKey,
-      surface: normalizeRuntimeAgentSurface(row.surface),
-      triggers,
-    });
-    if (rows.length >= 240) break;
-  }
-  return rows;
-}
-
 function normalizeAgentRef(args: {
   agentId?: unknown;
   agentActionKey?: unknown;
@@ -641,10 +569,7 @@ function normalizeAgentRef(args: {
   return { agentId, agentActionKey };
 }
 
-function scorePromptForCustomAgent(
-  promptLower: string,
-  agent: Pick<CavenRuntimeCustomAgent, "actionKey" | "name" | "triggers">
-): number {
+function scorePromptForCustomAgent(promptLower: string, agent: CavenRuntimeCustomAgent): number {
   let score = 0;
   const actionNeedle = agent.actionKey.replace(/_/g, " ");
   const nameNeedle = s(agent.name).toLowerCase();
@@ -664,16 +589,15 @@ function resolvePromptCustomAgentRef(args: {
   requestedAction: CavCodeAssistAction;
   installedAgentIds: string[];
   customAgents: CavenRuntimeCustomAgent[];
-  publishedAgents?: PublishedRuntimeAgent[];
 }): CavenRuntimeAgentRef | null {
   const installedSet = new Set(args.installedAgentIds.map((id) => s(id).toLowerCase()));
-  const eligible = [...args.customAgents, ...(args.publishedAgents || [])].filter(
+  const eligible = args.customAgents.filter(
     (agent) => installedSet.has(agent.id) && (agent.surface === "all" || agent.surface === "cavcode")
   );
   if (!eligible.length) return null;
 
   const promptLower = s(args.prompt).toLowerCase();
-  let best: CavenRuntimeCustomAgent | PublishedRuntimeAgent | null = null;
+  let best: CavenRuntimeCustomAgent | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
 
   for (const agent of eligible) {
@@ -722,15 +646,12 @@ function resolvePreferredCavCodeModel(modelOptions: CavAiModelOption[], fallback
 
 function normalizeCavCodeModelOptions(options: CavAiModelOption[]): CavAiModelOption[] {
   const coder = options.find((option) => s(option.id) === ALIBABA_QWEN_CODER_MODEL_ID);
-  if (!coder) return [];
-  return [{
-    id: ALIBABA_QWEN_CODER_MODEL_ID,
-    label: resolveAiModelLabel(ALIBABA_QWEN_CODER_MODEL_ID),
-  }];
-}
-
-function cavCodePlanModelOptions(planIdRaw: unknown): CavAiModelOption[] {
-  if (normalizePlanId(planIdRaw) === "free") return [];
+  if (coder) {
+    return [{
+      id: ALIBABA_QWEN_CODER_MODEL_ID,
+      label: resolveAiModelLabel(ALIBABA_QWEN_CODER_MODEL_ID),
+    }];
+  }
   return [{
     id: ALIBABA_QWEN_CODER_MODEL_ID,
     label: resolveAiModelLabel(ALIBABA_QWEN_CODER_MODEL_ID),
@@ -1137,16 +1058,15 @@ function reasoningLevelsForPlan(planIdRaw: unknown): ReasoningLevel[] {
 
 function normalizePlanId(value: unknown): "free" | "premium" | "premium_plus" {
   const raw = s(value).toLowerCase();
-  if (raw === "premium_plus" || raw === "premium+") return "premium_plus";
+  if (raw === "premium_plus") return "premium_plus";
   if (raw === "premium") return "premium";
   return "free";
 }
 
-function resolveServerPlanId(
-  planIdRaw: unknown,
-  fallback: "free" | "premium" | "premium_plus"
-): "free" | "premium" | "premium_plus" {
-  return s(planIdRaw) ? normalizePlanId(planIdRaw) : fallback;
+function planTierRank(planId: "free" | "premium" | "premium_plus"): number {
+  if (planId === "premium_plus") return 3;
+  if (planId === "premium") return 2;
+  return 1;
 }
 
 function maxImageAttachmentsForPlan(planId: "free" | "premium" | "premium_plus"): number {
@@ -1164,14 +1084,17 @@ function normalizeReasoningOptions(raw: unknown): ReasoningLevel[] {
     .filter((level) => unique.includes(level));
 }
 
-function clampReasoningLevelsToPlan(
+function mergeReasoningLevelsWithPlan(
   options: ReasoningLevel[],
   planIdRaw: unknown
 ): ReasoningLevel[] {
-  const set = new Set<ReasoningLevel>(reasoningLevelsForPlan(planIdRaw));
+  const set = new Set<ReasoningLevel>([
+    ...reasoningLevelsForPlan(planIdRaw),
+    ...options,
+  ]);
   return REASONING_LEVEL_OPTIONS
     .map((option) => option.value)
-    .filter((level) => set.has(level) && options.includes(level));
+    .filter((level) => set.has(level));
 }
 
 function toModelOption(value: unknown): CavAiModelOption | null {
@@ -1482,23 +1405,6 @@ function toDataUrl(file: File): Promise<string> {
   });
 }
 
-function isAuthRequiredLikeResponse(status: number, payload: unknown) {
-  const decision = readGuardDecisionFromPayload(payload);
-  if (decision?.actionId === "AUTH_REQUIRED") return true;
-  if (status === 401) return true;
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
-  const errorCode = String((payload as Record<string, unknown>).error || "").trim().toUpperCase();
-  return errorCode === "AUTH_REQUIRED" || errorCode === "UNAUTHORIZED" || errorCode === "SESSION_REVOKED" || errorCode === "EXPIRED";
-}
-
-function readAuthMeAiReady(payload: unknown, fallbackValue: boolean) {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return fallbackValue;
-  const capabilities = (payload as Record<string, unknown>).capabilities;
-  if (!capabilities || typeof capabilities !== "object" || Array.isArray(capabilities)) return fallbackValue;
-  const aiReady = (capabilities as Record<string, unknown>).aiReady;
-  return typeof aiReady === "boolean" ? aiReady : fallbackValue;
-}
-
 function matchesPath(file: CavAiProjectFileRef, hint: string): number {
   const normalizedHint = normalizePathLike(hint).toLowerCase();
   const full = normalizePathLike(file.path).toLowerCase();
@@ -1637,32 +1543,23 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   const [cavCloudAttachItems, setCavCloudAttachItems] = useState<CavCloudAttachFileItem[]>([]);
   const [cavCloudAttachQuery, setCavCloudAttachQuery] = useState("");
 
-  const [planBoot] = useState(() => readBootClientPlanBootstrap());
-  const bootAuthenticatedHint = Boolean(planBoot.authenticatedHint);
-  const [modelOptions, setModelOptions] = useState<CavAiModelOption[]>(
-    () => (planBoot.planId === "free" ? [] : cavCodePlanModelOptions(planBoot.planId))
-  );
+  const [modelOptions, setModelOptions] = useState<CavAiModelOption[]>([]);
   const [audioModelOptions, setAudioModelOptions] = useState<CavAiModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState(ALIBABA_QWEN_CODER_MODEL_ID);
   const [selectedAudioModel, setSelectedAudioModel] = useState("auto");
   const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>("medium");
-  const [availableReasoningLevels, setAvailableReasoningLevels] = useState<ReasoningLevel[]>(
-    () => reasoningLevelsForPlan(planBoot.planId)
-  );
-  const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">(() => planBoot.planId);
-  const [isAuthenticated, setIsAuthenticated] = useState(() => bootAuthenticatedHint);
-  const [authProbeReady, setAuthProbeReady] = useState(false);
+  const [availableReasoningLevels, setAvailableReasoningLevels] = useState<ReasoningLevel[]>(DEFAULT_REASONING_LEVELS);
+  const [accountPlanId, setAccountPlanId] = useState<"free" | "premium" | "premium_plus">("free");
   const [qwenPopoverState, setQwenPopoverState] = useState<QwenCoderPopoverUiState | null>(null);
   const [qwenPopoverOpen, setQwenPopoverOpen] = useState(false);
   const [qwenPopoverPinned, setQwenPopoverPinned] = useState(false);
   const [queueEnabled, setQueueEnabled] = useState(false);
-  const [, setBadgeTone] = useState<BadgeTone>("default");
+  const [badgeTone, setBadgeTone] = useState<BadgeTone>("default");
   const [openComposerMenu, setOpenComposerMenu] = useState<ComposerMenu>(null);
   const [promptFocused, setPromptFocused] = useState(false);
   const [transcribingAudio, setTranscribingAudio] = useState(false);
   const [recordingVoice, setRecordingVoice] = useState(false);
   const [processingVoice, setProcessingVoice] = useState(false);
-  const [activeVoiceCaptureIntent, setActiveVoiceCaptureIntent] = useState<VoiceCaptureIntent | null>(null);
   const [voiceOrbState, setVoiceOrbState] = useState<CavAiVoiceOrbMode>("idle");
   const [voiceOrbStream, setVoiceOrbStream] = useState<MediaStream | null>(null);
   const [profileIdentity, setProfileIdentity] = useState<CavAiIdentityInput>({ fullName: "", username: "" });
@@ -1677,7 +1574,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   const [cavenSettings, setCavenSettings] = useState<CavenWorkspaceSettings>(CAVEN_DEFAULT_SETTINGS);
   const [installedAgentIds, setInstalledAgentIds] = useState<string[]>([]);
   const [customAgents, setCustomAgents] = useState<CavenRuntimeCustomAgent[]>([]);
-  const [publishedAgents, setPublishedAgents] = useState<PublishedRuntimeAgent[]>([]);
   const [savingCavenSettingsKey, setSavingCavenSettingsKey] = useState("");
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [settingsDropdownSections, setSettingsDropdownSections] = useState<Record<CavenSettingsDropdownSection, boolean>>({
@@ -1696,7 +1592,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   const voiceChunksRef = useRef<Blob[]>([]);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const historySearchInputRef = useRef<HTMLInputElement | null>(null);
-  const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const composerControlsRef = useRef<HTMLDivElement | null>(null);
   const inlineEditInputRef = useRef<HTMLTextAreaElement | null>(null);
   const viewerImageWrapRef = useRef<HTMLDivElement | null>(null);
@@ -1826,37 +1721,11 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     setReasoningPanelMessageId("");
   }, []);
   const activeFilePath = normalizePathLike(s(props.filePath));
-  const cavenInteractionLocked = useMemo(
-    () => accountPlanId === "free" || s(qwenPopoverState?.entitlement?.state).toLowerCase() === "locked_free",
-    [accountPlanId, qwenPopoverState]
-  );
-  const hasQueuedPrompts = queuedPrompts.length > 0;
   const hasPendingPrompt = submitting && Boolean(s(pendingPromptText));
   const hasInlineEdit = Boolean(inlineEditDraft);
   const hasExistingThread = Boolean(sessionId || visibleMessages.length || currentSession || hasPendingPrompt || hasInlineEdit);
   const showVoiceOrb = voiceOrbState !== "idle";
   const voiceOrbHasConversation = Boolean(visibleMessages.length || hasPendingPrompt || hasInlineEdit || loadingMessages || loadingQueue || queuedPrompts.length);
-  const showCodePanelChatBrand =
-    !cavenInteractionLocked
-    && viewMode !== "history"
-    && !loadingMessages
-    && !loadingQueue
-    && !hasPendingPrompt
-    && !hasInlineEdit
-    && !visibleMessages.length
-    && !hasQueuedPrompts;
-  const showCodePanelHistoryBrand =
-    !cavenInteractionLocked
-    && viewMode === "history"
-    && !loadingSessions
-    && !filteredSessions.length;
-  const codePanelIdleBrand = (
-    <div className={styles.codePanelIdleBrand}>
-      <span className={styles.codePanelEmptyLogo} role="img" aria-label={heroLine}>
-        <span className={styles.codePanelEmptyLogoGlyph} aria-hidden="true" />
-      </span>
-    </div>
-  );
   const promptPlaceholder = promptFocused
     ? ""
     : hasExistingThread
@@ -1865,8 +1734,8 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   const modelMenuOptions = useMemo(() => {
     const entries = modelOptions
       .map((option) => ({
-        id: option.id,
-        label: option.id === ALIBABA_QWEN_CODER_MODEL_ID ? "Caven" : resolveAiModelLabel(option.id),
+      id: option.id,
+      label: resolveAiModelLabel(option.id),
       }))
       .filter((option) => !isAiAutoModelId(option.id));
     const ordered: CavAiModelOption[] = [];
@@ -1883,20 +1752,29 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     }
     return ordered;
   }, [modelOptions]);
+  const audioModelMenuOptions = useMemo(() => {
+    const options: CavAiModelOption[] = [{ id: "auto", label: "Auto transcription model" }];
+    for (const option of audioModelOptions) {
+      if (options.some((row) => row.id === option.id)) continue;
+      options.push({
+        id: option.id,
+        label: option.label || resolveAiModelLabel(option.id),
+      });
+    }
+    return options;
+  }, [audioModelOptions]);
   const selectedModelLabel = useMemo(() => {
     const match = modelMenuOptions.find((option) => option.id === selectedModel);
     if (match) return match.label;
     return resolveAiModelLabel(selectedModel);
   }, [modelMenuOptions, selectedModel]);
+  const selectedAudioModelLabel = useMemo(() => {
+    return "Voice";
+  }, []);
   const qwenAvailability = useMemo(
     () => qwenPopoverState?.modelAvailability?.[ALIBABA_QWEN_CODER_MODEL_ID] || null,
     [qwenPopoverState]
   );
-  const qwenEntitlementState = useMemo(
-    () => s(qwenPopoverState?.entitlement?.state).toLowerCase(),
-    [qwenPopoverState]
-  );
-  const qwenFreeLocked = qwenEntitlementState === "locked_free";
   const qwenLocked = useMemo(
     () => Boolean(qwenAvailability && qwenAvailability.selectable === false),
     [qwenAvailability]
@@ -1905,20 +1783,19 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     () => Math.max(0, Math.min(100, Number(qwenPopoverState?.usage?.percentUsed || 0))),
     [qwenPopoverState]
   );
-  const qwenUsageSummary = useMemo(
-    () => {
-      const creditsUsed = Math.max(0, Math.trunc(Number(qwenPopoverState?.usage?.creditsUsed || 0)));
-      const creditsTotal = Math.max(0, Math.trunc(Number(qwenPopoverState?.usage?.creditsTotal || 0)));
-      return `${creditsUsed} / ${creditsTotal} credits used`;
-    },
-    [qwenPopoverState]
-  );
   const qwenUsageLabel = useMemo(
     () => {
-      if (!qwenPopoverState) return "Caven usage";
-      return qwenUsageSummary;
+      const state = s(qwenPopoverState?.entitlement?.state).toLowerCase();
+      if (state === "locked_free" || Number(qwenPopoverState?.usage?.creditsTotal || 0) <= 0) {
+        return "Not included on Free";
+      }
+      return `${Math.round(qwenUsagePercent)}% used`;
     },
-    [qwenPopoverState, qwenUsageSummary]
+    [qwenPopoverState, qwenUsagePercent]
+  );
+  const cavenInteractionLocked = useMemo(
+    () => s(qwenPopoverState?.entitlement?.state).toLowerCase() === "locked_free",
+    [qwenPopoverState]
   );
   const maxImageAttachments = useMemo(() => maxImageAttachmentsForPlan(accountPlanId), [accountPlanId]);
   const emitQwenUpgradeDecision = useCallback(() => {
@@ -1964,7 +1841,30 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     const match = REASONING_LEVEL_OPTIONS.find((option) => option.value === reasoningLevel);
     return match?.label || toReasoningDisplayLabel(reasoningLevel);
   }, [reasoningLevel]);
+  const hasQueuedPrompts = queuedPrompts.length > 0;
+  const showCodePanelChatBrand =
+    !cavenInteractionLocked
+    && viewMode !== "history"
+    && !loadingMessages
+    && !loadingQueue
+    && !hasPendingPrompt
+    && !hasInlineEdit
+    && !visibleMessages.length
+    && !hasQueuedPrompts;
+  const showCodePanelHistoryBrand =
+    !cavenInteractionLocked
+    && viewMode === "history"
+    && !loadingSessions
+    && !filteredSessions.length;
+  const codePanelIdleBrand = (
+    <div className={styles.codePanelIdleBrand}>
+      <span className={styles.codePanelEmptyLogo} role="img" aria-label={heroLine}>
+        <span className={styles.codePanelEmptyLogoGlyph} aria-hidden="true" />
+      </span>
+    </div>
+  );
   const asrAudioSkillEnabled = cavenSettings.asrAudioSkillEnabled;
+  const showAudioModelSelector = asrAudioSkillEnabled && audioModelMenuOptions.length > 1;
   const activeSkillInfo = useMemo(
     () => CAVEN_SKILLS.find((row) => row.id === activeSkillInfoId) || null,
     [activeSkillInfoId]
@@ -2024,10 +1924,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   }, [cavenSettings.showReasoningTimeline, clearReasoningTicker]);
 
   const loadQwenPopoverState = useCallback(async (nextSessionId?: string | null) => {
-    if (!authProbeReady || !isAuthenticated) {
-      setQwenPopoverState(null);
-      return;
-    }
     try {
       const qp = new URLSearchParams();
       const sid = s(nextSessionId || sessionId);
@@ -2038,27 +1934,20 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
         cache: "no-store",
       });
       const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      if (!res.ok || body.ok !== true) {
-        if (isAuthRequiredLikeResponse(res.status, body)) {
-          setIsAuthenticated(false);
-          setAuthProbeReady(true);
-          setQwenPopoverState(null);
-        }
-        return;
-      }
+      if (!res.ok || body.ok !== true) return;
       const next = toQwenPopoverUiState(body);
       if (next) setQwenPopoverState(next);
     } catch {
       // Best effort only.
     }
-  }, [authProbeReady, isAuthenticated, sessionId]);
+  }, [sessionId]);
 
   const trackCavenEvent = useCallback((event: string, payload: Record<string, unknown>) => {
     if (!cavenSettings.telemetryOptIn) return;
     track(event, payload);
   }, [cavenSettings.telemetryOptIn]);
 
-  const applyLoadedSettings = useCallback((value: unknown, publishedValue?: unknown) => {
+  const applyLoadedSettings = useCallback((value: unknown) => {
     const next = toCavenWorkspaceSettings(value);
     const raw = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
     setCavenSettings(next);
@@ -2067,9 +1956,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     }
     if ("customAgents" in raw) {
       setCustomAgents(normalizeRuntimeCustomAgents(raw.customAgents));
-    }
-    if (publishedValue !== undefined) {
-      setPublishedAgents(normalizePublishedRuntimeAgents(publishedValue));
     }
     if (!sessionId) {
       setQueueEnabled(next.queueFollowUps);
@@ -2081,106 +1967,25 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     }
   }, [sessionId]);
 
-  const applyUnauthenticatedCodeState = useCallback(() => {
-    setIsAuthenticated(false);
-    setAccountPlanId("free");
-    publishClientPlan({ planId: "free" });
-    setModelOptions(cavCodePlanModelOptions("free"));
-    setAudioModelOptions([]);
-    setAvailableReasoningLevels(reasoningLevelsForPlan("free"));
-    setQwenPopoverState(null);
-    applyLoadedSettings(CAVEN_DEFAULT_SETTINGS, []);
-    activeSessionIdRef.current = "";
-    setSessions([]);
-    setSessionId("");
-    setMessages([]);
-    setQueuedPrompts([]);
-  }, [applyLoadedSettings]);
-
-  const refreshCodeAuthState = useCallback(async (opts?: { cancelled?: () => boolean }): Promise<boolean> => {
-    const isCancelled = opts?.cancelled;
-    try {
-      const res = await fetch("/api/auth/me", {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
-      });
-      const body = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        authenticated?: boolean;
-        session?: {
-          systemRole?: unknown;
-        } | null;
-        capabilities?: {
-          aiReady?: unknown;
-        } | null;
-        user?: {
-          displayName?: unknown;
-          username?: unknown;
-        };
-        account?: {
-          tier?: unknown;
-          tierEffective?: unknown;
-        };
-      };
-      const systemRole = s(body.session?.systemRole).toLowerCase();
-      const hasUserPayload = Boolean(body.user && typeof body.user === "object");
-      const aiReady = readAuthMeAiReady(body, systemRole !== "system" && hasUserPayload);
-      if (isCancelled?.()) return false;
-      if (!res.ok || body.ok !== true || body.authenticated !== true || systemRole === "system" || !hasUserPayload || !aiReady) {
-        applyUnauthenticatedCodeState();
-        return false;
-      }
-      setIsAuthenticated(true);
-      const nextIdentity = rememberCavAiIdentity({
-        fullName: s(body.user?.displayName),
-        username: s(body.user?.username),
-      });
-      setProfileIdentity(nextIdentity);
-      const authPlanId = normalizePlanId(body.account?.tierEffective ?? body.account?.tier);
-      setAccountPlanId(authPlanId);
-      publishClientPlan({
-        planId: authPlanId,
-        preserveStrongerCached: true,
-      });
-      return true;
-    } catch {
-      if (isCancelled?.()) return false;
-      applyUnauthenticatedCodeState();
-      return false;
-    } finally {
-      if (!isCancelled?.()) {
-        setAuthProbeReady(true);
-      }
-    }
-  }, [applyUnauthenticatedCodeState]);
-
   const loadCavenSettings = useCallback(async () => {
-    if (!authProbeReady || !isAuthenticated) {
-      applyLoadedSettings(CAVEN_DEFAULT_SETTINGS, []);
-      return;
-    }
     try {
       const res = await fetch("/api/cavai/settings", {
         method: "GET",
         credentials: "include",
         cache: "no-store",
       });
-      const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ settings?: unknown; publishedAgents?: unknown }>;
+      const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ settings?: unknown }>;
       if (!res.ok || !body.ok) {
-        if (isAuthRequiredLikeResponse(res.status, body)) {
-          applyUnauthenticatedCodeState();
-          return;
-        }
-        applyLoadedSettings(CAVEN_DEFAULT_SETTINGS, []);
+        emitGuardDecisionFromPayload(body);
+        applyLoadedSettings(CAVEN_DEFAULT_SETTINGS);
         return;
       }
-      applyLoadedSettings(body.settings || CAVEN_DEFAULT_SETTINGS, body.publishedAgents);
+      applyLoadedSettings(body.settings || CAVEN_DEFAULT_SETTINGS);
     } catch (err) {
       console.warn("[caven] settings load failed, using defaults", err);
-      applyLoadedSettings(CAVEN_DEFAULT_SETTINGS, []);
+      applyLoadedSettings(CAVEN_DEFAULT_SETTINGS);
     }
-  }, [applyLoadedSettings, applyUnauthenticatedCodeState, authProbeReady, isAuthenticated]);
+  }, [applyLoadedSettings]);
 
   const patchCavenSettings = useCallback(
     async (patch: Partial<CavenWorkspaceSettings>, saveKey = "") => {
@@ -2201,12 +2006,12 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
           },
           body: JSON.stringify(patch),
         });
-        const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ settings?: unknown; publishedAgents?: unknown }>;
+        const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ settings?: unknown }>;
         if (!res.ok || !body.ok) {
           emitGuardDecisionFromPayload(body);
           throw new Error(s((body as { message?: unknown }).message) || "Failed to update Caven settings.");
         }
-        applyLoadedSettings(body.settings, body.publishedAgents);
+        applyLoadedSettings(body.settings);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to update Caven settings.");
         void loadCavenSettings();
@@ -2237,26 +2042,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     });
   }, [qwenPopoverOpen, qwenPopoverState, trackCavenEvent]);
 
-  useLayoutEffect(() => {
-    const boot = readBootClientPlanBootstrap();
-    setAccountPlanId(boot.planId);
-    setModelOptions(boot.planId === "free" ? [] : cavCodePlanModelOptions(boot.planId));
-    setAvailableReasoningLevels(reasoningLevelsForPlan(boot.planId));
-  }, []);
-
-  useEffect(() => {
-    return subscribeClientPlan((planId) => {
-      setAccountPlanId(planId);
-    });
-  }, []);
-
   const loadProviderModels = useCallback(async () => {
-    if (!authProbeReady || !isAuthenticated) {
-      setModelOptions(cavCodePlanModelOptions("free"));
-      setAudioModelOptions([]);
-      setAvailableReasoningLevels(reasoningLevelsForPlan("free"));
-      return;
-    }
     try {
       const res = await fetch("/api/ai/test?catalog=context&surface=cavcode&action=generate_component", {
         method: "GET",
@@ -2281,30 +2067,28 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
         guardDecision?: unknown;
       };
       if (!res.ok || body.ok !== true) {
-        if (isAuthRequiredLikeResponse(res.status, body)) {
-          applyUnauthenticatedCodeState();
-          return;
-        }
         emitGuardDecisionFromPayload(body);
-        setModelOptions(cavCodePlanModelOptions(accountPlanId));
-        setAvailableReasoningLevels(reasoningLevelsForPlan(accountPlanId));
+        setAvailableReasoningLevels((prev) => mergeReasoningLevelsWithPlan(prev, accountPlanId));
         return;
       }
-      const effectivePlanId = resolveServerPlanId(body.planId, accountPlanId);
+      const policyPlanId = normalizePlanId(body.planId);
+      const effectivePlanId =
+        planTierRank(policyPlanId) >= planTierRank(accountPlanId) ? policyPlanId : accountPlanId;
       setAccountPlanId(effectivePlanId);
-      publishClientPlan({
-        planId: effectivePlanId,
-        preserveStrongerCached: true,
-      });
       const hasCatalog = Boolean(body.modelCatalog && typeof body.modelCatalog === "object");
       const textOptions = Array.isArray(body.modelCatalog?.text)
         ? body.modelCatalog?.text.map((row) => toModelOption(row)).filter(Boolean) as CavAiModelOption[]
         : [];
       if (hasCatalog) {
-        const nextOptions = normalizeCavCodeModelOptions(textOptions);
-        setModelOptions(nextOptions.length ? nextOptions : cavCodePlanModelOptions(effectivePlanId));
+        setModelOptions(normalizeCavCodeModelOptions(textOptions));
       } else {
-        setModelOptions(cavCodePlanModelOptions(effectivePlanId));
+        const fallbackOptions = [s(body.models?.chat), s(body.models?.reasoning)]
+          .filter(Boolean)
+          .map((id) => ({
+            id,
+            label: resolveAiModelLabel(id),
+          }));
+        setModelOptions(normalizeCavCodeModelOptions(fallbackOptions));
       }
 
       const audioOptions = Array.isArray(body.modelCatalog?.audio)
@@ -2314,13 +2098,11 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
 
       const optionsFromPolicy = normalizeReasoningOptions(body.reasoning?.options);
       if (optionsFromPolicy.length) {
-        const nextReasoning = clampReasoningLevelsToPlan(optionsFromPolicy, effectivePlanId);
-        setAvailableReasoningLevels(nextReasoning.length ? nextReasoning : reasoningLevelsForPlan(effectivePlanId));
+        setAvailableReasoningLevels(mergeReasoningLevelsWithPlan(optionsFromPolicy, effectivePlanId));
       } else {
         const optionsFromMax = reasoningLevelsUpTo(body.reasoning?.maxLevel);
         const nextReasoning = optionsFromMax.length ? optionsFromMax : reasoningLevelsForPlan(effectivePlanId);
-        const nextReasoningLevels = clampReasoningLevelsToPlan(nextReasoning, effectivePlanId);
-        setAvailableReasoningLevels(nextReasoningLevels.length ? nextReasoningLevels : reasoningLevelsForPlan(effectivePlanId));
+        setAvailableReasoningLevels(mergeReasoningLevelsWithPlan(nextReasoning, effectivePlanId));
       }
 
       const qwenState = toQwenPopoverUiState(body);
@@ -2329,20 +2111,11 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       }
     } catch {
       // Best effort only.
-      setModelOptions(cavCodePlanModelOptions(accountPlanId));
-      setAvailableReasoningLevels(reasoningLevelsForPlan(accountPlanId));
+      setAvailableReasoningLevels((prev) => mergeReasoningLevelsWithPlan(prev, accountPlanId));
     }
-  }, [accountPlanId, applyUnauthenticatedCodeState, authProbeReady, isAuthenticated]);
+  }, [accountPlanId]);
 
   const loadSessions = useCallback(async () => {
-    if (!authProbeReady || !isAuthenticated) {
-      setSessions([]);
-      activeSessionIdRef.current = "";
-      setSessionId("");
-      setMessages([]);
-      setQueuedPrompts([]);
-      return;
-    }
     setLoadingSessions(true);
     try {
       const res = await fetch(buildSessionsUrl({ workspaceId, projectId }), {
@@ -2352,10 +2125,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       });
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ sessions?: CavAiSessionSummary[] }>;
       if (!res.ok || !body.ok) {
-        if (isAuthRequiredLikeResponse(res.status, body)) {
-          applyUnauthenticatedCodeState();
-          return;
-        }
         emitGuardDecisionFromPayload(body);
         throw new Error(s((body as { message?: unknown }).message) || "Failed to load sessions.");
       }
@@ -2383,13 +2152,9 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     } finally {
       setLoadingSessions(false);
     }
-  }, [applyUnauthenticatedCodeState, authProbeReady, isAuthenticated, projectId, workspaceId]);
+  }, [projectId, workspaceId]);
 
   const loadMessages = useCallback(async (nextSessionId: string) => {
-    if (!authProbeReady || !isAuthenticated) {
-      setMessages([]);
-      return;
-    }
     const normalized = s(nextSessionId);
     if (!normalized) {
       setMessages([]);
@@ -2411,10 +2176,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       });
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ messages?: CavAiMessage[] }>;
       if (!res.ok || !body.ok) {
-        if (isAuthRequiredLikeResponse(res.status, body)) {
-          applyUnauthenticatedCodeState();
-          return;
-        }
         emitGuardDecisionFromPayload(body);
         throw new Error(s((body as { message?: unknown }).message) || "Failed to load messages.");
       }
@@ -2431,13 +2192,9 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     } finally {
       setLoadingMessages(false);
     }
-  }, [applyUnauthenticatedCodeState, authProbeReady, isAuthenticated]);
+  }, []);
 
   const loadQueuedPrompts = useCallback(async (nextSessionId: string) => {
-    if (!authProbeReady || !isAuthenticated) {
-      setQueuedPrompts([]);
-      return;
-    }
     const normalized = s(nextSessionId);
     if (!normalized) {
       setQueuedPrompts([]);
@@ -2455,10 +2212,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       });
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ queued?: unknown[] }>;
       if (!res.ok || !body.ok) {
-        if (isAuthRequiredLikeResponse(res.status, body)) {
-          applyUnauthenticatedCodeState();
-          return;
-        }
         emitGuardDecisionFromPayload(body);
         throw new Error(s((body as { message?: unknown }).message) || "Failed to load queue.");
       }
@@ -2469,7 +2222,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     } finally {
       setLoadingQueue(false);
     }
-  }, [applyUnauthenticatedCodeState, authProbeReady, isAuthenticated]);
+  }, []);
 
   const claimNextQueuedPrompt = useCallback(async (nextSessionId: string): Promise<CavAiQueuedPrompt | null> => {
     const normalized = s(nextSessionId);
@@ -2496,19 +2249,16 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   }, []);
 
   useEffect(() => {
-    if (!authProbeReady) return;
     void loadProviderModels();
-  }, [authProbeReady, loadProviderModels]);
+  }, [loadProviderModels]);
 
   useEffect(() => {
-    if (!authProbeReady) return;
     void loadCavenSettings();
-  }, [authProbeReady, loadCavenSettings]);
+  }, [loadCavenSettings]);
 
   useEffect(() => {
-    if (!authProbeReady || !isAuthenticated) return;
     void loadQwenPopoverState(sessionId || null);
-  }, [authProbeReady, isAuthenticated, loadQwenPopoverState, sessionId]);
+  }, [loadQwenPopoverState, sessionId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2546,30 +2296,41 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
 
   useEffect(() => {
     let cancelled = false;
-    void refreshCodeAuthState({ cancelled: () => cancelled });
+    void (async () => {
+      try {
+        const res = await fetch("/api/auth/me", {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
+        const body = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          authenticated?: boolean;
+          user?: {
+            displayName?: unknown;
+            username?: unknown;
+          };
+          account?: {
+            tier?: unknown;
+            tierEffective?: unknown;
+          };
+        };
+        if (cancelled || !res.ok || body.ok !== true || body.authenticated !== true) return;
+        const nextIdentity = rememberCavAiIdentity({
+          fullName: s(body.user?.displayName),
+          username: s(body.user?.username),
+        });
+        setProfileIdentity(nextIdentity);
+        const authPlanId = normalizePlanId(body.account?.tierEffective ?? body.account?.tier);
+        setAccountPlanId((prev) => (planTierRank(authPlanId) >= planTierRank(prev) ? authPlanId : prev));
+      } catch {
+        // Best effort only.
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [refreshCodeAuthState]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const syncAuth = () => {
-      void refreshCodeAuthState();
-    };
-    const onVisibilityChange = () => {
-      if (document.visibilityState !== "visible") return;
-      syncAuth();
-    };
-    window.addEventListener("pageshow", syncAuth);
-    window.addEventListener("focus", syncAuth);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      window.removeEventListener("pageshow", syncAuth);
-      window.removeEventListener("focus", syncAuth);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [refreshCodeAuthState]);
+  }, []);
 
   useEffect(() => {
     const nextLine = pickAndRememberCavAiLine({
@@ -2607,16 +2368,10 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   }, [messages, sessionId]);
 
   useEffect(() => {
-    if (!authProbeReady) return;
     void loadSessions();
-  }, [authProbeReady, loadSessions]);
+  }, [loadSessions]);
 
   useEffect(() => {
-    if (!authProbeReady || !isAuthenticated) {
-      setMessages([]);
-      setQueuedPrompts([]);
-      return;
-    }
     if (!sessionId) {
       setMessages([]);
       setQueuedPrompts([]);
@@ -2624,7 +2379,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     }
     void loadMessages(sessionId);
     void loadQueuedPrompts(sessionId);
-  }, [authProbeReady, isAuthenticated, loadMessages, loadQueuedPrompts, sessionId]);
+  }, [loadMessages, loadQueuedPrompts, sessionId]);
 
   useEffect(() => {
     if (!reasoningPanelMessageId) return;
@@ -2689,12 +2444,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   }, [audioModelOptions, selectedAudioModel]);
 
   useEffect(() => {
-    setModelOptions((prev) => {
-      const nextOptions = normalizeCavCodeModelOptions(prev);
-      if (normalizePlanId(accountPlanId) === "free") return [];
-      return nextOptions.length ? nextOptions : cavCodePlanModelOptions(accountPlanId);
-    });
-    setAvailableReasoningLevels(reasoningLevelsForPlan(accountPlanId));
+    setAvailableReasoningLevels((prev) => mergeReasoningLevelsWithPlan(prev, accountPlanId));
   }, [accountPlanId]);
 
   useEffect(() => {
@@ -2988,7 +2738,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       requestedAction: action,
       installedAgentIds,
       customAgents,
-      publishedAgents,
     });
     let resolvedSessionId = s(options?.sessionId) || s(sessionId);
     if (!resolvedSessionId) {
@@ -3171,7 +2920,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     projectId,
     props.projectRootName,
     props.projectRootPath,
-    publishedAgents,
     queueEnabled,
     loadQwenPopoverState,
     ensureActiveSessionId,
@@ -3557,7 +3305,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       requestedAction: inferredAction,
       installedAgentIds,
       customAgents,
-      publishedAgents,
     });
 
     let targetSessionId = s(sessionId);
@@ -3687,7 +3434,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     projectId,
     props.projectRootName,
     props.projectRootPath,
-    publishedAgents,
     queueEnabled,
     ensureActiveSessionId,
     resolveSelectedCode,
@@ -3880,24 +3626,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     void processQueuedPrompts();
   }, [hasQueuedPrompts, processQueuedPrompts, sessionId, submitting]);
 
-  const appendTranscriptToComposer = useCallback((transcriptRaw: string) => {
-    const transcript = s(transcriptRaw);
-    if (!transcript) {
-      setError("Voice input did not produce a transcript.");
-      return false;
-    }
-    setPrompt((prev) => {
-      const existing = s(prev);
-      return existing ? `${existing}\n\n${transcript}` : transcript;
-    });
-    if (typeof window !== "undefined") {
-      window.requestAnimationFrame(() => {
-        composerInputRef.current?.focus();
-      });
-    }
-    return true;
-  }, []);
-
   const transcribeAudioFile = useCallback(async (file: File, forcedModelId?: string): Promise<string | null> => {
     if (!asrAudioSkillEnabled) {
       throw new Error("Voice transcription is disabled in Caven settings.");
@@ -3962,43 +3690,10 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     voiceChunksRef.current = [];
   }, []);
 
-  const processDictatedVoice = useCallback(async (blob: Blob) => {
+  const processCapturedVoice = useCallback(async (blob: Blob) => {
     if (!blob.size) {
       setError("No audio was captured.");
       setVoiceOrbState("idle");
-      setActiveVoiceCaptureIntent(null);
-      return;
-    }
-    setProcessingVoice(true);
-    setVoiceOrbState("processing");
-    try {
-      const extension = inferAudioFileExtension(blob.type);
-      const file = new File(
-        [blob],
-        `dictate-${Date.now().toString(36)}.${extension}`,
-        { type: blob.type || "audio/webm" }
-      );
-      const transcript = await transcribeAudioFile(file);
-      if (!appendTranscriptToComposer(transcript || "")) {
-        setVoiceOrbState("idle");
-        return;
-      }
-      setError("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Dictation failed.");
-      setVoiceOrbState("idle");
-    } finally {
-      setProcessingVoice(false);
-      setVoiceOrbState("idle");
-      setActiveVoiceCaptureIntent(null);
-    }
-  }, [appendTranscriptToComposer, transcribeAudioFile]);
-
-  const processSpokenVoice = useCallback(async (blob: Blob) => {
-    if (!blob.size) {
-      setError("No audio was captured.");
-      setVoiceOrbState("idle");
-      setActiveVoiceCaptureIntent(null);
       return;
     }
     setProcessingVoice(true);
@@ -4039,7 +3734,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     } finally {
       setProcessingVoice(false);
       setVoiceOrbState("idle");
-      setActiveVoiceCaptureIntent(null);
     }
   }, [
     cavenInteractionLocked,
@@ -4060,7 +3754,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     recorder.stop();
   }, []);
 
-  const startVoiceCapture = useCallback(async (intent: VoiceCaptureIntent) => {
+  const startVoiceCapture = useCallback(async () => {
     if (recordingVoice || processingVoice || transcribingAudio || submitting) return;
     if (!asrAudioSkillEnabled) {
       setError("Voice transcription is disabled in Caven settings.");
@@ -4077,7 +3771,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     }
 
     setError("");
-    setActiveVoiceCaptureIntent(intent);
     setVoiceOrbState("listening");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -4101,7 +3794,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
         setRecordingVoice(false);
         setProcessingVoice(false);
         setVoiceOrbState("idle");
-        setActiveVoiceCaptureIntent(null);
         setError("Voice capture failed.");
       };
 
@@ -4113,15 +3805,10 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
         const blob = chunks.length ? new Blob(chunks, { type: fallbackType }) : null;
         if (!blob || !blob.size) {
           setVoiceOrbState("idle");
-          setActiveVoiceCaptureIntent(null);
           setError("No audio was captured.");
           return;
         }
-        if (intent === "dictate") {
-          void processDictatedVoice(blob);
-          return;
-        }
-        void processSpokenVoice(blob);
+        void processCapturedVoice(blob);
       };
 
       recorder.start(250);
@@ -4131,16 +3818,14 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
       setRecordingVoice(false);
       setProcessingVoice(false);
       setVoiceOrbState("idle");
-      setActiveVoiceCaptureIntent(null);
-      setError(toVoiceCaptureErrorMessage(err));
+      setError(err instanceof Error ? err.message : "Voice capture failed.");
     }
   }, [
     asrAudioSkillEnabled,
     cavenInteractionLocked,
     clearVoiceCapture,
     emitQwenUpgradeDecision,
-    processDictatedVoice,
-    processSpokenVoice,
+    processCapturedVoice,
     processingVoice,
     recordingVoice,
     submitting,
@@ -4148,79 +3833,22 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   ]);
 
   const promptHasTypedInput = prompt.length > 0;
-  const dictateCaptureActive = recordingVoice && activeVoiceCaptureIntent === "dictate";
-  const speakCaptureActive = recordingVoice && activeVoiceCaptureIntent === "speak";
-  const voiceStatus = useMemo(() => {
-    if (dictateCaptureActive) {
-      return {
-        label: "Dictating",
-        detail: "Listening now. Tap Dictate again to turn this audio into text.",
-      };
-    }
-    if (speakCaptureActive) {
-      return {
-        label: "Speak",
-        detail: "Listening now. Tap Speak again to send this request.",
-      };
-    }
-    if (transcribingAudio && activeVoiceCaptureIntent === "dictate") {
-      return {
-        label: "Transcribing",
-        detail: "Turning your audio into text for the composer.",
-      };
-    }
-    if (transcribingAudio || processingVoice) {
-      return {
-        label: "Thinking",
-        detail: "Transcribing your audio and running the request.",
-      };
-    }
-    return null;
-  }, [activeVoiceCaptureIntent, dictateCaptureActive, processingVoice, speakCaptureActive, transcribingAudio]);
-  const onComposerDictateAction = useCallback(() => {
-    if (!asrAudioSkillEnabled) {
-      setError("Voice transcription is disabled in Caven settings.");
-      return;
-    }
-    if (cavenInteractionLocked) {
-      emitQwenUpgradeDecision();
-      return;
-    }
-    if (dictateCaptureActive) {
-      stopVoiceCapture();
-      return;
-    }
-    if (recordingVoice || processingVoice || transcribingAudio || submitting) return;
-    void startVoiceCapture("dictate");
-  }, [
-    asrAudioSkillEnabled,
-    cavenInteractionLocked,
-    dictateCaptureActive,
-    emitQwenUpgradeDecision,
-    processingVoice,
-    recordingVoice,
-    startVoiceCapture,
-    stopVoiceCapture,
-    submitting,
-    transcribingAudio,
-  ]);
   const onComposerPrimaryAction = useCallback(() => {
     if (submitting || promptHasTypedInput) {
       onPrimaryAction();
       return;
     }
-    if (speakCaptureActive) {
+    if (recordingVoice) {
       stopVoiceCapture();
       return;
     }
-    if (recordingVoice || processingVoice || transcribingAudio) return;
-    void startVoiceCapture("speak");
+    if (processingVoice || transcribingAudio) return;
+    void startVoiceCapture();
   }, [
     onPrimaryAction,
     processingVoice,
     promptHasTypedInput,
     recordingVoice,
-    speakCaptureActive,
     startVoiceCapture,
     stopVoiceCapture,
     submitting,
@@ -5108,6 +4736,12 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
                 />
               ) : null}
               {showCodePanelChatBrand ? codePanelIdleBrand : null}
+
+              {!cavenInteractionLocked && Boolean(sessionId) && !visibleMessages.length && !loadingMessages && !hasPendingPrompt && !hasInlineEdit && !showCodePanelChatBrand ? (
+                <div className={styles.emptyLarge}>
+                  {heroLine}
+                </div>
+              ) : null}
 
               {loadingQueue ? <div className={styles.metaText}>Loading queue...</div> : null}
 
@@ -6303,7 +5937,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
 
           <div className={styles.composerInputWrap}>
             <textarea
-              ref={composerInputRef}
               className={styles.input}
               value={prompt}
               onChange={(event) => setPrompt(event.currentTarget.value)}
@@ -6383,14 +6016,15 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
                   {modelMenuOptions.map((option) => {
                     const isOn = selectedModel === option.id;
                     const isQwenCoder = option.id === ALIBABA_QWEN_CODER_MODEL_ID;
-                    const isSelectionBlocked = isQwenCoder && qwenLocked;
-                    const showLockedTag = isQwenCoder && qwenFreeLocked;
-                    const statusReason = isQwenCoder && qwenPopoverState
-                      ? qwenEntitlementState === "cooldown"
+                    const isLocked = isQwenCoder && qwenLocked;
+                    const lockReason = isQwenCoder && qwenPopoverState
+                      ? qwenPopoverState.entitlement.state === "cooldown"
                         ? `Cooling down until ${toCountdownLabel(qwenPopoverState.cooldownEndsAt)}`
-                        : qwenEntitlementState === "premium_plus_exhausted"
+                        : qwenPopoverState.entitlement.state === "locked_free"
+                          ? "Not included on Free"
+                          : qwenPopoverState.entitlement.state === "premium_plus_exhausted"
                             ? `Resets ${toDateLabel(qwenPopoverState.resetAt)}`
-                            : qwenEntitlementState === "premium_exhausted"
+                            : qwenPopoverState.entitlement.state === "premium_exhausted"
                               ? `Resets ${toDateLabel(qwenPopoverState.resetAt)}`
                               : ""
                       : "";
@@ -6415,10 +6049,10 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
                           className={[
                             styles.iconMenuItem,
                             isOn ? styles.iconMenuItemOn : "",
-                            showLockedTag ? styles.iconMenuItemLocked : "",
+                            isLocked ? styles.iconMenuItemLocked : "",
                           ].filter(Boolean).join(" ")}
                           onClick={() => {
-                            if (isSelectionBlocked) {
+                            if (isLocked) {
                               setQwenPopoverPinned(true);
                               setQwenPopoverOpen(true);
                               trackCavenEvent("qwen_coder_selection_blocked", {
@@ -6440,7 +6074,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
                           }}
                         >
                           <span className={styles.iconMenuItemLabel}>{option.label}</span>
-                          {showLockedTag ? <span className={styles.iconMenuLockTag}>Locked</span> : null}
+                          {isLocked ? <span className={styles.iconMenuLockTag}>Locked</span> : null}
                         </button>
                         {isQwenCoder && qwenPopoverState ? (
                           <>
@@ -6495,10 +6129,35 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
                                 >
                                   <span className={styles.qwenUsagePopoverCloseGlyph} aria-hidden="true" />
                                 </button>
+                                {qwenPopoverState.entitlement.state === "locked_free" || qwenPopoverState.usage.creditsTotal <= 0 ? (
+                                  <>
+                                    <div className={styles.qwenUsagePopoverTitle}>Caven usage</div>
+                                    <div className={styles.qwenUsagePopoverMetric}>Not included on Free</div>
+                                    <div className={styles.qwenUsagePopoverLine}>Caven is available on Premium and Premium+.</div>
+                                    <div className={styles.qwenUsagePopoverLine}>{CAVEN_MODEL_ATTRIBUTION}</div>
+                                    <a
+                                      className={styles.qwenUsagePopoverCta}
+                                      href="/settings/upgrade?plan=premium&billing=monthly"
+                                      onClick={() => {
+                                        trackCavenEvent("qwen_coder_upgrade_cta_click", {
+                                          surface: "cavcode",
+                                          source: "popover",
+                                          planLabel: qwenPopoverState.planLabel,
+                                          state: qwenPopoverState.entitlement.state,
+                                        });
+                                      }}
+                                    >
+                                      Upgrade
+                                    </a>
+                                    {lockReason ? <div className={styles.qwenUsagePopoverState}>{lockReason}</div> : null}
+                                  </>
+                                ) : (
+                                  <>
                                 <div className={styles.qwenUsagePopoverTitle}>Caven usage</div>
-                                <div className={styles.qwenUsagePopoverMetric}>{qwenUsageSummary}</div>
+                                <div className={styles.qwenUsagePopoverLine}>{CAVEN_MODEL_ATTRIBUTION}</div>
+                                <div className={styles.qwenUsagePopoverMetric}>{Math.round(qwenUsagePercent)}% used</div>
                                 <div className={styles.qwenUsagePopoverLine}>
-                                  {Math.round(qwenUsagePercent)}% used
+                                  {qwenPopoverState.usage.creditsUsed} / {qwenPopoverState.usage.creditsTotal} credits used
                                 </div>
                                 <div className={styles.qwenUsagePopoverLine}>
                                   {qwenPopoverState.usage.creditsLeft} credits left
@@ -6516,9 +6175,9 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
                                 ) : null}
                                 {qwenPopoverState.entitlement.state === "cooldown" ? (
                                   <div className={styles.qwenUsagePopoverLine}>Cooldown ends in {toCountdownLabel(qwenPopoverState.cooldownEndsAt)}</div>
-                                ) : !qwenFreeLocked ? (
+                                ) : (
                                   <div className={styles.qwenUsagePopoverLine}>Resets {toDateLabel(qwenPopoverState.resetAt)}</div>
-                                ) : null}
+                                )}
                                 {qwenPopoverState.contextWindow && qwenPopoverState.contextWindow.compactionCount > 0 ? (
                                   <div className={styles.qwenUsagePopoverHint}>CavAi automatically compacts context when needed.</div>
                                 ) : null}
@@ -6527,22 +6186,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
                                     {qwenPopoverState.entitlement.warningLevel}% usage warning reached
                                   </div>
                                 ) : null}
-                                {qwenFreeLocked ? (
-                                  <a
-                                    className={styles.qwenUsagePopoverCta}
-                                    href="/settings/upgrade?plan=premium&billing=monthly"
-                                    onClick={() => {
-                                      trackCavenEvent("qwen_coder_upgrade_cta_click", {
-                                        surface: "cavcode",
-                                        source: "popover",
-                                        planLabel: qwenPopoverState.planLabel,
-                                        state: qwenPopoverState.entitlement.state,
-                                      });
-                                    }}
-                                  >
-                                    Upgrade to Premium
-                                  </a>
-                                ) : qwenPopoverState.planLabel !== "Premium+" ? (
+                                {qwenPopoverState.planLabel !== "Premium+" ? (
                                   <a
                                     className={styles.qwenUsagePopoverCta}
                                     href="/settings/upgrade?plan=premium_plus&billing=monthly"
@@ -6558,7 +6202,9 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
                                     Upgrade to Premium+
                                   </a>
                                 ) : null}
-                                {statusReason ? <div className={styles.qwenUsagePopoverState}>{statusReason}</div> : null}
+                                {lockReason ? <div className={styles.qwenUsagePopoverState}>{lockReason}</div> : null}
+                                  </>
+                                )}
                               </div>
                             ) : null}
                           </>
@@ -6636,23 +6282,54 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
               <span className={styles.queueGlyph} aria-hidden="true" />
             </button>
 
-            <button
-              type="button"
-              className={[styles.actionBtn, styles.iconActionBtn, styles.composerAudioBtn, styles.composerRightStart].join(" ")}
-              onClick={onComposerDictateAction}
-              aria-label={dictateCaptureActive ? "Stop dictate" : "Dictate"}
-              title={dictateCaptureActive ? "Stop Dictate" : "Dictate"}
-              disabled={speakCaptureActive || (!dictateCaptureActive && (processingVoice || transcribingAudio || submitting))}
-            >
-              <span className={[styles.selectGlyph, styles.audioGlyph].join(" ")} aria-hidden="true" />
-            </button>
+            {showAudioModelSelector ? (
+              <div className={[styles.iconMenuWrap, styles.composerRightStart].join(" ")}>
+                <button
+                  type="button"
+                  className={[styles.actionBtn, styles.iconActionBtn, styles.composerAudioBtn, styles.menuTriggerBtn].join(" ")}
+                  onClick={() => {
+                    if (cavenInteractionLocked) return;
+                    setOpenComposerMenu((prev) => (prev === "audio_model" ? null : "audio_model"));
+                  }}
+                  aria-label={selectedAudioModelLabel}
+                  aria-haspopup="menu"
+                  aria-expanded={openComposerMenu === "audio_model"}
+                  title={selectedAudioModelLabel}
+                  disabled={cavenInteractionLocked}
+                >
+                  <span className={[styles.selectGlyph, styles.audioGlyph].join(" ")} aria-hidden="true" />
+                </button>
+                {openComposerMenu === "audio_model" ? (
+                  <div className={styles.iconMenu} role="menu" aria-label="Transcription model options">
+                    {audioModelMenuOptions.map((option) => {
+                      const isOn = selectedAudioModel === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={isOn}
+                          className={[styles.iconMenuItem, isOn ? styles.iconMenuItemOn : ""].filter(Boolean).join(" ")}
+                          onClick={() => {
+                            setSelectedAudioModel(option.id);
+                            setOpenComposerMenu(null);
+                          }}
+                        >
+                          <span className={styles.iconMenuItemLabel}>{option.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             <button
               type="button"
               className={[
                 styles.primaryBtn,
                 styles.composerSendBtn,
-                styles.composerSendBtnPaired,
+                showAudioModelSelector ? styles.composerSendBtnPaired : "",
                 submitting ? styles.primaryBtnStop : "",
               ]
                 .filter(Boolean)
@@ -6661,27 +6338,27 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
               aria-label={
                 submitting
                   ? "Stop Caven prompt"
-                  : speakCaptureActive
-                    ? "Stop speak"
+                  : recordingVoice
+                    ? "Stop voice input"
                     : promptHasTypedInput
                       ? "Send Caven prompt"
-                      : "Speak"
+                      : "Start voice input"
               }
               title={
                 submitting
                   ? "Stop"
-                  : speakCaptureActive
-                    ? "Stop Speak"
+                  : recordingVoice
+                    ? "Stop voice"
                     : promptHasTypedInput
                       ? "Send"
-                      : "Speak"
+                      : "Start voice"
               }
-              disabled={cavenInteractionLocked || dictateCaptureActive || processingVoice}
+              disabled={cavenInteractionLocked || processingVoice}
             >
               <span
                 className={[
                   styles.primaryBtnGlyph,
-                  submitting || speakCaptureActive
+                  submitting || recordingVoice
                     ? styles.primaryBtnGlyphStop
                     : promptHasTypedInput
                       ? styles.primaryBtnGlyphRun
@@ -6694,13 +6371,7 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
             </button>
           </div>
 
-          {voiceStatus ? (
-            <div className={styles.voiceStatusBar} role="status" aria-live="polite">
-              <span className={styles.voiceStatusDot} aria-hidden="true" />
-              <span className={styles.voiceStatusLabel}>{voiceStatus.label}</span>
-              <span className={styles.voiceStatusDetail}>{voiceStatus.detail}</span>
-            </div>
-          ) : null}
+          {transcribingAudio ? <div className={styles.metaText}>Transcribing audio...</div> : null}
           {error ? <div className={styles.error}>{error}</div> : null}
 
           <input

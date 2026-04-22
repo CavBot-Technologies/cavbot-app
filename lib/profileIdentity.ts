@@ -1,8 +1,13 @@
-import { normalizeUsername } from "@/lib/username";
 import { resolvePlanIdFromTier } from "@/lib/plans";
+import { normalizeUsername } from "@/lib/username";
 
 function s(value: unknown) {
   return String(value ?? "").trim();
+}
+
+export function normalizeProviderDisplayName(value: unknown, max = 64) {
+  const normalized = s(value).slice(0, max);
+  return normalized || null;
 }
 
 function lower(value: unknown) {
@@ -11,11 +16,6 @@ function lower(value: unknown) {
 
 export const CAVBOT_FOUNDER_USERNAME = "cavbot";
 export const CAVBOT_FOUNDER_DISPLAY_NAME = "CavBot Admin";
-
-export function normalizeProviderDisplayName(value: unknown, max = 64) {
-  const normalized = s(value).slice(0, max);
-  return normalized || null;
-}
 
 export function isCavbotFounderIdentity(input: {
   username?: unknown;

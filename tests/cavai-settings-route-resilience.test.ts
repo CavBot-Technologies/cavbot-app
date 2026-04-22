@@ -12,11 +12,11 @@ function read(relPath: string) {
 test("cavai settings route parallelizes registry and publication hydration", () => {
   const source = read("app/api/cavai/settings/route.ts");
 
-  assert.match(source, /buildFallbackAgentRegistryUiSnapshot/);
-  assert.match(source, /listPublishedOperatorAgents/);
-  assert.match(source, /listOwnedPublishedOperatorSourceAgentIds/);
-  assert.match(source, /publishedAgents,\s*ownedPublishedSourceAgentIds/);
-  assert.match(source, /degraded \? \{ \.\.\.baseResponse, degraded: true \} : baseResponse/);
+  assert.match(source, /async function loadAgentRegistryResponse/);
+  assert.match(source, /await Promise\.allSettled\(\[/);
+  assert.match(source, /agentRegistry: related\.agentRegistry/);
+  assert.match(source, /publishedAgents: related\.publishedAgents/);
+  assert.match(source, /ownedPublishedSourceAgentIds: related\.ownedPublishedSourceAgentIds/);
 });
 
 test("cavai schema bootstraps are guarded by single-flight promises", () => {
@@ -26,10 +26,7 @@ test("cavai schema bootstraps are guarded by single-flight promises", () => {
 
   assert.match(settingsSource, /let tableReadyPromise: Promise<void> \| null = null;/);
   assert.match(registrySource, /let tableReadyPromise: Promise<void> \| null = null;/);
-  assert.match(operatorSource, /let tablesReady = false;/);
-  assert.match(operatorSource, /async function ensureOperatorAgentTables\(\)/);
-  assert.match(operatorSource, /CREATE TABLE IF NOT EXISTS "OperatorPublishedAgent"/);
-  assert.match(operatorSource, /CREATE TABLE IF NOT EXISTS "OperatorAgentPublicationQueue"/);
+  assert.match(operatorSource, /let tablesReadyPromise: Promise<void> \| null = null;/);
 });
 
 test("agent registry sync skips duplicate work for identical state", () => {

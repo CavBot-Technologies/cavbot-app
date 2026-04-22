@@ -20,7 +20,6 @@
     "deploy:cloudflare": "npm run deploy:cloudflare:prod",
     "start": "next start",
     "lint": "eslint",
-    "admin:rollups": "node --import tsx scripts/admin-rollups.ts",
     "test:sdk": "node --import tsx --test tests/cavai-analytics-load-order.test.mjs tests/cloudfare-analytics-worker.test.mjs tests/cavbot-asset-policy.test.ts tests/appshell-navigation-regressions.test.ts tests/desktop-selection-helpers.test.ts tests/desktop-selection-regressions.test.ts tests/left-nav-cavai-wiring.test.ts",
     "check:no-localstorage": "node scripts/check-no-localstorage.mjs app/layout.tsx lib/cavbotAssetPolicy.ts lib/status/constants.ts",
     "backfill:signup-welcome": "node --import tsx scripts/backfill-signup-welcome-email.ts",
@@ -51,8 +50,7 @@
     "stripe": "^20.2.0",
     "stylelint": "^17.0.0",
     "swr": "^2.3.8",
-    "three": "^0.183.2",
-    "typescript": "^5"
+    "three": "^0.183.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -71,6 +69,7 @@
     "rg": "^0.0.2",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
+    "typescript": "^5",
     "wrangler": "^4.78.0"
   },
   "prisma": {

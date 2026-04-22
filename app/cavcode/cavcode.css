@@ -1,9 +1,9 @@
-/* CavCode — VS Code-class IDE shell
+/* CavCode — VS Code-class IDE shell (Monaco)
    REPLACEMENT cavcode.css
    Goals:
    - Match CavCodePage classnames (cc-*)
    - Defensive styling for popovers + Live surface (in case markup differs slightly)
-   - Use the editor's real widgets for Find / Suggestions / Hover (VS Code DNA)
+   - Use Monaco’s REAL widgets for Find / Suggestions / Hover (VS Code DNA)
    - Keep your palette + glass language
 */
 
@@ -29,7 +29,7 @@
   --cb-red: #ff4d4d;
 
   --cb-font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
-  --cb-mono: "JetBrains Mono","SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --cb-mono: "JetBrains Mono","SF Mono",SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
 
   --activity-w: 46px;
   --sidebar-w: 290px;
@@ -116,7 +116,7 @@ body[data-cb-footer-hidden="1"] .cc-root{
   background: transparent;
 }
 
-/* Keep the VS Code-like right-side scrollbar and overview ruler visible */
+/* Keep Monaco's VS Code-like right-side scrollbar/overview ruler visible */
 .cc-root .monaco-scrollable-element > .scrollbar.vertical{
   opacity: 1 !important;
   pointer-events: auto !important;
@@ -569,47 +569,6 @@ body[data-cb-footer-hidden="1"] .cc-ide{
   position: relative;
   z-index: 72;
   overflow: visible;
-  isolation: isolate;
-}
-
-.cc-sidebar > :not(.cc-sidebar-brandMark){
-  position: relative;
-  z-index: 1;
-}
-
-.cc-sidebar-brandMark{
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 72px;
-  height: 72px;
-  transform: translate(-50%, -50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  opacity: .16;
-  z-index: 0;
-  filter: drop-shadow(0 18px 38px rgba(0,0,0,.28));
-}
-
-.cc-sidebar-brandMark::before{
-  content: "";
-  position: absolute;
-  inset: -16px;
-  border-radius: 999px;
-  background:
-    radial-gradient(circle, rgba(185,200,90,.12) 0%, rgba(185,200,90,.05) 42%, rgba(185,200,90,0) 72%);
-}
-
-.cc-sidebar-brandMarkImg{
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  filter: brightness(0) invert(.95);
 }
 
 .cc-sidebar-head{
@@ -617,18 +576,14 @@ body[data-cb-footer-hidden="1"] .cc-ide{
   height: var(--tabs-h);
   padding: 0 10px;
   border-bottom: 1px solid rgba(255,255,255,.08);
-  position: relative;
-  z-index: calc(var(--z-pop) - 1);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  position: relative;
+  z-index: calc(var(--z-pop) - 1);
   overflow: visible;
   isolation: isolate;
-}
-
-.cc-sidebar-head.is-menu-open{
-  z-index: calc(var(--z-pop) + 2) !important;
 }
 
 .cc-brand-row{
@@ -690,31 +645,6 @@ body[data-cb-footer-hidden="1"] .cc-ide{
   isolation: isolate;
 }
 
-.cc-side-menuShell.is-open{
-  z-index: calc(var(--z-pop) + 4);
-}
-
-.cc-side-menuOverlay{
-  position: fixed;
-  inset: 0;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  background:
-    radial-gradient(circle at 24px 24px, rgba(96,116,168,.10) 0, rgba(96,116,168,0) 180px),
-    rgba(2,5,16,.42);
-  backdrop-filter: blur(10px) saturate(120%);
-  -webkit-backdrop-filter: blur(10px) saturate(120%);
-  cursor: default;
-  z-index: 0;
-}
-
-.cc-side-menuShell > .cc-side-menuBtn,
-.cc-side-menuShell > .cc-side-icbtn{
-  position: relative;
-  z-index: 2;
-}
-
 .cc-side-menuBtn{
   width: 28px;
   height: 26px;
@@ -738,47 +668,43 @@ body[data-cb-footer-hidden="1"] .cc-ide{
 
 .cc-side-menu{
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 6px);
   right: 0;
-  min-width: 196px;
-  padding: 8px;
-  border: 1px solid rgba(255,255,255,.16);
-  border-radius: 16px;
+  min-width: 188px;
+  padding: 7px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 14px;
   background:
-    linear-gradient(180deg, rgba(8,12,25,.985) 0%, rgba(5,9,19,.99) 100%),
-    rgba(3,6,22,.96);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
+    linear-gradient(180deg, rgba(16,20,34,.99), rgba(8,12,24,.995)),
+    rgba(8,12,24,.995);
   box-shadow:
-    0 34px 88px rgba(0,0,0,.78),
-    0 14px 32px rgba(0,0,0,.46),
-    0 0 0 1px rgba(255,255,255,.05);
-  z-index: 3;
+    0 22px 70px rgba(0,0,0,.64),
+    0 0 0 1px rgba(255,255,255,.02) inset;
+  z-index: calc(var(--z-pop) + 2);
+  display: grid;
+  gap: 3px;
   overflow: hidden;
   isolation: isolate;
   background-clip: padding-box;
-  display: grid;
-  gap: 4px;
 }
 
 .cc-side-menuItem{
-  border: 1px solid transparent;
+  border: 0;
   border-radius: 10px;
   height: 30px;
   padding: 0 11px;
-  background: rgba(255,255,255,.015);
-  color: rgba(240,246,255,.96);
+  background: transparent;
+  color: rgba(232,240,255,.92);
   font-size: 12px;
   font-weight: 700;
   text-align: left;
   cursor: pointer;
-  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+  transition: background 150ms ease, color 150ms ease;
 }
 
 .cc-side-menuItem:hover{
-  background: rgba(255,255,255,.07);
-  border-color: rgba(255,255,255,.08);
-  color: rgba(247,251,255,.98);
+  background: rgba(255,255,255,.08);
+  color: rgba(247,251,255,.96);
 }
 
 .cc-side-menuItem:disabled{
@@ -820,17 +746,6 @@ body[data-cb-footer-hidden="1"] .cc-ide{
 
 .cc-side-menuItemLabel{
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .01em;
-  white-space: nowrap;
-}
-
-.cc-side-menuItemKey{
-  margin-left: auto;
-  padding-left: 12px;
-  color: rgba(197,206,231,.82);
-  font-family: var(--cb-mono);
-  font-size: 11px;
   font-weight: 700;
   letter-spacing: .01em;
   white-space: nowrap;
@@ -1159,10 +1074,10 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   padding: 10px 8px 12px;
   overflow: auto;
   min-height: 0;
-  position: relative;
-  z-index: 0;
   display: grid;
   gap: 10px;
+  position: relative;
+  z-index: 0;
 }
 
 .cc-run-modebar{
@@ -2205,60 +2120,71 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   z-index: 0;
 }
 
-.cc-search-bar{
+.cc-search-shell{
   display: grid;
-  padding-top: 2px;
+  gap: 9px;
+  padding: 12px 12px 13px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(8,12,24,.9), rgba(4,8,20,.82)),
+    rgba(4,8,20,.82);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
 }
 
-.cc-search-in{
+.cc-search-kicker{
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: rgba(247,251,255,.88);
+}
+
+.cc-search-note{
+  font-size: 11px;
+  line-height: 1.6;
+  color: rgba(197,206,231,.76);
+  font-weight: 700;
+}
+
+.cc-search .cc-search-in{
   width: 100%;
   height: 32px;
-  border-radius: 0;
+  border-radius: 10px;
   border: 1px solid rgba(255,255,255,.12);
-  background: rgba(3,6,18,.68);
+  background: rgba(0,0,0,.20);
   color: rgba(247,251,255,.92);
-  padding: 0 10px;
+  padding: 0 12px;
   outline: none;
   font-family: var(--cb-mono);
   font-size: 11px;
   font-weight: 750;
-  letter-spacing: .01em;
+  letter-spacing: .015em;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.02);
 }
 
-.cc-search-in::placeholder{ color: rgba(197,206,231,.46); }
-
-.cc-search-in:focus{
-  border-color: rgba(185,200,90,.28);
-  background: rgba(4,8,20,.84);
-}
-
-.cc-search .cc-search-in{
-  height: 36px;
-  border-radius: 10px;
-  border-color: rgba(255,255,255,.08);
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.03) 0%, rgba(255,255,255,.01) 100%),
-    rgba(6,10,22,.82);
-  padding: 0 12px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+.cc-search .cc-search-in::placeholder{
+  color: rgba(197,206,231,.50);
+  letter-spacing: 0;
 }
 
 .cc-search .cc-search-in:focus{
-  border-color: rgba(185,200,90,.24);
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.035) 0%, rgba(255,255,255,.015) 100%),
-    rgba(8,12,24,.92);
-  box-shadow: 0 0 0 1px rgba(185,200,90,.12), inset 0 1px 0 rgba(255,255,255,.04);
+  border-color: rgba(185,200,90,.26);
+  background: rgba(5,10,22,.72);
+  box-shadow:
+    0 0 0 1px rgba(185,200,90,.08),
+    inset 0 1px 0 rgba(255,255,255,.02);
 }
 
 .cc-search-results{
   min-height: 0;
   overflow: auto;
-  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.10);
   background:
-    linear-gradient(180deg, rgba(255,255,255,.02) 0%, rgba(255,255,255,.01) 100%),
-    rgba(5,9,20,.82);
-  padding: 6px 8px;
+    linear-gradient(180deg, rgba(8,12,24,.72), rgba(4,7,18,.78)),
+    rgba(4,7,18,.78);
+  padding: 6px 0;
   -ms-overflow-style: none;
   scrollbar-width: none;
   scrollbar-color: transparent transparent;
@@ -2270,11 +2196,11 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   width: 100%;
   text-align: left;
   border: 0;
-  border-bottom: 1px solid rgba(255,255,255,.07);
+  border-bottom: 1px solid rgba(255,255,255,.06);
   background: transparent;
   color: rgba(247,251,255,.92);
   border-radius: 0;
-  padding: 10px 2px;
+  padding: 10px 12px;
   display: grid;
   gap: 4px;
   cursor: pointer;
@@ -2283,7 +2209,8 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-hit:hover{
-  background: rgba(255,255,255,.04);
+  background: rgba(255,255,255,.06);
+  color: rgba(247,251,255,.97);
 }
 
 .cc-hit:last-child{
@@ -2296,16 +2223,16 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   letter-spacing: .14em;
   text-transform: uppercase;
   font-weight: 800;
-  color: rgba(197,206,231,.72);
+  color: rgba(197,206,231,.68);
 }
 
-.cc-hit-kind.file{ color: rgba(185,200,90,.80); }
-.cc-hit-kind.folder{ color: rgba(129,176,255,.82); }
+.cc-hit-kind.file{ color: rgba(185,200,90,.86); }
+.cc-hit-kind.folder{ color: rgba(143,171,255,.82); }
 
 .cc-hit-name{
-  display: block;
   font-weight: 800;
   font-size: 12px;
+  letter-spacing: -.01em;
 }
 
 .cc-hit-path{
@@ -2317,11 +2244,11 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-search-empty{
-  padding: 12px 4px;
+  padding: 12px 12px 14px;
   font-family: var(--cb-mono);
-  font-size: 10.5px;
-  letter-spacing: .01em;
-  color: rgba(197,206,231,.64);
+  font-size: 11px;
+  line-height: 1.65;
+  color: rgba(197,206,231,.72);
 }
 
 /* CHANGES */
@@ -2333,9 +2260,9 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   align-items: start;
   min-height: 0;
   height: 100%;
+  overflow: visible;
   position: relative;
   z-index: 0;
-  overflow: visible;
 }
 
 .cc-changes-commitWrap{
@@ -5381,10 +5308,10 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 /* IMPORTANT:
-   You said: “Command-F must render editor-native style”.
+   You said: “Command-F must render Monaco style”.
    So this file DOES NOT force a custom panel to look like Find.
    If you still render your own .cc-find panel, it’s styled below,
-   but the real find widget is the priority and is fully styled in the editor section.
+   but Monaco’s real find-widget is the priority and is fully styled in the Monaco section.
 */
 .cc-find{
   position: absolute;
@@ -5884,15 +5811,13 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-term-inbar{
-  height: 38px;
+  height: 36px;
+  border-top: 1px solid rgba(255,255,255,.08);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 0 12px;
-  margin: 8px 10px 10px;
-  border: 1px solid rgba(255,255,255,.09);
-  background: linear-gradient(180deg, rgba(10,14,33,.94), rgba(5,8,22,.92));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+  background: rgba(0,0,0,.14);
 }
 
 .cc-term-prompt{
@@ -5904,23 +5829,22 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-term-in{
   width: 100%;
-  height: 100%;
+  height: 28px;
   border-radius: 0;
-  border: 0;
-  background: transparent;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.18);
   color: rgba(247,251,255,.92);
-  padding: 0;
+  padding: 0 10px;
   outline: none;
   font-family: var(--cb-mono);
   font-size: 12px;
-  box-shadow: none;
 }
 
 .cc-term-in::placeholder{ color: rgba(197,206,231,.48); }
 
 .cc-term-in:focus{
-  border-color: transparent;
-  background: transparent;
+  border-color: rgba(185,200,90,.22);
+  
 }
 
 /* Problems */
@@ -6602,7 +6526,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   background: rgba(155,171,213,.70);
 }
 
-/* Panel scrollbar override: defeat global scrollbar-hide lock and match the editor minimap style. */
+/* Panel scrollbar override: defeat global scrollbar-hide lock and match Monaco minimap style. */
 html body .cc-root .cc-panel-git,
 html body .cc-root .cc-problems,
 html body .cc-root .cc-panel-ports,
@@ -7121,8 +7045,8 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 }
 
 /* =========================
-   EDITOR — VS Code DNA (REAL WIDGETS)
-   This is what makes Cmd/Ctrl+F look native to CavCode and VS Code.
+   MONACO — VS Code DNA (REAL WIDGETS)
+   This is what makes Cmd/Ctrl+F look “real Monaco/VS Code”.
    ========================= */
 
 /* editor shell */
@@ -7146,7 +7070,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
   -webkit-backdrop-filter: blur(10px);
 }
 
-/* find widget = the real Cmd/Ctrl+F surface */
+/* find widget = Monaco’s real Cmd/Ctrl+F */
 .monaco-editor .find-widget{
   border-radius: 4px !important;
   border: 1px solid rgba(255,255,255,.14) !important;
@@ -7155,7 +7079,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
   -webkit-backdrop-filter: blur(14px);
 }
 
-/* input styling inside editor widgets */
+/* input styling inside Monaco widgets */
 .monaco-editor .find-widget input,
 .monaco-editor .find-widget textarea,
 .monaco-editor .monaco-inputbox .input{
@@ -7166,7 +7090,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
   box-shadow: none !important;
 }
 
-/* focus ring in editor widgets */
+/* focus ring in Monaco widgets */
 .monaco-editor .monaco-inputbox.idle.focused,
 .monaco-editor .monaco-inputbox.focused{
   outline: 0 !important;
@@ -8080,7 +8004,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
   transform: translateY(0px) scale(.98);
 }
 /* =========================
-   Editor: VS Code-style widgets (square corners)
+   Monaco: VS Code-style widgets (square corners)
 ========================= */
 
 /* Inline "peek problem" widget */
@@ -8127,7 +8051,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 .monaco-editor .zone-widget a:hover {
   text-decoration: underline !important;
 }
-/* Find widget (Cmd/Ctrl+F) */
+/* Monaco Find widget (Cmd/Ctrl+F) */
 .monaco-editor .find-widget,
 .monaco-editor .find-widget .monaco-sash,
 .monaco-editor .find-widget .find-part,
@@ -8159,7 +8083,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
   border-color: rgba(185, 200, 90, 0.55) !important; /* lime focus */
 }
 
-/* Remove thick red validation borders from editor error input boxes. */
+/* Remove thick red validation borders from Monaco error input boxes. */
 .monaco-editor .monaco-inputbox.error,
 .monaco-editor .monaco-inputbox.error .ibwrapper,
 .monaco-editor .monaco-inputbox.error .ibwrapper:hover,
@@ -8284,33 +8208,6 @@ html body .cc-root .cc-ide .cc-panel [data-cc-hard="term-input"]{
   outline: none !important;
   -webkit-mask-image: none !important;
   mask-image: none !important;
-}
-
-html body .cc-root .cc-ide .cc-panel [data-cc-hard="term-inbar"]{
-  gap: 12px !important;
-  padding: 0 12px !important;
-  height: 38px !important;
-  margin: 8px 10px 10px !important;
-  border: 1px solid rgba(255,255,255,.09) !important;
-  background: linear-gradient(180deg, rgba(10,14,33,.96), rgba(5,8,22,.94)) !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.03) !important;
-}
-
-html body .cc-root .cc-ide .cc-panel [data-cc-hard="term-input"]{
-  height: 100% !important;
-  border: 0 !important;
-  background: transparent !important;
-  padding: 0 !important;
-  box-shadow: none !important;
-  outline: none !important;
-  appearance: none !important;
-  -webkit-appearance: none !important;
-}
-
-html body .cc-root .cc-ide .cc-panel [data-cc-hard="term-input"]:focus{
-  border: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
 }
 
 html body .cc-root .cc-ide .cc-panel [data-cc-hard="panel-tab"]{
