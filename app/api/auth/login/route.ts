@@ -4,8 +4,8 @@ import {
   assertWriteOrigin,
   createUserSession,
   isApiAuthError,
-  sessionCookieOptions,
   verifyPassword,
+  writeSessionCookie,
 } from "@/lib/apiAuth";
 import {
   createAuthTokenRecord,
@@ -458,12 +458,7 @@ export async function POST(req: Request) {
     const res = json({ ok: true, accountId: active.accountId, memberRole }, 200);
 
 
-    const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
-    const cookieOpts = {
-      ...cookieOptsFromLib,
-      secure: process.env.NODE_ENV === "production" ? cookieOptsFromLib.secure : false,
-    };
-    res.cookies.set(name, token, cookieOpts);
+    writeSessionCookie(req, res, token);
 
 
     const firstProject = await findFirstProjectIdByAccount(pool, active.accountId);

@@ -10,7 +10,7 @@ import {
   normalizeProviderDisplayName,
 } from "@/lib/profileIdentity";
 import { createProjectKeyMaterial } from "@/lib/projectKeyMaterial.server";
-import { createUserSession, getAppOrigin, isApiAuthError, sessionCookieOptions } from "@/lib/apiAuth";
+import { createUserSession, getAppOrigin, isApiAuthError, writeSessionCookie } from "@/lib/apiAuth";
 import { auditLogWrite } from "@/lib/audit";
 import { randomBytes } from "crypto";
 import { sendSignupWelcomeEmail } from "@/lib/signupWelcomeEmail.server";
@@ -431,12 +431,7 @@ export async function GET(req: NextRequest) {
     clearCookie(res, "cb_oauth_mode");
 
     // session cookie (matches your login/register routes)
-    const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
-    const cookieOpts = {
-      ...cookieOptsFromLib,
-      secure: process.env.NODE_ENV === "production" ? cookieOptsFromLib.secure : false,
-    };
-    res.cookies.set(name, token, cookieOpts);
+    writeSessionCookie(req, res, token);
 
     // pointer cookies (matches login/register)
     if (result.firstProject?.id) {

@@ -6,7 +6,7 @@ import {
   createUserSession,
   hashPassword,
   isApiAuthError,
-  sessionCookieOptions,
+  writeSessionCookie,
 } from "@/lib/apiAuth";
 
 import { auditLogWrite } from "@/lib/audit";
@@ -410,12 +410,7 @@ export async function POST(req: Request) {
         201
       );
 
-      const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
-      const cookieOpts = {
-        ...cookieOptsFromLib,
-        secure: process.env.NODE_ENV === "production" ? cookieOptsFromLib.secure : false,
-      };
-      res.cookies.set(name, token, cookieOpts);
+      writeSessionCookie(req, res, token);
 
       const pointerCookieOpts = {
         httpOnly: true,

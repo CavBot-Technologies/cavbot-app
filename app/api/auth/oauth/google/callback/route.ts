@@ -13,7 +13,7 @@ import {
   createUserSession,
   getAppOrigin,
   isApiAuthError,
-  sessionCookieOptions,
+  writeSessionCookie,
 } from "@/lib/apiAuth";
 import { auditLogWrite } from "@/lib/audit";
 import { randomBytes } from "crypto";
@@ -407,12 +407,7 @@ export async function GET(req: NextRequest) {
     clearCookie(res, "cb_google_oauth_mode");
 
     // Session cookie
-    const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
-    const cookieOpts = {
-      ...cookieOptsFromLib,
-      secure: process.env.NODE_ENV === "production" ? cookieOptsFromLib.secure : false,
-    };
-    res.cookies.set(name, session, cookieOpts);
+    writeSessionCookie(req, res, session);
 
     // Workspace pointers
     if (result.firstProject?.id) {

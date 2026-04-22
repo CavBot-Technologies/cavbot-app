@@ -9,8 +9,10 @@ import {
   createUserSession,
   requireSession,
   requireSystemToken,
+  expireSessionCookie,
   isApiAuthError,
   sessionCookieOptions,
+  writeSessionCookie,
 } from "@/lib/apiAuth";
 import type { CavbotSession } from "@/lib/apiAuth";
 import {
@@ -47,22 +49,6 @@ function json<T>(payload: T, init?: number | ResponseInit) {
   });
 }
 
-
-function clearSessionCookie(req: Request, res: NextResponse) {
-  const { name, ...cookieOpts } = sessionCookieOptions(req);
-  res.cookies.set(name, "", { ...cookieOpts, maxAge: 0 });
-  return res;
-}
-
-function attachUserSessionCookie(req: Request, res: NextResponse, token: string) {
-  const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
-  const cookieOpts = {
-    ...cookieOptsFromLib,
-    secure: process.env.NODE_ENV === "production" ? cookieOptsFromLib.secure : false,
-  };
-  res.cookies.set(name, token, cookieOpts);
-  return res;
-}
 
 
 type Role = "OWNER" | "ADMIN" | "MEMBER";
@@ -240,7 +226,7 @@ export async function GET(req: Request) {
 
     if (!userId || !accountId) {
       const res = json({ ok: true, authed: false, signedOut: true, reason: "missing_session_fields", client }, 200);
-      return clearSessionCookie(req, res);
+      return expireSessionCookie(req, res);
     }
 
 
@@ -250,7 +236,7 @@ export async function GET(req: Request) {
 
     if (!membership) {
       const res = json({ ok: true, authed: false, signedOut: true, reason: "no_membership", client }, 200);
-      return clearSessionCookie(req, res);
+      return expireSessionCookie(req, res);
     }
 
     const memberships = await findMembershipsForUser(pool, userId);
@@ -301,7 +287,7 @@ export async function GET(req: Request) {
         memberRole: normalizeRole(effectiveMembership.role),
         sessionVersion: resolveIssuedSessionVersion(sess.sv),
       });
-      return attachUserSessionCookie(req, response, token);
+      return writeSessionCookie(req, response, token);
     }
     return response;
   } catch (error) {
@@ -311,7 +297,7 @@ export async function GET(req: Request) {
 
     if (isApiAuthError(error) && (error.status === 401 || error.status === 403)) {
       const res = json({ ok: true, authed: false, signedOut: true, error: error.code, client }, 200);
-      return clearSessionCookie(req, res);
+      return expireSessionCookie(req, res);
     }
 
     if (sess?.systemRole === "system") {
@@ -380,15 +366,7 @@ export async function POST(req: Request) {
       const res = json({ ok: true, mode: "system" }, 200);
 
 
-      const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
-      const cookieOpts = {
-        ...cookieOptsFromLib,
-        secure: process.env.NODE_ENV === "production" ? cookieOptsFromLib.secure : false,
-      };
-
-
-      res.cookies.set(name, token, cookieOpts);
-      return res;
+      return writeSessionCookie(req, res, token);
     }
 
 
@@ -427,15 +405,7 @@ export async function POST(req: Request) {
     const res = json({ ok: true, mode: "user", accountId: active.accountId, memberRole }, 200);
 
 
-    const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
-    const cookieOpts = {
-      ...cookieOptsFromLib,
-      secure: process.env.NODE_ENV === "production" ? cookieOptsFromLib.secure : false,
-    };
-
-
-    res.cookies.set(name, token, cookieOpts);
-    return res;
+    return writeSessionCookie(req, res, token);
   } catch (error) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
     return json({ ok: false, error: "session_issue_failed" }, 500);
@@ -445,7 +415,7 @@ export async function POST(req: Request) {
 
 export async function DELETE(req: Request) {
   const res = json({ ok: true }, 200);
-  return clearSessionCookie(req, res);
+  return expireSessionCookie(req, res);
 }
 
 

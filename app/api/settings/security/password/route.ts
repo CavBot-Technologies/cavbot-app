@@ -8,7 +8,7 @@ import {
   verifyPassword,
   hashPassword,
   createUserSession,
-  sessionCookieOptions,
+  writeSessionCookie,
 } from "@/lib/apiAuth";
 import { requireSettingsOwnerSession } from "@/lib/settings/ownerAuth.server";
 import { readSecurityUserAuth, updateSecurityPasswordHash } from "@/lib/settings/securityRuntime.server";
@@ -115,14 +115,7 @@ export async function PATCH(req: NextRequest) {
     const res = json({ ok: true }, 200);
 
 
-    const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
-    const cookieOpts = {
-      ...cookieOptsFromLib,
-      secure: process.env.NODE_ENV === "production" ? cookieOptsFromLib.secure : false,
-    };
-
-
-    res.cookies.set(name, freshToken, cookieOpts);
+    writeSessionCookie(req, res, freshToken);
 
     if (accountId) {
       await auditLogWrite({

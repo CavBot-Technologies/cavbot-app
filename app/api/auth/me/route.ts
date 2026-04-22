@@ -1,7 +1,14 @@
 // app/api/auth/me/route.ts
 import { NextResponse } from "next/server";
 
-import { createUserSession, getSession, requireSession, isApiAuthError, sessionCookieOptions } from "@/lib/apiAuth";
+import {
+  createUserSession,
+  getSession,
+  requireSession,
+  isApiAuthError,
+  sessionCookieOptions,
+  writeSessionCookie,
+} from "@/lib/apiAuth";
 import type { CavbotSession } from "@/lib/apiAuth";
 import {
   compareMembershipPriority,
@@ -49,16 +56,6 @@ function json<T>(payload: T, init?: number | ResponseInit) {
     ...resInit,
     headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS },
   });
-}
-
-function attachUserSessionCookie(req: Request, res: NextResponse, token: string) {
-  const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
-  const cookieOpts = {
-    ...cookieOptsFromLib,
-    secure: process.env.NODE_ENV === "production" ? cookieOptsFromLib.secure : false,
-  };
-  res.cookies.set(name, token, cookieOpts);
-  return res;
 }
 
 function firstInitialChar(input: string) {
@@ -466,7 +463,7 @@ export async function GET(req: Request) {
         memberRole: normalizeMemberRole(membership.role),
         sessionVersion: resolveIssuedSessionVersion(sess.sv),
       });
-      return attachUserSessionCookie(req, response, token);
+      return writeSessionCookie(req, response, token);
     }
     return response;
   } catch (error) {

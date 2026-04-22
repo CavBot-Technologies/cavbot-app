@@ -315,21 +315,22 @@ async function hmacSha256(secret: string, data: string) {
    COOKIE PARSING
 ========================== */
 
-function parseCookie(header: string, name: string) {
+function parseCookieValues(header: string, name: string) {
   const parts = (header || "")
     .split(";")
     .map((v) => v.trim())
     .filter(Boolean);
 
+  const values: string[] = [];
   for (const p of parts) {
     const idx = p.indexOf("=");
     if (idx === -1) continue;
     const k = p.slice(0, idx).trim();
     const v = p.slice(idx + 1).trim();
-    if (k === name) return v;
+    if (k === name && v) values.push(v);
   }
 
-  return "";
+  return values;
 }
 
 function getBearerToken(req: Request) {
@@ -617,6 +618,43 @@ export function sessionCookieOptions(req?: Request) {
   };
 }
 
+function sessionCookieWriteOptions(req?: Request) {
+  const { name, ...cookieOptsFromLib } = sessionCookieOptions(req);
+  return {
+    name,
+    cookieOpts: {
+      ...cookieOptsFromLib,
+      secure: process.env.NODE_ENV === "production" ? cookieOptsFromLib.secure : false,
+    },
+  };
+}
+
+export function writeSessionCookie(req: Request, res: { cookies: { set: (...args: unknown[]) => void } }, token: string) {
+  const { name, cookieOpts } = sessionCookieWriteOptions(req);
+  res.cookies.set(name, token, cookieOpts);
+
+  if (cookieOpts.domain) {
+    const hostOnlyOpts = { ...cookieOpts };
+    delete hostOnlyOpts.domain;
+    res.cookies.set(name, "", { ...hostOnlyOpts, maxAge: 0 });
+  }
+
+  return res;
+}
+
+export function expireSessionCookie(req: Request, res: { cookies: { set: (...args: unknown[]) => void } }) {
+  const { name, cookieOpts } = sessionCookieWriteOptions(req);
+  res.cookies.set(name, "", { ...cookieOpts, maxAge: 0 });
+
+  if (cookieOpts.domain) {
+    const hostOnlyOpts = { ...cookieOpts };
+    delete hostOnlyOpts.domain;
+    res.cookies.set(name, "", { ...hostOnlyOpts, maxAge: 0 });
+  }
+
+  return res;
+}
+
 /* ==========================
    SESSION READERS
 ========================== */
@@ -624,9 +662,13 @@ export function sessionCookieOptions(req?: Request) {
 export async function getSession(req: Request): Promise<CavbotSession | null> {
   try {
     const cookieHeader = req.headers.get("cookie") || "";
-    const cookieToken = parseCookie(cookieHeader, SESSION_COOKIE);
+    const cookieTokens = parseCookieValues(cookieHeader, SESSION_COOKIE);
     const bearer = getBearerToken(req);
-    const cookieFirstCandidates = [cookieToken, bearer].map((token) => String(token || "").trim()).filter(Boolean);
+    const cookieFirstCandidates = Array.from(
+      new Set(
+        [...cookieTokens, bearer].map((token) => String(token || "").trim()).filter(Boolean),
+      ),
+    );
 
     if (!cookieFirstCandidates.length) return null;
     for (const token of cookieFirstCandidates) {

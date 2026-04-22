@@ -1,6 +1,6 @@
 // app/api/auth/logout/route.ts
 import { NextResponse } from "next/server";
-import { assertWriteOrigin, isApiAuthError, requireSession, sessionCookieOptions } from "@/lib/apiAuth";
+import { assertWriteOrigin, expireSessionCookie, isApiAuthError, requireSession } from "@/lib/apiAuth";
 import { auditLogWrite } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -33,8 +33,7 @@ export async function POST(req: Request) {
     const res = json({ ok: true }, 200);
 
     // Clear session cookie reliably
-    const { name, ...cookieOpts } = sessionCookieOptions(req);
-    res.cookies.set(name, "", { ...cookieOpts, maxAge: 0 });
+    expireSessionCookie(req, res);
 
     // Clear project pointers
     const pointerCookieOpts = {
