@@ -645,21 +645,15 @@ export function writeSessionCookie(req: Request, res: NextResponse<unknown>, tok
 
   const hostOnlyOpts = hostOnlyCookieOptions(cookieOpts);
 
+  // Pages can collapse same-name Set-Cookie headers, so avoid a follow-up host-only clear here.
   try {
     res.cookies.set(name, token, cookieOpts);
+    return res;
   } catch (error) {
     console.warn("[auth] shared session cookie write failed; falling back to host-only cookie", error);
     res.cookies.set(name, token, hostOnlyOpts);
     return res;
   }
-
-  try {
-    res.cookies.set(name, "", { ...hostOnlyOpts, maxAge: 0 });
-  } catch (error) {
-    console.warn("[auth] legacy host-only session cookie clear failed", error);
-  }
-
-  return res;
 }
 
 export function expireSessionCookie(req: Request, res: NextResponse<unknown>): NextResponse<unknown> {
@@ -671,16 +665,17 @@ export function expireSessionCookie(req: Request, res: NextResponse<unknown>): N
 
   const hostOnlyOpts = hostOnlyCookieOptions(cookieOpts);
 
-  try {
-    res.cookies.set(name, "", { ...cookieOpts, maxAge: 0 });
-  } catch (error) {
-    console.warn("[auth] shared session cookie clear failed", error);
-  }
-
+  // Clear host-only first so the shared-domain clear is the final cookie write if the platform dedupes.
   try {
     res.cookies.set(name, "", { ...hostOnlyOpts, maxAge: 0 });
   } catch (error) {
     console.warn("[auth] legacy host-only session cookie clear failed", error);
+  }
+
+  try {
+    res.cookies.set(name, "", { ...cookieOpts, maxAge: 0 });
+  } catch (error) {
+    console.warn("[auth] shared session cookie clear failed", error);
   }
 
   return res;
