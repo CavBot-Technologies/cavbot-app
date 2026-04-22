@@ -44,6 +44,20 @@ export const WORKSPACE_NOTIFICATION_KINDS = {
   ACCESS_REQUEST_APPROVED: "ACCESS_REQUEST_APPROVED",
 } as const;
 
+export const HQ_NOTIFICATION_KINDS = {
+  OPERATOR_INVITE_RECEIVED: "OPERATOR_INVITE_RECEIVED",
+  OPERATOR_INVITE_ACCEPTED: "OPERATOR_INVITE_ACCEPTED",
+  OPERATOR_ID_READY: "OPERATOR_ID_READY",
+  HQ_BROADCAST_USER: "HQ_BROADCAST_USER",
+  HQ_BROADCAST_STAFF: "HQ_BROADCAST_STAFF",
+  HQ_CASE_ASSIGNED: "HQ_CASE_ASSIGNED",
+  HQ_CASE_SLA_BREACH: "HQ_CASE_SLA_BREACH",
+  HQ_CHAT_MESSAGE: "HQ_CHAT_MESSAGE",
+  HQ_CHAT_THREAD_ADDED: "HQ_CHAT_THREAD_ADDED",
+  HQ_ACCOUNT_ACTION: "HQ_ACCOUNT_ACTION",
+  HQ_USER_ACTION: "HQ_USER_ACTION",
+} as const;
+
 export type CavSafeNotificationKind =
   (typeof CAVSAFE_NOTIFICATION_KINDS)[keyof typeof CAVSAFE_NOTIFICATION_KINDS];
 
@@ -53,8 +67,12 @@ export type CavCloudNotificationKind =
 export type WorkspaceNotificationKind =
   (typeof WORKSPACE_NOTIFICATION_KINDS)[keyof typeof WORKSPACE_NOTIFICATION_KINDS];
 
+export type HqNotificationKind =
+  (typeof HQ_NOTIFICATION_KINDS)[keyof typeof HQ_NOTIFICATION_KINDS];
+
 export type NotificationKind =
   | CavSafeNotificationKind
   | CavCloudNotificationKind
   | WorkspaceNotificationKind
+  | HqNotificationKind
   | "GENERIC";

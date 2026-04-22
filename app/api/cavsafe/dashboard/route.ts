@@ -1,8 +1,16 @@
 import type { CavSafeOperationKind, Prisma } from "@prisma/client";
 
-import { requireCavsafeOwnerSession } from "@/lib/cavsafe/auth.server";
+import { isApiAuthError } from "@/lib/apiAuth";
+import {
+  cavsafeTierTokenFromPlanId,
+  isCavsafePlanSchemaMismatchError,
+  requireCavsafeOwnerContext,
+  requireCavsafeOwnerSession,
+  resolveCavsafePlanIdOrDefault,
+} from "@/lib/cavsafe/auth.server";
 import { cavsafeErrorResponse, jsonNoStore } from "@/lib/cavsafe/http.server";
 import { cavsafeSecuredStorageLimitBytesForPlan } from "@/lib/cavsafe/policy.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -229,6 +237,150 @@ function sanitizeEventMeta(args: {
   if (args.subjectType === "artifact") out.artifactId = out.artifactId || args.subjectId;
 
   return out;
+}
+
+function isCavSafeDashboardSchemaMismatch(err: unknown) {
+  return isCavsafePlanSchemaMismatchError(err) || isSchemaMismatchError(err, {
+    tables: [
+      "CavSafeFile",
+      "CavSafeFolder",
+      "CavSafeOperationLog",
+      "CavSafeMultipartUpload",
+      "CavSafeMultipartPart",
+      "CavSafeUsagePoint",
+      "CavSafeSnapshot",
+      "CavSafeProjectMount",
+      "PublicArtifact",
+    ],
+    columns: [
+      "bytes",
+      "deletedAt",
+      "mimeType",
+      "name",
+      "path",
+      "folderId",
+      "sha256",
+      "immutableAt",
+      "unlockAt",
+      "expireAt",
+      "kind",
+      "subjectType",
+      "subjectId",
+      "label",
+      "meta",
+      "createdAt",
+      "updatedAt",
+      "status",
+      "fileName",
+      "filePath",
+      "expectedBytes",
+      "uploadId",
+      "bucketStart",
+      "usedBytes",
+      "displayTitle",
+      "visibility",
+      "publishedAt",
+      "sourcePath",
+      "accountId",
+    ],
+    fields: [
+      "bytes",
+      "deletedAt",
+      "mimeType",
+      "name",
+      "path",
+      "folderId",
+      "sha256",
+      "immutableAt",
+      "unlockAt",
+      "expireAt",
+      "kind",
+      "subjectType",
+      "subjectId",
+      "label",
+      "meta",
+      "createdAt",
+      "updatedAt",
+      "status",
+      "fileName",
+      "filePath",
+      "expectedBytes",
+      "uploadId",
+      "bucketStart",
+      "usedBytes",
+      "displayTitle",
+      "visibility",
+      "publishedAt",
+      "sourcePath",
+      "accountId",
+    ],
+  });
+}
+
+function degradedDashboardPayload(tier: "PREMIUM" | "PREMIUM_PLUS", limitBytes: number) {
+  const premiumPlusUnlocked = tier === "PREMIUM_PLUS";
+  return {
+    ok: true as const,
+    degraded: true,
+    tier,
+    securedStorage: {
+      usedBytes: 0,
+      limitBytes,
+      freeBytes: limitBytes,
+      growthBytesRange: 0,
+      trendPoints: [{ t: Date.now(), usedBytes: 0 }],
+      breakdown: ["images", "videos", "documents", "archives", "code", "other"].map((kind) => ({ kind, bytes: 0 })),
+      topFolders: [],
+    },
+    activity: {
+      events: [],
+    },
+    publishEvidence: {
+      recentArtifacts: [],
+      privateEvidenceCount: 0,
+      privateEvidenceRecent: [],
+    },
+    queue: {
+      activeUploads: [],
+      activeMoves: [],
+      failedItems: [],
+    },
+    premiumPlus: premiumPlusUnlocked
+      ? {
+          locked: false,
+          audit: {
+            pulse24h: [],
+            pulse7d: [],
+            recent: [],
+          },
+          integrity: {
+            lockedCount: 0,
+            missingSha256Count: 0,
+          },
+          timeLocks: {
+            lockedCount: 0,
+            expiredCount: 0,
+            unlockingSoon: [],
+          },
+          snapshots: {
+            totalCount: 0,
+          },
+          mounts: {
+            count: 0,
+          },
+        }
+      : {
+          locked: true,
+        },
+  };
+}
+
+async function buildDegradedDashboardResponse(req: Request) {
+  const sess = await requireCavsafeOwnerContext(req);
+  const planId = await resolveCavsafePlanIdOrDefault(String(sess.accountId || ""), "premium");
+  const limitBytes = toSafeNumber(cavsafeSecuredStorageLimitBytesForPlan(planId));
+
+  return jsonNoStore(degradedDashboardPayload(cavsafeTierTokenFromPlanId(planId), limitBytes), 200);
 }
 
 export async function GET(req: Request) {
@@ -811,6 +963,19 @@ export async function GET(req: Request) {
       premiumPlus: premiumPlusPayload,
     }, 200);
   } catch (err) {
+    if (isApiAuthError(err)) {
+      return cavsafeErrorResponse(err, "Failed to load CavSafe dashboard.");
+    }
+    if (isMissingUsagePointTableError(err) || isCavSafeDashboardSchemaMismatch(err)) {
+      try {
+        return await buildDegradedDashboardResponse(req);
+      } catch (fallbackError) {
+        return cavsafeErrorResponse(fallbackError, "Failed to load CavSafe dashboard.");
+      }
+    }
+    try {
+      return await buildDegradedDashboardResponse(req);
+    } catch {}
     return cavsafeErrorResponse(err, "Failed to load CavSafe dashboard.");
   }
 }

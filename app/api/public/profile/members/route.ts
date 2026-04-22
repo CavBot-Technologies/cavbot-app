@@ -3,7 +3,6 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getSession } from "@/lib/apiAuth";
-import { seedPublicProfileDemoMembers } from "@/lib/dev/publicProfileDemoMembers.server";
 import { prisma } from "@/lib/prisma";
 import {
   resolvePublicProfileViewerTeamState,
@@ -31,7 +30,6 @@ function json<T>(data: T, status = 200) {
 export async function GET(req: NextRequest) {
   try {
     const username = String(req.nextUrl.searchParams.get("username") || "").trim();
-    const seedDemo = String(req.nextUrl.searchParams.get("seedDemo") || "").trim() === "1";
     const workspace = await resolvePublicProfileWorkspaceContext(username);
     if (!workspace?.workspaceId) {
       return json({ ok: false, error: "WORKSPACE_NOT_FOUND" }, 404);
@@ -45,12 +43,6 @@ export async function GET(req: NextRequest) {
 
     if (!viewer.authenticated || !viewer.canManageWorkspace || !viewer.viewerUserId) {
       return json({ ok: false, error: "FORBIDDEN" }, 403);
-    }
-
-    if (seedDemo && process.env.NODE_ENV !== "production") {
-      await seedPublicProfileDemoMembers({
-        accountId: workspace.workspaceId,
-      }).catch(() => null);
     }
 
     const members = await prisma.membership.findMany({

@@ -1,14 +1,24 @@
 // app/api/auth/me/route.ts
 import { NextResponse } from "next/server";
-import { getSession, isApiAuthError } from "@/lib/apiAuth";
+
+import { getSession, requireSession, isApiAuthError } from "@/lib/apiAuth";
 import type { CavbotSession } from "@/lib/apiAuth";
 import {
   clearExpiredTrialSeat,
+  type AuthUser,
   findAccountById,
   findSessionMembership,
   findUserById,
   getAuthPool,
 } from "@/lib/authDb";
+import {
+  findLatestEntitledSubscription,
+  isTrialSeatEntitled,
+  planTierTokenFromPlanId,
+  resolveEffectivePlanId,
+} from "@/lib/accountPlan.server";
+import { getStaffProfileByUserId, maskStaffCode } from "@/lib/admin/staff";
+import { resolveAdminDepartment } from "@/lib/admin/access";
 
 const DEFAULT_CAVCLOUD_COLLAB_POLICY = {
   allowAdminsManageCollaboration: false,
@@ -68,6 +78,9 @@ type MembershipRecord = {
   createdAt: Date;
   accountId: string;
   userId: string;
+  accountName?: string | null;
+  accountSlug?: string | null;
+  accountTier?: string | null;
 };
 
 type PrismaAccount = {
@@ -91,49 +104,178 @@ type AccountWithComputed = PrismaAccount & {
 function computeEffectiveTier(account: PrismaAccount) {
   const now = Date.now();
   const endsAtMs = account?.trialEndsAt ? new Date(account.trialEndsAt).getTime() : 0;
-
-  const trialActive = Boolean(account?.trialSeatActive) && endsAtMs > now;
-
-  // IMPORTANT: "PREMIUM_PLUS" doesn't exist in Prisma enum
-  // but we can return it as a JSON-only "effective" tier for your UI + gates.
-  let tierEffective = String(account?.tier || "FREE").toUpperCase();
-
-  // Map ENTERPRISE to top access
-  if (tierEffective === "ENTERPRISE") tierEffective = "PREMIUM_PLUS";
-
-  if (trialActive) tierEffective = "PREMIUM_PLUS";
+  const trialActive = isTrialSeatEntitled(account, now);
 
   const daysLeft =
-    trialActive && endsAtMs
+    trialActive && endsAtMs > now
       ? Math.max(0, Math.ceil((endsAtMs - now) / (1000 * 60 * 60 * 24)))
       : 0;
 
-  return { trialActive, tierEffective, daysLeft };
+  return { trialActive, daysLeft };
+}
+
+function sessionIssuedAtDate(sess: CavbotSession) {
+  const issuedAtMs = Number(sess?.iat || 0) * 1000;
+  return Number.isFinite(issuedAtMs) && issuedAtMs > 0 ? new Date(issuedAtMs) : new Date();
+}
+
+function buildFallbackUser(userId: string, sess: CavbotSession): AuthUser {
+  return {
+    id: userId,
+    email: "",
+    username: null,
+    displayName: null,
+    fullName: null,
+    usernameChangeCount: 0,
+    lastUsernameChangeAt: null,
+    publicProfileEnabled: false,
+    avatarImage: null,
+    avatarTone: null,
+    createdAt: sessionIssuedAtDate(sess),
+    lastLoginAt: null,
+    emailVerifiedAt: null,
+  };
+}
+
+function fallbackMembershipFromSession(sess: CavbotSession): MembershipRecord | null {
+  if (sess.systemRole !== "user" || !sess.sub || !sess.accountId || !sess.memberRole) return null;
+  return {
+    role: sess.memberRole,
+    createdAt: sessionIssuedAtDate(sess),
+    accountId: String(sess.accountId),
+    userId: String(sess.sub),
+    accountName: null,
+    accountSlug: null,
+    accountTier: "FREE",
+  };
+}
+
+function buildFallbackAccountFromMembership(args: {
+  sess: CavbotSession;
+  membership: MembershipRecord | null;
+  entitledSubscription: Awaited<ReturnType<typeof findLatestEntitledSubscription>> | null;
+}): AccountWithComputed | null {
+  const accountId = String(args.sess.accountId || args.membership?.accountId || "").trim();
+  if (!accountId) return null;
+
+  const fallbackAccount: PrismaAccount = {
+    id: accountId,
+    name: args.membership?.accountName || null,
+    slug: args.membership?.accountSlug || null,
+    tier: String(args.membership?.accountTier || "FREE"),
+    createdAt: args.membership?.createdAt || sessionIssuedAtDate(args.sess),
+    trialSeatActive: false,
+    trialStartedAt: null,
+    trialEndsAt: null,
+    trialEverUsed: false,
+  };
+
+  const eff = computeEffectiveTier(fallbackAccount);
+  const effectivePlanId = resolveEffectivePlanId({
+    account: fallbackAccount,
+    subscription: args.entitledSubscription,
+  });
+
+  return {
+    ...fallbackAccount,
+    tierEffective: planTierTokenFromPlanId(effectivePlanId),
+    trialActive: eff.trialActive,
+    trialDaysLeft: eff.daysLeft,
+  };
+}
+
+function buildDegradedAuthMePayloadFromSession(sess: CavbotSession) {
+  if (sess.systemRole === "system") {
+    return {
+      ok: true,
+      authenticated: true,
+      degraded: true,
+      indeterminate: true,
+      session: sess,
+    } as const;
+  }
+
+  const userId = String(sess?.sub || "").trim();
+  if (!userId) {
+    return {
+      ok: true,
+      authenticated: false,
+      degraded: true,
+      indeterminate: true,
+    } as const;
+  }
+
+  const membership = fallbackMembershipFromSession(sess);
+  const user = buildFallbackUser(userId, sess);
+  const initials = deriveInitials(user.displayName, user.username);
+  const account = buildFallbackAccountFromMembership({
+    sess,
+    membership,
+    entitledSubscription: null,
+  });
+
+  return {
+    ok: true,
+    authenticated: true,
+    degraded: true,
+    indeterminate: true,
+    session: sess,
+    user: {
+      ...user,
+      initials,
+    },
+    staff: null,
+    account,
+    membership,
+    policy: {
+      ...DEFAULT_CAVCLOUD_COLLAB_POLICY,
+      allowArcadeCollaboratorAccess: false,
+    },
+  } as const;
 }
 
 export async function GET(req: Request) {
+  let sess: CavbotSession | null = await getSession(req).catch(() => null);
+
   try {
     const pool = getAuthPool();
-    const sess: CavbotSession | null = await getSession(req);
+    let degraded = false;
+
+    try {
+      sess = await requireSession(req);
+    } catch (error) {
+      if (isApiAuthError(error) && (error.status === 401 || error.status === 403)) {
+        return json({ ok: true, authenticated: false, signedOut: true, error: error.code }, 200);
+      }
+      throw error;
+    }
 
     // Not logged in -> always 200
-    if (!sess) return json({ ok: true, authenticated: false }, 200);
-
-    // System sessions (internal tooling)
     if (sess.systemRole === "system") {
-      return json({ ok: true, authenticated: true, session: sess }, 200);
+      return json({ ok: true, authenticated: true, degraded, session: sess }, 200);
     }
 
     const userId = String(sess?.sub || "").trim();
     const accountId = sess?.accountId ? String(sess.accountId).trim() : null;
 
-    if (!userId) return json({ ok: true, authenticated: false }, 200);
+    if (!userId) return json({ ok: true, authenticated: false, signedOut: true }, 200);
 
-    const user = await findUserById(pool, userId);
+    let user: AuthUser | null = null;
+    let userLookupFailed = false;
+    try {
+      user = await findUserById(pool, userId);
+    } catch {
+      userLookupFailed = true;
+      degraded = true;
+    }
 
-    if (!user) return json({ ok: true, authenticated: false }, 200);
+    if (!user) {
+      if (!userLookupFailed) return json({ ok: true, authenticated: false, signedOut: true }, 200);
+      user = buildFallbackUser(userId, sess);
+    }
 
     const initials = deriveInitials(user.displayName, user.username);
+    const staffProfile = await getStaffProfileByUserId(userId).catch(() => null);
 
     let membership: MembershipRecord | null = null;
     let account: PrismaAccount | null = null;
@@ -141,7 +283,12 @@ export async function GET(req: Request) {
     let collabPolicy = { ...DEFAULT_CAVCLOUD_COLLAB_POLICY };
 
     if (accountId) {
-      const membershipRecord = await findSessionMembership(pool, userId, accountId);
+      let membershipLookupFailed = false;
+      const membershipRecord = await findSessionMembership(pool, userId, accountId).catch(() => {
+        membershipLookupFailed = true;
+        degraded = true;
+        return null;
+      });
 
       membership = membershipRecord
         ? {
@@ -149,26 +296,56 @@ export async function GET(req: Request) {
             createdAt: membershipRecord.createdAt,
             accountId: membershipRecord.accountId,
             userId: membershipRecord.userId,
+            accountName: membershipRecord.accountName,
+            accountSlug: membershipRecord.accountSlug,
+            accountTier: membershipRecord.accountTier,
           }
-        : null;
+        : membershipLookupFailed
+          ? fallbackMembershipFromSession(sess)
+          : null;
 
-      if (!membership) return json({ ok: true, authenticated: false }, 200);
+      if (!membership) return json({ ok: true, authenticated: false, signedOut: true }, 200);
 
-      await clearExpiredTrialSeat(pool, accountId);
-      const accountRecord = await findAccountById(pool, accountId);
+      await clearExpiredTrialSeat(pool, accountId).catch(() => {
+        degraded = true;
+      });
 
-      if (!accountRecord) return json({ ok: true, authenticated: false }, 200);
+      let accountLookupFailed = false;
+      const [accountRecord, entitledSubscription] = await Promise.all([
+        findAccountById(pool, accountId).catch(() => {
+          accountLookupFailed = true;
+          degraded = true;
+          return null;
+        }),
+        findLatestEntitledSubscription(accountId).catch(() => {
+          degraded = true;
+          return null;
+        }),
+      ]);
 
-      account = accountRecord;
+      if (!accountRecord) {
+        if (!accountLookupFailed) return json({ ok: true, authenticated: false, signedOut: true }, 200);
+        accountWithComputed = buildFallbackAccountFromMembership({
+          sess,
+          membership,
+          entitledSubscription,
+        });
+      } else {
+        account = accountRecord;
 
-      // Compute effective tier for UI + gates
-      const eff = computeEffectiveTier(account);
-      accountWithComputed = {
-        ...account,
-        tierEffective: eff.tierEffective, // "FREE" | "PREMIUM" | "PREMIUM_PLUS"
-        trialActive: eff.trialActive,
-        trialDaysLeft: eff.daysLeft,
-      };
+        // Compute effective tier for UI + gates
+        const eff = computeEffectiveTier(account);
+        const effectivePlanId = resolveEffectivePlanId({
+          account,
+          subscription: entitledSubscription,
+        });
+        accountWithComputed = {
+          ...account,
+          tierEffective: planTierTokenFromPlanId(effectivePlanId),
+          trialActive: eff.trialActive,
+          trialDaysLeft: eff.daysLeft,
+        };
+      }
 
       collabPolicy = { ...DEFAULT_CAVCLOUD_COLLAB_POLICY };
     }
@@ -177,11 +354,21 @@ export async function GET(req: Request) {
       {
         ok: true,
         authenticated: true,
+        degraded,
         session: sess,
         user: {
           ...user,
           initials,
         },
+        staff: staffProfile
+          ? {
+              id: staffProfile.id,
+              active: staffProfile.status === "ACTIVE",
+              positionTitle: staffProfile.positionTitle,
+              department: resolveAdminDepartment(staffProfile),
+              maskedStaffCode: maskStaffCode(staffProfile.staffCode),
+            }
+          : null,
         account: accountWithComputed ?? account,
         membership,
         policy: {
@@ -192,7 +379,30 @@ export async function GET(req: Request) {
       200
     );
   } catch (error) {
-    if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
-    return json({ ok: true, authenticated: false }, 200);
+    if (isApiAuthError(error) && (error.status === 401 || error.status === 403)) {
+      return json({ ok: true, authenticated: false, signedOut: true, error: error.code }, 200);
+    }
+    if (sess) {
+      const payload = buildDegradedAuthMePayloadFromSession(sess);
+      return json(
+        isApiAuthError(error)
+          ? {
+              ...payload,
+              error: error.code,
+            }
+          : payload,
+        200
+      );
+    }
+    return json(
+      {
+        ok: true,
+        authenticated: false,
+        degraded: true,
+        indeterminate: true,
+        ...(isApiAuthError(error) ? { error: error.code } : {}),
+      },
+      200
+    );
   }
 }

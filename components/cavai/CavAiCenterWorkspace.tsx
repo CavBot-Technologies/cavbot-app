@@ -7,6 +7,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import { LockIcon } from "@/components/LockIcon";
+import CavAiVoiceOrb, { type CavAiVoiceOrbMode } from "@/components/cavai/CavAiVoiceOrb";
 import { isReservedUsername, isValidUsername, normalizeUsername } from "@/lib/username";
 import {
   CAVAI_SAFE_FALLBACK_LINE,
@@ -383,7 +384,29 @@ type CavenRuntimeCustomAgent = {
   triggers: string[];
   instructions: string;
   iconSvg: string;
+  iconBackground: string | null;
   createdAt: string;
+  publicationRequested: boolean;
+  publicationRequestedAt: string | null;
+};
+
+type PublishedOperatorAgentRecord = {
+  id: string;
+  sourceAgentId: string;
+  sourceUserId: string;
+  sourceAccountId: string;
+  ownerName: string;
+  ownerUsername: string | null;
+  name: string;
+  summary: string;
+  actionKey: string;
+  surface: "cavcode" | "center" | "all";
+  triggers: string[];
+  instructions: string;
+  iconSvg: string;
+  iconBackground: string | null;
+  publishedAt: string;
+  updatedAt: string;
 };
 
 type CavenRuntimeAgentRef = {
@@ -398,6 +421,11 @@ type ApiEnvelope<T> =
       error?: string;
       message?: string;
       guardDecision?: unknown;
+      degraded?: boolean;
+      unavailable?: boolean;
+      retryable?: boolean;
+      indeterminate?: boolean;
+      signedOut?: boolean;
     };
 
 type CenterConfig = {
@@ -459,12 +487,14 @@ type CenterRuntimeAgentOption = {
   iconSrc: string;
   minimumPlan: CenterAgentPlanId;
   centerAction: AiCenterAction | null;
-  source: "builtin" | "custom";
+  source: "builtin" | "custom" | "published";
   family: "cavai" | "caven";
   surface: "cavcode" | "center" | "all";
   mode: "general" | "companion";
   locked: boolean;
   bank: string;
+  ownerName?: string | null;
+  ownerUsername?: string | null;
 };
 type BuiltInRegistryCard = {
   id: string;
@@ -558,11 +588,30 @@ const SESSION_MESSAGE_PREFETCH_COUNT = 10;
 const RECENT_FILES_EMPTY_HINT = "No recent files yet. Add a file and it will appear here.";
 const CENTER_LOAD_SESSIONS_FAILED_MESSAGE = "Failed to load sessions.";
 const CENTER_LOAD_MESSAGES_FAILED_MESSAGE = "Failed to load messages.";
+const PASSIVE_CENTER_UNAVAILABLE_ERRORS = new Set([
+  "SERVICE_UNAVAILABLE",
+  "AI_SESSIONS_UNAVAILABLE",
+  "AI_SESSION_MESSAGES_UNAVAILABLE",
+  "SESSION_HISTORY_UNAVAILABLE",
+]);
 
 function isCenterLoadFailureMessage(value: unknown): boolean {
   const normalized = s(value).toLowerCase();
   if (!normalized) return false;
   return normalized.includes("failed to load sessions") || normalized.includes("failed to load messages");
+}
+
+function isPassiveCenterUnavailablePayload(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const payload = value as {
+    unavailable?: unknown;
+    degraded?: unknown;
+    retryable?: unknown;
+    error?: unknown;
+  };
+  if (payload.unavailable === true) return true;
+  if (payload.degraded === true && payload.retryable === true) return true;
+  return PASSIVE_CENTER_UNAVAILABLE_ERRORS.has(s(payload.error).toUpperCase());
 }
 const CAVAI_GUEST_SESSION_CACHE_STORAGE_PREFIX = "cavai_center_guest_session_cache_v1";
 const CAVAI_GUEST_SESSION_CACHE_MAX_SESSIONS = 60;
@@ -1955,9 +2004,70 @@ function normalizeRuntimeCustomAgents(
       triggers,
       instructions: s(row.instructions),
       iconSvg: s(row.iconSvg),
+      iconBackground: s(row.iconBackground) || null,
       createdAt: s(row.createdAt),
+      publicationRequested: row.publicationRequested === true,
+      publicationRequestedAt: row.publicationRequested === true
+        ? (Number.isFinite(Date.parse(s(row.publicationRequestedAt))) ? new Date(s(row.publicationRequestedAt)).toISOString() : s(row.createdAt) || new Date().toISOString())
+        : null,
     });
     if (rows.length >= 120) break;
+  }
+  return rows;
+}
+
+function normalizePublishedOperatorAgents(
+  value: unknown,
+  knownBuiltInIdSet?: ReadonlySet<string>
+): PublishedOperatorAgentRecord[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const rows: PublishedOperatorAgentRecord[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const row = entry as Record<string, unknown>;
+    const id = s(row.id).toLowerCase();
+    const sourceAgentId = s(row.sourceAgentId).toLowerCase();
+    const sourceUserId = s(row.sourceUserId);
+    const sourceAccountId = s(row.sourceAccountId);
+    const actionKey = s(row.actionKey).toLowerCase();
+    if (
+      !id
+      || !sourceAgentId
+      || !sourceUserId
+      || !sourceAccountId
+      || !actionKey
+      || !CAVEN_AGENT_ID_RE.test(id)
+      || !CAVEN_AGENT_ID_RE.test(sourceAgentId)
+      || !CAVEN_AGENT_ACTION_KEY_RE.test(actionKey)
+      || seen.has(id)
+      || knownBuiltInIdSet?.has(id)
+    ) {
+      continue;
+    }
+    seen.add(id);
+    const triggers = Array.isArray(row.triggers)
+      ? row.triggers.map((item) => s(item)).filter(Boolean).slice(0, 12)
+      : [];
+    rows.push({
+      id,
+      sourceAgentId,
+      sourceUserId,
+      sourceAccountId,
+      ownerName: s(row.ownerName) || "Operator",
+      ownerUsername: s(row.ownerUsername) || null,
+      name: s(row.name),
+      summary: s(row.summary),
+      actionKey,
+      surface: normalizeRuntimeAgentSurface(row.surface),
+      triggers,
+      instructions: s(row.instructions),
+      iconSvg: s(row.iconSvg),
+      iconBackground: s(row.iconBackground) || null,
+      publishedAt: s(row.publishedAt),
+      updatedAt: s(row.updatedAt),
+    });
+    if (rows.length >= 240) break;
   }
   return rows;
 }
@@ -2026,7 +2136,10 @@ function normalizeAgentRef(args: {
   return { agentId, agentActionKey };
 }
 
-function scorePromptForCustomAgent(promptLower: string, agent: CavenRuntimeCustomAgent): number {
+function scorePromptForCustomAgent(
+  promptLower: string,
+  agent: Pick<CavenRuntimeCustomAgent, "actionKey" | "name" | "triggers">
+): number {
   let score = 0;
   const actionNeedle = agent.actionKey.replace(/_/g, " ");
   const nameNeedle = s(agent.name).toLowerCase();
@@ -2046,15 +2159,16 @@ function resolvePromptCustomAgentRef(args: {
   requestedAction: AiCenterAction;
   installedAgentIds: string[];
   customAgents: CavenRuntimeCustomAgent[];
+  publishedAgents?: PublishedOperatorAgentRecord[];
 }): CavenRuntimeAgentRef | null {
   const installedSet = new Set(args.installedAgentIds.map((id) => s(id).toLowerCase()));
-  const eligible = args.customAgents.filter(
+  const eligible = [...args.customAgents, ...(args.publishedAgents || [])].filter(
     (agent) => installedSet.has(agent.id) && (agent.surface === "all" || agent.surface === "center")
   );
   if (!eligible.length) return null;
 
   const promptLower = s(args.prompt).toLowerCase();
-  let best: CavenRuntimeCustomAgent | null = null;
+  let best: CavenRuntimeCustomAgent | PublishedOperatorAgentRecord | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
 
   for (const agent of eligible) {
@@ -3518,6 +3632,8 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [recordingVoice, setRecordingVoice] = useState(false);
   const [processingVoice, setProcessingVoice] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState("");
+  const [voiceOrbState, setVoiceOrbState] = useState<CavAiVoiceOrbMode>("idle");
+  const [voiceOrbStream, setVoiceOrbStream] = useState<MediaStream | null>(null);
   const [pendingPromptText, setPendingPromptText] = useState("");
   const [pendingImageGeneration, setPendingImageGeneration] = useState(false);
   const [reasoningContextLines, setReasoningContextLines] = useState<string[]>([]);
@@ -3593,6 +3709,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const [installedAgentIds, setInstalledAgentIds] = useState<string[]>([]);
   const installedAgentIdsRef = useRef<string[]>([]);
   const [customAgents, setCustomAgents] = useState<CavenRuntimeCustomAgent[]>([]);
+  const [publishedAgents, setPublishedAgents] = useState<PublishedOperatorAgentRecord[]>([]);
   const [savingAgentId, setSavingAgentId] = useState("");
   const [agentModeQuery, setAgentModeQuery] = useState("");
   const [agentModeManageAgentId, setAgentModeManageAgentId] = useState("");
@@ -3906,6 +4023,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const hasPendingPrompt = submitting && (Boolean(s(pendingPromptText)) || hasInlineEditPending);
   const hasInlineEdit = Boolean(inlineEditDraft);
   const isEmptyThread = !messages.length && !loadingMessages && !hasPendingPrompt && !hasInlineEdit;
+  const showVoiceOrb = voiceOrbState !== "idle";
   const threadInnerClassName = [styles.centerThreadInner, isEmptyThread ? styles.centerThreadInnerEmpty : styles.centerThreadInnerChat]
     .filter(Boolean)
     .join(" ");
@@ -4045,9 +4163,32 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         })),
     [customAgents]
   );
+  const publishedCenterAgentBank = useMemo<CenterRuntimeAgentOption[]>(
+    () =>
+      publishedAgents
+        .filter((agent) => agent.surface === "all" || agent.surface === "center")
+        .map((agent) => ({
+          id: agent.id,
+          name: s(agent.name) || agent.id,
+          summary: s(agent.summary),
+          actionKey: agent.actionKey,
+          iconSrc: runtimeAgentIconSrc(agent.iconSvg),
+          minimumPlan: "free",
+          centerAction: null,
+          source: "published" as const,
+          family: "cavai",
+          surface: agent.surface,
+          mode: "general" as const,
+          locked: false,
+          bank: "published",
+          ownerName: agent.ownerName,
+          ownerUsername: agent.ownerUsername,
+        })),
+    [publishedAgents]
+  );
   const centerAgentBankCatalog = useMemo<CenterRuntimeAgentOption[]>(
-    () => [...builtInCenterAgentBank, ...customCenterAgentBank],
-    [builtInCenterAgentBank, customCenterAgentBank]
+    () => [...builtInCenterAgentBank, ...customCenterAgentBank, ...publishedCenterAgentBank],
+    [builtInCenterAgentBank, customCenterAgentBank, publishedCenterAgentBank]
   );
   const scopedCenterAgentBankCatalog = useMemo(
     () => (isGuestPreviewMode ? centerAgentBankCatalog : centerAgentBankCatalog.filter((agent) => agent.mode === centerAgentMode)),
@@ -4096,6 +4237,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
           agent.name,
           agent.summary,
           agent.actionKey,
+          agent.ownerName || "",
+          agent.ownerUsername || "",
+          agent.source === "custom" ? "my agents private" : "",
+          agent.source === "published" ? "published operators shared" : "",
           "cavai",
           agent.mode === "companion" ? "companion cavbot" : "general",
         ]
@@ -4118,49 +4263,82 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     () => filterAgentListForQuery(lockedCenterAgents),
     [filterAgentListForQuery, lockedCenterAgents]
   );
+  const installedMyAgents = useMemo(
+    () => visibleInstalledCenterAgents.filter((agent) => agent.source === "custom"),
+    [visibleInstalledCenterAgents]
+  );
+  const installedPublishedCenterAgents = useMemo(
+    () => visibleInstalledCenterAgents.filter((agent) => agent.source === "published"),
+    [visibleInstalledCenterAgents]
+  );
   const installedCavAiAgents = useMemo(
     () => visibleInstalledCenterAgents.filter((agent) =>
+      agent.source === "builtin" && (
       centerAgentMode === "companion" && !isGuestPreviewMode
         ? agent.mode === "companion"
-        : agent.family === "cavai" && agent.mode !== "companion"
+        : agent.family === "cavai" && agent.mode !== "companion")
     ),
     [centerAgentMode, isGuestPreviewMode, visibleInstalledCenterAgents]
   );
   const installedCavenAgents = useMemo(
-    () => visibleInstalledCenterAgents.filter((agent) => agent.family === "caven"),
+    () => visibleInstalledCenterAgents.filter((agent) => agent.source === "builtin" && agent.family === "caven"),
     [visibleInstalledCenterAgents]
+  );
+  const bankMyAgents = useMemo(
+    () => visibleAvailableCenterAgentBank.filter((agent) => agent.source === "custom"),
+    [visibleAvailableCenterAgentBank]
+  );
+  const bankPublishedCenterAgents = useMemo(
+    () => visibleAvailableCenterAgentBank.filter((agent) => agent.source === "published"),
+    [visibleAvailableCenterAgentBank]
   );
   const bankCavAiAgents = useMemo(
     () => visibleAvailableCenterAgentBank.filter((agent) =>
+      agent.source === "builtin" && (
       centerAgentMode === "companion" && !isGuestPreviewMode
         ? agent.mode === "companion"
-        : agent.family === "cavai" && agent.mode !== "companion"
+        : agent.family === "cavai" && agent.mode !== "companion")
     ),
     [centerAgentMode, isGuestPreviewMode, visibleAvailableCenterAgentBank]
   );
   const bankCavenAgents = useMemo(
-    () => visibleAvailableCenterAgentBank.filter((agent) => agent.family === "caven"),
+    () => visibleAvailableCenterAgentBank.filter((agent) => agent.source === "builtin" && agent.family === "caven"),
     [visibleAvailableCenterAgentBank]
   );
   const lockedCavAiAgents = useMemo(
     () => visibleLockedCenterAgents.filter((agent) =>
+      agent.source === "builtin" && (
       centerAgentMode === "companion" && !isGuestPreviewMode
         ? agent.mode === "companion"
-        : agent.family === "cavai" && agent.mode !== "companion"
+        : agent.family === "cavai" && agent.mode !== "companion")
     ),
     [centerAgentMode, isGuestPreviewMode, visibleLockedCenterAgents]
   );
   const lockedCavenAgents = useMemo(
-    () => visibleLockedCenterAgents.filter((agent) => agent.family === "caven"),
+    () => visibleLockedCenterAgents.filter((agent) => agent.source === "builtin" && agent.family === "caven"),
     [visibleLockedCenterAgents]
   );
   const lockedCompanionAgents = useMemo(
-    () => visibleLockedCenterAgents.filter((agent) => agent.mode === "companion"),
+    () => visibleLockedCenterAgents.filter((agent) => agent.source === "builtin" && agent.mode === "companion"),
     [visibleLockedCenterAgents]
   );
   const centerPrimaryFamilyLabel = centerAgentMode === "companion" ? "CavBot Companion" : "CavAi";
   const centerPrimarySectionLabel = centerPrimaryFamilyLabel;
   const centerLegacyAgentBankLabel = "Agent Bank";
+  const describeCenterAgentMeta = useCallback((agent: CenterRuntimeAgentOption): string => {
+    if (agent.source === "published") {
+      return agent.ownerUsername ? `by @${agent.ownerUsername}` : `by ${agent.ownerName || "Operator"}`;
+    }
+    if (agent.source === "custom") {
+      const placementLabel = agent.surface === "center"
+        ? "CavAi only"
+        : agent.surface === "cavcode"
+          ? "Caven only"
+          : "All surfaces";
+      return placementLabel;
+    }
+    return "";
+  }, []);
   const selectedInstalledAgentOption = useMemo(
     () =>
       manualAgentRef
@@ -4532,6 +4710,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ sessions?: CavAiSessionSummary[] }>;
       if (!res.ok || !body.ok) {
         emitGuardDecisionFromPayload(body);
+        if (isPassiveCenterUnavailablePayload(body)) return true;
         throw new Error(s((body as { message?: unknown }).message) || CENTER_LOAD_SESSIONS_FAILED_MESSAGE);
       }
       setError("");
@@ -4628,6 +4807,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       const body = (await res.json().catch(() => ({}))) as ApiEnvelope<{ messages?: CavAiMessage[] }>;
       if (!res.ok || !body.ok) {
         emitGuardDecisionFromPayload(body);
+        if (isPassiveCenterUnavailablePayload(body)) {
+          const cachedRows = sessionMessageCacheRef.current.get(normalized);
+          if (cachedRows) return cachedRows;
+          const summary = sessions.find((item) => item.id === normalized) || null;
+          return buildSyntheticThreadFromSessionSummary(summary);
+        }
         throw new Error(s((body as { message?: unknown }).message) || CENTER_LOAD_MESSAGES_FAILED_MESSAGE);
       }
       const rows = Array.isArray(body.messages) ? body.messages : [];
@@ -4815,6 +5000,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       agentRegistrySnapshotRef.current = { ...EMPTY_AGENT_REGISTRY_SNAPSHOT };
       setInstalledAgentIds([]);
       setCustomAgents([]);
+      setPublishedAgents([]);
       return true;
     }
     try {
@@ -4827,6 +5013,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         ok?: boolean;
         settings?: unknown;
         agentRegistry?: unknown;
+        publishedAgents?: unknown;
         planId?: unknown;
       };
       if (!res.ok || body.ok !== true || !body.settings || typeof body.settings !== "object") return false;
@@ -4839,16 +5026,20 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       const knownBuiltInIdSet = new Set(knownBuiltInIds);
       const row = body.settings as Record<string, unknown>;
       const nextCustomAgents = normalizeRuntimeCustomAgents(row.customAgents, knownBuiltInIdSet);
+      const nextPublishedAgents = normalizePublishedOperatorAgents(body.publishedAgents, knownBuiltInIdSet);
       const nextCustomIdSet = new Set(nextCustomAgents.map((agent) => agent.id));
+      const nextPublishedIdSet = new Set(nextPublishedAgents.map((agent) => agent.id));
       const installedRaw = normalizeInstalledAgentIdsFromSettings(row.installedAgentIds);
       const installedSet = new Set(installedRaw);
       const orderedKnown = knownBuiltInIds.filter((id) => installedSet.has(id));
       const orderedCustom = nextCustomAgents.map((agent) => agent.id).filter((id) => installedSet.has(id));
+      const orderedPublished = nextPublishedAgents.map((agent) => agent.id).filter((id) => installedSet.has(id));
       const orderedUnknown = installedRaw.filter(
-        (id) => !knownBuiltInIdSet.has(id) && !nextCustomIdSet.has(id)
+        (id) => !knownBuiltInIdSet.has(id) && !nextCustomIdSet.has(id) && !nextPublishedIdSet.has(id)
       );
       setCustomAgents(nextCustomAgents);
-      setInstalledAgentIds([...orderedKnown, ...orderedCustom, ...orderedUnknown]);
+      setPublishedAgents(nextPublishedAgents);
+      setInstalledAgentIds([...orderedKnown, ...orderedCustom, ...orderedPublished, ...orderedUnknown]);
       return true;
     } catch {
       return false;
@@ -5226,6 +5417,9 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         const body = (await res.json().catch(() => ({}))) as {
           ok?: boolean;
           authenticated?: boolean;
+          degraded?: boolean;
+          indeterminate?: boolean;
+          signedOut?: boolean;
           user?: {
             displayName?: unknown;
             username?: unknown;
@@ -5240,7 +5434,12 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
           };
         };
         if (cancelled) return;
-        if (!res.ok || body.ok !== true || body.authenticated !== true) {
+        const authIndeterminate = body.indeterminate === true;
+        const signedOut = body.signedOut === true || res.status === 401 || res.status === 403;
+        if (authIndeterminate) {
+          return;
+        }
+        if (signedOut || !res.ok || body.ok !== true || body.authenticated !== true) {
           setIsAuthenticated(false);
           setAccountProfilePublicEnabled(null);
           setAccountProfileAvatar("");
@@ -5266,9 +5465,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         const authPlanId = normalizePlanId(body.account?.tierEffective ?? body.account?.tier);
         setAccountPlanId((prev) => (planTierRank(authPlanId) >= planTierRank(prev) ? authPlanId : prev));
       } catch {
-        if (!cancelled) {
-          setIsAuthenticated(false);
-        }
+        // Preserve the last known auth state on transient backend failures.
       } finally {
         if (!cancelled) {
           setAuthProbeReady(true);
@@ -6243,6 +6440,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
           requestedAction: resolvedAction,
           installedAgentIds,
           customAgents: composerQuickMode === "agent_mode" ? [] : customAgents,
+          publishedAgents: composerQuickMode === "agent_mode" ? [] : publishedAgents,
         }));
       const overrideResearchUrls = Array.isArray(submitOverride.researchUrls)
         ? submitOverride.researchUrls.map((row) => s(row)).filter(Boolean)
@@ -6550,6 +6748,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     props.projectId,
     props.surface,
     props.workspaceId,
+    publishedAgents,
     researchModeActive,
     reasoningLevel,
     selectedModel,
@@ -7370,12 +7569,14 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     else nextSet.delete(agentId);
 
     const customIdSet = new Set(customAgents.map((agent) => agent.id));
+    const publishedIdSet = new Set(publishedAgents.map((agent) => agent.id));
     const orderedKnown = knownBuiltInAgentIds.filter((id) => nextSet.has(id));
     const orderedCustom = customAgents.map((agent) => agent.id).filter((id) => nextSet.has(id));
+    const orderedPublished = publishedAgents.map((agent) => agent.id).filter((id) => nextSet.has(id));
     const orderedUnknown = installedAgentIds.filter(
-      (id) => id !== "dictate" && !knownBuiltInAgentIdSet.has(id) && !customIdSet.has(id) && nextSet.has(id)
+      (id) => id !== "dictate" && !knownBuiltInAgentIdSet.has(id) && !customIdSet.has(id) && !publishedIdSet.has(id) && nextSet.has(id)
     );
-    const nextIds = [...orderedKnown, ...orderedCustom, ...orderedUnknown];
+    const nextIds = [...orderedKnown, ...orderedCustom, ...orderedPublished, ...orderedUnknown];
     const prevIds = [...installedAgentIds];
 
     setInstalledAgentIds(nextIds);
@@ -7398,6 +7599,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         ok?: boolean;
         settings?: unknown;
         agentRegistry?: unknown;
+        publishedAgents?: unknown;
         planId?: unknown;
         message?: unknown;
       };
@@ -7412,16 +7614,20 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       const nextKnownBuiltInIds = flattenBuiltInRegistryCards(snapshot).map((card) => card.id);
       const nextKnownBuiltInIdSet = new Set(nextKnownBuiltInIds);
       const nextCustomAgents = normalizeRuntimeCustomAgents(row.customAgents, nextKnownBuiltInIdSet);
+      const nextPublishedAgents = normalizePublishedOperatorAgents(body.publishedAgents, nextKnownBuiltInIdSet);
       const nextCustomIdSet = new Set(nextCustomAgents.map((agent) => agent.id));
+      const nextPublishedIdSet = new Set(nextPublishedAgents.map((agent) => agent.id));
       const installedRaw = normalizeInstalledAgentIdsFromSettings(row.installedAgentIds);
       const installedRawSet = new Set(installedRaw);
       const orderedBuiltIns = nextKnownBuiltInIds.filter((id) => installedRawSet.has(id));
       const orderedCustomAgents = nextCustomAgents.map((agent) => agent.id).filter((id) => installedRawSet.has(id));
+      const orderedPublishedAgents = nextPublishedAgents.map((agent) => agent.id).filter((id) => installedRawSet.has(id));
       const orderedLegacy = installedRaw.filter(
-        (id) => !nextKnownBuiltInIdSet.has(id) && !nextCustomIdSet.has(id)
+        (id) => !nextKnownBuiltInIdSet.has(id) && !nextCustomIdSet.has(id) && !nextPublishedIdSet.has(id)
       );
-      setInstalledAgentIds([...orderedBuiltIns, ...orderedCustomAgents, ...orderedLegacy]);
+      setInstalledAgentIds([...orderedBuiltIns, ...orderedCustomAgents, ...orderedPublishedAgents, ...orderedLegacy]);
       setCustomAgents(nextCustomAgents);
+      setPublishedAgents(nextPublishedAgents);
       setError("");
     } catch (err) {
       setInstalledAgentIds(prevIds);
@@ -7436,6 +7642,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     knownBuiltInAgentIds,
     knownBuiltInAgentIdSet,
     isGuestPreviewMode,
+    publishedAgents,
     savingAgentId,
   ]);
 
@@ -7464,7 +7671,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
             triggers: agent.triggers,
             instructions: agent.instructions,
             iconSvg: agent.iconSvg,
+            iconBackground: agent.iconBackground,
             createdAt: agent.createdAt,
+            publicationRequested: agent.publicationRequested,
+            publicationRequestedAt: agent.publicationRequestedAt,
           })),
           installedAgentIds: args.nextInstalledIds,
         }),
@@ -7473,6 +7683,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         ok?: boolean;
         settings?: unknown;
         agentRegistry?: unknown;
+        publishedAgents?: unknown;
         planId?: unknown;
         message?: unknown;
       };
@@ -7487,16 +7698,20 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       const nextKnownBuiltInIds = flattenBuiltInRegistryCards(snapshot).map((card) => card.id);
       const nextKnownBuiltInIdSet = new Set(nextKnownBuiltInIds);
       const nextCustomAgents = normalizeRuntimeCustomAgents(row.customAgents, nextKnownBuiltInIdSet);
+      const nextPublishedAgents = normalizePublishedOperatorAgents(body.publishedAgents, nextKnownBuiltInIdSet);
       const nextCustomIdSet = new Set(nextCustomAgents.map((agent) => agent.id));
+      const nextPublishedIdSet = new Set(nextPublishedAgents.map((agent) => agent.id));
       const installedRaw = normalizeInstalledAgentIdsFromSettings(row.installedAgentIds);
       const installedRawSet = new Set(installedRaw);
       const orderedBuiltIns = nextKnownBuiltInIds.filter((id) => installedRawSet.has(id));
       const orderedCustomAgents = nextCustomAgents.map((agent) => agent.id).filter((id) => installedRawSet.has(id));
+      const orderedPublishedAgents = nextPublishedAgents.map((agent) => agent.id).filter((id) => installedRawSet.has(id));
       const orderedLegacy = installedRaw.filter(
-        (id) => !nextKnownBuiltInIdSet.has(id) && !nextCustomIdSet.has(id)
+        (id) => !nextKnownBuiltInIdSet.has(id) && !nextCustomIdSet.has(id) && !nextPublishedIdSet.has(id)
       );
-      setInstalledAgentIds([...orderedBuiltIns, ...orderedCustomAgents, ...orderedLegacy]);
+      setInstalledAgentIds([...orderedBuiltIns, ...orderedCustomAgents, ...orderedPublishedAgents, ...orderedLegacy]);
       setCustomAgents(nextCustomAgents);
+      setPublishedAgents(nextPublishedAgents);
       if (args.successErrorClear) setError("");
     } catch (err) {
       args.onRollback();
@@ -7628,6 +7843,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       stream.getTracks().forEach((track) => track.stop());
       voiceStreamRef.current = null;
     }
+    setVoiceOrbStream(null);
     voiceChunksRef.current = [];
   }, []);
 
@@ -7650,6 +7866,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     ttsPlaybackSessionRef.current += 1;
     clearTtsPlayback();
     setSpeakingMessageId("");
+    setVoiceOrbState("idle");
   }, [clearTtsPlayback]);
 
   const cacheTtsBlob = useCallback((cacheKeyRaw: string, blob: Blob) => {
@@ -8030,9 +8247,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const processCapturedVoice = useCallback(async (blob: Blob) => {
     if (!blob.size) {
       setError("No audio was captured.");
+      setVoiceOrbState("idle");
       return;
     }
     setProcessingVoice(true);
+    setVoiceOrbState("processing");
     try {
       const extension = inferAudioFileExtension(blob.type);
       const file = new File(
@@ -8045,6 +8264,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       if (!spokenPrompt) {
         setError("Voice input did not produce a transcript.");
         autoSpeakNextVoiceReplyRef.current = false;
+        setVoiceOrbState("idle");
         return;
       }
       autoSpeakNextVoiceReplyRef.current = true;
@@ -8056,19 +8276,24 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       const replyText = s(reply);
       if (!replyText) {
         autoSpeakNextVoiceReplyRef.current = false;
+        setVoiceOrbState("idle");
         return;
       }
       const quickSpeakKey = `voice-auto-inline-${hashSpeechText(replyText)}`;
       autoSpeakNextVoiceReplyRef.current = false;
+      setVoiceOrbState("speaking");
       const started = await playSpeechFromText(replyText, quickSpeakKey);
       if (!started) {
         autoSpeakNextVoiceReplyRef.current = true;
+        setVoiceOrbState("idle");
       }
     } catch (err) {
       autoSpeakNextVoiceReplyRef.current = false;
       setError(err instanceof Error ? err.message : "Voice input failed.");
+      setVoiceOrbState("idle");
     } finally {
       setProcessingVoice(false);
+      setVoiceOrbState("idle");
     }
   }, [onSubmit, playSpeechFromText, transcribeAudioFile, voiceReplyModel]);
 
@@ -8110,6 +8335,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     }
 
     setError("");
+    setVoiceOrbState("listening");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = pickAudioRecorderMimeType();
@@ -8118,6 +8344,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         : new MediaRecorder(stream);
 
       voiceStreamRef.current = stream;
+      setVoiceOrbStream(stream);
       voiceRecorderRef.current = recorder;
       voiceChunksRef.current = [];
 
@@ -8130,6 +8357,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         clearVoiceCapture();
         setRecordingVoice(false);
         setProcessingVoice(false);
+        setVoiceOrbState("idle");
         setError("Voice capture failed.");
       };
 
@@ -8140,6 +8368,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         setRecordingVoice(false);
         const blob = chunks.length ? new Blob(chunks, { type: fallbackType }) : null;
         if (!blob || !blob.size) {
+          setVoiceOrbState("idle");
           setError("No audio was captured.");
           return;
         }
@@ -8152,6 +8381,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       clearVoiceCapture();
       setRecordingVoice(false);
       setProcessingVoice(false);
+      setVoiceOrbState("idle");
       setError(err instanceof Error ? err.message : "Voice capture failed.");
     }
   }, [clearVoiceCapture, processCapturedVoice, processingVoice, recordingVoice, submitting, transcribingAudio]);
@@ -9435,6 +9665,244 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     () => (shouldFloatAgentModeMenu ? floatingComposerMenuStyle : undefined),
     [floatingComposerMenuStyle, shouldFloatAgentModeMenu]
   );
+  const renderInstalledCenterAgentRow = useCallback((agent: CenterRuntimeAgentOption, keyPrefix: string) => {
+    const isOn = selectedInstalledAgentOption?.id === agent.id
+      && selectedInstalledAgentOption?.actionKey === agent.actionKey;
+    const metaLabel = describeCenterAgentMeta(agent);
+    return (
+      <div
+        key={`${keyPrefix}-${agent.id}`}
+        role="menuitemradio"
+        aria-checked={isOn}
+        tabIndex={0}
+        className={[
+          styles.iconMenuItem,
+          styles.centerAgentModeMenuItem,
+          isOn ? styles.centerAgentModeMenuItemOn : "",
+        ].filter(Boolean).join(" ")}
+        aria-label={metaLabel ? `${agent.name}. ${metaLabel}` : agent.name}
+        onClick={() => selectAgentModeOption(agent)}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          selectAgentModeOption(agent);
+        }}
+      >
+        <span className={styles.centerAgentModeMenuLead}>
+          <Image
+            src={agent.iconSrc}
+            alt=""
+            width={18}
+            height={18}
+            unoptimized
+            loading="eager"
+            data-agent-id={agent.id}
+            className={styles.centerAgentModeMenuIcon}
+          />
+          <span className={styles.centerAgentModeMenuLabelWrap}>
+            <span className={styles.centerAgentModeMenuLabel}>{agent.name}</span>
+            {metaLabel ? <span className={styles.centerAgentModeMenuMeta}>{metaLabel}</span> : null}
+          </span>
+        </span>
+        <span className={styles.centerAgentModeMenuActionWrap}>
+          <button
+            type="button"
+            className={styles.centerAgentModeManageBtn}
+            aria-label={`Manage ${agent.name}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              setAgentModeManageAgentId((prev) => (prev === agent.id ? "" : agent.id));
+            }}
+          >
+            <svg
+              className={styles.centerAgentModeManageCheck}
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path
+                d="M3.25 8.5L6.5 11.75L12.75 4.75"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <svg
+              className={styles.centerAgentModeManageDots}
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle cx="3.5" cy="8" r="1.2" fill="currentColor" />
+              <circle cx="8" cy="8" r="1.2" fill="currentColor" />
+              <circle cx="12.5" cy="8" r="1.2" fill="currentColor" />
+            </svg>
+          </button>
+          {agentModeManageAgentId === agent.id ? (
+            <div
+              className={styles.centerAgentModeManageMenu}
+              role="menu"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                className={styles.centerAgentModeManageMenuItem}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  uninstallAgentFromMenu(agent.id);
+                }}
+              >
+                Uninstall
+              </button>
+              {agent.source === "custom" ? (
+                <>
+                  <button
+                    type="button"
+                    className={styles.centerAgentModeManageMenuItem}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      moveCustomAgentSurface(agent.id, "cavcode");
+                    }}
+                    disabled={agent.surface === "cavcode"}
+                  >
+                    Move to Caven
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.centerAgentModeManageMenuItem}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      moveCustomAgentSurface(agent.id, "center");
+                    }}
+                    disabled={agent.surface === "center"}
+                  >
+                    Move to CavAi
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.centerAgentModeManageMenuItem}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      moveCustomAgentSurface(agent.id, "all");
+                    }}
+                    disabled={agent.surface === "all"}
+                  >
+                    Move to All Surfaces
+                  </button>
+                  <button
+                    type="button"
+                    className={[styles.centerAgentModeManageMenuItem, styles.centerAgentModeManageMenuItemDanger].join(" ")}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      deleteCustomAgent(agent.id);
+                    }}
+                  >
+                    Delete Agent
+                  </button>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+        </span>
+      </div>
+    );
+  }, [
+    agentModeManageAgentId,
+    deleteCustomAgent,
+    describeCenterAgentMeta,
+    moveCustomAgentSurface,
+    selectAgentModeOption,
+    selectedInstalledAgentOption,
+    uninstallAgentFromMenu,
+  ]);
+
+  const renderLockedCenterAgentRow = useCallback((agent: CenterRuntimeAgentOption, keyPrefix: string) => {
+    const metaLabel = describeCenterAgentMeta(agent);
+    return (
+      <div
+        key={`${keyPrefix}-${agent.id}`}
+        aria-disabled="true"
+        className={[styles.centerAgentModeMenuItem, styles.centerAgentModeLockedRow].join(" ")}
+      >
+        <span className={styles.centerAgentModeMenuLead}>
+          <Image
+            src={agent.iconSrc}
+            alt=""
+            width={18}
+            height={18}
+            unoptimized
+            loading="eager"
+            data-agent-id={agent.id}
+            className={styles.centerAgentModeMenuIcon}
+          />
+          <span className={styles.centerAgentModeMenuLabelWrap}>
+            <span className={styles.centerAgentModeMenuLabel}>{agent.name}</span>
+            {metaLabel ? <span className={styles.centerAgentModeMenuMeta}>{metaLabel}</span> : null}
+          </span>
+        </span>
+        <span className={styles.centerAgentModeLockedMeta} aria-hidden="true">
+          <span className={styles.centerAgentModeLockedBadge}>
+            <LockIcon width={14} height={14} aria-hidden="true" />
+          </span>
+        </span>
+      </div>
+    );
+  }, [describeCenterAgentMeta]);
+
+  const renderAvailableCenterAgentRow = useCallback((agent: CenterRuntimeAgentOption, keyPrefix: string) => {
+    const busy = savingAgentId === agent.id;
+    const metaLabel = describeCenterAgentMeta(agent);
+    return (
+      <button
+        key={`${keyPrefix}-${agent.id}`}
+        type="button"
+        role="menuitem"
+        className={[
+          styles.iconMenuItem,
+          styles.centerAgentModeMenuItem,
+        ].filter(Boolean).join(" ")}
+        onClick={() => {
+          void toggleAgentInstalled(agent.id, true);
+        }}
+        disabled={busy}
+        aria-label={busy ? `Installing ${agent.name}` : `Install ${agent.name}`}
+      >
+        <span className={styles.centerAgentModeMenuLead}>
+          <Image
+            src={agent.iconSrc}
+            alt=""
+            width={18}
+            height={18}
+            unoptimized
+            loading="eager"
+            data-agent-id={agent.id}
+            className={styles.centerAgentModeMenuIcon}
+          />
+          <span className={styles.centerAgentModeMenuLabelWrap}>
+            <span className={styles.centerAgentModeMenuLabel}>{agent.name}</span>
+            {metaLabel ? <span className={styles.centerAgentModeMenuMeta}>{metaLabel}</span> : null}
+          </span>
+        </span>
+        <span className={styles.centerAgentModeMenuAction} aria-hidden="true">
+          {busy ? (
+            "..."
+          ) : (
+            <Image
+              src="/icons/app/cavcode/plus-large-svgrepo-com.svg"
+              alt=""
+              width={14}
+              height={14}
+              unoptimized
+              className={styles.centerAgentModeMenuActionIcon}
+            />
+          )}
+        </span>
+      </button>
+    );
+  }, [describeCenterAgentMeta, savingAgentId, toggleAgentInstalled]);
+
   const renderComposerMenuLayer = useCallback((args: {
     menu: Exclude<ComposerMenu, null>;
     className: string;
@@ -10004,6 +10472,18 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                     </summary>
                     {visibleInstalledCenterAgents.length ? (
                       <>
+                        {installedMyAgents.length ? (
+                          <details className={styles.centerAgentModeFamilyGroup} open aria-label="Installed private agents">
+                            <summary className={styles.centerAgentModeFamilyTitle}>My Agents</summary>
+                            {installedMyAgents.map((agent) => renderInstalledCenterAgentRow(agent, "installed-my"))}
+                          </details>
+                        ) : null}
+                        {installedPublishedCenterAgents.length ? (
+                          <details className={styles.centerAgentModeFamilyGroup} open aria-label="Installed published operator agents">
+                            <summary className={styles.centerAgentModeFamilyTitle}>Published by other operators</summary>
+                            {installedPublishedCenterAgents.map((agent) => renderInstalledCenterAgentRow(agent, "installed-published"))}
+                          </details>
+                        ) : null}
                         {installedCavAiAgents.length ? (
                           <details
                             className={styles.centerAgentModeFamilyGroup}
@@ -10011,297 +10491,13 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                             aria-label={`Installed ${centerPrimarySectionLabel} (${centerPrimaryFamilyLabel})`}
                           >
                             <summary className={styles.centerAgentModeFamilyTitle}>{centerPrimarySectionLabel}</summary>
-                            {installedCavAiAgents.map((agent) => {
-                              const isOn = selectedInstalledAgentOption?.id === agent.id
-                                && selectedInstalledAgentOption?.actionKey === agent.actionKey;
-                              return (
-                                <div
-                                  key={`agent-installed-${agent.id}`}
-                                  role="menuitemradio"
-                                  aria-checked={isOn}
-                                  tabIndex={0}
-                                  className={[
-                                    styles.iconMenuItem,
-                                    styles.centerAgentModeMenuItem,
-                                    isOn ? styles.centerAgentModeMenuItemOn : "",
-                                  ].filter(Boolean).join(" ")}
-                                  onClick={() => selectAgentModeOption(agent)}
-                                  onKeyDown={(event) => {
-                                    if (event.key !== "Enter" && event.key !== " ") return;
-                                    event.preventDefault();
-                                    selectAgentModeOption(agent);
-                                  }}
-                                  title={agent.summary || agent.name}
-                                >
-                                  <span className={styles.centerAgentModeMenuLead}>
-                                    <Image
-                                      src={agent.iconSrc}
-                                      alt=""
-                                      width={18}
-                                      height={18}
-                                      unoptimized
-                                      loading="eager"
-                                      data-agent-id={agent.id}
-                                      className={styles.centerAgentModeMenuIcon}
-                                    />
-                                    <span className={styles.centerAgentModeMenuLabelWrap}>
-                                      <span className={styles.centerAgentModeMenuLabel}>{agent.name}</span>
-                                    </span>
-                                  </span>
-                                  <span className={styles.centerAgentModeMenuActionWrap}>
-                                    <button
-                                      type="button"
-                                      className={styles.centerAgentModeManageBtn}
-                                      aria-label={`Manage ${agent.name}`}
-                                      title={`Manage ${agent.name}`}
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        setAgentModeManageAgentId((prev) => (prev === agent.id ? "" : agent.id));
-                                      }}
-                                    >
-                                      <svg
-                                        className={styles.centerAgentModeManageCheck}
-                                        viewBox="0 0 16 16"
-                                        aria-hidden="true"
-                                        focusable="false"
-                                      >
-                                        <path
-                                          d="M3.25 8.5L6.5 11.75L12.75 4.75"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          strokeWidth="1.9"
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                        />
-                                      </svg>
-                                      <svg
-                                        className={styles.centerAgentModeManageDots}
-                                        viewBox="0 0 16 16"
-                                        aria-hidden="true"
-                                        focusable="false"
-                                      >
-                                        <circle cx="3.5" cy="8" r="1.2" fill="currentColor" />
-                                        <circle cx="8" cy="8" r="1.2" fill="currentColor" />
-                                        <circle cx="12.5" cy="8" r="1.2" fill="currentColor" />
-                                      </svg>
-                                    </button>
-                                    {agentModeManageAgentId === agent.id ? (
-                                      <div
-                                        className={styles.centerAgentModeManageMenu}
-                                        role="menu"
-                                        onClick={(event) => event.stopPropagation()}
-                                      >
-                                        <button
-                                          type="button"
-                                          className={styles.centerAgentModeManageMenuItem}
-                                          onClick={(event) => {
-                                            event.stopPropagation();
-                                            uninstallAgentFromMenu(agent.id);
-                                          }}
-                                        >
-                                          Uninstall
-                                        </button>
-                                        {agent.source === "custom" ? (
-                                          <>
-                                            <button
-                                              type="button"
-                                              className={styles.centerAgentModeManageMenuItem}
-                                              onClick={(event) => {
-                                                event.stopPropagation();
-                                                moveCustomAgentSurface(agent.id, "cavcode");
-                                              }}
-                                              disabled={agent.surface === "cavcode"}
-                                            >
-                                              Move to Caven
-                                            </button>
-                                            <button
-                                              type="button"
-                                              className={styles.centerAgentModeManageMenuItem}
-                                              onClick={(event) => {
-                                                event.stopPropagation();
-                                                moveCustomAgentSurface(agent.id, "center");
-                                              }}
-                                              disabled={agent.surface === "center"}
-                                            >
-                                              Move to CavAi
-                                            </button>
-                                            <button
-                                              type="button"
-                                              className={styles.centerAgentModeManageMenuItem}
-                                              onClick={(event) => {
-                                                event.stopPropagation();
-                                                moveCustomAgentSurface(agent.id, "all");
-                                              }}
-                                              disabled={agent.surface === "all"}
-                                            >
-                                              Move to All Surfaces
-                                            </button>
-                                            <button
-                                              type="button"
-                                              className={[styles.centerAgentModeManageMenuItem, styles.centerAgentModeManageMenuItemDanger].join(" ")}
-                                              onClick={(event) => {
-                                                event.stopPropagation();
-                                                deleteCustomAgent(agent.id);
-                                              }}
-                                            >
-                                              Delete Agent
-                                            </button>
-                                          </>
-                                        ) : null}
-                                      </div>
-                                    ) : null}
-                                  </span>
-                                </div>
-                              );
-                            })}
+                            {installedCavAiAgents.map((agent) => renderInstalledCenterAgentRow(agent, "installed-primary"))}
                           </details>
                         ) : null}
                         {installedCavenAgents.length ? (
                           <details className={styles.centerAgentModeFamilyGroup} open aria-label="Installed Caven agents">
                             <summary className={styles.centerAgentModeFamilyTitle}>Caven</summary>
-                            {installedCavenAgents.map((agent) => {
-                              const isOn = selectedInstalledAgentOption?.id === agent.id
-                                && selectedInstalledAgentOption?.actionKey === agent.actionKey;
-                              return (
-                                <div
-                                  key={`agent-installed-${agent.id}`}
-                                  role="menuitemradio"
-                                  aria-checked={isOn}
-                                  tabIndex={0}
-                                  className={[
-                                    styles.iconMenuItem,
-                                    styles.centerAgentModeMenuItem,
-                                    isOn ? styles.centerAgentModeMenuItemOn : "",
-                                  ].filter(Boolean).join(" ")}
-                                  onClick={() => selectAgentModeOption(agent)}
-                                  onKeyDown={(event) => {
-                                    if (event.key !== "Enter" && event.key !== " ") return;
-                                    event.preventDefault();
-                                    selectAgentModeOption(agent);
-                                  }}
-                                  title={agent.summary || agent.name}
-                                >
-                                  <span className={styles.centerAgentModeMenuLead}>
-                                    <Image
-                                      src={agent.iconSrc}
-                                      alt=""
-                                      width={18}
-                                      height={18}
-                                      unoptimized
-                                      loading="eager"
-                                      data-agent-id={agent.id}
-                                      className={styles.centerAgentModeMenuIcon}
-                                    />
-                                    <span className={styles.centerAgentModeMenuLabelWrap}>
-                                      <span className={styles.centerAgentModeMenuLabel}>{agent.name}</span>
-                                    </span>
-                                  </span>
-                                  <span className={styles.centerAgentModeMenuActionWrap}>
-                                    <button
-                                      type="button"
-                                      className={styles.centerAgentModeManageBtn}
-                                      aria-label={`Manage ${agent.name}`}
-                                      title={`Manage ${agent.name}`}
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        setAgentModeManageAgentId((prev) => (prev === agent.id ? "" : agent.id));
-                                      }}
-                                    >
-                                      <svg
-                                        className={styles.centerAgentModeManageCheck}
-                                        viewBox="0 0 16 16"
-                                        aria-hidden="true"
-                                        focusable="false"
-                                      >
-                                        <path
-                                          d="M3.25 8.5L6.5 11.75L12.75 4.75"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          strokeWidth="1.9"
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                        />
-                                      </svg>
-                                      <svg
-                                        className={styles.centerAgentModeManageDots}
-                                        viewBox="0 0 16 16"
-                                        aria-hidden="true"
-                                        focusable="false"
-                                      >
-                                        <circle cx="3.5" cy="8" r="1.2" fill="currentColor" />
-                                        <circle cx="8" cy="8" r="1.2" fill="currentColor" />
-                                        <circle cx="12.5" cy="8" r="1.2" fill="currentColor" />
-                                      </svg>
-                                    </button>
-                                    {agentModeManageAgentId === agent.id ? (
-                                      <div
-                                        className={styles.centerAgentModeManageMenu}
-                                        role="menu"
-                                        onClick={(event) => event.stopPropagation()}
-                                      >
-                                        <button
-                                          type="button"
-                                          className={styles.centerAgentModeManageMenuItem}
-                                          onClick={(event) => {
-                                            event.stopPropagation();
-                                            uninstallAgentFromMenu(agent.id);
-                                          }}
-                                        >
-                                          Uninstall
-                                        </button>
-                                        {agent.source === "custom" ? (
-                                          <>
-                                            <button
-                                              type="button"
-                                              className={styles.centerAgentModeManageMenuItem}
-                                              onClick={(event) => {
-                                                event.stopPropagation();
-                                                moveCustomAgentSurface(agent.id, "cavcode");
-                                              }}
-                                              disabled={agent.surface === "cavcode"}
-                                            >
-                                              Move to Caven
-                                            </button>
-                                            <button
-                                              type="button"
-                                              className={styles.centerAgentModeManageMenuItem}
-                                              onClick={(event) => {
-                                                event.stopPropagation();
-                                                moveCustomAgentSurface(agent.id, "center");
-                                              }}
-                                              disabled={agent.surface === "center"}
-                                            >
-                                              Move to CavAi
-                                            </button>
-                                            <button
-                                              type="button"
-                                              className={styles.centerAgentModeManageMenuItem}
-                                              onClick={(event) => {
-                                                event.stopPropagation();
-                                                moveCustomAgentSurface(agent.id, "all");
-                                              }}
-                                              disabled={agent.surface === "all"}
-                                            >
-                                              Move to All Surfaces
-                                            </button>
-                                            <button
-                                              type="button"
-                                              className={[styles.centerAgentModeManageMenuItem, styles.centerAgentModeManageMenuItemDanger].join(" ")}
-                                              onClick={(event) => {
-                                                event.stopPropagation();
-                                                deleteCustomAgent(agent.id);
-                                              }}
-                                            >
-                                              Delete Agent
-                                            </button>
-                                          </>
-                                        ) : null}
-                                      </div>
-                                    ) : null}
-                                  </span>
-                                </div>
-                              );
-                            })}
+                            {installedCavenAgents.map((agent) => renderInstalledCenterAgentRow(agent, "installed-caven"))}
                           </details>
                         ) : null}
                       </>
@@ -10319,6 +10515,18 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                     </summary>
                     {visibleAvailableCenterAgentBank.length ? (
                       <>
+                        {bankMyAgents.length ? (
+                          <details className={styles.centerAgentModeFamilyGroup} open aria-label="Available private agents">
+                            <summary className={styles.centerAgentModeFamilyTitle}>My Agents</summary>
+                            {bankMyAgents.map((agent) => renderAvailableCenterAgentRow(agent, "available-my"))}
+                          </details>
+                        ) : null}
+                        {bankPublishedCenterAgents.length ? (
+                          <details className={styles.centerAgentModeFamilyGroup} open aria-label="Available published operator agents">
+                            <summary className={styles.centerAgentModeFamilyTitle}>Published by other operators</summary>
+                            {bankPublishedCenterAgents.map((agent) => renderAvailableCenterAgentRow(agent, "available-published"))}
+                          </details>
+                        ) : null}
                         {bankCavAiAgents.length ? (
                           <details
                             className={styles.centerAgentModeFamilyGroup}
@@ -10326,111 +10534,13 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                             aria-label={`Available ${centerPrimarySectionLabel} (${centerPrimaryFamilyLabel})`}
                           >
                             <summary className={styles.centerAgentModeFamilyTitle}>{centerPrimarySectionLabel}</summary>
-                            {bankCavAiAgents.map((agent) => {
-                              const busy = savingAgentId === agent.id;
-                              return (
-                                <button
-                                  key={`agent-bank-${agent.id}`}
-                                  type="button"
-                                  role="menuitem"
-                                  className={[
-                                    styles.iconMenuItem,
-                                    styles.centerAgentModeMenuItem,
-                                  ].filter(Boolean).join(" ")}
-                                  onClick={() => {
-                                    void toggleAgentInstalled(agent.id, true);
-                                  }}
-                                  disabled={busy}
-                                  aria-label={busy ? `Installing ${agent.name}` : `Install ${agent.name}`}
-                                  title={agent.summary || agent.name}
-                                >
-                                  <span className={styles.centerAgentModeMenuLead}>
-                                    <Image
-                                      src={agent.iconSrc}
-                                      alt=""
-                                      width={18}
-                                      height={18}
-                                      unoptimized
-                                      loading="eager"
-                                      data-agent-id={agent.id}
-                                      className={styles.centerAgentModeMenuIcon}
-                                    />
-                                    <span className={styles.centerAgentModeMenuLabelWrap}>
-                                      <span className={styles.centerAgentModeMenuLabel}>{agent.name}</span>
-                                    </span>
-                                  </span>
-                                  <span className={styles.centerAgentModeMenuAction} aria-hidden="true">
-                                    {busy ? (
-                                      "..."
-                                    ) : (
-                                      <Image
-                                        src="/icons/app/cavcode/plus-large-svgrepo-com.svg"
-                                        alt=""
-                                        width={14}
-                                        height={14}
-                                        unoptimized
-                                        className={styles.centerAgentModeMenuActionIcon}
-                                      />
-                                    )}
-                                  </span>
-                                </button>
-                              );
-                            })}
+                            {bankCavAiAgents.map((agent) => renderAvailableCenterAgentRow(agent, "available-primary"))}
                           </details>
                         ) : null}
                         {bankCavenAgents.length ? (
                           <details className={styles.centerAgentModeFamilyGroup} open aria-label="Available Caven agents">
                             <summary className={styles.centerAgentModeFamilyTitle}>Caven</summary>
-                            {bankCavenAgents.map((agent) => {
-                              const busy = savingAgentId === agent.id;
-                              return (
-                                <button
-                                  key={`agent-bank-${agent.id}`}
-                                  type="button"
-                                  role="menuitem"
-                                  className={[
-                                    styles.iconMenuItem,
-                                    styles.centerAgentModeMenuItem,
-                                  ].filter(Boolean).join(" ")}
-                                  onClick={() => {
-                                    void toggleAgentInstalled(agent.id, true);
-                                  }}
-                                  disabled={busy}
-                                  aria-label={busy ? `Installing ${agent.name}` : `Install ${agent.name}`}
-                                  title={agent.summary || agent.name}
-                                >
-                                  <span className={styles.centerAgentModeMenuLead}>
-                                    <Image
-                                      src={agent.iconSrc}
-                                      alt=""
-                                      width={18}
-                                      height={18}
-                                      unoptimized
-                                      loading="eager"
-                                      data-agent-id={agent.id}
-                                      className={styles.centerAgentModeMenuIcon}
-                                    />
-                                    <span className={styles.centerAgentModeMenuLabelWrap}>
-                                      <span className={styles.centerAgentModeMenuLabel}>{agent.name}</span>
-                                    </span>
-                                  </span>
-                                  <span className={styles.centerAgentModeMenuAction} aria-hidden="true">
-                                    {busy ? (
-                                      "..."
-                                    ) : (
-                                      <Image
-                                        src="/icons/app/cavcode/plus-large-svgrepo-com.svg"
-                                        alt=""
-                                        width={14}
-                                        height={14}
-                                        unoptimized
-                                        className={styles.centerAgentModeMenuActionIcon}
-                                      />
-                                    )}
-                                  </span>
-                                </button>
-                              );
-                            })}
+                            {bankCavenAgents.map((agent) => renderAvailableCenterAgentRow(agent, "available-caven"))}
                           </details>
                         ) : null}
                       </>
@@ -10457,100 +10567,19 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                             aria-label={`Locked ${centerPrimarySectionLabel} (${centerPrimaryFamilyLabel})`}
                           >
                             <summary className={styles.centerAgentModeFamilyTitle}>{centerPrimarySectionLabel}</summary>
-                            {lockedCavAiAgents.map((agent) => (
-                              <div
-                                key={`agent-locked-${agent.id}`}
-                                className={styles.centerAgentModeLockedRow}
-                                title={agent.summary || agent.name}
-                              >
-                                <span className={styles.centerAgentModeMenuLead}>
-                                  <Image
-                                    src={agent.iconSrc}
-                                    alt=""
-                                    width={18}
-                                    height={18}
-                                    unoptimized
-                                    loading="eager"
-                                    data-agent-id={agent.id}
-                                    className={styles.centerAgentModeMenuIcon}
-                                  />
-                                  <span className={styles.centerAgentModeMenuLabelWrap}>
-                                    <span className={styles.centerAgentModeMenuLabel}>{agent.name}</span>
-                                  </span>
-                                </span>
-                                <span className={styles.centerAgentModeLockedMeta}>
-                                  <Link href="/plan" className={styles.centerAgentModeUpgradeCta}>
-                                    <LockIcon width={14} height={14} aria-hidden="true" />
-                                  </Link>
-                                </span>
-                              </div>
-                            ))}
+                            {lockedCavAiAgents.map((agent) => renderLockedCenterAgentRow(agent, "locked-primary"))}
                           </details>
                         ) : null}
                         {lockedCavenAgents.length ? (
                           <details className={styles.centerAgentModeFamilyGroup} open aria-label="Locked Caven agents">
                             <summary className={styles.centerAgentModeFamilyTitle}>Caven</summary>
-                            {lockedCavenAgents.map((agent) => (
-                              <div
-                                key={`agent-locked-${agent.id}`}
-                                className={styles.centerAgentModeLockedRow}
-                                title={agent.summary || agent.name}
-                              >
-                                <span className={styles.centerAgentModeMenuLead}>
-                                  <Image
-                                    src={agent.iconSrc}
-                                    alt=""
-                                    width={18}
-                                    height={18}
-                                    unoptimized
-                                    loading="eager"
-                                    data-agent-id={agent.id}
-                                    className={styles.centerAgentModeMenuIcon}
-                                  />
-                                  <span className={styles.centerAgentModeMenuLabelWrap}>
-                                    <span className={styles.centerAgentModeMenuLabel}>{agent.name}</span>
-                                  </span>
-                                </span>
-                                <span className={styles.centerAgentModeLockedMeta}>
-                                  <Link href="/plan" className={styles.centerAgentModeUpgradeCta}>
-                                    <LockIcon width={14} height={14} aria-hidden="true" />
-                                  </Link>
-                                </span>
-                              </div>
-                            ))}
+                            {lockedCavenAgents.map((agent) => renderLockedCenterAgentRow(agent, "locked-caven"))}
                           </details>
                         ) : null}
                         {isGuestPreviewMode && lockedCompanionAgents.length ? (
                           <details className={styles.centerAgentModeFamilyGroup} open aria-label="Locked CavBot Companion agents">
                             <summary className={styles.centerAgentModeFamilyTitle}>CavBot Companion</summary>
-                            {lockedCompanionAgents.map((agent) => (
-                              <div
-                                key={`agent-locked-${agent.id}`}
-                                className={styles.centerAgentModeLockedRow}
-                                title={agent.summary || agent.name}
-                              >
-                                <span className={styles.centerAgentModeMenuLead}>
-                                  <Image
-                                    src={agent.iconSrc}
-                                    alt=""
-                                    width={18}
-                                    height={18}
-                                    unoptimized
-                                    loading="eager"
-                                    data-agent-id={agent.id}
-                                    className={styles.centerAgentModeMenuIcon}
-                                  />
-                                  <span className={styles.centerAgentModeMenuLabelWrap}>
-                                    <span className={styles.centerAgentModeMenuLabel}>{agent.name}</span>
-                                  </span>
-                                </span>
-                                <span className={styles.centerAgentModeLockedMeta}>
-                                  <Link href="/plan" className={styles.centerAgentModeUpgradeCta}>
-                                    <LockIcon width={14} height={14} aria-hidden="true" />
-                                  </Link>
-                                </span>
-                              </div>
-                            ))}
+                            {lockedCompanionAgents.map((agent) => renderLockedCenterAgentRow(agent, "locked-companion"))}
                           </details>
                         ) : null}
                       </>
@@ -10853,6 +10882,224 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
   const activeImageStudioGallery = imageStudioImportSource === "cavsafe" ? imageStudioGallerySafe : imageStudioGalleryCloud;
   const showInlineError = Boolean(error) && !isCenterLoadFailureMessage(error);
+  const showDesktopGuestAuthPanel = !overlay && !isPhoneLayout && isGuestPreviewMode && accountMenuOpen;
+  const renderGuestAuthPanel = (opts?: { docked?: boolean }) => (
+    <div
+      className={[
+        styles.centerGuestAuthPanel,
+        opts?.docked ? styles.centerGuestAuthPanelDocked : "",
+      ].filter(Boolean).join(" ")}
+      role="dialog"
+      aria-modal="false"
+      aria-label="Sign in or create an account"
+    >
+      <div className={styles.centerGuestAuthPanelHead}>
+        <Image
+          src="/logo/official-logotype-light.svg"
+          alt="CavBot"
+          width={176}
+          height={29}
+          className={styles.centerGuestAuthPanelLogotype}
+          priority
+        />
+        <button
+          type="button"
+          className={styles.centerGuestAuthCloseBtn}
+          onClick={closeGuestAuthPanel}
+          aria-label="Close auth panel"
+          disabled={guestAuthBusy}
+        >
+          <span className={styles.centerGuestAuthCloseGlyph} aria-hidden="true" />
+        </button>
+      </div>
+      <div className={styles.centerGuestAuthPanelBody}>
+        <h3 className={styles.centerGuestAuthTitle}>Sign in or create an account</h3>
+        <p className={styles.centerGuestAuthSubtitle}>Save and sync your searches</p>
+
+        <button
+          type="button"
+          className={styles.centerGuestAuthProviderBtn}
+          onClick={() => onGuestAuthOauth("google")}
+          disabled={guestAuthBusy}
+        >
+          <span className={styles.centerGuestAuthProviderIcon} aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+              <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.6 3.8-5.5 3.8-3.3 0-6-2.7-6-6.1S8.7 5.7 12 5.7c1.9 0 3.2.8 3.9 1.6l2.6-2.5C16.9 3.3 14.7 2 12 2 6.9 2 2.8 6.1 2.8 11.8S6.9 21.6 12 21.6c6.9 0 8.6-4.9 8.6-7.4 0-.5-.1-1-.1-1.4H12Z" />
+              <path fill="#34A853" d="M3.6 7.3l3.2 2.3C7.7 7.4 9.7 5.7 12 5.7c1.9 0 3.2.8 3.9 1.6l2.6-2.5C16.9 3.3 14.7 2 12 2 8.4 2 5.2 4 3.6 7.3Z" />
+              <path fill="#FBBC05" d="M12 21.6c2.7 0 5-1 6.7-2.6l-3.1-2.4c-.8.6-2 1.3-3.6 1.3-2.3 0-4.3-1.5-5.1-3.7l-3.3 2.5c1.6 3 4.7 4.9 8.4 4.9Z" />
+              <path fill="#4285F4" d="M20.5 11.8c0-.5-.1-1-.1-1.4H12v3.9h5.5c-.3 1.4-1.2 2.6-2.6 3.4l3.1 2.4c1.8-1.7 2.5-4.2 2.5-6.3Z" />
+            </svg>
+          </span>
+          Continue with Google
+        </button>
+        <button
+          type="button"
+          className={styles.centerGuestAuthProviderBtn}
+          onClick={() => onGuestAuthOauth("github")}
+          disabled={guestAuthBusy}
+        >
+          <span className={styles.centerGuestAuthProviderIcon} aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+              <path
+                fill="currentColor"
+                d="M12 .5C5.73.5.75 5.63.75 12c0 5.1 3.29 9.42 7.86 10.95.57.11.78-.25.78-.56 0-.28-.01-1.02-.02-2-3.2.71-3.88-1.58-3.88-1.58-.52-1.36-1.28-1.72-1.28-1.72-1.05-.74.08-.73.08-.73 1.16.08 1.77 1.22 1.77 1.22 1.03 1.8 2.7 1.28 3.36.98.1-.77.4-1.28.72-1.58-2.55-.3-5.23-1.3-5.23-5.8 0-1.28.45-2.33 1.18-3.15-.12-.3-.51-1.53.11-3.18 0 0 .97-.32 3.18 1.2a10.7 10.7 0 0 1 2.9-.4c.98 0 1.97.14 2.9.4 2.21-1.52 3.18-1.2 3.18-1.2.62 1.65.23 2.88.11 3.18.74.82 1.18 1.87 1.18 3.15 0 4.51-2.69 5.5-5.25 5.79.41.36.78 1.08.78 2.18 0 1.58-.01 2.85-.01 3.23 0 .31.2.67.79.56A11.28 11.28 0 0 0 23.25 12C23.25 5.63 18.27.5 12 .5Z"
+              />
+            </svg>
+          </span>
+          Continue with GitHub
+        </button>
+
+        <div className={styles.centerGuestAuthDivider} role="separator" aria-label="or continue with email">
+          <span>or</span>
+        </div>
+
+        <form
+          className={styles.centerGuestAuthForm}
+          onSubmit={(event) => {
+            event.preventDefault();
+            onGuestAuthPrimaryAction();
+          }}
+        >
+          {guestAuthStage === "email" ? (
+            <div className={styles.centerGuestAuthField}>
+              <input
+                id="cavai-guest-auth-email"
+                type="email"
+                autoComplete="email"
+                className={[styles.centerGuestAuthInput, styles.centerGuestAuthEmailInput].join(" ")}
+                value={guestAuthEmail}
+                onChange={(event) => {
+                  setGuestAuthEmail(event.currentTarget.value);
+                  setGuestAuthError("");
+                }}
+                placeholder="Enter your email"
+                aria-label="Email"
+                disabled={guestAuthBusy}
+                required
+              />
+            </div>
+          ) : null}
+
+          {guestAuthStage === "login_password" ? (
+            <>
+              <div className={styles.centerGuestAuthField}>
+                <div className={styles.centerGuestAuthEmailValue}>{guestAuthEmail}</div>
+              </div>
+              <div className={styles.centerGuestAuthField}>
+                <input
+                  id="cavai-guest-auth-password-login"
+                  type="password"
+                  autoComplete="current-password"
+                  className={[styles.centerGuestAuthInput, styles.centerGuestAuthPasswordInput].join(" ")}
+                  value={guestAuthPassword}
+                  onChange={(event) => {
+                    setGuestAuthPassword(event.currentTarget.value);
+                    setGuestAuthError("");
+                  }}
+                  placeholder="Enter your password"
+                  aria-label="Password"
+                  disabled={guestAuthBusy}
+                  required
+                />
+              </div>
+            </>
+          ) : null}
+
+          {guestAuthStage === "signup_details" ? (
+            <>
+              <div className={styles.centerGuestAuthField}>
+                <div className={styles.centerGuestAuthEmailValue}>{guestAuthEmail}</div>
+              </div>
+              <div className={styles.centerGuestAuthField}>
+                <label className={styles.centerGuestAuthLabel} htmlFor="cavai-guest-auth-name">
+                  Name (optional)
+                </label>
+                <input
+                  id="cavai-guest-auth-name"
+                  type="text"
+                  autoComplete="name"
+                  className={styles.centerGuestAuthInput}
+                  value={guestAuthName}
+                  onChange={(event) => {
+                    setGuestAuthName(event.currentTarget.value);
+                    setGuestAuthError("");
+                  }}
+                  placeholder="Name"
+                  disabled={guestAuthBusy}
+                />
+              </div>
+              <div className={styles.centerGuestAuthField}>
+                <label className={styles.centerGuestAuthLabel} htmlFor="cavai-guest-auth-username">
+                  Username
+                </label>
+                <input
+                  id="cavai-guest-auth-username"
+                  type="text"
+                  autoComplete="username"
+                  className={styles.centerGuestAuthInput}
+                  value={guestAuthUsername}
+                  onChange={(event) => {
+                    setGuestAuthUsername(event.currentTarget.value.toLowerCase());
+                    setGuestAuthError("");
+                  }}
+                  placeholder="Username"
+                  disabled={guestAuthBusy}
+                  required
+                />
+              </div>
+              <div className={styles.centerGuestAuthField}>
+                <input
+                  id="cavai-guest-auth-password-signup"
+                  type="password"
+                  autoComplete="new-password"
+                  className={[styles.centerGuestAuthInput, styles.centerGuestAuthPasswordInput].join(" ")}
+                  value={guestAuthPassword}
+                  onChange={(event) => {
+                    setGuestAuthPassword(event.currentTarget.value);
+                    setGuestAuthError("");
+                  }}
+                  placeholder="Use at least 10 characters"
+                  aria-label="Password"
+                  disabled={guestAuthBusy}
+                  required
+                />
+              </div>
+            </>
+          ) : null}
+
+          {guestAuthStage !== "email" ? (
+            <button
+              type="button"
+              className={styles.centerGuestAuthSwitchBtn}
+              onClick={() => {
+                setGuestAuthStage("email");
+                setGuestAuthPassword("");
+                setGuestAuthError("");
+              }}
+              disabled={guestAuthBusy}
+            >
+              Use a different email
+            </button>
+          ) : null}
+
+          <button
+            type="submit"
+            className={styles.centerGuestAuthSubmitBtn}
+            disabled={guestAuthBusy || (guestAuthStage === "email" && s(guestAuthEmail).length < 1)}
+          >
+            {guestAuthBusy
+              ? "Please wait..."
+              : guestAuthStage === "email"
+                ? "Continue with email"
+                : guestAuthStage === "login_password"
+                  ? "Log in"
+                  : "Sign up"}
+          </button>
+        </form>
+        {guestAuthError ? <p className={styles.centerGuestAuthError}>{guestAuthError}</p> : null}
+      </div>
+    </div>
+  );
 
   if (!isOpen) return null;
 
@@ -11056,220 +11303,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
                       </span>
                       <span className={styles.centerSidebarActionText}>CavBot Operator</span>
                     </button>
-                    {accountMenuOpen ? (
-                      <div
-                        className={styles.centerGuestAuthPanel}
-                        role="dialog"
-                        aria-modal="false"
-                        aria-label="Sign in or create an account"
-                      >
-                        <div className={styles.centerGuestAuthPanelHead}>
-                          <Image
-                            src="/logo/official-logotype-light.svg"
-                            alt="CavBot"
-                            width={176}
-                            height={29}
-                            className={styles.centerGuestAuthPanelLogotype}
-                            priority
-                          />
-                          <button
-                            type="button"
-                            className={styles.centerGuestAuthCloseBtn}
-                            onClick={closeGuestAuthPanel}
-                            aria-label="Close auth panel"
-                            disabled={guestAuthBusy}
-                          >
-                            <span className={styles.centerGuestAuthCloseGlyph} aria-hidden="true" />
-                          </button>
-                        </div>
-                        <div className={styles.centerGuestAuthPanelBody}>
-                          <h3 className={styles.centerGuestAuthTitle}>Sign in or create an account</h3>
-                          <p className={styles.centerGuestAuthSubtitle}>Save and sync your searches</p>
-
-                          <button
-                            type="button"
-                            className={styles.centerGuestAuthProviderBtn}
-                            onClick={() => onGuestAuthOauth("google")}
-                            disabled={guestAuthBusy}
-                          >
-                            <span className={styles.centerGuestAuthProviderIcon} aria-hidden="true">
-                              <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
-                                <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.6 3.8-5.5 3.8-3.3 0-6-2.7-6-6.1S8.7 5.7 12 5.7c1.9 0 3.2.8 3.9 1.6l2.6-2.5C16.9 3.3 14.7 2 12 2 6.9 2 2.8 6.1 2.8 11.8S6.9 21.6 12 21.6c6.9 0 8.6-4.9 8.6-7.4 0-.5-.1-1-.1-1.4H12Z" />
-                                <path fill="#34A853" d="M3.6 7.3l3.2 2.3C7.7 7.4 9.7 5.7 12 5.7c1.9 0 3.2.8 3.9 1.6l2.6-2.5C16.9 3.3 14.7 2 12 2 8.4 2 5.2 4 3.6 7.3Z" />
-                                <path fill="#FBBC05" d="M12 21.6c2.7 0 5-1 6.7-2.6l-3.1-2.4c-.8.6-2 1.3-3.6 1.3-2.3 0-4.3-1.5-5.1-3.7l-3.3 2.5c1.6 3 4.7 4.9 8.4 4.9Z" />
-                                <path fill="#4285F4" d="M20.5 11.8c0-.5-.1-1-.1-1.4H12v3.9h5.5c-.3 1.4-1.2 2.6-2.6 3.4l3.1 2.4c1.8-1.7 2.5-4.2 2.5-6.3Z" />
-                              </svg>
-                            </span>
-                            Continue with Google
-                          </button>
-                          <button
-                            type="button"
-                            className={styles.centerGuestAuthProviderBtn}
-                            onClick={() => onGuestAuthOauth("github")}
-                            disabled={guestAuthBusy}
-                          >
-                            <span className={styles.centerGuestAuthProviderIcon} aria-hidden="true">
-                              <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
-                                <path
-                                  fill="currentColor"
-                                  d="M12 .5C5.73.5.75 5.63.75 12c0 5.1 3.29 9.42 7.86 10.95.57.11.78-.25.78-.56 0-.28-.01-1.02-.02-2-3.2.71-3.88-1.58-3.88-1.58-.52-1.36-1.28-1.72-1.28-1.72-1.05-.74.08-.73.08-.73 1.16.08 1.77 1.22 1.77 1.22 1.03 1.8 2.7 1.28 3.36.98.1-.77.4-1.28.72-1.58-2.55-.3-5.23-1.3-5.23-5.8 0-1.28.45-2.33 1.18-3.15-.12-.3-.51-1.53.11-3.18 0 0 .97-.32 3.18 1.2a10.7 10.7 0 0 1 2.9-.4c.98 0 1.97.14 2.9.4 2.21-1.52 3.18-1.2 3.18-1.2.62 1.65.23 2.88.11 3.18.74.82 1.18 1.87 1.18 3.15 0 4.51-2.69 5.5-5.25 5.79.41.36.78 1.08.78 2.18 0 1.58-.01 2.85-.01 3.23 0 .31.2.67.79.56A11.28 11.28 0 0 0 23.25 12C23.25 5.63 18.27.5 12 .5Z"
-                                />
-                              </svg>
-                            </span>
-                            Continue with GitHub
-                          </button>
-
-                          <div className={styles.centerGuestAuthDivider} role="separator" aria-label="or continue with email">
-                            <span>or</span>
-                          </div>
-
-                          <form
-                            className={styles.centerGuestAuthForm}
-                            onSubmit={(event) => {
-                              event.preventDefault();
-                              onGuestAuthPrimaryAction();
-                            }}
-                          >
-                            {guestAuthStage === "email" ? (
-                              <div className={styles.centerGuestAuthField}>
-                                <input
-                                  id="cavai-guest-auth-email"
-                                  type="email"
-                                  autoComplete="email"
-                                  className={[styles.centerGuestAuthInput, styles.centerGuestAuthEmailInput].join(" ")}
-                                  value={guestAuthEmail}
-                                  onChange={(event) => {
-                                    setGuestAuthEmail(event.currentTarget.value);
-                                    setGuestAuthError("");
-                                  }}
-                                  placeholder="Enter your email"
-                                  aria-label="Email"
-                                  disabled={guestAuthBusy}
-                                  required
-                                />
-                              </div>
-                            ) : null}
-
-                            {guestAuthStage === "login_password" ? (
-                              <>
-                                <div className={styles.centerGuestAuthField}>
-                                  <div className={styles.centerGuestAuthEmailValue}>{guestAuthEmail}</div>
-                                </div>
-                                <div className={styles.centerGuestAuthField}>
-                                  <input
-                                    id="cavai-guest-auth-password-login"
-                                    type="password"
-                                    autoComplete="current-password"
-                                    className={[styles.centerGuestAuthInput, styles.centerGuestAuthPasswordInput].join(" ")}
-                                    value={guestAuthPassword}
-                                    onChange={(event) => {
-                                      setGuestAuthPassword(event.currentTarget.value);
-                                      setGuestAuthError("");
-                                    }}
-                                    placeholder="Enter your password"
-                                    aria-label="Password"
-                                    disabled={guestAuthBusy}
-                                    required
-                                  />
-                                </div>
-                              </>
-                            ) : null}
-
-                            {guestAuthStage === "signup_details" ? (
-                              <>
-                                <div className={styles.centerGuestAuthField}>
-                                  <div className={styles.centerGuestAuthEmailValue}>{guestAuthEmail}</div>
-                                </div>
-                                <div className={styles.centerGuestAuthField}>
-                                  <label className={styles.centerGuestAuthLabel} htmlFor="cavai-guest-auth-name">
-                                    Name (optional)
-                                  </label>
-                                  <input
-                                    id="cavai-guest-auth-name"
-                                    type="text"
-                                    autoComplete="name"
-                                    className={styles.centerGuestAuthInput}
-                                    value={guestAuthName}
-                                    onChange={(event) => {
-                                      setGuestAuthName(event.currentTarget.value);
-                                      setGuestAuthError("");
-                                    }}
-                                    placeholder="Name"
-                                    disabled={guestAuthBusy}
-                                  />
-                                </div>
-                                <div className={styles.centerGuestAuthField}>
-                                  <label className={styles.centerGuestAuthLabel} htmlFor="cavai-guest-auth-username">
-                                    Username
-                                  </label>
-                                  <input
-                                    id="cavai-guest-auth-username"
-                                    type="text"
-                                    autoComplete="username"
-                                    className={styles.centerGuestAuthInput}
-                                    value={guestAuthUsername}
-                                    onChange={(event) => {
-                                      setGuestAuthUsername(event.currentTarget.value.toLowerCase());
-                                      setGuestAuthError("");
-                                    }}
-                                    placeholder="Username"
-                                    disabled={guestAuthBusy}
-                                    required
-                                  />
-                                </div>
-                                <div className={styles.centerGuestAuthField}>
-                                  <input
-                                    id="cavai-guest-auth-password-signup"
-                                    type="password"
-                                    autoComplete="new-password"
-                                    className={[styles.centerGuestAuthInput, styles.centerGuestAuthPasswordInput].join(" ")}
-                                    value={guestAuthPassword}
-                                    onChange={(event) => {
-                                      setGuestAuthPassword(event.currentTarget.value);
-                                      setGuestAuthError("");
-                                    }}
-                                    placeholder="Use at least 10 characters"
-                                    aria-label="Password"
-                                    disabled={guestAuthBusy}
-                                    required
-                                  />
-                                </div>
-                              </>
-                            ) : null}
-
-                            {guestAuthStage !== "email" ? (
-                              <button
-                                type="button"
-                                className={styles.centerGuestAuthSwitchBtn}
-                                onClick={() => {
-                                  setGuestAuthStage("email");
-                                  setGuestAuthPassword("");
-                                  setGuestAuthError("");
-                                }}
-                                disabled={guestAuthBusy}
-                              >
-                                Use a different email
-                              </button>
-                            ) : null}
-
-                            <button
-                              type="submit"
-                              className={styles.centerGuestAuthSubmitBtn}
-                              disabled={guestAuthBusy || (guestAuthStage === "email" && s(guestAuthEmail).length < 1)}
-                            >
-                              {guestAuthBusy
-                                ? "Please wait..."
-                                : guestAuthStage === "email"
-                                  ? "Continue with email"
-                                  : guestAuthStage === "login_password"
-                                    ? "Log in"
-                                    : "Sign up"}
-                            </button>
-                          </form>
-                          {guestAuthError ? <p className={styles.centerGuestAuthError}>{guestAuthError}</p> : null}
-                        </div>
-                      </div>
-                    ) : null}
+                    {accountMenuOpen && isPhoneLayout ? renderGuestAuthPanel() : null}
                   </div>
                   ) : null
                 ) : (
@@ -11346,7 +11380,13 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
           </aside>
         ) : null}
 
-        <section className={styles.centerMain} aria-label="CavAi chat workspace">
+        <section
+          className={[
+            styles.centerMain,
+            showDesktopGuestAuthPanel ? styles.centerMainWithGuestAuth : "",
+          ].filter(Boolean).join(" ")}
+          aria-label="CavAi chat workspace"
+        >
           <header className={styles.centerMainHeader}>
             {!overlay ? (
               <div className={styles.centerMobileHeaderLeft}>
@@ -11582,7 +11622,26 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
             </section>
           ) : null}
 
-          <section ref={threadRef} className={styles.centerThread} aria-label="Conversation stream" onScroll={onThreadScroll}>
+          {showDesktopGuestAuthPanel ? renderGuestAuthPanel({ docked: true }) : null}
+
+          <section
+            ref={threadRef}
+            className={styles.centerThread}
+            aria-label="Conversation stream"
+            onScroll={onThreadScroll}
+            style={{ position: "relative" }}
+          >
+            {showVoiceOrb ? (
+              <CavAiVoiceOrb
+                active
+                mode={voiceOrbState}
+                mediaStream={voiceOrbStream}
+                placement={isEmptyThread ? "center" : "bottom"}
+                centerOffsetY={centerComposerInThread ? -84 : -28}
+                bottomOffset={22}
+                label="CavAi voice activity"
+              />
+            ) : null}
             <div className={threadInnerClassName}>
               {isEmptyThread ? (
                 <div

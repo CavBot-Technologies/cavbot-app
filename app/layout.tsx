@@ -1,19 +1,16 @@
 // app/layout.tsx
 import type { Metadata } from "next";
-import { Suspense, type ReactNode } from "react";
-import Script from "next/script";
+import { type ReactNode } from "react";
+import { headers } from "next/headers";
 import "./globals.css";
 import "./workspace.css";
+import "./admin-internal/admin.css";
 import "@/components/LightToggle.css";
-import BrowserStoreBoot from "./_components/BrowserStoreBoot";
-import CavbotBadgeMotion from "./_components/CavbotBadgeMotion";
-import GlobalFooterMount from "./_components/GlobalFooterMount";
-import IconWarmup from "./_components/IconWarmup";
-import RouteLifecycle from "./_components/RouteLifecycle";
-import SystemStatusBootstrap from "@/components/status/SystemStatusBootstrap";
-import { resolveCavbotAssetPolicy } from "@/lib/cavbotAssetPolicy";
+import AppHostRuntimeMounts, { AppHostPreconnectLink } from "./_components/AppHostRuntimeMounts";
+import { shouldRenderSharedRootRuntime } from "@/lib/admin/rootRuntime";
 
-const APP_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://app.cavbot.io";
+const APP_ORIGIN =
+  process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://app.cavbot.io";
 
 export const metadata: Metadata = {
   metadataBase: new URL(APP_ORIGIN),
@@ -78,7 +75,6 @@ export const viewport = {
 };
 
 export const runtime = "nodejs";
-const OFFICIAL_CDN_ASSETS = resolveCavbotAssetPolicy("customer_snippet");
 const browserStoreBootstrapScript = `(function(){function c(){var m=new Map();return{get length(){return m.size;},key:function(i){if(!Number.isFinite(i)||i<0)return null;var k=Array.from(m.keys());return k[Math.trunc(i)]||null;},getItem:function(k){var n=String(k||"");if(!n)return null;return m.has(n)?String(m.get(n)||""):null;},setItem:function(k,v){var n=String(k||"");if(!n)return;m.set(n,String(v??""));},removeItem:function(k){var n=String(k||"");if(!n)return;m.delete(n);},clear:function(){m.clear();}};}if(!globalThis.__cbLocalStore)globalThis.__cbLocalStore=c();if(!globalThis.__cbSessionStore)globalThis.__cbSessionStore=c();})();`;
 
 type RootLayoutProps = {
@@ -86,11 +82,14 @@ type RootLayoutProps = {
 };
 
 export default function RootLayout({ children }: RootLayoutProps) {
+  const host = headers().get("host");
+  const renderSharedRuntime = shouldRenderSharedRootRuntime(host);
+
   return (
     <html lang="en" data-cavbot-react-app="1" style={{ backgroundColor: "#01030f" }}>
       <head>
         <script id="cb-browser-store-shim" dangerouslySetInnerHTML={{ __html: browserStoreBootstrapScript }} />
-        <link rel="preconnect" href={OFFICIAL_CDN_ASSETS.baseUrl} crossOrigin="" />
+        {renderSharedRuntime ? <AppHostPreconnectLink /> : null}
       </head>
 
       <body style={{ backgroundColor: "#01030f", color: "#c5cee7" }}>
@@ -99,32 +98,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
           Skip to content
         </a>
 
-        <Suspense fallback={null}>
-          <BrowserStoreBoot />
-        </Suspense>
-        <Suspense fallback={null}>
-          <RouteLifecycle />
-        </Suspense>
-        <Suspense fallback={null}>
-          <CavbotBadgeMotion />
-        </Suspense>
-        <Suspense fallback={null}>
-          <IconWarmup />
-        </Suspense>
-        <Suspense fallback={null}>
-          <SystemStatusBootstrap />
-        </Suspense>
+        {renderSharedRuntime ? <AppHostRuntimeMounts /> : null}
 
         {children}
-        <Suspense fallback={null}>
-          <GlobalFooterMount />
-        </Suspense>
-        <Script
-          id="cavbot-official-brain-cdn"
-          src={OFFICIAL_CDN_ASSETS.scripts.brain}
-          strategy="afterInteractive"
-          crossOrigin="anonymous"
-        />
       </body>
     </html>
   );

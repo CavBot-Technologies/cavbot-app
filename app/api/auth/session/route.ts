@@ -5,8 +5,9 @@ import "server-only";
 import { NextResponse } from "next/server";
 import {
   createSystemSession,
-  createUserSession,
   getSession,
+  createUserSession,
+  requireSession,
   requireSystemToken,
   isApiAuthError,
   sessionCookieOptions,
@@ -19,6 +20,8 @@ import {
   getAuthPool,
   pickPrimaryMembership,
 } from "@/lib/authDb";
+import { getAccountDisciplineState } from "@/lib/admin/accountDiscipline.server";
+import { getUserDisciplineState } from "@/lib/admin/userDiscipline.server";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
 
 
@@ -61,6 +64,31 @@ function normalizeRole(value: string | null | undefined): Role {
 
 function normalizeEmail(x: unknown) {
   return String(x ?? "").trim().toLowerCase();
+}
+
+function buildDegradedBootstrapFromSession(sess: CavbotSession) {
+  if (sess.systemRole !== "user") return null;
+
+  const userId = String(sess.sub || "").trim();
+  const accountId = String(sess.accountId || "").trim();
+  if (!userId || !accountId) return null;
+
+  return {
+    mode: "user" as const,
+    session: {
+      userId,
+      email: null,
+      displayName: null,
+      accountId,
+      memberRole: normalizeRole(sess.memberRole),
+    },
+    account: {
+      id: accountId,
+      slug: null,
+      tier: null,
+      name: null,
+    },
+  };
 }
 
 
@@ -169,13 +197,11 @@ function makeClientMeta(req: Request) {
  *   Session history requires a real Session table + capture on login/refresh.
  */
 export async function GET(req: Request) {
+  let sess: CavbotSession | null = await getSession(req).catch(() => null);
+
   try {
-    const sess: CavbotSession | null = await getSession(req);
     const client = makeClientMeta(req);
-
-
-    // Not logged in -> always 200
-    if (!sess) return json({ ok: true, authed: false, client }, 200);
+    sess = await requireSession(req);
 
 
     // System session (ops)
@@ -189,7 +215,7 @@ export async function GET(req: Request) {
 
 
     if (!userId || !accountId) {
-      const res = json({ ok: true, authed: false, reason: "missing_session_fields", client }, 200);
+      const res = json({ ok: true, authed: false, signedOut: true, reason: "missing_session_fields", client }, 200);
       return clearSessionCookie(req, res);
     }
 
@@ -199,10 +225,9 @@ export async function GET(req: Request) {
 
 
     if (!membership) {
-      const res = json({ ok: true, authed: false, reason: "no_membership", client }, 200);
+      const res = json({ ok: true, authed: false, signedOut: true, reason: "no_membership", client }, 200);
       return clearSessionCookie(req, res);
     }
-
 
     // IMPORTANT:
     // membership.role is the source-of-truth (cookie role can be stale)
@@ -211,6 +236,7 @@ export async function GET(req: Request) {
         ok: true,
         authed: true,
         mode: "user",
+        signedOut: false,
         session: {
           userId: membership.userId,
           email: membership.userEmail,
@@ -231,14 +257,59 @@ export async function GET(req: Request) {
   } catch (error) {
     // Always return 200 for session bootstrap stability
     const client = makeClientMeta(req);
+    const authErrorCode = isApiAuthError(error) ? error.code : "";
 
 
-    if (isApiAuthError(error)) {
-      const res = json({ ok: true, authed: false, error: error.code, client }, 200);
+    if (isApiAuthError(error) && (error.status === 401 || error.status === 403)) {
+      const res = json({ ok: true, authed: false, signedOut: true, error: error.code, client }, 200);
       return clearSessionCookie(req, res);
     }
-    const res = json({ ok: true, authed: false, client }, 200);
-    return clearSessionCookie(req, res);
+
+    if (sess?.systemRole === "system") {
+      return json(
+        {
+          ok: true,
+          authed: true,
+          mode: "system",
+          degraded: true,
+          indeterminate: true,
+          retryable: true,
+          ...(authErrorCode ? { error: authErrorCode } : {}),
+          client,
+        },
+        200
+      );
+    }
+
+    const degraded = sess ? buildDegradedBootstrapFromSession(sess) : null;
+    if (degraded) {
+      return json(
+        {
+          ok: true,
+          authed: true,
+          degraded: true,
+          indeterminate: true,
+          retryable: true,
+          ...(authErrorCode ? { error: authErrorCode } : {}),
+          client,
+          ...degraded,
+        },
+        200
+      );
+    }
+
+    return json(
+      {
+        ok: true,
+        authed: false,
+        degraded: true,
+        indeterminate: true,
+        retryable: true,
+        ...(authErrorCode ? { error: authErrorCode } : {}),
+        client,
+      },
+      200
+    );
   }
 }
 
@@ -294,6 +365,24 @@ export async function POST(req: Request) {
 
 
     if (!active) return json({ ok: false, error: "user_not_found_or_no_membership" }, 404);
+    {
+      const discipline = await getUserDisciplineState(user.id);
+      if (discipline?.status === "REVOKED") {
+        return json({ ok: false, error: "USER_REVOKED" }, 403);
+      }
+      if (discipline?.status === "SUSPENDED") {
+        return json({ ok: false, error: "USER_SUSPENDED" }, 403);
+      }
+    }
+    {
+      const discipline = await getAccountDisciplineState(active.accountId);
+      if (discipline?.status === "REVOKED") {
+        return json({ ok: false, error: "ACCOUNT_REVOKED" }, 403);
+      }
+      if (discipline?.status === "SUSPENDED") {
+        return json({ ok: false, error: "ACCOUNT_SUSPENDED" }, 403);
+      }
+    }
 
     const memberRole = normalizeRole(active.role);
     const token = await createUserSession({

@@ -8,7 +8,12 @@ import {
   requireUser,
   type CavbotAccountSession,
 } from "@/lib/apiAuth";
-import { resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
+import {
+  findLatestEntitledSubscription,
+  resolveEffectivePlanId as resolveEffectiveAccountPlanId,
+} from "@/lib/accountPlan.server";
+import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
+import type { PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 
 export type CavsafePlanId = Extract<PlanId, "premium" | "premium_plus">;
@@ -18,37 +23,97 @@ export type CavsafeAuthorizedSession = CavbotAccountSession & {
   cavsafePremiumPlus: boolean;
 };
 
-function isTrialSeatActiveNow(trialSeatActive: boolean | null, trialEndsAt: Date | null): boolean {
-  if (!trialSeatActive || !trialEndsAt) return false;
-  const endsAtMs = new Date(trialEndsAt).getTime();
-  return Number.isFinite(endsAtMs) && endsAtMs > Date.now();
+type CavsafeAccountPlanRecord = {
+  tier?: unknown;
+  trialSeatActive?: boolean | null;
+  trialEndsAt?: Date | null;
+};
+
+function normalizeCavsafePlanId(planId: PlanId): CavsafePlanId | null {
+  if (planId === "premium_plus") return "premium_plus";
+  if (planId === "premium") return "premium";
+  return null;
 }
 
-async function resolveCavsafePlanId(accountId: string): Promise<CavsafePlanId> {
-  const account = await prisma.account.findUnique({
+export function isCavsafePlanSchemaMismatchError(err: unknown) {
+  return isSchemaMismatchError(err, {
+    tables: ["Account", "Subscription"],
+    columns: ["tier", "trialSeatActive", "trialEndsAt", "status", "currentPeriodEnd", "updatedAt", "createdAt"],
+  });
+}
+
+async function findCavsafeAccountPlanRecord(accountId: string): Promise<CavsafeAccountPlanRecord | null> {
+  try {
+    return await prisma.account.findUnique({
+      where: { id: accountId },
+      select: {
+        tier: true,
+        trialSeatActive: true,
+        trialEndsAt: true,
+      },
+    });
+  } catch (err) {
+    if (
+      !isSchemaMismatchError(err, {
+        tables: ["Account"],
+        columns: ["trialSeatActive", "trialEndsAt"],
+      })
+    ) {
+      throw err;
+    }
+  }
+
+  return prisma.account.findUnique({
     where: { id: accountId },
     select: {
       tier: true,
-      trialSeatActive: true,
-      trialEndsAt: true,
     },
   });
+}
+
+async function resolveCavsafePlanId(accountId: string): Promise<CavsafePlanId> {
+  const [account, entitledSubscription] = await Promise.all([
+    findCavsafeAccountPlanRecord(accountId),
+    findLatestEntitledSubscription(accountId),
+  ]);
+
   if (!account) throw new ApiAuthError("UNAUTHORIZED", 401);
 
-  const trialPlus = isTrialSeatActiveNow(account.trialSeatActive, account.trialEndsAt);
-  const planId = trialPlus ? "premium_plus" : resolvePlanIdFromTier(account.tier);
-
-  if (planId === "premium_plus") return "premium_plus";
-  if (planId === "premium") return "premium";
+  const planId = normalizeCavsafePlanId(resolveEffectiveAccountPlanId({
+    account,
+    subscription: entitledSubscription,
+  }));
+  if (planId) return planId;
   throw new ApiAuthError("PLAN_REQUIRED", 403);
 }
 
-export async function requireCavsafeOwnerSession(req: Request): Promise<CavsafeAuthorizedSession> {
+export function cavsafeTierTokenFromPlanId(planId: CavsafePlanId): "PREMIUM" | "PREMIUM_PLUS" {
+  return planId === "premium_plus" ? "PREMIUM_PLUS" : "PREMIUM";
+}
+
+export async function resolveCavsafePlanIdOrDefault(
+  accountIdRaw: string,
+  fallback: CavsafePlanId = "premium",
+): Promise<CavsafePlanId> {
+  const accountId = String(accountIdRaw || "").trim();
+  if (!accountId) return fallback;
+  try {
+    return await resolveCavsafePlanId(accountId);
+  } catch {
+    return fallback;
+  }
+}
+
+export async function requireCavsafeOwnerContext(req: Request): Promise<CavbotAccountSession> {
   const sess = await requireSession(req);
   requireAccountContext(sess);
   requireUser(sess);
   requireAccountRole(sess, ["OWNER"]);
+  return sess;
+}
 
+export async function requireCavsafeOwnerSession(req: Request): Promise<CavsafeAuthorizedSession> {
+  const sess = await requireCavsafeOwnerContext(req);
   const cavsafePlanId = await resolveCavsafePlanId(sess.accountId);
   return {
     ...sess,

@@ -2,14 +2,25 @@
 "use client";
 
 
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { CavPadDock } from "./CavPad";
+import {
+  Suspense,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import type { CavPadSite } from "./CavPad";
 import { CavGuardModal } from "./CavGuardModal";
 import { CavBotVerifyModal } from "./CavBotVerifyModal";
+import { OperatorIdRevealModal } from "@/components/notifications/OperatorIdRevealModal";
 import CavAiCenterLauncher, { type AiCenterSurface } from "@/components/cavai/CavAiCenterLauncher";
 import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import { LockIcon } from "@/components/LockIcon";
@@ -21,13 +32,21 @@ import {
   traceRenderCount,
 } from "@/lib/dev/routePerf";
 import {
+  formatNotificationExpiry,
+  NotificationActionMeta,
   NotificationFilter,
+  NotificationJoinRole,
   NotificationRaw,
   NotificationRow,
   NOTIFICATION_FILTERS,
   filterNotifications,
   isBackendOnlyNotificationRaw,
+  isOperatorIdReadyNotification,
+  isWorkspaceJoinApprovalAction,
   mapRawNotification,
+  normalizeNotificationActions,
+  normalizeNotificationJoinRole,
+  readNotificationShareMeta,
 } from "@/lib/notifications";
 import { buildCavGuardDecision } from "@/src/lib/cavguard/cavGuard.registry";
 import { CAV_GUARD_DECISION_EVENT, emitGuardDecisionFromPayload, readGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
@@ -35,6 +54,12 @@ import { normalizeGuardReturnPath } from "@/src/lib/cavguard/cavGuard.return";
 import type { CavGuardDecision } from "@/src/lib/cavguard/cavGuard.types";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
+
+const loadCavPadDock = () => import("./CavPad").then((mod) => mod.CavPadDock);
+const CavPadDock = dynamic(loadCavPadDock, {
+  ssr: false,
+  loading: () => null,
+});
 
 type WindowWithGlobals = Window & {
   __CB_NOTIF_SETTINGS__?: Record<string, unknown> | null;
@@ -83,9 +108,33 @@ type PlanSnapshot = {
   ts: number;
 };
 
+type AppShellPlanContextValue = {
+  planTier: PlanTier;
+  planResolved: boolean;
+  memberRole: MemberRole;
+  trialActive: boolean;
+};
+
+const AppShellPlanContext = createContext<AppShellPlanContextValue>({
+  planTier: "FREE",
+  planResolved: false,
+  memberRole: null,
+  trialActive: false,
+});
+
+export function useAppShellPlan() {
+  return useContext(AppShellPlanContext);
+}
+
 const SHELL_PLAN_SNAPSHOT_KEY = "cb_shell_plan_snapshot_v1";
 const PLAN_CONTEXT_KEY = "cb_plan_context_v1";
+const SHELL_PLAN_EVENT = "cb:shell-plan";
 let shellPlanSnapshotCache: PlanSnapshot | null = null;
+
+type ApiJSONOptions = {
+  guardMode?: "interactive" | "passive";
+  onPassiveAuthLoss?: (() => void) | null;
+};
 
 function coercePlanTier(input: unknown): PlanTier {
   const value = String(input || "").trim().toUpperCase();
@@ -165,6 +214,9 @@ function persistShellPlanSnapshot(snapshot: PlanSnapshot) {
   try {
     globalThis.__cbLocalStore.setItem(SHELL_PLAN_SNAPSHOT_KEY, JSON.stringify(snapshot));
   } catch {}
+  try {
+    window.dispatchEvent(new CustomEvent(SHELL_PLAN_EVENT, { detail: snapshot }));
+  } catch {}
 }
 
 
@@ -177,6 +229,15 @@ function planRank(t: PlanTier) {
 
 function canAccess(current: PlanTier, required: "FREE" | "PREMIUM" | "PREMIUM_PLUS") {
   return planRank(current) >= planRank(required as PlanTier);
+}
+
+function isAuthRequiredLikeResponse(status: number, payload: unknown) {
+  const decision = readGuardDecisionFromPayload(payload);
+  if (decision?.actionId === "AUTH_REQUIRED") return true;
+  if (status === 401) return true;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const errorCode = String((payload as Record<string, unknown>).error || "").trim().toUpperCase();
+  return errorCode === "AUTH_REQUIRED" || errorCode === "UNAUTHORIZED" || errorCode === "SESSION_REVOKED" || errorCode === "EXPIRED";
 }
 
 
@@ -389,7 +450,7 @@ function resolvePlanTierFromAccount(account: AccountTier): PlanTier {
 }
 
 
-async function apiJSON<T>(url: string, init?: RequestInit): Promise<T> {
+async function apiJSON<T>(url: string, init?: RequestInit, options?: ApiJSONOptions): Promise<T> {
   const res = await fetch(url, {
     ...init,
     headers: {
@@ -407,7 +468,13 @@ async function apiJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const guardDecision = readGuardDecisionFromPayload(data);
   if (!res.ok || data?.ok === false) {
     if (guardDecision) {
-      emitGuardDecisionFromPayload(data);
+      if (options?.guardMode !== "passive") {
+        emitGuardDecisionFromPayload(data);
+      } else if (isAuthRequiredLikeResponse(res.status, data)) {
+        options?.onPassiveAuthLoss?.();
+      }
+    } else if (options?.guardMode === "passive" && isAuthRequiredLikeResponse(res.status, data)) {
+      options?.onPassiveAuthLoss?.();
     }
     const msg = data?.message || data?.error || "Request failed";
     throw Object.assign(new Error(String(msg)), { status: res.status, data, guardDecision });
@@ -415,120 +482,7 @@ async function apiJSON<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-type NotificationActionMeta = {
-  key: string;
-  label: string;
-  href: string;
-  method: "GET" | "POST" | "PATCH" | "DELETE";
-  body?: Record<string, unknown> | null;
-};
-
-type NotificationJoinRole = "member" | "admin";
-
-type NotificationShareMeta = {
-  permissionLabel: string | null;
-  expiresAtIso: string | null;
-};
-
 type VerifyActionType = "signup" | "login" | "reset" | "invite";
-
-function normalizeNotificationActions(meta: Record<string, unknown> | null | undefined): NotificationActionMeta[] {
-  if (!meta || typeof meta !== "object") return [];
-  const actionsRaw = meta.actions;
-  if (!actionsRaw || typeof actionsRaw !== "object" || Array.isArray(actionsRaw)) return [];
-
-  const actions = actionsRaw as Record<string, unknown>;
-  const out: NotificationActionMeta[] = [];
-
-  for (const [rawKey, row] of Object.entries(actions)) {
-    const key = String(rawKey || "").trim();
-    if (!key) continue;
-    if (!row || typeof row !== "object" || Array.isArray(row)) continue;
-    const parsed = row as Record<string, unknown>;
-    const href = String(parsed.href || "").trim();
-    if (!href) continue;
-
-    const label = String(parsed.label || "").trim();
-    const methodRaw = String(parsed.method || "GET").trim().toUpperCase();
-    const method = methodRaw === "POST" || methodRaw === "PATCH" || methodRaw === "DELETE"
-      ? methodRaw
-      : "GET";
-    const body = parsed.body && typeof parsed.body === "object" && !Array.isArray(parsed.body)
-      ? (parsed.body as Record<string, unknown>)
-      : null;
-
-    out.push({
-      key,
-      label: label || (
-        key === "saveToCavCloud"
-          ? "Save to CavCloud"
-          : key === "openInCavCode"
-            ? "Open in CavCode"
-            : key === "decline"
-              ? "Decline"
-              : key === "accept"
-                ? "Accept"
-                : key === "approve"
-                  ? "Approve"
-                  : key === "deny"
-                    ? "Deny"
-                    : key === "requestAccess"
-                      ? "Request access"
-                      : "Open"
-      ),
-      href,
-      method,
-      body,
-    });
-  }
-
-  return out;
-}
-
-function normalizeNotificationJoinRole(value: unknown): NotificationJoinRole {
-  return String(value || "").trim().toLowerCase() === "admin" ? "admin" : "member";
-}
-
-function isWorkspaceJoinApprovalAction(action: NotificationActionMeta): boolean {
-  if (!action || action.method === "GET") return false;
-  const key = String(action.key || "").trim().toLowerCase();
-  if (key !== "accept" && key !== "approve") return false;
-
-  const href = String(action.href || "").trim().toLowerCase();
-  if (!href) return false;
-  if (href === "/api/invites/respond" || href === "/api/access-requests/respond") return true;
-  if (href.includes("/api/workspaces/invites/") && href.endsWith("/accept")) return true;
-  if (href.includes("/api/workspaces/access-requests/") && href.endsWith("/approve")) return true;
-  return false;
-}
-
-function readNotificationShareMeta(meta: Record<string, unknown> | null | undefined): NotificationShareMeta {
-  if (!meta || typeof meta !== "object") {
-    return { permissionLabel: null, expiresAtIso: null };
-  }
-  const permissionLabelRaw = String(meta.permissionLabel || "").trim();
-  const permissionRaw = String(meta.permission || "").trim().toUpperCase();
-  const permissionLabel = permissionLabelRaw
-    || (permissionRaw === "EDIT" ? "Collaborate" : permissionRaw === "VIEW" ? "Read-only" : "");
-
-  const expiresAtIso = String(meta.expiresAtISO || "").trim();
-  return {
-    permissionLabel: permissionLabel || null,
-    expiresAtIso: expiresAtIso || null,
-  };
-}
-
-function formatNotificationExpiry(expiresAtIso: string | null | undefined): string {
-  const value = String(expiresAtIso || "").trim();
-  if (!value) return "";
-  const ts = Date.parse(value);
-  if (!Number.isFinite(ts)) return "";
-  const remainingMs = ts - Date.now();
-  if (remainingMs <= 0) return "Expired";
-  const days = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
-  if (days <= 1) return "Expires in 1 day";
-  return `Expires in ${days} days`;
-}
 
 export default function AppShell({
   title, // kept for compatibility (not shown in header)
@@ -592,7 +546,6 @@ export default function AppShell({
   // ===== Range (persisted only; NO URL WRITES) =====
   const [range, setRange] = useState<RangeKey>("24h");
   const [rangeOpen, setRangeOpen] = useState(false);
-  const [quickToolsOpen, setQuickToolsOpen] = useState(false);
 
   useEffect(() => {
     const stored = readStoredRange();
@@ -616,6 +569,8 @@ export default function AppShell({
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifView] = useState<"panel" | "modal" | "full">("panel");
   const [notifCount, setNotifCount] = useState(0);
+  const [staffChatEnabled, setStaffChatEnabled] = useState(false);
+  const [staffChatUnreadCount, setStaffChatUnreadCount] = useState(0);
 
 
   const [notifItems, setNotifItems] = useState<NotifItem[]>([]);
@@ -629,6 +584,7 @@ export default function AppShell({
   const [notifActionBusyKey, setNotifActionBusyKey] = useState<string>("");
   const [notifActionErrorById, setNotifActionErrorById] = useState<Record<string, string>>({});
   const [notifActionRoleById, setNotifActionRoleById] = useState<Record<string, NotificationJoinRole>>({});
+  const [operatorIdRevealNotificationId, setOperatorIdRevealNotificationId] = useState<string | null>(null);
 
 
   const [notifToast, setNotifToast] = useState<{
@@ -651,12 +607,16 @@ export default function AppShell({
 
 
   // ===== Plan widget (SIDEBAR footer) =====
-  const bootSnapshot = shellPlanSnapshotCache;
+  const bootSnapshot = useMemo(() => shellPlanSnapshotCache ?? readShellPlanSnapshot(), []);
   const [planTier, setPlanTier] = useState<PlanTier>(bootSnapshot?.planTier || "FREE");
   const [memberRole, setMemberRole] = useState<MemberRole>(bootSnapshot?.memberRole || null);
   const [planResolved, setPlanResolved] = useState<boolean>(Boolean(bootSnapshot));
   const [authPlanVerified, setAuthPlanVerified] = useState(false);
+  const [sessionAuthenticated, setSessionAuthenticated] = useState(false);
   const [, setPlanResolveError] = useState<string>("");
+  const authRefreshRequestIdRef = useRef(0);
+  const authRefreshInFlightRef = useRef<Promise<void> | null>(null);
+  const authRefreshLastAtRef = useRef(0);
 
 
   // ===== Trial state (only affects the widget display) =====
@@ -688,12 +648,10 @@ export default function AppShell({
 
 
   const rangeWrapRef = useRef<HTMLDivElement | null>(null);
-  const quickToolsWrapRef = useRef<HTMLDivElement | null>(null);
   const accountWrapRef = useRef<HTMLDivElement | null>(null);
   const notifWrapRef = useRef<HTMLDivElement | null>(null);
   const navScrollRef = useRef<HTMLElement | null>(null);
   const rangeOpenRef = useRef(false);
-  const quickToolsOpenRef = useRef(false);
   const accountOpenRef = useRef(false);
   const notifOpenRef = useRef(false);
   const [navScrollIndicator, setNavScrollIndicator] = useState<"down" | "up">("down");
@@ -703,6 +661,7 @@ export default function AppShell({
   const cavGuardRetryRef = useRef<(() => void | Promise<void>) | null>(null);
   const cavGuardRetryUsedRef = useRef(false);
   const cavGuardDismissHrefRef = useRef<string | null>(null);
+  const cavPadPendingOpenRef = useRef(false);
   const verifyResolverRef = useRef<((value: { ok: boolean }) => void) | null>(null);
   const [verifyRequest, setVerifyRequest] = useState<{
     actionType: VerifyActionType;
@@ -764,6 +723,11 @@ export default function AppShell({
     recordNavigationStart(dismissHref, "router.replace");
     router.replace(dismissHref);
   }, [pathname, resetCavGuardModal, router, searchParamsSerialized]);
+
+  const authLoginHref = useMemo(() => {
+    const currentHref = normalizeGuardReturnPath(`${pathname}${searchParamsSerialized ? `?${searchParamsSerialized}` : ""}`) || "/";
+    return `/auth?mode=login&next=${encodeURIComponent(currentHref)}`;
+  }, [pathname, searchParamsSerialized]);
 
   const requestCaverify = useCallback(
     (reason: string) =>
@@ -846,27 +810,31 @@ export default function AppShell({
         plan: options?.plan || planTier,
         flags: options?.flags || null,
       });
+      const dismissHref = actionId === "AUTH_REQUIRED"
+        ? normalizeGuardReturnPath(options?.dismissHref) || authLoginHref
+        : normalizeGuardReturnPath(options?.dismissHref);
       void openCavGuardDecision(
         decision,
         options?.retryAction || null,
-        normalizeGuardReturnPath(options?.dismissHref),
+        dismissHref,
       );
     },
-    [memberRole, openCavGuardDecision, planTier],
+    [authLoginHref, memberRole, openCavGuardDecision, planTier],
   );
 
   useEffect(() => {
     function onGuardEvent(event: Event) {
       const detail = (event as CustomEvent<{ decision?: CavGuardDecision | null }>).detail || {};
       if (!detail.decision) return;
-      void openCavGuardDecision(detail.decision);
+      const dismissHref = detail.decision.actionId === "AUTH_REQUIRED" ? authLoginHref : null;
+      void openCavGuardDecision(detail.decision, null, dismissHref);
     }
 
     window.addEventListener(CAV_GUARD_DECISION_EVENT, onGuardEvent as EventListener);
     return () => {
       window.removeEventListener(CAV_GUARD_DECISION_EVENT, onGuardEvent as EventListener);
     };
-  }, [openCavGuardDecision]);
+  }, [authLoginHref, openCavGuardDecision]);
 
   const showCavPad = useMemo(() => {
     return !(
@@ -992,6 +960,8 @@ export default function AppShell({
   useEffect(() => {
     function onOpenCavPadFromPriority() {
       if (!(showCavPad && authPlanVerified && memberRole)) return;
+      cavPadPendingOpenRef.current = false;
+      void loadCavPadDock();
       setCavPadOpen(true);
     }
 
@@ -1220,7 +1190,6 @@ export default function AppShell({
   useEffect(() => {
     setNavOpen(false);
     setRangeOpen(false);
-    setQuickToolsOpen(false);
     setAccountOpen(false);
     setNotifOpen(false);
   }, [pathname]);
@@ -1384,6 +1353,8 @@ export default function AppShell({
    * - Trial state uses explicit flags OR computed from endsAt
    */
   const refreshAuthAndPlan = useCallback(async (signal?: AbortSignal) => {
+    const requestId = authRefreshRequestIdRef.current + 1;
+    authRefreshRequestIdRef.current = requestId;
     try {
       setPlanResolveError("");
       const res = await fetch("/api/auth/me", {
@@ -1393,8 +1364,15 @@ export default function AppShell({
       });
 
       const data = await res.json().catch(() => ({}));
-      if (signal?.aborted) return;
+      if (signal?.aborted || requestId !== authRefreshRequestIdRef.current) return;
+      if (data?.indeterminate === true) {
+        setAuthPlanVerified(true);
+        setPlanResolved(true);
+        setPlanResolveError("");
+        return;
+      }
       setAuthPlanVerified(true);
+      setSessionAuthenticated(Boolean(res.ok && data?.authenticated));
 
       // Initials: full name (first two names) -> username first letter.
       const nextFullName = String(data?.user?.displayName || "").trim();
@@ -1405,9 +1383,12 @@ export default function AppShell({
         setProfileUsername(nextUsername);
         setInitials(nextInitials);
         persistAccountInitials(nextInitials);
+        setStaffChatEnabled(Boolean(data?.staff?.active));
         if (typeof data?.user?.publicProfileEnabled === "boolean") {
           setProfilePublicEnabled(data.user.publicProfileEnabled);
         }
+      } else {
+        setStaffChatEnabled(false);
       }
 
       // Tier: prefer tierEffective
@@ -1466,21 +1447,50 @@ export default function AppShell({
         ts: Date.now(),
       });
     } catch {
-      if (signal?.aborted) return;
-      setAuthPlanVerified(false);
+      if (signal?.aborted || requestId !== authRefreshRequestIdRef.current) return;
       const cached = readShellPlanSnapshot();
       if (cached) {
         setPlanTier(cached.planTier);
         setMemberRole(cached.memberRole);
         setTrialActive(cached.trialActive);
         setTrialDaysLeft(cached.trialDaysLeft);
+        setAuthPlanVerified(true);
         setPlanResolved(true);
         setPlanResolveError("");
         return;
       }
+      if (sessionAuthenticated || memberRole || bootSnapshot) {
+        setAuthPlanVerified(true);
+        setPlanResolved(true);
+        setPlanResolveError("");
+        return;
+      }
+      setAuthPlanVerified(false);
       setPlanResolveError("Unable to verify current plan.");
     }
-  }, []);
+  }, [bootSnapshot, memberRole, sessionAuthenticated]);
+
+  const requestAuthRefresh = useCallback((options?: { force?: boolean }) => {
+    const force = options?.force === true;
+    const now = Date.now();
+
+    if (!force) {
+      if (authRefreshInFlightRef.current) return authRefreshInFlightRef.current;
+      if (authRefreshLastAtRef.current && now - authRefreshLastAtRef.current < 8_000) {
+        return Promise.resolve();
+      }
+    }
+
+    const refreshPromise = refreshAuthAndPlan();
+    authRefreshInFlightRef.current = refreshPromise;
+    void refreshPromise.finally(() => {
+      if (authRefreshInFlightRef.current === refreshPromise) {
+        authRefreshInFlightRef.current = null;
+      }
+      authRefreshLastAtRef.current = Date.now();
+    });
+    return refreshPromise;
+  }, [refreshAuthAndPlan]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -1494,13 +1504,45 @@ export default function AppShell({
 
   useEffect(() => {
     const onRefresh = () => {
-      void refreshAuthAndPlan();
+      void requestAuthRefresh({ force: true });
     };
     window.addEventListener("cb:auth:refresh", onRefresh as EventListener);
     return () => {
       window.removeEventListener("cb:auth:refresh", onRefresh as EventListener);
     };
-  }, [refreshAuthAndPlan]);
+  }, [requestAuthRefresh]);
+
+  const handlePassiveAuthLoss = useCallback(() => {
+    setSessionAuthenticated(false);
+    setMemberRole(null);
+    setStaffChatEnabled(false);
+    setStaffChatUnreadCount(0);
+    setNotifOpen(false);
+    setNotifItems([]);
+    setNotifCount(0);
+    lastUnreadRef.current = 0;
+    cavPadPendingOpenRef.current = false;
+    void requestAuthRefresh({ force: true });
+  }, [requestAuthRefresh]);
+
+  useEffect(() => {
+    const syncAuth = () => {
+      void requestAuthRefresh();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      syncAuth();
+    };
+
+    window.addEventListener("pageshow", syncAuth);
+    window.addEventListener("focus", syncAuth);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pageshow", syncAuth);
+      window.removeEventListener("focus", syncAuth);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [requestAuthRefresh]);
 
 
   // Persist + publish range changes (NO URL WRITE)
@@ -1530,10 +1572,6 @@ export default function AppShell({
   }, [rangeOpen]);
 
   useEffect(() => {
-    quickToolsOpenRef.current = quickToolsOpen;
-  }, [quickToolsOpen]);
-
-  useEffect(() => {
     accountOpenRef.current = accountOpen;
   }, [accountOpen]);
 
@@ -1550,8 +1588,6 @@ export default function AppShell({
 
 
       if (rangeOpenRef.current && rangeWrapRef.current && !rangeWrapRef.current.contains(t)) setRangeOpen(false);
-      if (quickToolsOpenRef.current && quickToolsWrapRef.current && !quickToolsWrapRef.current.contains(t))
-        setQuickToolsOpen(false);
       if (accountOpenRef.current && accountWrapRef.current && !accountWrapRef.current.contains(t))
         setAccountOpen(false);
       if (notifOpenRef.current && notifWrapRef.current && !notifWrapRef.current.contains(t)) setNotifOpen(false);
@@ -1562,7 +1598,6 @@ export default function AppShell({
       if (e.key === "Escape") {
         setNavOpen(false);
         setRangeOpen(false);
-        setQuickToolsOpen(false);
         setAccountOpen(false);
         setNotifOpen(false);
         setCavGuardModalOpen(false);
@@ -1598,7 +1633,6 @@ export default function AppShell({
 
   function onSettingsClick(event: ReactMouseEvent<HTMLAnchorElement>) {
     setNavOpen(false);
-    setQuickToolsOpen(false);
     prefetchRoute("/settings");
     prefetchRoute("/settings?tab=account");
     prefetchRoute("/settings/integrations");
@@ -1609,27 +1643,85 @@ export default function AppShell({
   }
 
   const authenticatedWorkspaceUser = authPlanVerified && Boolean(memberRole);
-  const notificationsOwnerAllowed = authPlanVerified && memberRole === "OWNER";
-  const shouldMountCavPad = showCavPad && authenticatedWorkspaceUser;
+  const notificationsEnabled = authPlanVerified && sessionAuthenticated;
+  const shouldMountCavPad = showCavPad && authenticatedWorkspaceUser && cavPadOpen;
+
+  useEffect(() => {
+    if (!showCavPad || !authenticatedWorkspaceUser) return;
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    let idleId: number | null = null;
+    let timerId: number | null = null;
+
+    const warmCavPad = () => {
+      void loadCavPadDock();
+    };
+
+    if (typeof idleWindow.requestIdleCallback === "function") {
+      idleId = idleWindow.requestIdleCallback(() => {
+        warmCavPad();
+      }, { timeout: 1400 });
+    } else {
+      timerId = window.setTimeout(() => {
+        warmCavPad();
+      }, 900);
+    }
+
+    return () => {
+      if (idleId !== null && typeof idleWindow.cancelIdleCallback === "function") {
+        idleWindow.cancelIdleCallback(idleId);
+      }
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+      }
+    };
+  }, [authenticatedWorkspaceUser, showCavPad]);
+
+  function onCavPadClick() {
+    if (!showCavPad) return;
+    if (authenticatedWorkspaceUser) {
+      cavPadPendingOpenRef.current = false;
+      void loadCavPadDock();
+      setCavPadOpen(true);
+      return;
+    }
+    cavPadPendingOpenRef.current = true;
+    void refreshAuthAndPlan();
+  }
+
+  useEffect(() => {
+    if (!cavPadPendingOpenRef.current || !showCavPad || !authPlanVerified) return;
+    cavPadPendingOpenRef.current = false;
+    if (!memberRole) return;
+    void loadCavPadDock();
+    setCavPadOpen(true);
+  }, [authPlanVerified, memberRole, showCavPad]);
 
   function onNotificationsToggle() {
-    if (notificationsOwnerAllowed) {
+    if (notificationsEnabled) {
       setNotifOpen((v) => !v);
       return;
     }
-    openCavGuardByAction("NOTIFICATIONS_OWNER_ONLY");
+    openCavGuardByAction("AUTH_REQUIRED");
+  }
+
+  function onStaffChatOpen() {
+    recordClickIntent("/admin-internal/chat", "staff-chat-open");
+    recordNavigationStart("/admin-internal/chat", "router.push");
+    router.push("/admin-internal/chat");
   }
 
   function onNotificationsViewAll(event: ReactMouseEvent<HTMLAnchorElement>) {
-    if (notificationsOwnerAllowed) return;
+    if (notificationsEnabled) return;
     event.preventDefault();
     setNotifOpen(false);
-    openCavGuardByAction("NOTIFICATIONS_OWNER_ONLY");
+    openCavGuardByAction("AUTH_REQUIRED");
   }
 
   function onArcadeClick(event: ReactMouseEvent<HTMLAnchorElement>) {
     setNavOpen(false);
-    setQuickToolsOpen(false);
     if (!memberRole || memberRole === "OWNER") return;
     if (arcadeCollaboratorAccessEnabled) return;
     event.preventDefault();
@@ -1701,13 +1793,14 @@ export default function AppShell({
     prefetchRoute(upgradeHref);
   }, [prefetchRoute, upgradeHref]);
 
+
   // ==========================
   // NOTIFICATIONS: list + mark read + fade + toast + polling
   // ==========================
 
 
   const loadNotifList = useCallback(async (opts?: { unreadOnly?: boolean }) => {
-    if (!notificationsOwnerAllowed) {
+    if (!notificationsEnabled) {
       setNotifItems([]);
       setNotifCount(0);
       return;
@@ -1719,7 +1812,10 @@ export default function AppShell({
       nextCursor?: string | null;
     };
 
-    const data = await apiJSON<NotificationResponse>(`/api/notifications?${q}`);
+    const data = await apiJSON<NotificationResponse>(`/api/notifications?${q}`, undefined, {
+      guardMode: "passive",
+      onPassiveAuthLoss: handlePassiveAuthLoss,
+    });
 
     const items = (data.notifications || [])
       .filter((row) => !isBackendOnlyNotificationRaw(row))
@@ -1733,11 +1829,11 @@ export default function AppShell({
     // keep bubble accurate while open (real-time feel)
     const unreadCount = visible.reduce((acc, x) => acc + (x.unread ? 1 : 0), 0);
     setNotifCount(unreadCount);
-  }, [notificationsOwnerAllowed]);
+  }, [handlePassiveAuthLoss, notificationsEnabled]);
 
 
   async function markRead(ids: string[]) {
-    if (!notificationsOwnerAllowed) return;
+    if (!notificationsEnabled) return;
     if (!ids.length) return;
     await apiJSON<{ ok: true }>("/api/notifications", {
       method: "POST",
@@ -1785,13 +1881,18 @@ export default function AppShell({
     }
   }
 
+  async function openOperatorIdRevealFromNotif(n: NotifItem) {
+    await onClickNotif(n);
+    setOperatorIdRevealNotificationId(n.id);
+  }
+
   async function runNotifAction(
     n: NotifItem,
     action: NotificationActionMeta,
     role?: NotificationJoinRole | null,
   ) {
-    if (!notificationsOwnerAllowed) {
-      openCavGuardByAction("NOTIFICATIONS_OWNER_ONLY");
+    if (!notificationsEnabled) {
+      openCavGuardByAction("AUTH_REQUIRED");
       return;
     }
     const busyKey = `${n.id}:${action.key}`;
@@ -1889,20 +1990,20 @@ export default function AppShell({
   // load list when opening or when unread filter changes while open
   useEffect(() => {
     if (!notifOpen) return;
-    if (!notificationsOwnerAllowed) return;
+    if (!notificationsEnabled) return;
     loadNotifList({ unreadOnly: notifUnreadOnly }).catch(() => {});
-  }, [notifOpen, notifUnreadOnly, notificationsOwnerAllowed, loadNotifList]);
+  }, [notifOpen, notifUnreadOnly, notificationsEnabled, loadNotifList]);
 
   // Prime notifications in the background so the panel opens with content immediately.
   useEffect(() => {
-    if (!notificationsOwnerAllowed) return;
+    if (!notificationsEnabled) return;
     loadNotifList({ unreadOnly: false }).catch(() => {});
-  }, [notificationsOwnerAllowed, loadNotifList]);
+  }, [notificationsEnabled, loadNotifList]);
 
 
   // Poll unread count + incoming toast (only if count increases and dropdown is closed)
   useEffect(() => {
-    if (!notificationsOwnerAllowed) {
+    if (!notificationsEnabled) {
       lastUnreadRef.current = 0;
       setNotifCount(0);
       return;
@@ -1914,6 +2015,7 @@ export default function AppShell({
 
     async function tick() {
       try {
+        if (document.visibilityState === "hidden") return;
         const res = await fetch("/api/notifications/unread-count", {
           method: "GET",
           cache: "no-store",
@@ -1923,7 +2025,10 @@ export default function AppShell({
 
         const data = await res.json().catch(() => ({}));
         if (!alive) return;
-        emitGuardDecisionFromPayload(data);
+        if (isAuthRequiredLikeResponse(res.status, data)) {
+          handlePassiveAuthLoss();
+          return;
+        }
         if (!res.ok || data?.ok === false) {
           setNotifCount(0);
           return;
@@ -1962,7 +2067,12 @@ export default function AppShell({
               type NotificationToastResponse = { ok: true; notifications: NotificationRaw[] };
 
               const list = await apiJSON<NotificationToastResponse>(
-                `/api/notifications?unread=1&limit=1`
+                `/api/notifications?unread=1&limit=1`,
+                undefined,
+                {
+                  guardMode: "passive",
+                  onPassiveAuthLoss: handlePassiveAuthLoss,
+                },
               );
 
 
@@ -1991,7 +2101,9 @@ export default function AppShell({
     }
 
 
-    tick();
+    if (document.visibilityState === "visible") {
+      tick();
+    }
     const t = window.setInterval(() => tick(), 5000);
 
 
@@ -2003,10 +2115,48 @@ export default function AppShell({
       window.clearInterval(t);
       if (notifToastTimer.current) window.clearTimeout(notifToastTimer.current);
     };
-  }, [notifOpen, notificationsOwnerAllowed]);
+  }, [handlePassiveAuthLoss, notifOpen, notificationsEnabled]);
 
   useEffect(() => {
-    if (!notificationsOwnerAllowed) {
+    if (!staffChatEnabled || !sessionAuthenticated) {
+      setStaffChatUnreadCount(0);
+      return;
+    }
+
+    let mounted = true;
+
+    const loadUnread = async () => {
+      try {
+        const res = await fetch("/api/admin/chat/unread", {
+          method: "GET",
+          cache: "no-store",
+          credentials: "include",
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!mounted) return;
+        if (!res.ok || !payload?.ok) {
+          setStaffChatUnreadCount(0);
+          return;
+        }
+        setStaffChatUnreadCount(Number(payload?.unreadCount || 0));
+      } catch {
+        if (mounted) setStaffChatUnreadCount(0);
+      }
+    };
+
+    void loadUnread();
+    const timer = window.setInterval(() => {
+      void loadUnread();
+    }, 20000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(timer);
+    };
+  }, [sessionAuthenticated, staffChatEnabled]);
+
+  useEffect(() => {
+    if (!notificationsEnabled) {
       setNotifItems([]);
       setNotifCount(0);
       return;
@@ -2015,13 +2165,17 @@ export default function AppShell({
     let mounted = true;
     async function refreshNow() {
       try {
+        if (document.visibilityState === "hidden") return;
         const res = await fetch("/api/notifications/unread-count", {
           method: "GET",
           cache: "no-store",
         });
         const data = await res.json().catch(() => ({}));
         if (!mounted) return;
-        emitGuardDecisionFromPayload(data);
+        if (isAuthRequiredLikeResponse(res.status, data)) {
+          handlePassiveAuthLoss();
+          return;
+        }
         if (!res.ok || data?.ok === false) {
           setNotifCount(0);
           return;
@@ -2040,7 +2194,10 @@ export default function AppShell({
           notifications: NotificationRaw[];
           nextCursor?: string | null;
         };
-        const data = await apiJSON<NotificationResponse>(`/api/notifications?${q}`);
+        const data = await apiJSON<NotificationResponse>(`/api/notifications?${q}`, undefined, {
+          guardMode: "passive",
+          onPassiveAuthLoss: handlePassiveAuthLoss,
+        });
         if (!mounted) return;
         const items = (data.notifications || [])
           .filter((row) => !isBackendOnlyNotificationRaw(row))
@@ -2060,7 +2217,14 @@ export default function AppShell({
       mounted = false;
       window.removeEventListener("cb:notifications:refresh", onRefreshEvent as EventListener);
     };
-  }, [notifOpen, notifUnreadOnly, notificationsOwnerAllowed]);
+  }, [handlePassiveAuthLoss, notifOpen, notifUnreadOnly, notificationsEnabled]);
+
+  const shellPlanContextValue = useMemo<AppShellPlanContextValue>(() => ({
+    planTier,
+    planResolved,
+    memberRole,
+    trialActive,
+  }), [planTier, planResolved, memberRole, trialActive]);
 
   // Hydration safety valve: keep shell purely client-rendered after mount.
   if (!clientMounted) {
@@ -2068,11 +2232,12 @@ export default function AppShell({
   }
 
   return (
-    <div
-      className={`cb-shell${isCavbotPage ? " cb-route-cavbot" : ""}`}
-      data-cavbot-page-type="console"
-      data-shell-subtitle={subtitle || undefined}
-    >
+    <AppShellPlanContext.Provider value={shellPlanContextValue}>
+      <div
+        className={`cb-shell${isCavbotPage ? " cb-route-cavbot" : ""}`}
+        data-cavbot-page-type="console"
+        data-shell-subtitle={subtitle || undefined}
+      >
       <Suspense fallback={null}>
         <SearchParamsBridge onChange={setSearchParamsSerialized} />
       </Suspense>
@@ -2223,86 +2388,61 @@ export default function AppShell({
         {/* ===== SIDEBAR FOOTER (Icons + Plan) ===== */}
         <div className="cb-side-bottom" aria-label="Sidebar footer">
           <div className="cb-side-icons" aria-label="Quick tools">
-            <div className={`cb-side-tools-wrap ${quickToolsOpen ? "is-open" : ""}`} ref={quickToolsWrapRef}>
-              <button
-                className="cb-side-tools-trigger"
-                type="button"
-                aria-haspopup="menu"
-                aria-expanded={quickToolsOpen}
-                aria-label="Open quick tools"
-                onClick={() => setQuickToolsOpen((value) => !value)}
-              >
-                <IconFellowActivity />
-              </button>
+            <Link
+              className="cb-icon-btn cb-icon-btn-arcade"
+              href={"/cavbot-arcade"}
+              data-cb-route-intent="/cavbot-arcade"
+              data-cb-perf-source="sidebar-quicktool"
+              aria-label="CavBot Arcade"
+              onMouseEnter={() => prefetchRoute("/cavbot-arcade")}
+              onFocus={() => prefetchRoute("/cavbot-arcade")}
+              onPointerDown={() => prefetchRoute("/cavbot-arcade")}
+              onClick={onArcadeClick}
+            >
+              <IconArcadeCabinet />
+            </Link>
 
-              {quickToolsOpen ? (
-                <div className="cb-side-tools-menu" role="menu" aria-label="Quick tools">
-                  <Link
-                    className="cb-icon-btn cb-side-tools-item cb-icon-btn-arcade"
-                    href={"/cavbot-arcade"}
-                    data-cb-route-intent="/cavbot-arcade"
-                    data-cb-perf-source="sidebar-quicktool"
-                    aria-label="CavBot Arcade"
-                    role="menuitem"
-                    onMouseEnter={() => prefetchRoute("/cavbot-arcade")}
-                    onFocus={() => prefetchRoute("/cavbot-arcade")}
-                    onPointerDown={() => prefetchRoute("/cavbot-arcade")}
-                    onClick={onArcadeClick}
-                  >
-                    <IconArcadeCabinet />
-                  </Link>
+            {aiLauncherInSidebar ? (
+              <CavAiCenterLauncher
+                surface={aiSurface}
+                contextLabel={aiContextLabel}
+                workspaceId={workspaceParam || null}
+                projectId={aiProjectId}
+                expandHref={aiExpandHref}
+                context={aiRouteContext}
+                preload
+                triggerClassName="cb-icon-btn"
+                triggerAriaLabel={aiSurface === "cavsafe" ? "Open CavAi Center for CavSafe" : "Open CavAi Center for CavCloud"}
+                iconOnly
+              />
+            ) : null}
 
-                  {aiLauncherInSidebar ? (
-                    <CavAiCenterLauncher
-                      surface={aiSurface}
-                      contextLabel={aiContextLabel}
-                      workspaceId={workspaceParam || null}
-                      projectId={aiProjectId}
-                      expandHref={aiExpandHref}
-                      context={aiRouteContext}
-                      preload
-                      triggerClassName="cb-icon-btn cb-side-tools-item"
-                      triggerAriaLabel={
-                        aiSurface === "cavsafe" ? "Open CavAi Center for CavSafe" : "Open CavAi Center for CavCloud"
-                      }
-                      iconOnly
-                    />
-                  ) : null}
+            <a
+              className="cb-icon-btn"
+              href="https://cavbot.io/help-center"
+              target="_blank"
+              rel="noreferrer noopener"
+              aria-label="Help Center"
+              onClick={() => setNavOpen(false)}
+            >
+              <IconHelp />
+            </a>
 
-                  <a
-                    className="cb-icon-btn cb-side-tools-item"
-                    href="https://cavbot.io/help-center"
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    aria-label="Help Center"
-                    role="menuitem"
-                    onClick={() => {
-                      setNavOpen(false);
-                      setQuickToolsOpen(false);
-                    }}
-                  >
-                    <IconHelp />
-                  </a>
 
-                  <Link
-                    className="cb-icon-btn cb-side-tools-item"
-                    href={"/settings"}
-                    data-cb-route-intent="/settings"
-                    data-cb-perf-source="sidebar-quicktool"
-                    aria-label="Settings"
-                    role="menuitem"
-                    onMouseEnter={() => prefetchRoute("/settings")}
-                    onFocus={() => prefetchRoute("/settings")}
-                    onPointerDown={() => prefetchRoute("/settings")}
-                    onClick={onSettingsClick}
-                  >
-                    <IconGear />
-                  </Link>
-                </div>
-              ) : null}
-            </div>
+            <Link
+              className="cb-icon-btn"
+              href={"/settings"}
+              data-cb-route-intent="/settings"
+              data-cb-perf-source="sidebar-quicktool"
+              aria-label="Settings"
+              onMouseEnter={() => prefetchRoute("/settings")}
+              onFocus={() => prefetchRoute("/settings")}
+              onPointerDown={() => prefetchRoute("/settings")}
+              onClick={onSettingsClick}
+            >
+              <IconGear />
+            </Link>
           </div>
-
 
           <div className="cb-side-plan" aria-label="Account">
             <div className="cb-account-wrap cb-side-account-wrap" ref={accountWrapRef}>
@@ -2363,18 +2503,14 @@ export default function AppShell({
                 </span>
 
                 <span className="cb-side-account-spark" aria-hidden="true">
-                  {planTier === "PREMIUM_PLUS" ? (
-                    <IconPremiumPlusStar />
-                  ) : (
-                    <Image
-                      src="/icons/app/spark-svgrepo-com.svg"
-                      alt=""
-                      width={18}
-                      height={18}
-                      className="cb-upgrade-badgeIcon"
-                      priority
-                    />
-                  )}
+                  <Image
+                    src="/icons/app/spark-svgrepo-com.svg"
+                    alt=""
+                    width={18}
+                    height={18}
+                    className="cb-upgrade-badgeIcon"
+                    priority
+                  />
                 </span>
               </button>
 
@@ -2454,20 +2590,51 @@ export default function AppShell({
                 />
               ) : null}
 
-              {shouldMountCavPad ? (
-                <button
+	              {showCavPad ? (
+	                <button
                   className="cb-icon-btn-top"
                   type="button"
                   aria-label="Open CavPad"
-                  onClick={() => setCavPadOpen(true)}
+                  onClick={onCavPadClick}
+                  onMouseEnter={() => {
+                    void loadCavPadDock();
+                  }}
+                  onFocus={() => {
+                    void loadCavPadDock();
+                  }}
+                  onPointerDown={() => {
+                    void loadCavPadDock();
+                  }}
+                  onTouchStart={() => {
+                    void loadCavPadDock();
+                  }}
                   title="CavPad"
                 >
                   <IconCavPad />
-                </button>
+	                </button>
+	              ) : null}
+
+              {staffChatEnabled ? (
+                <div className="cb-notif-wrap">
+                  <button
+                    className="cb-icon-btn-top cb-notif-btn"
+                    type="button"
+                    aria-label="Open CavChat"
+                    onClick={onStaffChatOpen}
+                    title="CavChat"
+                  >
+                    <IconStaffChat />
+                    {staffChatUnreadCount > 0 ? (
+                      <span className="cb-notif-bubble" aria-label={`${staffChatUnreadCount} unread staff messages`}>
+                        {staffChatUnreadCount > 99 ? "99+" : String(staffChatUnreadCount)}
+                      </span>
+                    ) : null}
+                  </button>
+                </div>
               ) : null}
 
 
-              {/* NOTIFICATIONS */}
+	              {/* NOTIFICATIONS */}
 <div className="cb-notif-wrap" ref={notifWrapRef}>
 	  <button
 	    className="cb-icon-btn-top cb-notif-btn"
@@ -2547,6 +2714,7 @@ export default function AppShell({
                 ? n.meta
                 : null;
               const actions = normalizeNotificationActions(meta);
+              const canRevealOperatorId = isOperatorIdReadyNotification({ kind: n.kind, meta });
               const openAction = actions.find((action) => action.key === "open") || null;
               const shareMeta = readNotificationShareMeta(meta);
               const expiryLabel = formatNotificationExpiry(shareMeta.expiresAtIso);
@@ -2567,6 +2735,10 @@ export default function AppShell({
                     type="button"
                     className="cb-notif-link cb-notif-link-btn cb-notif-itemPrimary"
                     onClick={() => {
+                      if (canRevealOperatorId) {
+                        void openOperatorIdRevealFromNotif(n);
+                        return;
+                      }
                       if (openAction) {
                         void runNotifAction(n, openAction);
                         return;
@@ -2602,6 +2774,22 @@ export default function AppShell({
                       ›
                     </div>
                   </button>
+
+                  {canRevealOperatorId ? (
+                    <div className="cb-notif-actions" role="group" aria-label="Staff ID notification actions">
+                      <button
+                        type="button"
+                        className="cb-notif-inlineLink"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void openOperatorIdRevealFromNotif(n);
+                        }}
+                      >
+                        View staff ID
+                      </button>
+                    </div>
+                  ) : null}
 
                   {actions.length ? (
                     <div className="cb-notif-actions" role="group" aria-label="Notification actions">
@@ -2681,6 +2869,12 @@ export default function AppShell({
   ) : null}
 </div>
 
+            <OperatorIdRevealModal
+              open={Boolean(operatorIdRevealNotificationId)}
+              notificationId={operatorIdRevealNotificationId}
+              onClose={() => setOperatorIdRevealNotificationId(null)}
+            />
+
             </div>
           </div>
           </header>
@@ -2690,7 +2884,8 @@ export default function AppShell({
           {children || null}
         </main>
       </div>
-    </div>
+      </div>
+    </AppShellPlanContext.Provider>
   );
 }
 
@@ -2750,33 +2945,13 @@ function IconBell() {
   );
 }
 
-function IconFellowActivity() {
+function IconStaffChat() {
   return (
-    <Image
-      src="/icons/app/fellow-activity-svgrepo-com.svg"
-      alt=""
-      width={22}
-      height={22}
-      className="cb-fellow-activity-icon"
-      aria-hidden="true"
-      priority
-      unoptimized
-    />
-  );
-}
-
-function IconPremiumPlusStar() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      className="cb-upgrade-badgeStar"
-      aria-hidden="true"
-    >
+    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
       <path
+        d="M4.75 5.25A2.75 2.75 0 0 1 7.5 2.5h7a2.75 2.75 0 0 1 2.75 2.75v5.5a2.75 2.75 0 0 1-2.75 2.75H10.2L6.6 17.1a.85.85 0 0 1-1.45-.6V13.5h-.4A2.75 2.75 0 0 1 2 10.75v-5.5a2.75 2.75 0 0 1 2.75-2.75Zm2.75 3.1a.9.9 0 1 0 0 1.8h7a.9.9 0 1 0 0-1.8Zm0-2.75a.9.9 0 1 0 0 1.8h4.5a.9.9 0 1 0 0-1.8Zm0 5.5a.9.9 0 1 0 0 1.8h4a.9.9 0 1 0 0-1.8Z"
         fill="currentColor"
-        d="M12 2.4l2.9 5.87 6.48.94-4.69 4.57 1.11 6.45L12 17.2 6.2 20.23l1.11-6.45L2.62 9.21l6.48-.94L12 2.4z"
+        opacity="0.94"
       />
     </svg>
   );

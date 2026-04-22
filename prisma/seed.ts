@@ -23,6 +23,26 @@ function sha256Hex(input: string) {
   return crypto.createHash("sha256").update(input).digest("hex");
 }
 
+function normalizeStaffCode(value: number) {
+  return `CAV-${String(Math.max(1, Math.trunc(value))).padStart(6, "0")}`;
+}
+
+function normalizeStaffCodeString(value: string) {
+  const digits = String(value || "").replace(/\D+/g, "");
+  if (!digits) return "";
+  return `CAV-${digits.padStart(6, "0").slice(-6)}`;
+}
+
+function isRetiredStaffCode(value: string) {
+  return normalizeStaffCodeString(value) === "CAV-000001";
+}
+
+function parseStaffCodeNumber(value: string) {
+  const digits = String(value || "").replace(/\D+/g, "");
+  if (!digits) return 0;
+  return Math.max(0, Number.parseInt(digits, 10) || 0);
+}
+
 type StringEnumRecord = Record<string, string>;
 
 function pickEnumValue<T extends StringEnumRecord>(enumObj: T, preferred: string[]): T[keyof T] | null {
@@ -147,6 +167,139 @@ async function main() {
         data: { accountId: account.id, userId: user.id, role },
         select: { id: true },
       });
+    }
+
+    const ownerEmailForAdmin = String(process.env.ADMIN_OWNER_EMAIL || process.env.CAVBOT_OWNER_EMAIL || email)
+      .trim()
+      .toLowerCase();
+    if (user.email === ownerEmailForAdmin) {
+      const ownerStaffCode = normalizeStaffCodeString(String(process.env.CAVBOT_ADMIN_STAFF_CODE || ""));
+      if (!ownerStaffCode || isRetiredStaffCode(ownerStaffCode)) {
+        throw new Error("CAVBOT_ADMIN_STAFF_CODE must be set to a non-retired staff code.");
+      }
+      const ownerStaffFloor = parseStaffCodeNumber(ownerStaffCode) || 1;
+      const existingStaffSequence = await prisma.staffSequence.findUnique({
+        where: { key: "staff" },
+        select: { lastValue: true },
+      });
+      if (!existingStaffSequence) {
+        await prisma.staffSequence.create({
+          data: {
+            key: "staff",
+            lastValue: ownerStaffFloor,
+          },
+        });
+      } else if (existingStaffSequence.lastValue < ownerStaffFloor) {
+        await prisma.staffSequence.update({
+          where: { key: "staff" },
+          data: {
+            lastValue: ownerStaffFloor,
+          },
+        });
+      }
+
+      await prisma.staffProfile.upsert({
+        where: { userId: user.id },
+        update: {
+          staffCode: ownerStaffCode,
+          systemRole: "OWNER",
+          positionTitle: String(process.env.ADMIN_OWNER_POSITION_TITLE || process.env.CAVBOT_OWNER_POSITION_TITLE || "Founder & CEO"),
+          status: "ACTIVE",
+          onboardingStatus: "COMPLETED",
+          invitedEmail: user.email,
+          invitedByUserId: user.id,
+          createdByUserId: user.id,
+          metadataJson: {
+            founder: true,
+            immutableFounderId: true,
+          },
+        },
+        create: {
+          userId: user.id,
+          staffCode: ownerStaffCode,
+          systemRole: "OWNER",
+          positionTitle: String(process.env.ADMIN_OWNER_POSITION_TITLE || process.env.CAVBOT_OWNER_POSITION_TITLE || "Founder & CEO"),
+          status: "ACTIVE",
+          onboardingStatus: "COMPLETED",
+          invitedEmail: user.email,
+          invitedByUserId: user.id,
+          createdByUserId: user.id,
+          metadataJson: {
+            founder: true,
+            immutableFounderId: true,
+          },
+        },
+      });
+    }
+
+    const founderEmail = String(process.env.CAVBOT_FOUNDER_EMAIL || "").trim().toLowerCase();
+    if (founderEmail && founderEmail !== ownerEmailForAdmin) {
+      const founder = await prisma.user.findUnique({
+        where: { email: founderEmail },
+        select: { id: true, email: true },
+      });
+
+      if (founder?.id) {
+        const founderStaffCode = normalizeStaffCodeString(String(process.env.CAVBOT_FOUNDER_STAFF_CODE || ""));
+        if (founderStaffCode && isRetiredStaffCode(founderStaffCode)) {
+          throw new Error("CAVBOT_FOUNDER_STAFF_CODE uses a retired staff code.");
+        }
+        const founderTitle = String(process.env.CAVBOT_FOUNDER_POSITION_TITLE || "Founder & CEO");
+        const founderFloor = parseStaffCodeNumber(founderStaffCode);
+
+        if (founderFloor > 0) {
+          const existingFounderSequence = await prisma.staffSequence.findUnique({
+            where: { key: "staff" },
+            select: { lastValue: true },
+          });
+          if (!existingFounderSequence) {
+            await prisma.staffSequence.create({
+              data: {
+                key: "staff",
+                lastValue: founderFloor,
+              },
+            });
+          } else if (existingFounderSequence.lastValue < founderFloor) {
+            await prisma.staffSequence.update({
+              where: { key: "staff" },
+              data: {
+                lastValue: founderFloor,
+              },
+            });
+          }
+        }
+
+        await prisma.staffProfile.upsert({
+          where: { userId: founder.id },
+          update: {
+            ...(founderStaffCode ? { staffCode: founderStaffCode } : {}),
+            systemRole: "OWNER",
+            positionTitle: founderTitle,
+            status: "ACTIVE",
+            onboardingStatus: "COMPLETED",
+            invitedEmail: founder.email,
+            metadataJson: {
+              founderAccount: true,
+              configuredFounder: true,
+            },
+          },
+          create: {
+            userId: founder.id,
+            staffCode: founderStaffCode || normalizeStaffCode(2),
+            systemRole: "OWNER",
+            positionTitle: founderTitle,
+            status: "ACTIVE",
+            onboardingStatus: "COMPLETED",
+            invitedEmail: founder.email,
+            invitedByUserId: user.id,
+            createdByUserId: user.id,
+            metadataJson: {
+              founderAccount: true,
+              configuredFounder: true,
+            },
+          },
+        });
+      }
     }
 
    // ---------- DEFAULT PROJECT (so you can add sites immediately) ----------

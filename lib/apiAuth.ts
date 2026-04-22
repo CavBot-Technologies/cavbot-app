@@ -9,6 +9,9 @@ import {
   pickPrimaryMembership,
   userHasOAuthIdentity,
 } from "@/lib/authDb";
+import { isAdminHost } from "@/lib/admin/config";
+import { getAccountDisciplineState } from "@/lib/admin/accountDiscipline.server";
+import { getUserDisciplineState } from "@/lib/admin/userDiscipline.server";
 
 /**
  * CavBot Auth Model (Multi-tenant)
@@ -74,6 +77,10 @@ export function isApiAuthError(e: unknown): e is ApiAuthError {
   return !!e && typeof e === "object" && e !== null && "status" in e && "code" in e;
 }
 
+function authBackendUnavailableError() {
+  return new ApiAuthError("AUTH_BACKEND_UNAVAILABLE", 503);
+}
+
 const SESSION_TTL_SECONDS = 60 * 60 * 8; // 8 hours
 const CLOUDFLARE_PBKDF2_ITER_LIMIT = 100_000;
 
@@ -124,6 +131,17 @@ function normalizeOriginValue(raw: string): string | null {
     return new URL(withScheme).origin;
   } catch {
     return null;
+  }
+}
+
+function isConfiguredAdminOrigin(origin: string) {
+  const normalized = normalizeOriginValue(origin);
+  if (!normalized) return false;
+
+  try {
+    return isAdminHost(new URL(normalized).host.toLowerCase());
+  } catch {
+    return false;
   }
 }
 
@@ -300,6 +318,8 @@ export function assertWriteOrigin(req: Request) {
 
   const allowed = getAllowedOrigins();
   if (allowed.includes(origin)) return;
+
+  if (isConfiguredAdminOrigin(origin)) return;
 
   if (process.env.NODE_ENV !== "production") {
     if (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")) return;
@@ -593,9 +613,10 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
 
         sess.accountId = String(active.accountId);
         sess.memberRole = active.role;
-      } catch {
+      } catch (error) {
+        if (error instanceof ApiAuthError) throw error;
         if (process.env.NODE_ENV !== "production") return sess;
-        throw new ApiAuthError("UNAUTHORIZED", 401);
+        throw authBackendUnavailableError();
       }
     }
 
@@ -607,7 +628,7 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
       if (process.env.NODE_ENV !== "production") {
         return sess;
       }
-      throw new ApiAuthError("UNAUTHORIZED", 401);
+      throw authBackendUnavailableError();
     }
 
     if (!auth) {
@@ -617,6 +638,7 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
         if (await userHasOAuthIdentity(pool, userId)) return sess;
       } catch {
         if (process.env.NODE_ENV !== "production") return sess;
+        throw authBackendUnavailableError();
       }
 
       if (process.env.NODE_ENV !== "production") return sess;
@@ -637,6 +659,27 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
     if (!tokenSv || tokenSv !== dbEffective) {
       if (process.env.NODE_ENV !== "production") return sess;
       throw new ApiAuthError("SESSION_REVOKED", 401);
+    }
+
+    try {
+      const userDiscipline = await getUserDisciplineState(userId);
+      if (userDiscipline?.status === "REVOKED") {
+        throw new ApiAuthError("USER_REVOKED", 403);
+      }
+      if (userDiscipline?.status === "SUSPENDED") {
+        throw new ApiAuthError("USER_SUSPENDED", 403);
+      }
+      const discipline = await getAccountDisciplineState(String(sess.accountId || ""));
+      if (discipline?.status === "REVOKED") {
+        throw new ApiAuthError("ACCOUNT_REVOKED", 403);
+      }
+      if (discipline?.status === "SUSPENDED") {
+        throw new ApiAuthError("ACCOUNT_SUSPENDED", 403);
+      }
+    } catch (error) {
+      if (error instanceof ApiAuthError) throw error;
+      if (process.env.NODE_ENV !== "production") return sess;
+      throw authBackendUnavailableError();
     }
   }
 

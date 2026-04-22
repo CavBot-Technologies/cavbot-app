@@ -15,8 +15,7 @@ function getAppOriginPublic() {
     process.env.NEXT_PUBLIC_APP_URL ||
     (process.env.NODE_ENV !== "production" ? "http://localhost:3000" : "");
   const normalized = trimTrailingSlash(String(candidate || ""));
-  if (normalized) return normalized;
-  throw new Error("Missing app origin env for snippet generation.");
+  return normalized;
 }
 
 const APP_ORIGIN = getAppOriginPublic();
@@ -30,7 +29,7 @@ const EMBED_API_BASE = trimTrailingSlash(
     process.env.CAVBOT_EMBED_API_URL ||
     APP_ORIGIN
 );
-const EMBED_ANALYTICS_ENDPOINT = `${EMBED_API_BASE}/api/embed/analytics`;
+const EMBED_ANALYTICS_ENDPOINT = EMBED_API_BASE ? `${EMBED_API_BASE}/api/embed/analytics` : "/api/embed/analytics";
 
 function toJsonString(value: string | null | undefined) {
   return typeof value === "string" ? JSON.stringify(value) : "null";
@@ -88,13 +87,14 @@ export function buildBrainSnippet(context: SnippetContext): string {
 export function buildArcadeSnippet(context: ArcadeSnippetContext, env: string = "404"): string {
   if (!isSnippetReady(context)) return "";
   const origin = trimTrailingSlash(context.appOrigin ?? APP_ORIGIN);
+  const originAttr = origin ? ` data-config-origin="${origin}"` : "";
   return `<script
   defer
   src="${CUSTOMER_ASSET_POLICY.scripts.arcadeLoader}"
   data-project-key="${context.publishableKey}"
   data-site-id="${context.siteId}"
   data-site="${context.siteId}"
-  data-config-origin="${origin}"
+${originAttr}
   data-env="${env}">
 </script>`;
 }
