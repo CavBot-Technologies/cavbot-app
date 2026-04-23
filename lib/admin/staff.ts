@@ -3,10 +3,12 @@ import "server-only";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Prisma, type StaffProfile, type StaffStatus, type StaffSystemRole } from "@prisma/client";
+import type pg from "pg";
 
 import { buildAdminDepartmentScopeSet, normalizeAdminDepartment } from "@/lib/admin/access";
 import { sanitizeAdminNextPath } from "@/lib/admin/config";
 import { readOperatorInviteMeta } from "@/lib/admin/operatorOnboarding.server";
+import { getAuthPool } from "@/lib/authDb";
 import { getSession, requireUser, type CavbotUserSession, ApiAuthError } from "@/lib/apiAuth";
 import { hasAdminScope, type AdminScope } from "@/lib/admin/permissions";
 import { recordAdminEventSafe } from "@/lib/admin/events";
@@ -28,6 +30,41 @@ type StaffProfileWithUser = StaffProfile & {
   };
 };
 
+type Queryable = {
+  query: <T extends pg.QueryResultRow = pg.QueryResultRow>(
+    text: string,
+    values?: unknown[],
+  ) => Promise<pg.QueryResult<T>>;
+};
+
+type RawStaffProfileRow = {
+  id: string;
+  userId: string;
+  staffCode: string;
+  systemRole: StaffSystemRole | string;
+  positionTitle: string;
+  status: StaffStatus | string;
+  onboardingStatus: string;
+  invitedEmail: string | null;
+  invitedByUserId: string | null;
+  createdByUserId: string | null;
+  notes: string | null;
+  scopes: string[] | null;
+  metadataJson: Prisma.JsonValue | null;
+  lastAdminLoginAt: Date | string | null;
+  lastAdminStepUpAt: Date | string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  userEmail: string;
+  userUsername: string | null;
+  userDisplayName: string | null;
+  userFullName: string | null;
+  userAvatarImage: string | null;
+  userAvatarTone: string | null;
+  userLastLoginAt: Date | string | null;
+  userCreatedAt: Date | string;
+};
+
 const RETIRED_STAFF_CODES = ["CAV-000001"] as const;
 const RETIRED_STAFF_CODE_FLOOR = 1;
 
@@ -37,6 +74,91 @@ function env(name: string) {
 
 function normalizeEmail(value: string | null | undefined) {
   return String(value || "").trim().toLowerCase();
+}
+
+function toDate(value: Date | string | null | undefined) {
+  if (!value) return null;
+  return value instanceof Date ? value : new Date(value);
+}
+
+async function queryOne<T extends pg.QueryResultRow>(
+  queryable: Queryable,
+  text: string,
+  values: unknown[] = [],
+) {
+  const result = await queryable.query<T>(text, values);
+  return result.rows[0] ?? null;
+}
+
+function normalizeStaffProfileRow(row: RawStaffProfileRow): StaffProfileWithUser {
+  return {
+    id: String(row.id),
+    userId: String(row.userId),
+    staffCode: String(row.staffCode),
+    systemRole: toSafeStaffRole(row.systemRole),
+    positionTitle: String(row.positionTitle || "Staff"),
+    status: String(row.status || "INVITED").toUpperCase() as StaffStatus,
+    onboardingStatus: String(row.onboardingStatus || "PENDING").toUpperCase() as StaffProfile["onboardingStatus"],
+    invitedEmail: row.invitedEmail == null ? null : String(row.invitedEmail),
+    invitedByUserId: row.invitedByUserId == null ? null : String(row.invitedByUserId),
+    createdByUserId: row.createdByUserId == null ? null : String(row.createdByUserId),
+    notes: row.notes == null ? null : String(row.notes),
+    scopes: Array.isArray(row.scopes) ? row.scopes.map((scope) => String(scope)) : [],
+    metadataJson: row.metadataJson ?? null,
+    lastAdminLoginAt: toDate(row.lastAdminLoginAt),
+    lastAdminStepUpAt: toDate(row.lastAdminStepUpAt),
+    createdAt: toDate(row.createdAt) || new Date(0),
+    updatedAt: toDate(row.updatedAt) || new Date(0),
+    user: {
+      id: String(row.userId),
+      email: String(row.userEmail || ""),
+      username: row.userUsername == null ? null : String(row.userUsername),
+      displayName: row.userDisplayName == null ? null : String(row.userDisplayName),
+      fullName: row.userFullName == null ? null : String(row.userFullName),
+      avatarImage: row.userAvatarImage == null ? null : String(row.userAvatarImage),
+      avatarTone: row.userAvatarTone == null ? null : String(row.userAvatarTone),
+      lastLoginAt: toDate(row.userLastLoginAt),
+      createdAt: toDate(row.userCreatedAt) || new Date(0),
+    },
+  };
+}
+
+async function readStaffProfileByUserIdRuntime(userId: string) {
+  const row = await queryOne<RawStaffProfileRow>(
+    getAuthPool(),
+    `SELECT
+       staff."id",
+       staff."userId",
+       staff."staffCode",
+       staff."systemRole",
+       staff."positionTitle",
+       staff."status",
+       staff."onboardingStatus",
+       staff."invitedEmail",
+       staff."invitedByUserId",
+       staff."createdByUserId",
+       staff."notes",
+       staff."scopes",
+       staff."metadataJson",
+       staff."lastAdminLoginAt",
+       staff."lastAdminStepUpAt",
+       staff."createdAt",
+       staff."updatedAt",
+       user_row."email" AS "userEmail",
+       user_row."username" AS "userUsername",
+       user_row."displayName" AS "userDisplayName",
+       user_row."fullName" AS "userFullName",
+       user_row."avatarImage" AS "userAvatarImage",
+       user_row."avatarTone" AS "userAvatarTone",
+       user_row."lastLoginAt" AS "userLastLoginAt",
+       user_row."createdAt" AS "userCreatedAt"
+     FROM "StaffProfile" staff
+     INNER JOIN "User" user_row ON user_row."id" = staff."userId"
+     WHERE staff."userId" = $1
+     LIMIT 1`,
+    [userId],
+  );
+  return row ? normalizeStaffProfileRow(row) : null;
 }
 
 export function normalizeStaffCode(value: string | null | undefined) {
@@ -86,24 +208,7 @@ function inviteDepartmentFromMeta(meta: unknown) {
 }
 
 export async function getStaffProfileByUserId(userId: string) {
-  const profile = await prisma.staffProfile.findUnique({
-    where: { userId },
-    include: {
-      user: {
-        select: {
-          id: true,
-          email: true,
-          username: true,
-          displayName: true,
-          fullName: true,
-          avatarImage: true,
-          avatarTone: true,
-          lastLoginAt: true,
-          createdAt: true,
-        },
-      },
-    },
-  }) as StaffProfileWithUser | null;
+  const profile = await readStaffProfileByUserIdRuntime(userId);
 
   return syncExpiredStaffSuspension(profile);
 }
@@ -286,11 +391,17 @@ async function materializePendingStaffInviteForUser(userId: string, email: strin
 }
 
 export async function ensureStaffProfileForUser(userId: string, email?: string | null) {
-  await ensureAdminOwnerBootstrap();
-
   const existing = await getStaffProfileByUserId(userId);
   if (existing) {
     const activated = await activateExistingStaffProfile(existing);
+    return activated;
+  }
+
+  await ensureAdminOwnerBootstrap();
+
+  const bootstrapped = await getStaffProfileByUserId(userId);
+  if (bootstrapped) {
+    const activated = await activateExistingStaffProfile(bootstrapped);
     return activated;
   }
 
@@ -561,14 +672,16 @@ function isAllowedStaffStatus(status: StaffStatus) {
 }
 
 export async function requireAdminAccess(req: Request, options?: { scopes?: AdminScope[] }) {
-  await ensureAdminOwnerBootstrap();
-
   const userSession = await getSession(req);
   if (!userSession) throw new ApiAuthError("ADMIN_AUTH_REQUIRED", 401);
   requireUser(userSession);
 
   const adminSession = await getAdminSession(req);
-  const staff = await getStaffProfileByUserId(userSession.sub);
+  let staff = await getStaffProfileByUserId(userSession.sub);
+  if (!staff) {
+    await ensureAdminOwnerBootstrap();
+    staff = await getStaffProfileByUserId(userSession.sub);
+  }
   if (!adminSession || !staff) throw new ApiAuthError("ADMIN_AUTH_REQUIRED", 401);
 
   assertStaffSessionIntegrity(adminSession, staff);
@@ -590,13 +703,15 @@ export async function requireAdminAccess(req: Request, options?: { scopes?: Admi
 }
 
 export async function requireActiveStaffSession(req: Request, options?: { scopes?: AdminScope[] }) {
-  await ensureAdminOwnerBootstrap();
-
   const userSession = await getSession(req);
   if (!userSession) throw new ApiAuthError("ADMIN_AUTH_REQUIRED", 401);
   requireUser(userSession);
 
-  const staff = await getStaffProfileByUserId(userSession.sub);
+  let staff = await getStaffProfileByUserId(userSession.sub);
+  if (!staff) {
+    await ensureAdminOwnerBootstrap();
+    staff = await getStaffProfileByUserId(userSession.sub);
+  }
   if (!staff || !isAllowedStaffStatus(staff.status)) {
     throw new ApiAuthError("ADMIN_FORBIDDEN", 403);
   }

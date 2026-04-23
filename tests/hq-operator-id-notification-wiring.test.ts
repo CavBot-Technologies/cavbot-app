@@ -58,11 +58,18 @@ test("staff IDs are not exposed by HQ emails and recovery routes now point users
 test("admin step-up routes use auth-db user lookup and keep audit logging non-fatal", () => {
   const challengeSource = read("app/api/admin/session/challenge/route.ts");
   const verifySource = read("app/api/admin/session/verify/route.ts");
+  const sessionSource = read("app/api/admin/session/route.ts");
+  const staffSource = read("lib/admin/staff.ts");
 
   assert.equal(challengeSource.includes("findUserById"), true);
   assert.equal(verifySource.includes("findUserById"), true);
+  assert.equal(sessionSource.includes("findUserById"), true);
   assert.equal(challengeSource.includes("prisma.user.findUnique"), false);
   assert.equal(verifySource.includes("prisma.user.findUnique"), false);
+  assert.equal(sessionSource.includes("prisma.user.findUnique"), false);
   assert.equal(challengeSource.includes("[admin/session/challenge] audit log failed"), true);
   assert.equal(verifySource.includes("[admin/session/verify] audit log failed"), true);
+  assert.equal(staffSource.includes("readStaffProfileByUserIdRuntime"), true);
+  assert.equal(staffSource.includes('FROM "StaffProfile" staff'), true);
+  assert.equal(staffSource.includes("await ensureAdminOwnerBootstrap();\n\n  const existing = await getStaffProfileByUserId(userId);"), false);
 });

@@ -5,9 +5,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { assertWriteOrigin, getSession, requireUser } from "@/lib/apiAuth";
 import { resolveAdminDepartment } from "@/lib/admin/access";
 import { clearAdminSessionCookie, getAdminSession } from "@/lib/admin/session";
-import { ensureAdminOwnerBootstrap, ensureStaffProfileForUser, getStaffProfileByUserId, maskStaffCode } from "@/lib/admin/staff";
+import { ensureStaffProfileForUser, getStaffProfileByUserId, maskStaffCode } from "@/lib/admin/staff";
+import { findUserById, getAuthPool } from "@/lib/authDb";
 import { writeAdminAuditLog } from "@/lib/admin/audit";
-import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,11 +34,7 @@ export async function GET(req: NextRequest) {
   }
   requireUser(session);
 
-  await ensureAdminOwnerBootstrap();
-  const user = await prisma.user.findUnique({
-    where: { id: session.sub },
-    select: { email: true },
-  });
+  const user = await findUserById(getAuthPool(), session.sub);
 
   const [adminSession, staff] = await Promise.all([
     getAdminSession(req),
