@@ -86,20 +86,6 @@ export function AccountDirectoryGrid(props: {
     return () => window.clearTimeout(timeout);
   }, [pendingHref]);
 
-  useEffect(() => {
-    for (const account of props.accounts) {
-      if (!account.detailHref) continue;
-      router.prefetch(account.detailHref);
-      router.prefetch(`${account.detailHref}/manage`);
-    }
-  }, [props.accounts, router]);
-
-  useEffect(() => {
-    if (!activeAccount?.detailHref) return;
-    router.prefetch(activeAccount.detailHref);
-    router.prefetch(`${activeAccount.detailHref}/manage`);
-  }, [activeAccount, router]);
-
   if (!props.accounts.length) {
     return <EmptyState title="No accounts match the current filters." subtitle="Adjust the workspace search or subscription filters and try again." />;
   }
@@ -120,7 +106,6 @@ export function AccountDirectoryGrid(props: {
 
   const openRoute = (href: string) => {
     setPendingHref(href);
-    router.prefetch(href);
     router.push(href);
   };
 
@@ -150,18 +135,6 @@ export function AccountDirectoryGrid(props: {
             type="button"
             className="hq-clientDirectoryCard"
             onClick={() => openCard(account.id)}
-            onMouseEnter={() => {
-              if (account.detailHref) {
-                router.prefetch(account.detailHref);
-                router.prefetch(`${account.detailHref}/manage`);
-              }
-            }}
-            onFocus={() => {
-              if (account.detailHref) {
-                router.prefetch(account.detailHref);
-                router.prefetch(`${account.detailHref}/manage`);
-              }
-            }}
             aria-haspopup="dialog"
             aria-label={`Open account card for ${account.name}${account.hasCavBotAdminIdentity ? ", CavBot admin identity" : ""}`}
           >
