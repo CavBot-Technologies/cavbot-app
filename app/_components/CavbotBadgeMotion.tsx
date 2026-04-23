@@ -3,28 +3,22 @@
 import { useEffect } from "react";
 
 type ManagedEye = {
-  inner: HTMLElement;
+  eye: HTMLElement;
   pupil: HTMLElement;
-  track: HTMLElement;
   centerX: number;
   centerY: number;
-  currentX: number;
-  currentY: number;
-  maxX: number;
-  maxY: number;
-  phase: number;
+  maxShift: number;
 };
 
-const EYE_SELECTOR = ".cavbot-eye-pupil";
+const PUPIL_SELECTOR = ".cavbot-eye-pupil";
 const TRACKER_SELECTOR = ".cavbot-eye-pupil, .cavbot-eye-inner, .cavbot-dm-avatar, [data-cavbot-head]";
-const MAX_SHIFT_X = 2.15;
-const MAX_SHIFT_Y = 1.55;
-const EASE = 0.16;
-const IDLE_X = 0.82;
-const IDLE_Y = 0.52;
-const POINTER_COOLDOWN_MS = 1800;
-const POINTER_PULL_DISTANCE = 132;
-const EYE_BOUND_INSET = 0.18;
+const POINTER_IDLE_COOLDOWN_MS = 1200;
+const POINTER_FALLOFF_DISTANCE = 180;
+const IDLE_X_AMPLITUDE = 0.42;
+const IDLE_Y_AMPLITUDE = 0.34;
+const SHIFT_RATIO = 0.12;
+const MIN_SHIFT = 2.4;
+const MAX_SHIFT = 4.8;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -36,23 +30,6 @@ function nodeContainsTracker(node: Node) {
   return Boolean(node.querySelector(TRACKER_SELECTOR));
 }
 
-function ensureTrack(pupil: HTMLElement) {
-  const existingTrack = pupil.closest(".cavbot-eye-track");
-  if (existingTrack instanceof HTMLElement) return existingTrack;
-
-  const inner = pupil.closest(".cavbot-eye-inner");
-  if (!(inner instanceof HTMLElement)) return null;
-
-  const parent = pupil.parentElement;
-  if (!parent) return null;
-
-  const track = document.createElement("div");
-  track.className = "cavbot-eye-track cavbot-eye-track--managed";
-  parent.replaceChild(track, pupil);
-  track.appendChild(pupil);
-  return track;
-}
-
 export default function CavbotBadgeMotion() {
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") return;
@@ -61,52 +38,40 @@ export default function CavbotBadgeMotion() {
     let rafId = 0;
     let mutationFrame = 0;
     let destroyed = false;
-    let pointerX = window.innerWidth / 2;
-    let pointerY = window.innerHeight / 2;
-    let lastPointerTs = 0;
+    let pointerX = Math.max(window.innerWidth / 2, 0);
+    let pointerY = Math.max(window.innerHeight / 2, 0);
+    let lastPointerTs = performance.now();
 
     const previousEyeRefresh = window.__cavbotEyeTrackingRefresh;
     const previousHeadRefresh = window.__cavbotHeadTrackingRefresh;
 
     const measure = () => {
       eyes.forEach((eye) => {
-        const innerRect = eye.inner.getBoundingClientRect();
-        const pupilRect = eye.pupil.getBoundingClientRect();
-        eye.centerX = innerRect.left + innerRect.width / 2;
-        eye.centerY = innerRect.top + innerRect.height / 2;
-        eye.maxX = Math.min(MAX_SHIFT_X, Math.max(0, (innerRect.width - pupilRect.width) / 2 - EYE_BOUND_INSET));
-        eye.maxY = Math.min(MAX_SHIFT_Y, Math.max(0, (innerRect.height - pupilRect.height) / 2 - EYE_BOUND_INSET));
-        eye.currentX = clamp(eye.currentX, -eye.maxX, eye.maxX);
-        eye.currentY = clamp(eye.currentY, -eye.maxY, eye.maxY);
+        const rect = eye.eye.getBoundingClientRect();
+        eye.centerX = rect.left + rect.width * 0.5;
+        eye.centerY = rect.top + rect.height * 0.5;
+        eye.maxShift = Math.min(MAX_SHIFT, Math.max(MIN_SHIFT, rect.width * SHIFT_RATIO));
       });
       window.__cavbotEyeTrackingLastRefresh = Date.now();
       window.__cavbotEyeTrackingReady = eyes.length > 0;
     };
 
     const collect = () => {
-      const previousEyes = new Map(eyes.map((eye) => [eye.track, eye]));
+      const previousEyes = new Map(eyes.map((eye) => [eye.pupil, eye]));
       const nextEyes: ManagedEye[] = [];
-      const pupils = Array.from(document.querySelectorAll<HTMLElement>(EYE_SELECTOR));
+      const pupils = Array.from(document.querySelectorAll<HTMLElement>(PUPIL_SELECTOR));
 
-      pupils.forEach((pupil, index) => {
-        const inner = pupil.closest(".cavbot-eye-inner");
-        if (!(inner instanceof HTMLElement)) return;
+      pupils.forEach((pupil) => {
+        const eye = pupil.closest(".cavbot-eye, .cavbot-dm-eye");
+        if (!(eye instanceof HTMLElement)) return;
 
-        const track = ensureTrack(pupil);
-        if (!(track instanceof HTMLElement)) return;
-
-        const previous = previousEyes.get(track);
+        const previous = previousEyes.get(pupil);
         nextEyes.push({
-          inner,
+          eye,
           pupil,
-          track,
           centerX: previous?.centerX ?? 0,
           centerY: previous?.centerY ?? 0,
-          currentX: previous?.currentX ?? 0,
-          currentY: previous?.currentY ?? 0,
-          maxX: previous?.maxX ?? MAX_SHIFT_X,
-          maxY: previous?.maxY ?? MAX_SHIFT_Y,
-          phase: previous?.phase ?? index * 1.31,
+          maxShift: previous?.maxShift ?? MIN_SHIFT,
         });
       });
 
@@ -120,28 +85,18 @@ export default function CavbotBadgeMotion() {
         rafId = 0;
         if (destroyed) return;
 
-        const pointerActive = ts - lastPointerTs < POINTER_COOLDOWN_MS;
+        const idle = ts - lastPointerTs > POINTER_IDLE_COOLDOWN_MS;
+        const idleX = idle ? Math.sin(ts / 920) * IDLE_X_AMPLITUDE : 0;
+        const idleY = idle ? Math.cos(ts / 780) * IDLE_Y_AMPLITUDE : 0;
+
         eyes.forEach((eye) => {
-          let targetX = 0;
-          let targetY = 0;
-
-          if (pointerActive) {
-            const dx = pointerX - eye.centerX;
-            const dy = pointerY - eye.centerY;
-            const distance = Math.hypot(dx, dy) || 1;
-            const pull = clamp(distance / POINTER_PULL_DISTANCE, 0, 1);
-            targetX = clamp((dx / distance) * eye.maxX * pull, -eye.maxX, eye.maxX);
-            targetY = clamp((dy / distance) * eye.maxY * pull, -eye.maxY, eye.maxY);
-          } else {
-            targetX = Math.sin(ts / 920 + eye.phase) * Math.min(IDLE_X, eye.maxX);
-            targetY = Math.cos(ts / 1220 + eye.phase * 1.17) * Math.min(IDLE_Y, eye.maxY);
-          }
-
-          eye.currentX += (targetX - eye.currentX) * EASE;
-          eye.currentY += (targetY - eye.currentY) * EASE;
-          eye.currentX = clamp(eye.currentX, -eye.maxX, eye.maxX);
-          eye.currentY = clamp(eye.currentY, -eye.maxY, eye.maxY);
-          eye.track.style.transform = `translate(${eye.currentX.toFixed(2)}px, ${eye.currentY.toFixed(2)}px)`;
+          const dx = pointerX - eye.centerX;
+          const dy = pointerY - eye.centerY;
+          const distance = Math.hypot(dx, dy) || 1;
+          const distFactor = Math.min(1, distance / POINTER_FALLOFF_DISTANCE);
+          const shiftX = clamp((dx / distance) * eye.maxShift * distFactor + idleX, -eye.maxShift, eye.maxShift);
+          const shiftY = clamp((dy / distance) * eye.maxShift * distFactor + idleY, -eye.maxShift, eye.maxShift);
+          eye.pupil.style.transform = `translate3d(${shiftX.toFixed(2)}px, ${shiftY.toFixed(2)}px, 0)`;
         });
 
         queue();
@@ -168,25 +123,30 @@ export default function CavbotBadgeMotion() {
       });
     };
 
-    const onPointerMove = (event: PointerEvent | MouseEvent) => {
-      pointerX = event.clientX;
-      pointerY = event.clientY;
+    const markPointer = (clientX: number, clientY: number) => {
+      pointerX = clientX;
+      pointerY = clientY;
       lastPointerTs = performance.now();
       queue();
+    };
+
+    const onPointerMove = (event: PointerEvent | MouseEvent) => {
+      markPointer(event.clientX, event.clientY);
     };
 
     const onTouchMove = (event: TouchEvent) => {
       const touch = event.touches?.[0];
       if (!touch) return;
-      pointerX = touch.clientX;
-      pointerY = touch.clientY;
-      lastPointerTs = performance.now();
-      queue();
+      markPointer(touch.clientX, touch.clientY);
     };
 
     const onViewportChange = () => {
-      measure();
-      queue();
+      if (performance.now() - lastPointerTs > 1500) {
+        markPointer(Math.max(window.innerWidth / 2, 0), Math.max(window.innerHeight / 2, 0));
+      } else {
+        measure();
+        queue();
+      }
     };
 
     const onVisibilityChange = () => {
