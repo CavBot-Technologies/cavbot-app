@@ -21,6 +21,7 @@ const WINDOW_DAYS: Record<RangeKey, number> = {
 const CHART_WIDTH = 980;
 const CHART_HEIGHT = 210;
 const CHART_PADDING = 12;
+const SCAN_METRICS_READY_EVENT = "cb:scan-metrics-ready";
 
 type TrendPoint = { day: string; sessions: number; views404: number };
 type Dict = Record<string, unknown>;
@@ -150,6 +151,13 @@ export default function NotificationsTimeline() {
   const [trend, setTrend] = useState<TrendPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  useEffect(() => {
+    const refresh = () => setRefreshTick((value) => value + 1);
+    window.addEventListener(SCAN_METRICS_READY_EVENT, refresh as EventListener);
+    return () => window.removeEventListener(SCAN_METRICS_READY_EVENT, refresh as EventListener);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -198,7 +206,7 @@ export default function NotificationsTimeline() {
       active = false;
       controller.abort();
     };
-  }, [range]);
+  }, [range, refreshTick]);
 
   const sessionsSeries = useMemo(() => trend.map((point) => point.sessions), [trend]);
   const views404Series = useMemo(() => trend.map((point) => point.views404), [trend]);

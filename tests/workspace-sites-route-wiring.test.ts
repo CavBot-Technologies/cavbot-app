@@ -12,7 +12,7 @@ test("command center workspace site route keeps secure site wiring parity", () =
   const helper = read("lib/workspaceSites.server.ts");
   const originHelper = read("originMatch.ts");
 
-  assert.equal(source.includes("requireLowRiskWriteSession"), true);
+  assert.equal(source.includes("requireLowRiskWorkspaceSession"), true);
   assert.equal(source.includes("requireAccountRole(sess, [\"OWNER\", \"ADMIN\"])"), true);
   assert.equal(source.includes("assertWorkerSiteRegistrationConfig()"), true);
   assert.equal(source.includes("registerWorkerSite(project.id, result.site.origin, result.site.label)"), true);
@@ -22,6 +22,8 @@ test("command center workspace site route keeps secure site wiring parity", () =
   assert.equal(helper.includes("originAliases"), true);
   assert.equal(helper.includes("ON CONFLICT (\"siteId\", \"origin\") DO NOTHING"), true);
   assert.equal(source.includes("createProjectNoticeBestEffort"), true);
+  assert.equal(source.includes("requestInitialSiteScanBestEffort"), true);
+  assert.equal(source.includes("initialScan"), true);
   assert.equal(source.includes("rollbackCreatedWorkspaceSite"), true);
   assert.equal(source.includes("SITE_WIRING_CONFIG_INVALID"), true);
   assert.equal(source.includes("DB_PERMISSION_DENIED"), true);
@@ -34,7 +36,7 @@ test("website delete, removed-list, and restore routes stay on the hardened work
   const restoreRoute = read("app/api/workspaces/[projectId]/sites/[siteId]/restore/route.ts");
   const helper = read("lib/workspaceSites.server.ts");
 
-  assert.equal(deleteRoute.includes("requireLowRiskWriteSession"), true);
+  assert.equal(deleteRoute.includes("requireLowRiskWorkspaceSession"), true);
   assert.equal(deleteRoute.includes("removeWorkspaceSite"), true);
   assert.equal(deleteRoute.includes("createProjectNoticeEntry"), true);
   assert.equal(deleteRoute.includes("analyticsPurged"), true);
@@ -44,7 +46,7 @@ test("website delete, removed-list, and restore routes stay on the hardened work
   assert.equal(removedRoute.includes("findOwnedWorkspaceProjectForSites"), true);
   assert.doesNotMatch(removedRoute, /prisma\./);
 
-  assert.equal(restoreRoute.includes("requireLowRiskWriteSession"), true);
+  assert.equal(restoreRoute.includes("requireLowRiskWorkspaceSession"), true);
   assert.equal(restoreRoute.includes("restoreWorkspaceSite"), true);
   assert.equal(restoreRoute.includes("createProjectNoticeEntry"), true);
   assert.doesNotMatch(restoreRoute, /prisma\./);
@@ -60,6 +62,8 @@ test("command center add-site UI rethrows friendly errors so modal feedback stay
   assert.equal(source.includes("function formatAddSiteErrorMessage"), true);
   assert.equal(source.includes("throw new Error(userMessage);"), true);
   assert.equal(source.includes("CavBot could not finish wiring this website for tracking."), true);
+  assert.equal(source.includes("describeInitialScanOutcome"), true);
+  assert.equal(source.includes("Initial scan queued."), true);
   assert.equal(source.includes("WORKSPACE_BOOTSTRAP_FAILED"), true);
   assert.equal(source.includes("DB_PERMISSION_DENIED"), true);
   assert.equal(source.includes("SITE_WIRING_CONFIG_INVALID"), true);

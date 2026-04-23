@@ -201,7 +201,7 @@ function normalizeTargets(raw: unknown): ClientTarget[] {
 type Tone = "good" | "ok" | "bad";
 
 function scoreLabel(score: number | null): { label: string; tone: Tone } {
-  if (score == null) return { label: "—", tone: "ok" };
+  if (score == null) return { label: "Warming", tone: "ok" };
   if (score >= 90) return { label: "Elite", tone: "good" };
   if (score >= 75) return { label: "Stable", tone: "ok" };
   if (score >= 55) return { label: "At Risk", tone: "bad" };
@@ -1708,6 +1708,11 @@ export default async function InsightsPage({ searchParams }: PageProps) {
     if (v404 == null && err == null) return null;
     return (v404 ?? 0) + (err ?? 0);
   })();
+  const insightScoreMetric = guardianScoreDisplay == null ? "Warming" : fmtInt(guardianScoreDisplay);
+  const heroSignalsMetric = heroSignals == null ? "Awaiting first scan" : fmtInt(heroSignals);
+  const vitalsReady = !(lcpP75Ms == null && inpP75Ms == null && clsP75 == null);
+  const vitalsMetric = vitalsReady ? "P75" : "Awaiting data";
+  const a11yIssuesMetric = a11yIssues == null ? "Not recorded yet" : fmtInt(a11yIssues);
 
   const cavaiSnapshotData =
     summary?.snapshot ?? summary?.diagnostics ?? summary ?? null;
@@ -1863,33 +1868,49 @@ export default async function InsightsPage({ searchParams }: PageProps) {
               <article className={`cb-card tone-${posture.tone}`}>
                 <div className="cb-card-top">
                   <div className="cb-card-label">Insight Score</div>
-                  <div className="cb-card-metric">{guardianScoreDisplay == null ? "—" : fmtInt(guardianScoreDisplay)}</div>
+                  <div className="cb-card-metric">{insightScoreMetric}</div>
                 </div>
-                <div className="cb-card-sub">A unified posture read from CavBot’s collected signals.</div>
+                <div className="cb-card-sub">
+                  {guardianScoreDisplay == null
+                    ? "CavBot is warming this origin and will score it after the first persisted scan or live rollup."
+                    : "A unified posture read from CavBot’s collected signals."}
+                </div>
               </article>
 
               <article className={`cb-card tone-${heroSignalsTone}`}>
                 <div className="cb-card-top">
                   <div className="cb-card-label">Signals Observed</div>
-                  <div className="cb-card-metric">{heroSignals == null ? "—" : fmtInt(heroSignals)}</div>
+                  <div className="cb-card-metric">{heroSignalsMetric}</div>
                 </div>
-                <div className="cb-card-sub">Combined signal volume for the selected target and range.</div>
+                <div className="cb-card-sub">
+                  {heroSignals == null
+                    ? "Combined signal volume appears after the first completed scan or telemetry rollup."
+                    : "Combined signal volume for the selected target and range."}
+                </div>
               </article>
 
               <article className={`cb-card tone-${vitalsTone}`}>
                 <div className="cb-card-top">
                   <div className="cb-card-label">Vitals Read</div>
-                  <div className="cb-card-metric">{lcpP75Ms == null && inpP75Ms == null && clsP75 == null ? "—" : "P75"}</div>
+                  <div className="cb-card-metric">{vitalsMetric}</div>
                 </div>
-                <div className="cb-card-sub">Performance posture using available P75 vitals.</div>
+                <div className="cb-card-sub">
+                  {vitalsReady
+                    ? "Performance posture using available P75 vitals."
+                    : "Real vitals appear here after the first compatible field sample or diagnostics pass arrives."}
+                </div>
               </article>
 
               <article className={`cb-card tone-${a11yTone}`}>
                 <div className="cb-card-top">
                   <div className="cb-card-label">A11y Issues</div>
-                  <div className="cb-card-metric">{a11yIssues == null ? "—" : fmtInt(a11yIssues)}</div>
+                  <div className="cb-card-metric">{a11yIssuesMetric}</div>
                 </div>
-                <div className="cb-card-sub">Accessibility audit issue count for the selected target and range.</div>
+                <div className="cb-card-sub">
+                  {a11yIssues == null
+                    ? "Accessibility issue counts appear after the first completed diagnostics pass."
+                    : "Accessibility audit issue count for the selected target and range."}
+                </div>
               </article>
             </section>
 
@@ -1988,7 +2009,7 @@ export default async function InsightsPage({ searchParams }: PageProps) {
                               </div>
                               <div className="ins-part-right">
                                 <div className="ins-part-w">{p.weightPct}%</div>
-                                <div className="ins-part-s">{p.score == null ? "—" : fmtInt(p.score)}</div>
+                                <div className="ins-part-s">{p.score == null ? "Pending" : fmtInt(p.score)}</div>
                               </div>
                             </div>
                             <div className="ins-part-bar" aria-hidden="true">
@@ -2003,7 +2024,9 @@ export default async function InsightsPage({ searchParams }: PageProps) {
                         <div className="ins-scoremeta">
                           <div className="ins-scoremeta-item">
                             <span className="ins-scoremeta-label mono">Output</span>
-                            <strong className={`ins-scoreout tone-${posture.tone}`}>{guardianScoreDisplay == null ? "—" : `${fmtInt(guardianScoreDisplay)} / 100`}</strong>
+                            <strong className={`ins-scoreout tone-${posture.tone}`}>
+                              {guardianScoreDisplay == null ? "Warming" : `${fmtInt(guardianScoreDisplay)} / 100`}
+                            </strong>
                           </div>
                           <div className="ins-scoremeta-item">
                             <span className="ins-scoremeta-label mono">Window</span>

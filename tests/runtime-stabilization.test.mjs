@@ -17,6 +17,8 @@ test("legacy sites route stays on runtime-safe workspace wiring", () => {
   assert.equal(source.includes("createDefaultAllowedOriginsForSite"), true);
   assert.equal(source.includes("rollbackCreatedWorkspaceSite"), true);
   assert.equal(source.includes("registerWorkerSite"), true);
+  assert.equal(source.includes("requestInitialSiteScanBestEffort"), true);
+  assert.equal(source.includes("initialScan"), true);
 });
 
 test("embed analytics route records local activity after successful upstream delivery", () => {
@@ -56,4 +58,23 @@ test("cavai persistence paths avoid prisma runtime access on production routes",
   assert.equal(metricsRoute.includes("requireWorkspaceResilientSession"), true);
   assert.equal(fixesRoute.includes("requireWorkspaceResilientSession"), true);
   assert.equal(packRoute.includes("requireWorkspaceResilientSession"), true);
+});
+
+test("scan completion now bridges raw scan artifacts into persisted CavAi packs", () => {
+  const scannerSource = read("lib/scanner.ts");
+  const diagnosticsSource = read("app/api/cavai/diagnostics/route.ts");
+  const pipelineSource = read("lib/cavai/pipeline.server.ts");
+  const bridgeSource = read("lib/cavai/scanBridge.server.ts");
+  const statusSource = read("lib/workspaceScans.server.ts");
+
+  assert.equal(scannerSource.includes("generateInsightPackFromScanArtifacts"), true);
+  assert.equal(scannerSource.includes("DIAGNOSTICS_GENERATION_FAILED"), true);
+  assert.equal(scannerSource.includes("requestInitialSiteScanBestEffort"), true);
+  assert.equal(scannerSource.includes("classifyInitialSiteScanFailure"), true);
+  assert.equal(diagnosticsSource.includes("generateInsightPackFromInput"), true);
+  assert.equal(pipelineSource.includes("augmentKeywordFindings"), true);
+  assert.equal(pipelineSource.includes("findIdempotentPack"), true);
+  assert.equal(bridgeSource.includes("createNormalizedScanInputFromScanArtifacts"), true);
+  assert.equal(statusSource.includes("diagnosticsReady"), true);
+  assert.equal(statusSource.includes("diagnosticsFailureReason"), true);
 });

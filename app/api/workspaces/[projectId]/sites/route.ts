@@ -33,6 +33,7 @@ import {
   requireLowRiskWorkspaceSession,
   requireWorkspaceSession,
 } from "@/lib/workspaceAuth.server";
+import { requestInitialSiteScanBestEffort } from "@/lib/scanner";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -414,6 +415,20 @@ export async function POST(req: Request, ctx: unknown) {
 
       await createProjectNoticeBestEffort(project.id, result.site.origin, rid);
 
+      const initialScan = await requestInitialSiteScanBestEffort({
+        projectId: project.id,
+        siteId: result.site.id,
+        accountId: sess.accountId,
+        operatorUserId: sess.sub,
+        ip:
+          (req.headers.get("cf-connecting-ip")
+            || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+            || req.headers.get("true-client-ip"))
+          ?? null,
+        userAgent: req.headers.get("user-agent") ?? null,
+        reason: "Initial site activation",
+      });
+
       if (sess.accountId) {
         try {
           await auditLogWrite({
@@ -443,7 +458,7 @@ export async function POST(req: Request, ctx: unknown) {
         }
       }
 
-      return json({ site: result.site, topSiteId: result.topSiteId }, 201, rid);
+      return json({ site: result.site, topSiteId: result.topSiteId, initialScan }, 201, rid);
     } catch (e: unknown) {
       return siteFailureResponse({
         route: "/api/workspaces/[projectId]/sites",

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { auditLogWrite } from "@/lib/audit";
+import { generateInsightPackFromScanArtifacts } from "@/lib/cavai/scanBridge.server";
 import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { PLANS, getPlanLimits, resolvePlanIdFromTier, type PlanId } from "@/lib/plans";
 import { Prisma, type ScanJobStatus, type ScanFindingSeverity } from "@prisma/client";
@@ -157,6 +158,9 @@ export type ScanJobSummary = {
   highPriorityCount: number | null;
   overallScore: number | null;
   report: ScanReport | null;
+  diagnosticsReady: boolean;
+  diagnosticsGeneratedAt: Date | null;
+  diagnosticsFailureReason: string | null;
 };
 
 export type ProjectScanStatus = {
@@ -189,6 +193,9 @@ export async function getProjectScanStatus(projectId: number, accountId: string 
         highPriorityCount: lastJob.highPriorityCount ?? null,
         overallScore: lastJob.overallScore ?? null,
         report: lastJob.resultJson as ScanReport | null,
+        diagnosticsReady: false,
+        diagnosticsGeneratedAt: null,
+        diagnosticsFailureReason: null,
       }
     : null;
 
@@ -680,7 +687,7 @@ async function runScanJob(jobId: string, context: RunScanContext) {
 
   const scanStart = Date.now();
   try {
-    const { report, analyses } = await performScan(job.site.origin, context.pageLimit);
+    const { report, analyses, pages } = await performScan(job.site.origin, context.pageLimit);
 
 	    const findingsData = analyses.flatMap((analysis) =>
 	      analysis.findings.map((finding) => ({
@@ -704,26 +711,92 @@ async function runScanJob(jobId: string, context: RunScanContext) {
 	      metaJson: toInputJson(analysis.snapshot.metaJson),
 	    }));
 
-    const updateData = {
-      status: "SUCCEEDED" as ScanJobStatus,
-      finishedAt: new Date(),
+    const finishedAt = new Date();
+    const durationMs = Date.now() - scanStart;
+    const rawUpdateData = {
       resultJson: report,
       pagesScanned: report.metrics.pagesAnalyzed,
       issuesFound: report.metrics.issuesFound,
       highPriorityCount: report.metrics.highPriorityCount,
       overallScore: report.metrics.overallScore,
-      durationMs: Date.now() - scanStart,
+      durationMs,
+      finishedAt,
     };
 
-    const tx: Prisma.PrismaPromise<unknown>[] = [];
+    const rawTx: Prisma.PrismaPromise<unknown>[] = [];
     if (findingsData.length) {
-      tx.push(prisma.scanFinding.createMany({ data: findingsData }));
+      rawTx.push(prisma.scanFinding.createMany({ data: findingsData }));
     }
     if (snapshotsData.length) {
-      tx.push(prisma.scanSnapshot.createMany({ data: snapshotsData }));
+      rawTx.push(prisma.scanSnapshot.createMany({ data: snapshotsData }));
     }
-    tx.push(prisma.scanJob.update({ where: { id: jobId }, data: updateData }));
-    await prisma.$transaction(tx);
+    rawTx.push(prisma.scanJob.update({ where: { id: jobId }, data: rawUpdateData }));
+    await prisma.$transaction(rawTx);
+
+    try {
+      await generateInsightPackFromScanArtifacts({
+        accountId: context.accountId,
+        userId: context.operatorUserId || "system",
+        origin: job.site.origin,
+        pageLimit: context.pageLimit,
+        pagesSelected: pages.map((page) => page.url),
+        report,
+        findings: analyses.flatMap((analysis) => analysis.findings),
+        snapshots: analyses.map((analysis) => analysis.snapshot),
+        jobId,
+        projectId: job.projectId,
+        siteId: job.siteId,
+        requestId: `scan_${jobId}`,
+      });
+    } catch (error) {
+      const diagnosticsMessage = error instanceof Error ? error.message : "Diagnostics generation failed";
+      const diagnosticsFailureReason = `DIAGNOSTICS_GENERATION_FAILED: ${diagnosticsMessage}`.slice(0, 500);
+      await prisma.scanJob.update({
+        where: { id: jobId },
+        data: {
+          status: "FAILED",
+          finishedAt: new Date(),
+          reason: diagnosticsFailureReason,
+          resultJson: report,
+          pagesScanned: report.metrics.pagesAnalyzed,
+          issuesFound: report.metrics.issuesFound,
+          highPriorityCount: report.metrics.highPriorityCount,
+          overallScore: report.metrics.overallScore,
+          durationMs,
+        },
+      });
+      await auditLogWrite({
+        accountId: context.accountId,
+        operatorUserId: context.operatorUserId,
+        action: "SCAN_FAILED",
+        targetType: "site",
+        targetId: job.site.id,
+        targetLabel: job.site.origin,
+        metaJson: {
+          error: diagnosticsFailureReason,
+          stage: "cavai_pack_generation",
+          pagesAnalyzed: report.metrics.pagesAnalyzed,
+          issuesFound: report.metrics.issuesFound,
+          ...(context.ip ? { requestIp: context.ip } : {}),
+          ...(context.userAgent ? { userAgent: context.userAgent } : {}),
+        },
+      });
+      return;
+    }
+
+    await prisma.scanJob.update({
+      where: { id: jobId },
+      data: {
+        status: "SUCCEEDED" as ScanJobStatus,
+        finishedAt,
+        resultJson: report,
+        pagesScanned: report.metrics.pagesAnalyzed,
+        issuesFound: report.metrics.issuesFound,
+        highPriorityCount: report.metrics.highPriorityCount,
+        overallScore: report.metrics.overallScore,
+        durationMs,
+      },
+    });
 
     await auditLogWrite({
       accountId: context.accountId,
@@ -736,7 +809,7 @@ async function runScanJob(jobId: string, context: RunScanContext) {
         pagesAnalyzed: report.metrics.pagesAnalyzed,
         issuesFound: report.metrics.issuesFound,
         highPriorityCount: report.metrics.highPriorityCount,
-        durationMs: updateData.durationMs,
+        durationMs,
         ...(context.ip ? { requestIp: context.ip } : {}),
         ...(context.userAgent ? { userAgent: context.userAgent } : {}),
       },
@@ -788,6 +861,28 @@ export type RequestScanResult = {
   scansPerMonth: number;
 };
 
+export type InitialSiteScanResult = {
+  queued: boolean;
+  jobId?: string;
+  reason?: "queued" | "already_running" | "rate_limited" | "quota_exhausted" | "site_not_ready" | "queue_failed";
+};
+
+export function classifyInitialSiteScanFailure(error: unknown): InitialSiteScanResult["reason"] {
+  if (!(error instanceof ScanRequestError)) return "queue_failed";
+  if (error.code === "SCAN_IN_PROGRESS") return "already_running";
+  if (error.code === "SCAN_RECENT") return "rate_limited";
+  if (error.code === "SCAN_LIMIT") return "quota_exhausted";
+  if (
+    error.code === "PROJECT_NOT_FOUND" ||
+    error.code === "SITE_NOT_FOUND" ||
+    error.code === "ACCESS_DENIED" ||
+    error.code === "ORIGIN_NOT_ALLOWLISTED"
+  ) {
+    return "site_not_ready";
+  }
+  return "queue_failed";
+}
+
 export async function requestScan(options: RequestScanOptions): Promise<RequestScanResult> {
   const project = await fetchProjectContext(options.projectId);
   if (!project) {
@@ -816,7 +911,7 @@ export async function requestScan(options: RequestScanOptions): Promise<RequestS
   }
 
   const hasRunning = await prisma.scanJob.findFirst({
-    where: { siteId: site.id, status: "RUNNING" },
+    where: { siteId: site.id, status: { in: ["QUEUED", "RUNNING"] } },
     select: { id: true },
   });
   if (hasRunning) {
@@ -870,4 +965,25 @@ export async function requestScan(options: RequestScanOptions): Promise<RequestS
     scansRemaining: Math.max(0, usage.scansPerMonth - (usage.scansThisMonth + 1)),
     scansPerMonth: usage.scansPerMonth,
   };
+}
+
+export async function requestInitialSiteScanBestEffort(
+  options: RequestScanOptions,
+): Promise<InitialSiteScanResult> {
+  try {
+    const result = await requestScan({
+      ...options,
+      reason: options.reason || "Initial site activation",
+    });
+    return {
+      queued: true,
+      jobId: result.jobId,
+      reason: "queued",
+    };
+  } catch (error) {
+    return {
+      queued: false,
+      reason: classifyInitialSiteScanFailure(error),
+    };
+  }
 }

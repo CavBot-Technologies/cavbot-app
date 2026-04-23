@@ -65,6 +65,7 @@ type FixPlanState = {
 
 const PACK_CACHE_TTL_MS = 30_000;
 const packCache = new Map<string, { at: number; value: PackResponseOk }>();
+const SCAN_METRICS_READY_EVENT = "cb:scan-metrics-ready";
 
 function normalizeOrigin(input: string): string {
   const raw = String(input || "").trim();
@@ -155,7 +156,7 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
     if (!normalizedOrigin) {
       return "Select a primary site to begin.";
     }
-    return "No deterministic run exists yet for this origin. Run diagnostics in Insights to generate an evidence-linked InsightPack.";
+    return "CavBot is waiting for the first completed scan for this origin. Initial scans queue automatically when a site is added.";
   }, [normalizedOrigin]);
 
   const loadPack = useCallback(async () => {
@@ -220,6 +221,19 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
   useEffect(() => {
     void loadPack();
   }, [loadPack]);
+
+  useEffect(() => {
+    if (!normalizedOrigin) return;
+    const handle = (event: Event) => {
+      const detail = (event as CustomEvent<{ origin?: string }>).detail;
+      const eventOrigin = normalizeOrigin(detail?.origin || "");
+      if (eventOrigin && eventOrigin !== normalizedOrigin) return;
+      packCache.delete(normalizedOrigin);
+      void loadPack();
+    };
+    window.addEventListener(SCAN_METRICS_READY_EVENT, handle as EventListener);
+    return () => window.removeEventListener(SCAN_METRICS_READY_EVENT, handle as EventListener);
+  }, [loadPack, normalizedOrigin]);
 
   const getPriorityByCode = useCallback(
     (priorityCode: string): CavAiPriorityV1 | null => {

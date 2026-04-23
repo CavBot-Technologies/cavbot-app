@@ -30,6 +30,9 @@ type RawScanJobRow = {
   resultJson: unknown;
   siteOrigin: string | null;
   siteLabel: string | null;
+  diagnosticsReady: boolean | null;
+  diagnosticsGeneratedAt: Date | string | null;
+  diagnosticsFailureReason: string | null;
 };
 
 function toDate(value: Date | string | null | undefined) {
@@ -107,6 +110,10 @@ function normalizeScanSummary(row: RawScanJobRow | null | undefined): ScanJobSum
     highPriorityCount: row.highPriorityCount == null ? null : toInt(row.highPriorityCount),
     overallScore: row.overallScore == null ? null : toInt(row.overallScore),
     report: normalizeScanReport(row.resultJson),
+    diagnosticsReady: Boolean(row.diagnosticsReady),
+    diagnosticsGeneratedAt: toDate(row.diagnosticsGeneratedAt),
+    diagnosticsFailureReason:
+      row.diagnosticsFailureReason == null ? null : String(row.diagnosticsFailureReason),
   };
 }
 
@@ -132,13 +139,37 @@ export async function getWorkspaceProjectScanStatus(projectId: number, accountId
        job."overallScore",
        job."resultJson",
        site."origin" AS "siteOrigin",
-       site."label" AS "siteLabel"
+       site."label" AS "siteLabel",
+       CASE
+         WHEN job."status" = 'SUCCEEDED' AND diag."generatedAt" IS NOT NULL THEN TRUE
+         ELSE FALSE
+       END AS "diagnosticsReady",
+       diag."generatedAt" AS "diagnosticsGeneratedAt",
+       CASE
+         WHEN job."status" = 'FAILED'
+          AND job."reason" IS NOT NULL
+          AND job."reason" LIKE 'DIAGNOSTICS_GENERATION_FAILED:%'
+         THEN job."reason"
+         ELSE NULL
+       END AS "diagnosticsFailureReason"
      FROM "ScanJob" job
      LEFT JOIN "Site" site ON site."id" = job."siteId"
+     LEFT JOIN LATERAL (
+       SELECT pack."generatedAt"
+       FROM "CavAiRun" run
+       INNER JOIN "CavAiInsightPack" pack
+         ON pack."runId" = run."id"
+        AND pack."accountId" = run."accountId"
+       WHERE run."accountId" = $2
+         AND run."origin" = site."origin"
+         AND run."createdAt" >= job."createdAt"
+       ORDER BY run."createdAt" DESC
+       LIMIT 1
+     ) diag ON TRUE
      WHERE job."projectId" = $1
      ORDER BY job."createdAt" DESC
      LIMIT 1`,
-    [projectId],
+    [projectId, accountId],
   );
 
   return {

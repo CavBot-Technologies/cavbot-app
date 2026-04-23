@@ -10,9 +10,8 @@ import {
   pickPrimaryMembership,
 } from "@/lib/authDb";
 import { prisma } from "@/lib/prisma";
-import { getProjectSummaryForTenant, getProjectSummary } from "@/lib/cavbotApi.server";
+import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 import { resolvePlanIdFromTier, hasModule } from "@/lib/plans";
-import { decryptAesGcm } from "@/lib/cryptoAesGcm.server";
 import { readCustomLinkUrlFallback } from "@/lib/profile/customLinkStore.server";
 import {
   DEFAULT_PUBLIC_PROFILE_SETTINGS,
@@ -1127,7 +1126,7 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
   }
 
   // Resolve project in the same tenant (never leak cross-tenant).
-  let project: { id: number; serverKeyEnc: string; serverKeyEncIv: string } | null = null;
+  let project: { id: number } | null = null;
   let monitoredSitesCount: number | null = null;
   let arcadeEnabled = false;
 
@@ -1146,8 +1145,6 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
     if (projectRow?.id != null) {
       project = {
         id: projectRow.id,
-        serverKeyEnc: projectRow.serverKeyEnc ? String(projectRow.serverKeyEnc) : "",
-        serverKeyEncIv: projectRow.serverKeyEncIv ? String(projectRow.serverKeyEncIv) : "",
       };
 
       monitoredSitesCount = await prisma.site
@@ -1168,25 +1165,13 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
 
   // Load summary (safe aggregates only). Fail closed and render "Waiting for telemetry" without inventing numbers.
   let summary: unknown = null;
-  if (project) {
+  if (project && accountId) {
     try {
-      // Preferred: tenant key (encrypted in DB).
-      if (project.serverKeyEnc && project.serverKeyEncIv) {
-        try {
-          const projectKey = await decryptAesGcm({ enc: project.serverKeyEnc, iv: project.serverKeyEncIv });
-          summary = await getProjectSummaryForTenant({
-            projectId: project.id,
-            range: "7d",
-            projectKey,
-          });
-        } catch {
-          // If this environment can't decrypt (missing CAVBOT_KEY_ENC_SECRET), fall back to env-key summary.
-          summary = await getProjectSummary(String(project.id), { range: "7d" });
-        }
-      } else {
-        // Fallback: env-based key (single-tenant/dev). Still real data, but not multi-tenant safe.
-        summary = await getProjectSummary(String(project.id), { range: "7d" });
-      }
+      summary = (await getTenantProjectSummary({
+        accountId,
+        projectId: project.id,
+        range: "7d",
+      })).summary;
     } catch {
       summary = null;
     }
@@ -1194,22 +1179,13 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
 
   // Operational history wants a longer memory window to decay entries naturally.
   let summary30d: unknown = null;
-  if (project) {
+  if (project && accountId) {
     try {
-      if (project.serverKeyEnc && project.serverKeyEncIv) {
-        try {
-          const projectKey = await decryptAesGcm({ enc: project.serverKeyEnc, iv: project.serverKeyEncIv });
-          summary30d = await getProjectSummaryForTenant({
-            projectId: project.id,
-            range: "30d",
-            projectKey,
-          });
-        } catch {
-          summary30d = await getProjectSummary(String(project.id), { range: "30d" });
-        }
-      } else {
-        summary30d = await getProjectSummary(String(project.id), { range: "30d" });
-      }
+      summary30d = (await getTenantProjectSummary({
+        accountId,
+        projectId: project.id,
+        range: "30d",
+      })).summary;
     } catch {
       summary30d = null;
     }

@@ -1143,8 +1143,8 @@ export default async function PublicCavbotProfilePage({
                                 />
                               </svg>
                               <div className="pp-healthRingLabel">
-                                <div className="pp-healthRingNum">{guardianScore == null ? "—" : guardianScore}</div>
-                                <div className="pp-healthRingUnit">/100</div>
+                                <div className="pp-healthRingNum">{guardianScore == null ? "Warming" : guardianScore}</div>
+                                <div className="pp-healthRingUnit">{guardianScore == null ? "" : "/100"}</div>
                               </div>
                             </div>
                           </div>

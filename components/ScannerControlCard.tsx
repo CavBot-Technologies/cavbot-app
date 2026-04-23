@@ -23,6 +23,8 @@ type ScanStatusResponse = {
   status: ProjectScanStatus;
 };
 
+const SCAN_METRICS_READY_EVENT = "cb:scan-metrics-ready";
+
 export default function ScannerControlCard({
   projectId,
   activeSiteId,
@@ -37,6 +39,7 @@ export default function ScannerControlCard({
   const [fetchError, setFetchError] = useState<string | null>(null);
   const lastStatusErrorToastRef = useRef<string>("");
   const pushToastRef = useRef(pushToast);
+  const lastMetricsReadyRef = useRef("");
 
   useEffect(() => {
     pushToastRef.current = pushToast;
@@ -112,6 +115,11 @@ export default function ScannerControlCard({
   const isFailed = scanStatus?.lastJob?.status === "FAILED";
   const latestJob = scanStatus?.lastJob ?? null;
   const report = latestJob?.report ?? null;
+  const diagnosticsReady = Boolean(latestJob?.diagnosticsReady);
+  const diagnosticsGeneratedAt = latestJob?.diagnosticsGeneratedAt ?? null;
+  const diagnosticsGeneratedAtIso = diagnosticsGeneratedAt
+    ? new Date(diagnosticsGeneratedAt as unknown as string | Date).toISOString()
+    : null;
 
   const pagesAnalyzed = report?.metrics.pagesAnalyzed ?? latestJob?.pagesScanned ?? 0;
   const issuesFound = report?.metrics.issuesFound ?? latestJob?.issuesFound ?? 0;
@@ -168,6 +176,23 @@ export default function ScannerControlCard({
     setModalOpen(false);
     setModalReport(null);
   };
+
+  useEffect(() => {
+    if (!latestJob || latestJob.status !== "SUCCEEDED" || !diagnosticsReady) return;
+    const emissionKey = `${latestJob.id}:${diagnosticsGeneratedAtIso || ""}`;
+    if (lastMetricsReadyRef.current === emissionKey) return;
+    lastMetricsReadyRef.current = emissionKey;
+    window.dispatchEvent(
+      new CustomEvent(SCAN_METRICS_READY_EVENT, {
+        detail: {
+          projectId,
+          jobId: latestJob.id,
+          origin: latestJob.siteOrigin || activeSite?.origin || "",
+          generatedAt: diagnosticsGeneratedAtIso,
+        },
+      })
+    );
+  }, [activeSite?.origin, diagnosticsGeneratedAtIso, diagnosticsReady, latestJob, projectId]);
 
   return (
     <section className="cb-card cb-card-scanner" aria-label="CavScan">
@@ -257,19 +282,21 @@ export default function ScannerControlCard({
               </button>
               {isFailed ? (
                 <span className="cb-scan-status cb-scan-status-warning">
-                  Last scan failed. Check logs and try again.
+                  {latestJob?.diagnosticsFailureReason || latestJob?.reason || "Last scan failed. Check logs and try again."}
                 </span>
               ) : null}
               {isSuccess ? (
                 <span className="cb-scan-status cb-scan-status-success">
-                  Latest scan completed successfully.
+                  {diagnosticsReady
+                    ? "Latest scan completed and refreshed CavAi metrics."
+                    : "Crawl completed. CavAi metrics are still warming."}
                 </span>
               ) : null}
             </div>
           </>
         ) : (
           <p className="cb-scan-subcopy">
-            No background crawling. Runs only when you press Scan.
+            No completed scans yet. CavBot queues the first scan when you add a website, and you can run CavScan any time to refresh live metrics.
             <br />
             <br />
           </p>

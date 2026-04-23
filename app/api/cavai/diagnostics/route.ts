@@ -1,23 +1,13 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { buildDeterministicCore, buildInputHash, applyOverlay } from "@/packages/cavai-core/src";
-import { parseNormalizedScanInputV1, validateInsightPackV1 } from "@/packages/cavai-contracts/src";
+import { parseNormalizedScanInputV1 } from "@/packages/cavai-contracts/src";
 import { auditLogWrite } from "@/lib/audit";
 import {
-  computeOverlay,
-  createRunAndFindings,
-  findIdempotentPack,
-  normalizeFindingsForInput,
-  persistInsightPack,
-} from "@/lib/cavai/intelligence.server";
-import { augmentFaviconFindings } from "@/lib/cavai/favicon.server";
-import { augmentStructuredDataFindings } from "@/lib/cavai/structured-data.server";
-import { augmentAccessibilityPlusFindings } from "@/lib/cavai/accessibility-plus.server";
-import { augmentReliability404Findings } from "@/lib/cavai/reliability-404.server";
-import { augmentUxLayoutGuardFindings } from "@/lib/cavai/ux-layout-guards.server";
-import { augmentTrustPageFindings } from "@/lib/cavai/trust-pages.server";
-import { augmentKeywordFindings } from "@/lib/cavai/keywords.server";
+  CavAiPackValidationError,
+  DEFAULT_CAVAI_ENGINE_VERSION,
+  generateInsightPackFromInput,
+} from "@/lib/cavai/pipeline.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import {
   isApiAuthError,
@@ -26,8 +16,6 @@ import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const ENGINE_VERSION = "cavai-core@1.1.0";
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
   Pragma: "no-cache",
@@ -106,114 +94,47 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const normalizedFindings = normalizeFindingsForInput(parsed.value.findings, parsed.value.origin);
-    const withFavicon = await augmentFaviconFindings({
-      input: {
-        ...parsed.value,
-        findings: normalizedFindings,
-      },
-    });
-    const withStructuredData = await augmentStructuredDataFindings({
-      input: {
-        ...parsed.value,
-        findings: withFavicon,
-      },
-    });
-    const withAccessibility = await augmentAccessibilityPlusFindings({
-      input: {
-        ...parsed.value,
-        findings: withStructuredData,
-      },
-    });
-    const withReliability = await augmentReliability404Findings({
-      input: {
-        ...parsed.value,
-        findings: withAccessibility,
-      },
-    });
-    const withUxLayout = await augmentUxLayoutGuardFindings({
-      input: {
-        ...parsed.value,
-        findings: withReliability,
-      },
-    });
-    const withTrust = await augmentTrustPageFindings({
-      input: {
-        ...parsed.value,
-        findings: withUxLayout,
-      },
-    });
-    const withKeywords = await augmentKeywordFindings({
-      input: {
-        ...parsed.value,
-        findings: withTrust,
-      },
-    });
-
-    const input = {
-      ...parsed.value,
-      findings: withKeywords,
-    };
-    const inputHash = buildInputHash(input);
     const force = new URL(req.url).searchParams.get("force") === "1";
-
-    if (!force) {
-      const existing = await findIdempotentPack({
-        accountId: session.accountId,
-        origin: input.origin,
-        inputHash,
-      });
-      if (existing) {
-        await writeDiagnosticsAudit({
-          req,
-          accountId: session.accountId,
-          userId: session.sub,
-          runId: existing.runId,
-          origin: input.origin,
-          inputHash,
-          idempotent: true,
-        });
-        return json({
-          ok: true,
-          requestId,
-          idempotent: true,
-          pack: existing,
-        });
-      }
-    }
-
-    const run = await createRunAndFindings({
+    const result = await generateInsightPackFromInput({
       accountId: session.accountId,
       userId: session.sub,
-      input,
-      inputHash,
-      engineVersion: ENGINE_VERSION,
-    });
-
-    const corePack = buildDeterministicCore(input, {
-      engineVersion: ENGINE_VERSION,
       requestId,
-      runId: run.runId,
-      accountId: session.accountId,
-      generatedAt: run.createdAtIso,
-      inputHash,
+      input: parsed.value,
+      force,
+      engineVersion: DEFAULT_CAVAI_ENGINE_VERSION,
+      meta: {
+        workspaceId: session.accountId,
+      },
     });
 
-    const overlay = await computeOverlay({
+    await writeDiagnosticsAudit({
+      req,
       accountId: session.accountId,
-      origin: input.origin,
+      userId: session.sub,
+      runId: result.runId,
+      origin: result.input.origin,
+      inputHash: result.inputHash,
+      idempotent: result.idempotent,
     });
-    const pack = applyOverlay(corePack, overlay);
 
-    const validated = validateInsightPackV1(pack);
-    if (!validated.ok) {
+    return json(
+      {
+        ok: true,
+        requestId,
+        idempotent: result.idempotent,
+        pack: result.pack,
+      },
+      200
+    );
+  } catch (error) {
+    if (error instanceof CavAiPackValidationError) {
       if (process.env.NODE_ENV !== "production") {
         return json(
           {
             ok: false,
             requestId,
             error: "PACK_VALIDATION_FAILED",
-            details: validated.errors,
+            details: error.details,
           },
           422
         );
@@ -227,33 +148,6 @@ export async function POST(req: NextRequest) {
         500
       );
     }
-
-    await persistInsightPack({
-      accountId: session.accountId,
-      runId: run.runId,
-      pack,
-    });
-
-    await writeDiagnosticsAudit({
-      req,
-      accountId: session.accountId,
-      userId: session.sub,
-      runId: run.runId,
-      origin: input.origin,
-      inputHash,
-      idempotent: false,
-    });
-
-    return json(
-      {
-        ok: true,
-        requestId,
-        idempotent: false,
-        pack,
-      },
-      200
-    );
-  } catch (error) {
     if (isApiAuthError(error)) {
       return json({ ok: false, requestId, error: error.code }, error.status);
     }

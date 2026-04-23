@@ -837,7 +837,9 @@ export default async function ControlRoomGamesPage({ searchParams }: PageProps) 
             <article className="cb-card tone-ok">
               <div className="cb-card-top">
                 <div className="cb-card-label">Trend</div>
-                <div className="cb-card-metric">{trendVals.length ? fmtInt(trendVals[trendVals.length - 1]) : "—"}</div>
+                <div className="cb-card-metric">
+                  {trendVals.length ? fmtInt(trendVals[trendVals.length - 1]) : "Warming"}
+                </div>
               </div>
               <div className="cb-card-sub">
                 <div className="crg-spark" aria-label="404 views sparkline">

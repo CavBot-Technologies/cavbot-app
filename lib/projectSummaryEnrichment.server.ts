@@ -61,6 +61,7 @@ const ROUTE_CODES = new Set([
   "broken_back_to_top",
   "inconsistent_navigation",
   "recommend_404_arcade_game",
+  "slow_response",
   "high_layout_shift",
   "horizontal_overflow_detected",
   "text_clip_overflow_risk",
@@ -422,7 +423,10 @@ export function enrichProjectSummaryWithLatestPack(
   routesRollup.spaNavigations ??= 0;
   routesRollup.views404Count ??= views404 ?? route404Rows.reduce((total, row) => total + row.diagnosticCount, 0);
   routesRollup.jsErrorCount ??= jsErrors ?? errorRows.filter((row) => row.issues.some((issue) => /js/i.test(issue))).length;
-  routesRollup.slowRouteCount ??= uniqueMatchingPages(pack, (finding) => finding.code === "high_layout_shift").size;
+  routesRollup.slowRouteCount ??= uniqueMatchingPages(
+    pack,
+    (finding) => finding.code === "high_layout_shift" || finding.code === "slow_response",
+  ).size;
   routesRollup.views404Pct ??=
     views404 != null && sessions30d != null && sessions30d > 0
       ? clamp((views404 / sessions30d) * 100, 0, 100)

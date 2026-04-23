@@ -27,7 +27,8 @@ import {
 import { requireAdminAccessFromRequestContext } from "@/lib/admin/staff";
 import { getArcadeGames } from "@/lib/arcade/catalog";
 import { buildArcadeThumbnailUrl, ARCADE_KIND_404 } from "@/lib/arcade/settings";
-import { getProjectSummary, type SummaryRange } from "@/lib/cavbotApi.server";
+import type { SummaryRange } from "@/lib/cavbotApi.server";
+import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -458,10 +459,12 @@ export default async function NotFoundRecoveryPage(props: {
       siteId: target.siteId,
       gameSlug: target.gameSlug,
       summary: readSummaryControlRoom(
-        await getProjectSummary(String(target.projectId), {
+        (await getTenantProjectSummary({
+          accountId: target.accountId,
+          projectId: target.projectId,
           range: summaryRange,
           siteOrigin: target.origin,
-        }),
+        })).summary,
         target.gameSlug,
       ),
     })),

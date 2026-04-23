@@ -10,10 +10,12 @@ const tenantScopedFiles = [
   "app/a11y/page.tsx",
   "app/insights/page.tsx",
   "app/404-control-room/page.tsx",
+  "app/admin-internal/(protected)/404-recovery/page.tsx",
   "app/api/errors/export/route.ts",
   "app/api/seo/export/route.ts",
   "app/api/summary/route.ts",
   "app/console/report/route.ts",
+  "lib/publicProfile/publicProfile.server.ts",
 ];
 
 test("dashboard surfaces use tenant-scoped summary reads", () => {

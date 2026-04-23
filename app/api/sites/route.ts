@@ -17,6 +17,7 @@ import {
   rollbackCreatedWorkspaceSite,
 } from "@/lib/workspaceSites.server";
 import { expandRelatedExactOrigins } from "@/originMatch";
+import { requestInitialSiteScanBestEffort } from "@/lib/scanner";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -326,7 +327,20 @@ export async function POST(req: Request) {
     }
 
     const site = await findLegacySiteById(result.site.id);
-    return json({ site }, 201);
+    const initialScan = await requestInitialSiteScanBestEffort({
+      projectId: project.id,
+      siteId: result.site.id,
+      accountId: session.accountId!,
+      operatorUserId: session.sub || null,
+      ip:
+        (req.headers.get("cf-connecting-ip")
+          || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+          || req.headers.get("true-client-ip"))
+        ?? null,
+      userAgent: req.headers.get("user-agent") ?? null,
+      reason: "Initial site activation",
+    });
+    return json({ site, initialScan }, 201);
   } catch (e: unknown) {
     const { status, payload } = asHttpError(e);
     return json(payload, status);

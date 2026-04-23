@@ -169,6 +169,12 @@ type WorkspacePlanDetail = {
   trialActive?: boolean;
 };
 
+type InitialScanPayload = {
+  queued: boolean;
+  jobId?: string;
+  reason?: "queued" | "already_running" | "rate_limited" | "quota_exhausted" | "site_not_ready" | "queue_failed";
+};
+
 function workspacePlanLabelForId(planId: PlanId) {
   if (planId === "premium_plus") return "PREMIUM+";
   if (planId === "premium") return "PREMIUM";
@@ -403,6 +409,49 @@ function formatAddSiteErrorMessage(error: unknown) {
   }
 
   return withAddSiteErrorContext(raw || "Failed to add website.", error, code);
+}
+
+function describeInitialScanOutcome(initialScan: InitialScanPayload | null | undefined) {
+  if (!initialScan) {
+    return {
+      noticeBody: "Run CavScan to populate the first analytics baseline for this origin.",
+      toast: "Website added. Run CavScan to start collecting live metrics.",
+      tone: "watch" as const,
+    };
+  }
+  if (initialScan.queued) {
+    return {
+      noticeBody: "An initial CavScan was queued automatically so metrics can warm up immediately.",
+      toast: "Website added. Initial scan queued.",
+      tone: "good" as const,
+    };
+  }
+  if (initialScan.reason === "already_running") {
+    return {
+      noticeBody: "A scan is already in flight for this origin. Metrics will refresh when it finishes.",
+      toast: "Website added. Initial scan was already running.",
+      tone: "watch" as const,
+    };
+  }
+  if (initialScan.reason === "rate_limited") {
+    return {
+      noticeBody: "A recent scan already used the warm-up slot. Use CavScan again after the cooldown if you need a fresh pass.",
+      toast: "Website added. Initial scan cooldown is active.",
+      tone: "watch" as const,
+    };
+  }
+  if (initialScan.reason === "quota_exhausted") {
+    return {
+      noticeBody: "The site is wired, but the account has no scan capacity left right now. Metrics will populate after the next available scan.",
+      toast: "Website added. Initial scan needs an available scan credit.",
+      tone: "watch" as const,
+    };
+  }
+  return {
+    noticeBody: "The site is wired. Use CavScan to trigger the first metrics pass if the automatic warm-up could not be queued.",
+    toast: "Website added. Initial scan was not queued; run CavScan to start metrics.",
+    tone: "watch" as const,
+  };
 }
 
 
@@ -2033,6 +2082,7 @@ function CommandDeckPageInner() {
       const data = await apiJSON<{
         site: { id: string; origin: string; label: string; createdAt: string | number };
         topSiteId?: string | null;
+        initialScan?: InitialScanPayload;
       }>(`/api/workspaces/${projectId}/sites`, {
         method: "POST",
         body: JSON.stringify(payload),
@@ -2042,15 +2092,17 @@ function CommandDeckPageInner() {
       const s = data?.site;
       if (!s?.id) throw new Error("SERVER_ERROR");
 
+      const initialScanFeedback = describeInitialScanOutcome(data.initialScan);
+
 
       addNotice({
-        tone: "good",
+        tone: initialScanFeedback.tone,
         title: "Website added",
-        body: `${s.origin} is now under this workspace.`,
+        body: `${s.origin} is now under this workspace. ${initialScanFeedback.noticeBody}`,
       });
 
 
-      pushToast("Website added.", "good");
+      pushToast(initialScanFeedback.toast, initialScanFeedback.tone);
 
       await persistWorkspaceSelection({
         projectId,
