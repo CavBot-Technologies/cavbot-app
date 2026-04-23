@@ -93,6 +93,33 @@ const HUMAN_RESOURCES_LINKS = [
   },
 ] as const;
 
+const DEVELOPER_LINKS = [
+  {
+    href: "/cavtools",
+    label: "CavTools",
+    sub: "Inspect signals, payloads, and operational tooling",
+    iconSrc: "/icons/app/tools-svgrepo-com.svg",
+  },
+  {
+    href: "/cavcode",
+    label: "CavCode",
+    sub: "Build, repair, and ship code with CavBot",
+    iconSrc: "/icons/app/cavcode/code-svgrepo-com.svg",
+  },
+  {
+    href: "/cavcode-viewer",
+    label: "CavCode Viewer",
+    sub: "Review generated output and implementation previews",
+    iconSrc: "/icons/app/file-blank-svgrepo-com.svg",
+  },
+  {
+    href: "/cavcloud",
+    label: "CavCloud",
+    sub: "Workspace files, assets, and deployment-ready storage",
+    iconSrc: "/icons/app/workspace-svgrepo-com.svg",
+  },
+] as const;
+
 const FOOTER_METRICS_KEY = "/api/system-footer/metrics";
 
 async function fetchFooterMetrics(url: string): Promise<FooterMetricsPayload> {
@@ -171,7 +198,9 @@ export default function CavbotGlobalFooter() {
   const [hoverCard, setHoverCard] = useState<FooterCardKey | null>(null);
   const [pinnedCard, setPinnedCard] = useState<FooterCardKey | null>(null);
   const [canHover, setCanHover] = useState(false);
-  const [adminHostRuntime, setAdminHostRuntime] = useState(false);
+  const [adminHostRuntime] = useState(() =>
+    typeof window !== "undefined" ? isAdminHost(window.location.host) : false,
+  );
   const systemCardId = useId();
   const apiCardId = useId();
   const destinationCardId = useId();
@@ -211,17 +240,6 @@ export default function CavbotGlobalFooter() {
     query.addListener(sync);
     return () => query.removeListener(sync);
   }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setAdminHostRuntime(isAdminHost(window.location.host));
-  }, []);
-
-  useEffect(() => {
-    if (adminHostRuntime) {
-      setDeveloperOpen(false);
-    }
-  }, [adminHostRuntime]);
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -732,34 +750,48 @@ export default function CavbotGlobalFooter() {
         <div className={styles.developerOverlay} onClick={() => setDeveloperOpen(false)}>
           <section
             id="cb-footer-developer-panel"
-            className={styles.developerPanel}
+            className={`${styles.developerPanel} ${developerOpen ? styles.developerPanelOpen : ""}`}
             role="dialog"
             aria-modal="true"
             aria-label="Developer links"
             onClick={(event) => event.stopPropagation()}
           >
+            <div className={styles.developerHeader}>
+              <div className={styles.developerTitle}>Developers</div>
+              <button
+                type="button"
+                className={styles.developerClose}
+                aria-label="Close developers panel"
+                onClick={() => setDeveloperOpen(false)}
+              >
+                <span className="cb-closeIcon" aria-hidden="true" />
+              </button>
+            </div>
             <div className={styles.developerLinks}>
-              <Link
-                ref={developerFirstLinkRef}
-                href="/cavtools"
-                className={styles.developerLink}
-                onClick={() => setDeveloperOpen(false)}
-              >
-                <span className={styles.developerLinkTitle}>CavTools</span>
-              </Link>
-              <Link href="/cavcode" className={styles.developerLink} onClick={() => setDeveloperOpen(false)}>
-                <span className={styles.developerLinkTitle}>CavCode</span>
-              </Link>
-              <Link
-                href="/cavcode-viewer"
-                className={styles.developerLink}
-                onClick={() => setDeveloperOpen(false)}
-              >
-                <span className={styles.developerLinkTitle}>CavCode Viewer</span>
-              </Link>
-              <Link href="/cavcloud" className={styles.developerLink} onClick={() => setDeveloperOpen(false)}>
-                <span className={styles.developerLinkTitle}>CavCloud</span>
-              </Link>
+              {DEVELOPER_LINKS.map((item, index) => (
+                <Link
+                  key={item.href}
+                  ref={index === 0 ? developerFirstLinkRef : undefined}
+                  href={item.href}
+                  className={styles.developerLink}
+                  onClick={() => setDeveloperOpen(false)}
+                >
+                  <span className={styles.developerLinkIcon} aria-hidden="true">
+                    <Image
+                      src={item.iconSrc}
+                      alt=""
+                      width={15}
+                      height={15}
+                      className={styles.developerLinkIconImage}
+                      unoptimized
+                    />
+                  </span>
+                  <span className={styles.developerLinkBody}>
+                    <span className={styles.developerLinkTitle}>{item.label}</span>
+                    <span className={styles.developerLinkSub}>{item.sub}</span>
+                  </span>
+                </Link>
+              ))}
             </div>
           </section>
         </div>

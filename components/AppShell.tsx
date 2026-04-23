@@ -12,6 +12,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -53,6 +54,12 @@ import { CAV_GUARD_DECISION_EVENT, emitGuardDecisionFromPayload, readGuardDecisi
 import { normalizeGuardReturnPath } from "@/src/lib/cavguard/cavGuard.return";
 import type { CavGuardDecision } from "@/src/lib/cavguard/cavGuard.types";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
+import {
+  readBootClientAuthBootstrap,
+  readBootClientPlanState,
+  readBootClientProfileState,
+} from "@/lib/clientAuthBootstrap";
+import { resolveAccountDisplayName, resolveAccountPlanLabel } from "@/lib/profileIdentity";
 import { buildCanonicalPublicProfileHref, openCanonicalPublicProfileWindow } from "@/lib/publicProfile/url";
 
 const loadCavPadDock = () => import("./CavPad").then((mod) => mod.CavPadDock);
@@ -152,7 +159,7 @@ function coerceMemberRole(input: unknown): MemberRole {
 function normalizeSnapshot(input: unknown): PlanSnapshot | null {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
   const row = input as Record<string, unknown>;
-  const planTier = coercePlanTier(row.planTier);
+  const planTier = coercePlanTier(row.planTier ?? row.planKey ?? row.planLabel);
   const memberRole = coerceMemberRole(row.memberRole);
   const trialActive = Boolean(row.trialActive);
   const daysRaw = Number(row.trialDaysLeft);
@@ -206,6 +213,17 @@ function readShellPlanSnapshot(): PlanSnapshot | null {
     return legacy;
   }
   return null;
+}
+
+function snapshotFromBootPlanState(input: ReturnType<typeof readBootClientPlanState>): PlanSnapshot | null {
+  if (!input) return null;
+  return {
+    planTier: coercePlanTier(input.planTier || input.planId || input.planLabel),
+    memberRole: coerceMemberRole(input.memberRole),
+    trialActive: Boolean(input.trialActive),
+    trialDaysLeft: Boolean(input.trialActive) ? clampInt(Number(input.trialDaysLeft || 0), 0, 365) : 0,
+    ts: Date.now(),
+  };
 }
 
 function persistShellPlanSnapshot(snapshot: PlanSnapshot) {
@@ -555,12 +573,16 @@ export default function AppShell({
 
   // ===== Account dropdown =====
   const [accountOpen, setAccountOpen] = useState(false);
-  const [initials, setInitials] = useState<string>("");
-  const [profileFullName, setProfileFullName] = useState<string>("");
-  const [profileUsername, setProfileUsername] = useState<string>("");
-  const [profileAvatar, setProfileAvatar] = useState<string>("");
-  const [profileTone, setProfileTone] = useState<string>("lime");
-  const [profilePublicEnabled, setProfilePublicEnabled] = useState<boolean | null>(null);
+  const [bootAuth] = useState(() => readBootClientAuthBootstrap());
+  const [bootProfile] = useState(() => readBootClientProfileState());
+  const [initials, setInitials] = useState<string>(() => String(bootProfile?.initials || "").slice(0, 3).toUpperCase());
+  const [profileFullName, setProfileFullName] = useState<string>(() => String(bootProfile?.fullName || "").trim());
+  const [profileUsername, setProfileUsername] = useState<string>(() => String(bootProfile?.username || "").trim().toLowerCase());
+  const [profileAvatar, setProfileAvatar] = useState<string>(() => String(bootProfile?.avatarImage || "").trim());
+  const [profileTone, setProfileTone] = useState<string>(() => String(bootProfile?.avatarTone || "lime").trim().toLowerCase() || "lime");
+  const [profilePublicEnabled, setProfilePublicEnabled] = useState<boolean | null>(() =>
+    typeof bootProfile?.publicProfileEnabled === "boolean" ? bootProfile.publicProfileEnabled : null,
+  );
 
 
   // ===== Notifications =====
@@ -607,12 +629,16 @@ export default function AppShell({
 
 
   // ===== Plan widget (SIDEBAR footer) =====
-  const bootSnapshot = useMemo(() => shellPlanSnapshotCache ?? readShellPlanSnapshot(), []);
+  const [bootSnapshot] = useState<PlanSnapshot | null>(() => {
+    const cached = shellPlanSnapshotCache ?? readShellPlanSnapshot();
+    if (cached) return cached;
+    return snapshotFromBootPlanState(readBootClientPlanState());
+  });
   const [planTier, setPlanTier] = useState<PlanTier>(bootSnapshot?.planTier || "FREE");
   const [memberRole, setMemberRole] = useState<MemberRole>(bootSnapshot?.memberRole || null);
-  const [planResolved, setPlanResolved] = useState<boolean>(Boolean(bootSnapshot));
-  const [authPlanVerified, setAuthPlanVerified] = useState(false);
-  const [sessionAuthenticated, setSessionAuthenticated] = useState(false);
+  const [planResolved, setPlanResolved] = useState<boolean>(Boolean(bootSnapshot || bootAuth?.plan));
+  const [authPlanVerified, setAuthPlanVerified] = useState(Boolean(bootAuth?.authenticated || bootSnapshot));
+  const [sessionAuthenticated, setSessionAuthenticated] = useState(Boolean(bootAuth?.authenticated));
   const [, setPlanResolveError] = useState<string>("");
   const authRefreshRequestIdRef = useRef(0);
   const authRefreshInFlightRef = useRef<Promise<void> | null>(null);
@@ -622,6 +648,64 @@ export default function AppShell({
   // ===== Trial state (only affects the widget display) =====
   const [trialActive, setTrialActive] = useState<boolean>(Boolean(bootSnapshot?.trialActive));
   const [trialDaysLeft, setTrialDaysLeft] = useState<number>(bootSnapshot?.trialDaysLeft || 0);
+
+  useLayoutEffect(() => {
+    if (bootSnapshot) {
+      setPlanTier(bootSnapshot.planTier);
+      setMemberRole(bootSnapshot.memberRole);
+      setTrialActive(bootSnapshot.trialActive);
+      setTrialDaysLeft(bootSnapshot.trialDaysLeft);
+      setPlanResolved(true);
+      setAuthPlanVerified(true);
+    }
+
+    if (bootAuth) {
+      setSessionAuthenticated(Boolean(bootAuth.authenticated));
+      if (bootAuth.authenticated) setAuthPlanVerified(true);
+    }
+
+    if (!bootProfile) return;
+    const nextFullName = String(bootProfile.fullName || "").trim();
+    const nextUsername = String(bootProfile.username || "").trim().toLowerCase();
+    const nextInitials = deriveAccountInitials(nextFullName, nextUsername, String(bootProfile.initials || "").trim());
+    const nextAvatar = String(bootProfile.avatarImage || "").trim();
+    const nextTone = String(bootProfile.avatarTone || "lime").trim().toLowerCase() || "lime";
+
+    setProfileFullName(nextFullName);
+    setProfileUsername(nextUsername);
+    setInitials(nextInitials);
+    setProfileAvatar(nextAvatar);
+    setProfileTone(nextTone);
+    if (typeof bootProfile.publicProfileEnabled === "boolean") {
+      setProfilePublicEnabled(bootProfile.publicProfileEnabled);
+    }
+    persistAccountInitials(nextInitials);
+
+    try {
+      globalThis.__cbLocalStore.setItem("cb_profile_fullName_v1", nextFullName);
+      globalThis.__cbLocalStore.setItem("cb_profile_username_v1", nextUsername);
+      globalThis.__cbLocalStore.setItem("cb_account_initials", nextInitials);
+      globalThis.__cbLocalStore.setItem("cb_settings_avatar_tone_v2", nextTone);
+      if (nextAvatar) {
+        globalThis.__cbLocalStore.setItem("cb_settings_avatar_image_v2", nextAvatar);
+      } else {
+        globalThis.__cbLocalStore.removeItem("cb_settings_avatar_image_v2");
+      }
+      window.dispatchEvent(
+        new CustomEvent("cb:profile", {
+          detail: {
+            fullName: nextFullName,
+            username: nextUsername,
+            initials: nextInitials,
+            avatarImage: nextAvatar,
+            tone: nextTone,
+            publicProfileEnabled: bootProfile.publicProfileEnabled,
+          },
+        }),
+      );
+      window.dispatchEvent(new CustomEvent("cb:profile-sync"));
+    } catch {}
+  }, [bootAuth, bootProfile, bootSnapshot]);
 
   useEffect(() => {
     if (bootSnapshot) return;
@@ -634,6 +718,31 @@ export default function AppShell({
     setPlanResolved(true);
     setPlanResolveError("");
   }, [bootSnapshot]);
+
+  useEffect(() => {
+    function onPlan(event: Event) {
+      const detail = (event as CustomEvent<Record<string, unknown>>).detail || {};
+      const next = normalizeSnapshot(detail);
+      if (!next) return;
+      setPlanTier(next.planTier);
+      setMemberRole(next.memberRole);
+      setTrialActive(next.trialActive);
+      setTrialDaysLeft(next.trialDaysLeft);
+      setPlanResolved(true);
+      setAuthPlanVerified(true);
+      shellPlanSnapshotCache = next;
+      try {
+        globalThis.__cbLocalStore.setItem(SHELL_PLAN_SNAPSHOT_KEY, JSON.stringify(next));
+      } catch {}
+    }
+
+    window.addEventListener("cb:plan", onPlan as EventListener);
+    window.addEventListener(SHELL_PLAN_EVENT, onPlan as EventListener);
+    return () => {
+      window.removeEventListener("cb:plan", onPlan as EventListener);
+      window.removeEventListener(SHELL_PLAN_EVENT, onPlan as EventListener);
+    };
+  }, []);
 
   useEffect(() => {
     if (!planResolved) return;
@@ -888,16 +997,18 @@ export default function AppShell({
       ? "Public Profile"
       : "Private Profile";
   const profileDisplayName = useMemo(() => {
-    const full = String(profileFullName || "").trim();
-    if (full) return full;
-    const handle = String(profileUsername || "").trim().replace(/^@+/, "");
-    return handle ? `@${handle}` : "CavBot Account";
+    return resolveAccountDisplayName({
+      fullName: profileFullName,
+      username: profileUsername,
+      fallbackLabel: "CavBot Account",
+    });
   }, [profileFullName, profileUsername]);
   const profilePlanLabel = useMemo(() => {
-    if (trialActive && trialDaysLeft > 0) return "FREE TRIAL";
-    if (planTier === "PREMIUM_PLUS") return "PREMIUM+";
-    if (planTier === "PREMIUM") return "PREMIUM PLAN";
-    return "FREE TIER";
+    return resolveAccountPlanLabel({
+      planTier,
+      trialActive,
+      trialDaysLeft,
+    });
   }, [planTier, trialActive, trialDaysLeft]);
   const planMenuLabel = planTier === "PREMIUM_PLUS" ? "See Plans" : "Upgrade Plan";
 
@@ -1378,15 +1489,50 @@ export default function AppShell({
       const nextFullName = String(data?.user?.displayName || "").trim();
       const nextUsername = String(data?.user?.username || "").trim().toLowerCase();
       const nextInitials = deriveAccountInitials(nextFullName, nextUsername, String(data?.user?.initials || ""));
+      const nextAvatarImage = String(data?.user?.avatarImage || "").trim();
+      const nextAvatarTone = String(data?.user?.avatarTone || "").trim().toLowerCase() || "lime";
       if (res.ok && data?.ok) {
         setProfileFullName(nextFullName);
         setProfileUsername(nextUsername);
         setInitials(nextInitials);
+        setProfileAvatar(nextAvatarImage);
+        setProfileTone(nextAvatarTone);
         persistAccountInitials(nextInitials);
         setStaffChatEnabled(Boolean(data?.staff?.active));
         if (typeof data?.user?.publicProfileEnabled === "boolean") {
           setProfilePublicEnabled(data.user.publicProfileEnabled);
         }
+        try {
+          globalThis.__cbLocalStore.setItem("cb_profile_fullName_v1", nextFullName);
+          globalThis.__cbLocalStore.setItem("cb_profile_username_v1", nextUsername);
+          globalThis.__cbLocalStore.setItem("cb_account_initials", nextInitials);
+          globalThis.__cbLocalStore.setItem("cb_settings_avatar_tone_v2", nextAvatarTone);
+          if (nextAvatarImage) {
+            globalThis.__cbLocalStore.setItem("cb_settings_avatar_image_v2", nextAvatarImage);
+          } else {
+            globalThis.__cbLocalStore.removeItem("cb_settings_avatar_image_v2");
+          }
+          if (typeof data?.user?.publicProfileEnabled === "boolean") {
+            globalThis.__cbLocalStore.setItem(
+              "cb_profile_public_enabled_v1",
+              data.user.publicProfileEnabled ? "true" : "false",
+            );
+          }
+          window.dispatchEvent(
+            new CustomEvent("cb:profile", {
+              detail: {
+                fullName: nextFullName,
+                username: nextUsername,
+                initials: nextInitials,
+                avatarImage: nextAvatarImage,
+                tone: nextAvatarTone,
+                publicProfileEnabled:
+                  typeof data?.user?.publicProfileEnabled === "boolean" ? data.user.publicProfileEnabled : null,
+              },
+            }),
+          );
+          window.dispatchEvent(new CustomEvent("cb:profile-sync"));
+        } catch {}
       } else {
         setStaffChatEnabled(false);
       }

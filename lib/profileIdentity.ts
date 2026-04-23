@@ -94,12 +94,7 @@ export function resolveAccountPlanLabel(input: {
   trialActive?: unknown;
   trialDaysLeft?: unknown;
 }) {
-  const trialActive = Boolean(input.trialActive);
-  const trialDaysLeft = Number(input.trialDaysLeft);
   const planId = resolvePlanIdFromTier(input.planId || input.planTier || "free");
-  if (trialActive && Number.isFinite(trialDaysLeft) && trialDaysLeft > 0 && planId !== "premium_plus") {
-    return "Free Trial";
-  }
   if (planId === "premium_plus") return "Premium+";
   if (planId === "premium") return "Premium";
   return "Free";

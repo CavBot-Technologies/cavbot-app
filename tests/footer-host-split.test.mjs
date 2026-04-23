@@ -20,8 +20,9 @@ test("global footer keeps app developer tools separate from HQ human resources",
 test("app footer developer modal keeps the original tool links", () => {
   const source = read("components/footer/CavbotGlobalFooter.tsx");
 
-  assert.match(source, /href="\/cavtools"/);
-  assert.match(source, /href="\/cavcode"/);
-  assert.match(source, /href="\/cavcode-viewer"/);
-  assert.match(source, /href="\/cavcloud"/);
+  assert.match(source, /href:\s*"\/cavtools"/);
+  assert.match(source, /href:\s*"\/cavcode"/);
+  assert.match(source, /href:\s*"\/cavcode-viewer"/);
+  assert.match(source, /href:\s*"\/cavcloud"/);
+  assert.match(source, /<div className=\{styles\.developerTitle\}>Developers<\/div>/);
 });

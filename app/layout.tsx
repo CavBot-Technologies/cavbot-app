@@ -7,6 +7,7 @@ import "./workspace.css";
 import "./admin-internal/admin.css";
 import "@/components/LightToggle.css";
 import AppHostRuntimeMounts, { AppHostPreconnectLink } from "./_components/AppHostRuntimeMounts";
+import { buildClientAuthBootstrapScript, readClientAuthBootstrapServerState } from "@/lib/authClientBootstrap.server";
 import { shouldRenderSharedRootRuntime } from "@/lib/admin/rootRuntime";
 
 const APP_ORIGIN =
@@ -75,20 +76,26 @@ export const viewport = {
 };
 
 export const runtime = "nodejs";
-const browserStoreBootstrapScript = `(function(){function c(){var m=new Map();return{get length(){return m.size;},key:function(i){if(!Number.isFinite(i)||i<0)return null;var k=Array.from(m.keys());return k[Math.trunc(i)]||null;},getItem:function(k){var n=String(k||"");if(!n)return null;return m.has(n)?String(m.get(n)||""):null;},setItem:function(k,v){var n=String(k||"");if(!n)return;m.set(n,String(v??""));},removeItem:function(k){var n=String(k||"");if(!n)return;m.delete(n);},clear:function(){m.clear();}};}if(!globalThis.__cbLocalStore)globalThis.__cbLocalStore=c();if(!globalThis.__cbSessionStore)globalThis.__cbSessionStore=c();})();`;
+const browserStoreBootstrapScript = `(function(){function c(){var m=new Map();return{get length(){return m.size;},key:function(i){if(!Number.isFinite(i)||i<0)return null;var k=Array.from(m.keys());return k[Math.trunc(i)]||null;},getItem:function(k){var n=String(k||"");if(!n)return null;return m.has(n)?String(m.get(n)||""):null;},setItem:function(k,v){var n=String(k||"");if(!n)return;m.set(n,String(v??""));},removeItem:function(k){var n=String(k||"");if(!n)return;m.delete(n);},clear:function(){m.clear();}};}function s(r){var f=c();function t(){try{return r()||null}catch{return null}}return{get length(){var o=t();if(!o)return f.length;try{return o.length}catch{return f.length}},key:function(i){var o=t();if(!o)return f.key(i);try{return o.key(i)}catch{return f.key(i)}},getItem:function(k){var n=String(k||"");if(!n)return null;var o=t();if(!o)return f.getItem(n);try{return o.getItem(n)}catch{return f.getItem(n)}},setItem:function(k,v){var n=String(k||"");if(!n)return;var o=t();if(!o){f.setItem(n,v);return}try{o.setItem(n,String(v??""))}catch{f.setItem(n,v)}},removeItem:function(k){var n=String(k||"");if(!n)return;var o=t();if(!o){f.removeItem(n);return}try{o.removeItem(n)}catch{f.removeItem(n)}},clear:function(){var o=t();if(!o){f.clear();return}try{o.clear()}catch{f.clear()}}};}if(!globalThis.__cbLocalStore)globalThis.__cbLocalStore=s(function(){return typeof window!=="undefined"?window.localStorage:null});if(!globalThis.__cbSessionStore)globalThis.__cbSessionStore=s(function(){return typeof window!=="undefined"?window.sessionStorage:null});})();`;
 
 type RootLayoutProps = {
   children: ReactNode;
 };
 
-export default function RootLayout({ children }: RootLayoutProps) {
-  const host = headers().get("host");
+export default async function RootLayout({ children }: RootLayoutProps) {
+  const [headerStore, authBootstrap] = await Promise.all([
+    headers(),
+    readClientAuthBootstrapServerState(),
+  ]);
+  const host = headerStore.get("host");
   const renderSharedRuntime = shouldRenderSharedRootRuntime(host);
+  const authBootstrapScript = buildClientAuthBootstrapScript(authBootstrap);
 
   return (
     <html lang="en" data-cavbot-react-app="1" style={{ backgroundColor: "#01030f" }}>
       <head>
         <script id="cb-browser-store-shim" dangerouslySetInnerHTML={{ __html: browserStoreBootstrapScript }} />
+        <script id="cb-auth-bootstrap" dangerouslySetInnerHTML={{ __html: authBootstrapScript }} />
         {renderSharedRuntime ? <AppHostPreconnectLink /> : null}
       </head>
 

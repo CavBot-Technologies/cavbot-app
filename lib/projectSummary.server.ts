@@ -7,9 +7,11 @@ import {
   type RequestAuthOverride,
   type SummaryRange,
 } from "@/lib/cavbotApi.server";
+import { enrichProjectSummaryWithLatestPack } from "@/lib/projectSummaryEnrichment.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
 import { decryptAesGcm } from "@/lib/cryptoAesGcm.server";
 import { resolveEffectiveAccountIdFromHeaders } from "@/lib/effectiveSessionAccount.server";
+import { getLatestPackWithHistory, normalizeOriginStrict } from "@/lib/cavai/packs.server";
 
 type TenantProjectSummaryInput = {
   accountId?: string | null;
@@ -157,18 +159,29 @@ export async function getTenantProjectSummary(
     projectSlug: input.projectSlug,
   });
 
-  const summary = await getProjectSummaryForTenant({
-    projectId: access.project.id,
-    range: input.range,
-    siteId: input.siteId,
-    siteOrigin: input.siteOrigin,
-    projectKey: access.summaryAuth.projectKey,
-    adminToken: access.summaryAuth.adminToken,
-    requestId: input.requestId,
-  });
+  const normalizedOrigin = normalizeOriginStrict(input.siteOrigin);
+
+  const [summary, latestPackWithHistory] = await Promise.all([
+    getProjectSummaryForTenant({
+      projectId: access.project.id,
+      range: input.range,
+      siteId: input.siteId,
+      siteOrigin: input.siteOrigin,
+      projectKey: access.summaryAuth.projectKey,
+      adminToken: access.summaryAuth.adminToken,
+      requestId: input.requestId,
+    }),
+    normalizedOrigin
+      ? getLatestPackWithHistory({
+          accountId: access.accountId,
+          origin: normalizedOrigin,
+          limit: 7,
+        }).catch(() => null)
+      : Promise.resolve(null),
+  ]);
 
   return {
     project: access.project,
-    summary,
+    summary: enrichProjectSummaryWithLatestPack(summary, latestPackWithHistory),
   };
 }

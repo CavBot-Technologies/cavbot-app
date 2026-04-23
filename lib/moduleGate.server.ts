@@ -5,7 +5,15 @@ import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { isApiAuthError, requireSession, requireAccountContext } from "@/lib/apiAuth";
-import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
+import {
+  clearExpiredTrialSeat,
+  findAccountById,
+  findMembershipsForUser,
+  findSessionMembership,
+  getAuthPool,
+  pickPrimaryMembership,
+} from "@/lib/authDb";
+import { findLatestEntitledSubscription, resolveEffectivePlanId } from "@/lib/accountPlan.server";
 import { resolveEffectiveAccountIdForSession } from "@/lib/effectiveSessionAccount.server";
 import { resolvePlanIdFromTier, hasModule, type ModuleId } from "@/lib/plans";
 
@@ -43,9 +51,37 @@ export async function gateModuleAccess(
     throw error;
   }
 
+  const pool = getAuthPool();
   const accountId = (await resolveEffectiveAccountIdForSession(sess).catch(() => null)) || sess.accountId!;
-  const plan = await getEffectiveAccountPlanContext(accountId).catch(() => null);
-  const planId = plan?.planId ?? resolvePlanIdFromTier("FREE");
+  const userId = String(sess.sub || "").trim();
+
+  const sessionMembership =
+    (userId && accountId
+      ? await findSessionMembership(pool, userId, accountId).catch(() => null)
+      : null) || null;
+
+  let fallbackMembership: Awaited<ReturnType<typeof pickPrimaryMembership<Awaited<ReturnType<typeof findMembershipsForUser>>[number]>>> | null =
+    null;
+  if (!sessionMembership && userId) {
+    const memberships = await findMembershipsForUser(pool, userId).catch(() => []);
+    fallbackMembership = pickPrimaryMembership(memberships);
+  }
+
+  await clearExpiredTrialSeat(pool, accountId).catch(() => null);
+
+  const [account, subscription] = await Promise.all([
+    findAccountById(pool, accountId).catch(() => null),
+    findLatestEntitledSubscription(accountId, pool).catch(() => null),
+  ]);
+
+  const planId = resolveEffectivePlanId({
+    account:
+      account ||
+      (sessionMembership || fallbackMembership
+        ? { tier: sessionMembership?.accountTier || fallbackMembership?.accountTier || "FREE" }
+        : null),
+    subscription,
+  }) ?? resolvePlanIdFromTier("FREE");
   const allowed = hasModule(planId, moduleId);
 
   if (allowed) return { ok: true, planId };

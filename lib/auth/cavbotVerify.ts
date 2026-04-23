@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { findStaffEmailByCode, findUserById, findUserByUsername, getAuthPool } from "@/lib/authDb";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { normalizeUsername } from "@/lib/username";
 import {
@@ -1741,41 +1742,23 @@ async function resolveOtpEmail(args: {
   if (identifier && (args.actionType === "login" || args.actionType === "reset")) {
     const username = normalizeUsername(identifier);
     if (username) {
-      const { prisma } = await import("@/lib/prisma");
-      const user = await prisma.user.findUnique({
-        where: { username },
-        select: { email: true },
-      });
+      const user = await findUserByUsername(getAuthPool(), username);
       if (user?.email) return String(user.email).trim().toLowerCase();
     }
 
     const staffCode = normalizeStaffCode(identifier);
     if (staffCode) {
-      const { prisma } = await import("@/lib/prisma");
-      const staff = await prisma.staffProfile.findUnique({
-        where: { staffCode },
-        select: {
-          user: {
-            select: {
-              email: true,
-            },
-          },
-        },
-      });
-      if (staff?.user?.email) return String(staff.user.email).trim().toLowerCase();
+      const staffEmail = await findStaffEmailByCode(getAuthPool(), staffCode);
+      if (staffEmail) return staffEmail;
     }
   }
 
   if (args.actionType === "invite") {
     const { getSession } = await import("@/lib/apiAuth");
-    const { prisma } = await import("@/lib/prisma");
     const session = await getSession(args.req);
     const userId = safeString(session?.sub).trim();
     if (userId && userId !== "system") {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { email: true },
-      });
+      const user = await findUserById(getAuthPool(), userId);
       if (user?.email) return String(user.email).trim().toLowerCase();
     }
   }

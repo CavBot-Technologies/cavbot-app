@@ -14,6 +14,7 @@ import {
   findUserAuth,
   findUserByEmail,
   findUserById,
+  findUserIdByStaffCode,
   findUserByUsername,
   getAuthPool,
   pickPrimaryMembership,
@@ -34,7 +35,6 @@ import { createHash, randomInt } from "crypto";
 import { sendEmail } from "@/lib/email/sendEmail"; // <-- must exist (you already use email for password reset)
 import { normalizeUsername } from "@/lib/username";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
-import { prisma } from "@/lib/prisma";
 import { pickClientIp, readCoarseRequestGeo } from "@/lib/requestGeo";
 import { ensureAdminOwnerBootstrap, getOwnerStaffCodeCandidates, isRetiredStaffCode } from "@/lib/admin/staff";
 import { getAccountDisciplineState } from "@/lib/admin/accountDiscipline.server";
@@ -305,12 +305,9 @@ export async function POST(req: Request) {
       if (ownerStaffCodeCandidates.has(staffCode)) {
         await ensureAdminOwnerBootstrap().catch(() => null);
       }
-      const staff = await prisma.staffProfile.findUnique({
-        where: { staffCode },
-        select: { userId: true },
-      });
-      if (staff?.userId) {
-        user = await findUserById(pool, staff.userId);
+      const staffUserId = await findUserIdByStaffCode(pool, staffCode);
+      if (staffUserId) {
+        user = await findUserById(pool, staffUserId);
       }
     }
     const userAuth = user ? await findUserAuth(pool, user.id) : null;

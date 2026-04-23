@@ -523,6 +523,31 @@ export async function findUserById(queryable: Queryable, userId: string) {
   return row ? mapUser(row) : null;
 }
 
+export async function findUserIdByStaffCode(queryable: Queryable, staffCode: string) {
+  const row = await queryOne<{ userId: string }>(
+    queryable,
+    `SELECT "userId"
+      FROM "StaffProfile"
+      WHERE "staffCode" = $1
+      LIMIT 1`,
+    [staffCode],
+  );
+  return row ? String(row.userId) : null;
+}
+
+export async function findStaffEmailByCode(queryable: Queryable, staffCode: string) {
+  const row = await queryOne<{ email: string }>(
+    queryable,
+    `SELECT u."email"
+      FROM "StaffProfile" s
+      JOIN "User" u ON u."id" = s."userId"
+      WHERE s."staffCode" = $1
+      LIMIT 1`,
+    [staffCode],
+  );
+  return row ? String(row.email || "").trim().toLowerCase() : null;
+}
+
 export async function findPublicProfileUserByUsername(queryable: Queryable, username: string) {
   const row = await queryOne<RawPublicProfileUserRow>(
     queryable,

@@ -17,6 +17,7 @@ import {
   type CavAiSurface,
   type CavAiIdentityInput,
 } from "@/lib/cavai/heroLine";
+import { resolveAccountDisplayName, resolveAccountPlanLabel } from "@/lib/profileIdentity";
 import {
   ALIBABA_QWEN_ASR_MODEL_ID,
   ALIBABA_QWEN_CHARACTER_MODEL_ID,
@@ -911,13 +912,6 @@ function maxImageAttachmentsForPlan(planId: "free" | "premium" | "premium_plus")
   if (planId === "premium_plus") return MAX_IMAGE_ATTACHMENTS_PREMIUM_PLUS;
   if (planId === "premium") return MAX_IMAGE_ATTACHMENTS_PREMIUM;
   return 2;
-}
-
-function toPlanTierLabel(value: unknown): "Free" | "Premium" | "Premium+" {
-  const plan = normalizePlanId(value);
-  if (plan === "premium_plus") return "Premium+";
-  if (plan === "premium") return "Premium";
-  return "Free";
 }
 
 function planTierRank(plan: "free" | "premium" | "premium_plus"): number {
@@ -4560,13 +4554,13 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const accountChipBackground = useMemo(() => resolveAccountToneBackground(accountProfileTone), [accountProfileTone]);
   const accountChipInk = useMemo(() => resolveAccountToneInk(accountProfileTone), [accountProfileTone]);
   const accountNameLabel = useMemo(() => {
-    const fullName = s(profileIdentity.fullName);
-    if (fullName) return fullName;
-    const username = normalizeInitialUsernameSource(s(accountProfileUsername || profileIdentity.username));
-    if (username) return `${username.slice(0, 1).toUpperCase()}${username.slice(1)}`;
-    return "CavBot Operator";
+    return resolveAccountDisplayName({
+      fullName: profileIdentity.fullName,
+      username: normalizeInitialUsernameSource(s(accountProfileUsername || profileIdentity.username)),
+      fallbackLabel: "CavBot Operator",
+    });
   }, [accountProfileUsername, profileIdentity.fullName, profileIdentity.username]);
-  const accountPlanLabel = useMemo(() => toPlanTierLabel(accountPlanId), [accountPlanId]);
+  const accountPlanLabel = useMemo(() => resolveAccountPlanLabel({ planId: accountPlanId }), [accountPlanId]);
   const publicProfileHref = useMemo(() => {
     return buildCanonicalPublicProfileHref(accountProfileUsername);
   }, [accountProfileUsername]);
