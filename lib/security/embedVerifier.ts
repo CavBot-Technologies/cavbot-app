@@ -230,6 +230,7 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
   if (record.status !== "ACTIVE") return failure("KEY_INACTIVE", 403, "Key is not active.");
   if (record.type !== "PUBLISHABLE") return failure("INVALID_KEY_TYPE", 403, "Publishable key required.");
   if (!record.projectId) return failure("INVALID_KEY", 401, "Key missing project binding.");
+  const projectId = record.projectId;
 
   const originHeader = inferRequestOrigin(req);
   if (!originHeader) {
