@@ -2708,7 +2708,8 @@ export default function AppShell({
                 }`}
                 aria-hidden="true"
               >
-                <CdnBadgeEyes />
+                {/* Keep the compact shell badge on pupil-only tracking; full head tracking clips the tiny topbar badge. */}
+                <CdnBadgeEyes trackingMode="eyeOnly" />
               </div>
             </div>
 

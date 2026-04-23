@@ -57,6 +57,12 @@ test("app shell republishes cached founder and plan state while footer modal and
   assert.match(globals, /\.cb-side-account-wrap \.cb-menu\{\s*top: auto;\s*right: auto;\s*bottom: calc\(100% \+ 8px\);/);
 });
 
+test("app shell compact badge stays on eye-only tracking", () => {
+  const appShell = read("components/AppShell.tsx");
+
+  assert.match(appShell, /<CdnBadgeEyes trackingMode="eyeOnly" \/>/);
+});
+
 test("cavcloud compact screens restore document scrolling through tablets and keep quick tools visible", () => {
   const css = read("app/cavcloud/cavcloud.css");
 
