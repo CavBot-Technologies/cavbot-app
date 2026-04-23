@@ -6,11 +6,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { assertWriteOrigin, getSession, requireUser } from "@/lib/apiAuth";
 import { resolveAdminNextPath } from "@/lib/admin/access";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
-import { getAuthPool, createAuthTokenRecord } from "@/lib/authDb";
+import { getAuthPool, createAuthTokenRecord, findUserById } from "@/lib/authDb";
 import { ensureStaffProfileForUser, maskStaffCode } from "@/lib/admin/staff";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { writeAdminAuditLog } from "@/lib/admin/audit";
-import { prisma } from "@/lib/prisma";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -65,10 +64,8 @@ export async function POST(req: NextRequest) {
     if (!session) return json({ ok: false, error: "AUTH_REQUIRED" }, 401);
     requireUser(session);
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.sub },
-      select: { email: true },
-    });
+    const authPool = getAuthPool();
+    const user = await findUserById(authPool, session.sub);
     const staff = await ensureStaffProfileForUser(session.sub, user?.email || null);
     if (!staff || staff.status !== "ACTIVE") {
       return json({ ok: false, error: "STAFF_NOT_ACTIVE" }, 403);
@@ -92,7 +89,7 @@ export async function POST(req: NextRequest) {
     const code = newEmailCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    await createAuthTokenRecord(getAuthPool(), {
+    await createAuthTokenRecord(authPool, {
       userId: staff.userId,
       type: "EMAIL_RECOVERY",
       tokenHash: sha256Hex(challengeId),
@@ -143,6 +140,8 @@ export async function POST(req: NextRequest) {
         nextPath,
         email: staff.user.email,
       },
+    }).catch((auditError) => {
+      console.error("[admin/session/challenge] audit log failed", auditError);
     });
 
     return json({
@@ -155,6 +154,7 @@ export async function POST(req: NextRequest) {
     if (error instanceof Error && error.message === "AUTH_REQUIRED") {
       return json({ ok: false, error: "AUTH_REQUIRED" }, 401);
     }
+    console.error("[admin/session/challenge] failed", error);
     return json({ ok: false, error: "ADMIN_CHALLENGE_FAILED" }, 500);
   }
 }

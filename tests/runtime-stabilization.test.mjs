@@ -61,6 +61,10 @@ test("cavai persistence paths avoid prisma runtime access on production routes",
   assert.equal(intelligenceSource.includes('"CavAiFinding"'), true);
   assert.equal(diagnosticsRoute.includes("requireWorkspaceResilientSession"), true);
   assert.equal(metricsRoute.includes("requireWorkspaceResilientSession"), true);
+  assert.equal(metricsRoute.includes("requestInitialSiteScanBestEffort"), true);
+  assert.equal(metricsRoute.includes("findOwnedWorkspaceSiteByOrigin"), true);
+  assert.equal(metricsRoute.includes("diagnosticsPending"), true);
+  assert.equal(metricsRoute.includes("initialScan"), true);
   assert.equal(fixesRoute.includes("requireWorkspaceResilientSession"), true);
   assert.equal(packRoute.includes("requireWorkspaceResilientSession"), true);
 });
@@ -82,4 +86,13 @@ test("scan completion now bridges raw scan artifacts into persisted CavAi packs"
   assert.equal(bridgeSource.includes("createNormalizedScanInputFromScanArtifacts"), true);
   assert.equal(statusSource.includes("diagnosticsReady"), true);
   assert.equal(statusSource.includes("diagnosticsFailureReason"), true);
+});
+
+test("status probes and workspace site helpers align to the app-hosted analytics asset", () => {
+  const statusSource = read("lib/status/constants.ts");
+  const helperSource = read("lib/workspaceSites.server.ts");
+
+  assert.equal(statusSource.includes('url: "/cavai/cavai-analytics-v5.js"'), true);
+  assert.equal(statusSource.includes('url: "/sdk/v5/cavai-analytics-v5.min.js"'), false);
+  assert.equal(helperSource.includes("export async function findOwnedWorkspaceSiteByOrigin"), true);
 });

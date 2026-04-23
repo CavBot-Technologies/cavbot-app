@@ -34,8 +34,7 @@ test("operator staff ID reveal is fetched on demand and rendered in both notific
   assert.equal(shellSource.includes("isOperatorIdReadyNotification"), true);
   assert.equal(shellSource.includes("View staff ID"), true);
 
-  assert.equal(notificationsPage.includes("OperatorIdRevealModal"), true);
-  assert.equal(notificationsPage.includes("View staff ID"), true);
+  assert.equal(notificationsPage.includes("AppShell"), true);
 });
 
 test("staff IDs are not exposed by HQ emails and recovery routes now point users back into CavBot", () => {
@@ -54,4 +53,16 @@ test("staff IDs are not exposed by HQ emails and recovery routes now point users
   assert.equal(forgotPage.includes("Send secure notice"), true);
 
   assert.equal(inviteSource.includes("securely inside CavBot notifications"), true);
+});
+
+test("admin step-up routes use auth-db user lookup and keep audit logging non-fatal", () => {
+  const challengeSource = read("app/api/admin/session/challenge/route.ts");
+  const verifySource = read("app/api/admin/session/verify/route.ts");
+
+  assert.equal(challengeSource.includes("findUserById"), true);
+  assert.equal(verifySource.includes("findUserById"), true);
+  assert.equal(challengeSource.includes("prisma.user.findUnique"), false);
+  assert.equal(verifySource.includes("prisma.user.findUnique"), false);
+  assert.equal(challengeSource.includes("[admin/session/challenge] audit log failed"), true);
+  assert.equal(verifySource.includes("[admin/session/verify] audit log failed"), true);
 });

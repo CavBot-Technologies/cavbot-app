@@ -20,7 +20,6 @@ import {
 import { findLatestEntitledSubscription, resolveEffectivePlanId } from "@/lib/accountPlan.server";
 import { getAuthPool } from "@/lib/authDb";
 import { auditLogWrite } from "@/lib/audit";
-import { getProjectSummaryForTenant } from "@/lib/cavbotApi.server";
 import {
   assertCavCloudActionAllowed,
   assertCavCodeProjectAccess,
@@ -61,6 +60,7 @@ import { createCavSafeInvite, revokeCavSafeAccess } from "@/lib/cavsafe/privateS
 import { type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { prismaEmpty, prismaJoin, prismaRaw, prismaSql, type Sql } from "@/lib/prismaRuntime";
+import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 import { requirePremiumEntitlement } from "@/lib/security/authorize";
 import { buildCavGuardDecision } from "@/src/lib/cavguard/cavGuard.registry";
 
@@ -8305,21 +8305,6 @@ async function copyPath(ctx: ExecContext, sourcePathArg: string, destPathArg: st
   throw new CavtoolsExecError("COPY_UNSUPPORTED", `cp is not supported for ${sourceRoot}.`, 400);
 }
 
-async function ensureProjectKey(ctx: ExecContext): Promise<string> {
-  if (!ctx.project?.id) throw new CavtoolsExecError("PROJECT_REQUIRED", "No active project found for telemetry commands.", 400);
-  if (!ctx.project.serverKeyEnc || !ctx.project.serverKeyEncIv) {
-    throw new CavtoolsExecError("PROJECT_KEY_MISSING", "Project key is missing for telemetry command execution.", 409);
-  }
-
-  const decrypted = await decryptAesGcm({
-    enc: ctx.project.serverKeyEnc,
-    iv: ctx.project.serverKeyEncIv,
-  });
-  const key = s(decrypted);
-  if (!key) throw new CavtoolsExecError("PROJECT_KEY_DECRYPT_FAILED", "Project key decryption failed.", 500);
-  return key;
-}
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
@@ -8349,12 +8334,15 @@ function pickNumber(record: unknown, paths: string[]): number | null {
 }
 
 async function telemetrySummary(ctx: ExecContext, range: "7d" | "30d") {
-  const projectKey = await ensureProjectKey(ctx);
-  const summary = await getProjectSummaryForTenant({
-    projectId: ctx.project?.id || 0,
+  if (!ctx.project?.id) {
+    throw new CavtoolsExecError("PROJECT_REQUIRED", "No active project found for telemetry commands.", 400);
+  }
+
+  const { summary } = await getTenantProjectSummary({
+    accountId: ctx.accountId,
+    projectId: ctx.project.id,
     range,
     siteOrigin: ctx.siteOrigin || undefined,
-    projectKey,
     requestId: `cavtools_${Date.now()}`,
   });
 

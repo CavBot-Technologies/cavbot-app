@@ -26,8 +26,7 @@ const APP_PROBES = {
   },
   cavaiAnalyticsAsset: {
     name: "Analytics SDK asset",
-    url: "/sdk/v5/cavai-analytics-v5.min.js",
-    origin: "cdn",
+    url: "/cavai/cavai-analytics-v5.js",
     timeoutMs: DEFAULT_PROBE_TIMEOUT_MS,
     expectedStatus: [200],
   },

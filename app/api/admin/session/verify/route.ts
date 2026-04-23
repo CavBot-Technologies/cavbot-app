@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { assertWriteOrigin, getSession, requireUser } from "@/lib/apiAuth";
 import { resolveAdminNextPath } from "@/lib/admin/access";
 import { adminSessionCookieOptions, createAdminSessionToken } from "@/lib/admin/session";
-import { getAuthPool, findAuthTokenByHash, markAuthTokenUsed } from "@/lib/authDb";
+import { getAuthPool, findAuthTokenByHash, findUserById, markAuthTokenUsed } from "@/lib/authDb";
 import { ensureStaffProfileForUser, maskStaffCode } from "@/lib/admin/staff";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
 import { writeAdminAuditLog } from "@/lib/admin/audit";
@@ -58,10 +58,8 @@ export async function POST(req: NextRequest) {
     if (!session) return json({ ok: false, error: "AUTH_REQUIRED" }, 401);
     requireUser(session);
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.sub },
-      select: { email: true },
-    });
+    const authPool = getAuthPool();
+    const user = await findUserById(authPool, session.sub);
     const staff = await ensureStaffProfileForUser(session.sub, user?.email || null);
     if (!staff || staff.status !== "ACTIVE") {
       return json({ ok: false, error: "STAFF_NOT_ACTIVE" }, 403);
@@ -85,7 +83,7 @@ export async function POST(req: NextRequest) {
       return json({ ok: false, error: "BAD_INPUT" }, 400);
     }
 
-    const token = await findAuthTokenByHash(getAuthPool(), sha256Hex(challengeId));
+    const token = await findAuthTokenByHash(authPool, sha256Hex(challengeId));
     if (!token || token.type !== "EMAIL_RECOVERY") {
       return json({ ok: false, error: "CHALLENGE_NOT_FOUND" }, 404);
     }
@@ -121,30 +119,33 @@ export async function POST(req: NextRequest) {
     });
     const nextPath = resolveAdminNextPath(staff, String(meta.nextPath || "/"));
 
-    await markAuthTokenUsed(getAuthPool(), token.id);
-    await Promise.all([
-      prisma.staffProfile.update({
-        where: { id: staff.id },
-        data: {
-          lastAdminLoginAt: new Date(),
-          lastAdminStepUpAt: new Date(),
-          onboardingStatus: "COMPLETED",
-        },
-      }),
-      writeAdminAuditLog({
-        actorStaffId: staff.id,
-        actorUserId: staff.userId,
-        action: "STAFF_SIGNED_IN",
-        actionLabel: "Staff admin sign-in completed",
-        entityType: "staff_profile",
-        entityId: staff.id,
-        entityLabel: maskStaffCode(staff.staffCode),
-        request: req,
-        metaJson: {
-          nextPath,
-        },
-      }),
-    ]);
+    const loginAt = new Date();
+    await markAuthTokenUsed(authPool, token.id);
+    await prisma.staffProfile.update({
+      where: { id: staff.id },
+      data: {
+        lastAdminLoginAt: loginAt,
+        lastAdminStepUpAt: loginAt,
+        onboardingStatus: "COMPLETED",
+      },
+    }).catch((updateError) => {
+      console.error("[admin/session/verify] staff profile login update failed", updateError);
+    });
+    await writeAdminAuditLog({
+      actorStaffId: staff.id,
+      actorUserId: staff.userId,
+      action: "STAFF_SIGNED_IN",
+      actionLabel: "Staff admin sign-in completed",
+      entityType: "staff_profile",
+      entityId: staff.id,
+      entityLabel: maskStaffCode(staff.staffCode),
+      request: req,
+      metaJson: {
+        nextPath,
+      },
+    }).catch((auditError) => {
+      console.error("[admin/session/verify] audit log failed", auditError);
+    });
 
     const response = json({
       ok: true,
@@ -160,7 +161,8 @@ export async function POST(req: NextRequest) {
     const { name, ...cookieOptions } = adminSessionCookieOptions(req);
     response.cookies.set(name, adminToken, cookieOptions);
     return response;
-  } catch {
+  } catch (error) {
+    console.error("[admin/session/verify] failed", error);
     return json({ ok: false, error: "ADMIN_VERIFY_FAILED" }, 500);
   }
 }

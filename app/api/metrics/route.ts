@@ -4,6 +4,8 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { getLatestPackWithHistory, normalizeOriginStrict } from "@/lib/cavai/packs.server";
+import { requestInitialSiteScanBestEffort } from "@/lib/scanner";
+import { findOwnedWorkspaceSiteByOrigin } from "@/lib/workspaceSites.server";
 import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
 
 export const runtime = "nodejs";
@@ -22,6 +24,16 @@ function json(payload: unknown, init?: number | ResponseInit) {
     ...base,
     headers: { ...(base.headers || {}), ...NO_STORE_HEADERS },
   });
+}
+
+function pickClientIp(req: Request) {
+  return String(
+    req.headers.get("cf-connecting-ip")
+    || req.headers.get("true-client-ip")
+    || req.headers.get("x-forwarded-for")
+    || req.headers.get("x-real-ip")
+    || "",
+  ).split(",")[0].trim();
 }
 
 export async function GET(req: NextRequest) {
@@ -49,6 +61,19 @@ export async function GET(req: NextRequest) {
     });
 
     if (!data.pack) {
+      const knownSite = await findOwnedWorkspaceSiteByOrigin(String(session.accountId || ""), origin).catch(() => null);
+      const initialScan = knownSite
+        ? await requestInitialSiteScanBestEffort({
+            projectId: knownSite.projectId,
+            siteId: knownSite.siteId,
+            accountId: String(session.accountId || ""),
+            operatorUserId: session.sub,
+            ip: pickClientIp(req),
+            userAgent: req.headers.get("user-agent"),
+            reason: "Diagnostics warm scan",
+          }).catch(() => ({ queued: false, reason: "queue_failed" as const }))
+        : null;
+
       return json(
         {
           ok: false,
@@ -56,6 +81,8 @@ export async function GET(req: NextRequest) {
           error: "INSUFFICIENT_DATA",
           message: "No persisted CavAi runs exist for this origin yet.",
           history: data.history,
+          diagnosticsPending: Boolean(knownSite),
+          initialScan,
         },
         200
       );

@@ -17,3 +17,11 @@ test("cavtools command plane lazy-loads child_process and soft-fails unsupported
   assert.equal(source.includes('PROCESS_RUNTIME_UNAVAILABLE'), true);
   assert.equal(source.includes("await spawnProcess("), true);
 });
+
+test("cavtools telemetry uses the tenant summary helper instead of the raw summary client", () => {
+  const source = read("lib/cavtools/commandPlane.server.ts");
+
+  assert.equal(source.includes('import { getTenantProjectSummary } from "@/lib/projectSummary.server";'), true);
+  assert.equal(source.includes("await getTenantProjectSummary({"), true);
+  assert.equal(source.includes("getProjectSummaryForTenant({"), false);
+});

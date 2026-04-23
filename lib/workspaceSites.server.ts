@@ -34,6 +34,12 @@ type RawWorkspaceSiteOriginRow = {
   origin: string;
 };
 
+type RawOwnedWorkspaceSiteRow = {
+  projectId: number | string;
+  siteId: string;
+  origin: string;
+};
+
 type RawVerifiedSiteRow = {
   id: string;
   projectId: number | string;
@@ -282,6 +288,35 @@ export async function findActiveWorkspaceSiteByOrigin(projectId: number, origin:
     [projectId, candidateOrigins]
   );
   return row ? { id: String(row.id), origin: String(row.origin) } : null;
+}
+
+export async function findOwnedWorkspaceSiteByOrigin(accountId: string, origin: string) {
+  const candidateOrigins = expandRelatedExactOrigins(origin);
+  const row = await queryOne<RawOwnedWorkspaceSiteRow>(
+    getAuthPool(),
+    `SELECT
+       project."id" AS "projectId",
+       site."id" AS "siteId",
+       site."origin" AS "origin"
+     FROM "Site" site
+     INNER JOIN "Project" project ON project."id" = site."projectId"
+     WHERE project."accountId" = $1
+       AND project."isActive" = true
+       AND site."isActive" = true
+       AND site."origin" = ANY($2::text[])
+     ORDER BY
+       CASE WHEN project."topSiteId" = site."id" THEN 0 ELSE 1 END ASC,
+       site."createdAt" DESC
+     LIMIT 1`,
+    [accountId, candidateOrigins],
+  );
+  return row
+    ? {
+        projectId: toInt(row.projectId),
+        siteId: String(row.siteId),
+        origin: String(row.origin),
+      }
+    : null;
 }
 
 export async function markWorkspaceSiteVerified(siteId: string) {
