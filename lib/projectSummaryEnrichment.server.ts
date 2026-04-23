@@ -118,7 +118,10 @@ function readPath(root: unknown, path: string): unknown {
 
 function firstNumber(root: unknown, paths: string[]) {
   for (const path of paths) {
-    const value = Number(readPath(root, path));
+    const rawValue = readPath(root, path);
+    if (rawValue == null) continue;
+    if (typeof rawValue === "string" && !rawValue.trim()) continue;
+    const value = Number(rawValue);
     if (Number.isFinite(value)) return value;
   }
   return null;
@@ -439,6 +442,124 @@ export function enrichProjectSummaryWithLocalWebVitals(
   metrics.clsP75 = rollup.clsP75;
   metrics.fcpP75Ms = rollup.fcpP75Ms;
   metrics.ttfbP75Ms = rollup.ttfbP75Ms;
+
+  return enriched;
+}
+
+function nullifyVitalContainer(container: AnyRecord | null) {
+  if (!container) return;
+
+  container.samples = null;
+  container.lcpP75Ms = null;
+  container.inpP75Ms = null;
+  container.clsP75 = null;
+  container.fcpP75Ms = null;
+  container.ttfbP75Ms = null;
+
+  const rollup = ensureRecord(container, "rollup");
+  rollup.samples = null;
+  rollup.lcpP75Ms = null;
+  rollup.inpP75Ms = null;
+  rollup.clsP75 = null;
+  rollup.fcpP75Ms = null;
+  rollup.ttfbP75Ms = null;
+}
+
+export function suppressPlaceholderWebVitals(summary: ProjectSummary): ProjectSummary {
+  const samples = firstNumber(summary, [
+    "webVitals.rollup.samples",
+    "webVitals.samples",
+    "vitals.rollup.samples",
+    "vitals.samples",
+    "performance.vitals.rollup.samples",
+    "performance.vitals.samples",
+    "performance.webVitals.rollup.samples",
+    "performance.webVitals.samples",
+    "diagnostics.vitals.rollup.samples",
+    "diagnostics.vitals.samples",
+    "metrics.webVitals.samples",
+  ]);
+  const lcpP75Ms = firstNumber(summary, [
+    "webVitals.rollup.lcpP75Ms",
+    "webVitals.lcpP75Ms",
+    "vitals.rollup.lcpP75Ms",
+    "vitals.lcpP75Ms",
+    "performance.vitals.rollup.lcpP75Ms",
+    "performance.vitals.lcpP75Ms",
+    "metrics.avgLcpMs",
+    "metrics.lcpP75Ms",
+  ]);
+  const inpP75Ms = firstNumber(summary, [
+    "webVitals.rollup.inpP75Ms",
+    "webVitals.inpP75Ms",
+    "vitals.rollup.inpP75Ms",
+    "vitals.inpP75Ms",
+    "performance.vitals.rollup.inpP75Ms",
+    "performance.vitals.inpP75Ms",
+    "metrics.inpP75Ms",
+  ]);
+  const clsP75 = firstNumber(summary, [
+    "webVitals.rollup.clsP75",
+    "webVitals.clsP75",
+    "vitals.rollup.clsP75",
+    "vitals.clsP75",
+    "performance.vitals.rollup.clsP75",
+    "performance.vitals.clsP75",
+    "metrics.globalCls",
+    "metrics.clsP75",
+  ]);
+  const fcpP75Ms = firstNumber(summary, [
+    "webVitals.rollup.fcpP75Ms",
+    "webVitals.fcpP75Ms",
+    "vitals.rollup.fcpP75Ms",
+    "vitals.fcpP75Ms",
+    "performance.vitals.rollup.fcpP75Ms",
+    "performance.vitals.fcpP75Ms",
+    "metrics.fcpP75Ms",
+  ]);
+  const ttfbP75Ms = firstNumber(summary, [
+    "webVitals.rollup.ttfbP75Ms",
+    "webVitals.ttfbP75Ms",
+    "vitals.rollup.ttfbP75Ms",
+    "vitals.ttfbP75Ms",
+    "performance.vitals.rollup.ttfbP75Ms",
+    "performance.vitals.ttfbP75Ms",
+    "metrics.avgTtfbMs",
+    "metrics.ttfbP75Ms",
+  ]);
+
+  const noSamples = samples == null || samples <= 0;
+  const placeholderMetrics = [lcpP75Ms, inpP75Ms, clsP75, fcpP75Ms, ttfbP75Ms];
+  const allPlaceholder = placeholderMetrics.every((value) => value == null || value === 0);
+  if (!noSamples || !allPlaceholder) return summary;
+
+  const enriched = { ...summary } as ProjectSummary & AnyRecord;
+  nullifyVitalContainer(asRecord(enriched.webVitals));
+  nullifyVitalContainer(asRecord(enriched.vitals));
+
+  const performance = asRecord(enriched.performance);
+  if (performance) {
+    nullifyVitalContainer(asRecord(performance.vitals));
+    nullifyVitalContainer(asRecord(performance.webVitals));
+  }
+
+  const diagnostics = asRecord(enriched.diagnostics);
+  if (diagnostics) {
+    nullifyVitalContainer(asRecord(diagnostics.vitals));
+  }
+
+  const metrics = asMetricRecord(enriched);
+  metrics.avgLcpMs = null;
+  metrics.avgTtfbMs = null;
+  metrics.globalCls = null;
+  metrics.lcpP75Ms = null;
+  metrics.inpP75Ms = null;
+  metrics.clsP75 = null;
+  metrics.fcpP75Ms = null;
+  metrics.ttfbP75Ms = null;
+  if (asRecord(metrics.webVitals)) {
+    nullifyVitalContainer(asRecord(metrics.webVitals));
+  }
 
   return enriched;
 }

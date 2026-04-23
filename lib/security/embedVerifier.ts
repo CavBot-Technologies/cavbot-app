@@ -8,6 +8,7 @@ import { getCavbotAppOrigins } from "@/lib/security/embedAppOrigins";
 import { EMBED_RATE_LIMIT_SPEC } from "@/lib/security/embedRateLimit";
 import {
   findActiveEmbedSite,
+  findActiveEmbedSiteByOrigin,
   findEmbedKeyByHash,
   listEmbedAllowedOrigins,
 } from "@/lib/security/embedKeyRuntime.server";
@@ -222,7 +223,6 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
     body?.site_id as string | undefined,
     siteCandidate
   );
-  if (!siteId) return failure("SITE_REQUIRED", 400, "Site identifier required for embed verification.");
 
   const keyHash = hashApiKey(projectKey.trim());
   const record = await findEmbedKeyByHash(keyHash);
@@ -231,30 +231,9 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
   if (record.type !== "PUBLISHABLE") return failure("INVALID_KEY_TYPE", 403, "Publishable key required.");
   if (!record.projectId) return failure("INVALID_KEY", 401, "Key missing project binding.");
 
-  const projectId = record.projectId!;
-  const site = await findActiveEmbedSite(siteId, record.projectId);
-  if (!site) {
-    await slowFailMetric(record, siteId, null, false, false, req, "SITE_NOT_FOUND");
-    return failure("SITE_NOT_FOUND", 404, "Requested site missing or inactive.");
-  }
-
-  if (record.siteId && record.siteId !== site.id) {
-    await slowFailMetric(record, site.id, null, false, false, req, "SITE_MISMATCH");
-    return failure("SITE_MISMATCH", 403, "Key not bound to this site.");
-  }
-
-  if (options.requiredScopes?.length) {
-    const allowedScopes = record.scopes ?? [];
-    const missing = options.requiredScopes.filter((scope) => !allowedScopes.includes(scope));
-    if (missing.length) {
-      await slowFailMetric(record, site.id, null, false, false, req, "SCOPE_MISSING");
-      return failure("SCOPE_MISSING", 403, "Required scope missing.");
-    }
-  }
-
   const originHeader = inferRequestOrigin(req);
   if (!originHeader) {
-    await slowFailMetric(record, site.id, null, false, false, req, "ORIGIN_MISSING");
+    await slowFailMetric(record, siteId || null, null, false, false, req, "ORIGIN_MISSING");
     return failure("ORIGIN_MISSING", 400, "Origin header missing.");
   }
 
@@ -262,8 +241,30 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
   try {
     canonicalOrigin = normalizeOriginStrict(originHeader);
   } catch {
-    await slowFailMetric(record, site.id, originHeader, false, false, req, "ORIGIN_INVALID");
+    await slowFailMetric(record, siteId || null, originHeader, false, false, req, "ORIGIN_INVALID");
     return failure("DENIED_ORIGIN", 403, "Origin parsing failed.", originHeader);
+  }
+
+  const site = siteId
+    ? await findActiveEmbedSite(siteId, record.projectId)
+    : await findActiveEmbedSiteByOrigin(canonicalOrigin, record.projectId);
+  if (!site) {
+    await slowFailMetric(record, siteId || null, canonicalOrigin, false, false, req, "SITE_NOT_FOUND");
+    return failure("SITE_NOT_FOUND", 404, "Requested site missing or inactive.");
+  }
+
+  if (record.siteId && record.siteId !== site.id) {
+    await slowFailMetric(record, site.id, canonicalOrigin, false, false, req, "SITE_MISMATCH");
+    return failure("SITE_MISMATCH", 403, "Key not bound to this site.");
+  }
+
+  if (options.requiredScopes?.length) {
+    const allowedScopes = record.scopes ?? [];
+    const missing = options.requiredScopes.filter((scope) => !allowedScopes.includes(scope));
+    if (missing.length) {
+      await slowFailMetric(record, site.id, canonicalOrigin, false, false, req, "SCOPE_MISSING");
+      return failure("SCOPE_MISSING", 403, "Required scope missing.");
+    }
   }
 
   const allowedRows = buildAllowedOrigins(site.origin, await listEmbedAllowedOrigins(site.id));

@@ -56,6 +56,8 @@ function toSlug(v: string) {
 }
 
 function nOrNull(x: unknown) {
+  if (x == null) return null;
+  if (typeof x === "string" && !x.trim()) return null;
   const v = Number(x);
   return Number.isFinite(v) ? v : null;
 }
@@ -86,6 +88,10 @@ function fmtCls(v: unknown) {
   const x = nOrNull(v);
   if (x == null) return "—";
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(x);
+}
+
+function fmtVitalState(value: number | null | undefined, formatter: (input: number) => string, fallback = "Warming") {
+  return value == null ? fallback : formatter(value);
 }
 
 /* =========================
@@ -1712,6 +1718,8 @@ export default async function InsightsPage({ searchParams }: PageProps) {
   const heroSignalsMetric = heroSignals == null ? "Awaiting first scan" : fmtInt(heroSignals);
   const vitalsReady = !(lcpP75Ms == null && inpP75Ms == null && clsP75 == null);
   const vitalsMetric = vitalsReady ? "P75" : "Awaiting data";
+  const vitalsWarmState = vitalsReady ? "Collecting" : "Warming";
+  const vitalsWarmSub = vitalsReady ? "Collecting enough field samples." : "Awaiting first field sample.";
   const a11yIssuesMetric = a11yIssues == null ? "Not recorded yet" : fmtInt(a11yIssues);
 
   const cavaiSnapshotData =
@@ -2107,20 +2115,20 @@ export default async function InsightsPage({ searchParams }: PageProps) {
                 <div className="ins-mini-grid">
                   <div className={`ins-mini tone-${toneForLcp(lcpP75Ms)}`}>
                     <div className="ins-mini-k">LCP (P75)</div>
-                    <div className="ins-mini-v">{fmtMs(lcpP75Ms)}</div>
-                    <div className="ins-mini-sub">Largest Contentful Paint</div>
+                    <div className="ins-mini-v">{fmtVitalState(lcpP75Ms, (value) => fmtMs(value), vitalsWarmState)}</div>
+                    <div className="ins-mini-sub">{lcpP75Ms != null ? "Largest Contentful Paint" : vitalsWarmSub}</div>
                   </div>
 
                   <div className={`ins-mini tone-${toneForInp(inpP75Ms)}`}>
                     <div className="ins-mini-k">INP (P75)</div>
-                    <div className="ins-mini-v">{fmtMs(inpP75Ms)}</div>
-                    <div className="ins-mini-sub">Interaction to Next Paint</div>
+                    <div className="ins-mini-v">{fmtVitalState(inpP75Ms, (value) => fmtMs(value), vitalsWarmState)}</div>
+                    <div className="ins-mini-sub">{inpP75Ms != null ? "Interaction to Next Paint" : vitalsWarmSub}</div>
                   </div>
 
                   <div className={`ins-mini tone-${toneForCls(clsP75)}`}>
                     <div className="ins-mini-k">CLS (P75)</div>
-                    <div className="ins-mini-v">{fmtCls(clsP75)}</div>
-                    <div className="ins-mini-sub">Cumulative Layout Shift</div>
+                    <div className="ins-mini-v">{fmtVitalState(clsP75, (value) => fmtCls(value), vitalsWarmState)}</div>
+                    <div className="ins-mini-sub">{clsP75 != null ? "Cumulative Layout Shift" : vitalsWarmSub}</div>
                   </div>
                 </div>
               </article>

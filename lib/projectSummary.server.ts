@@ -11,6 +11,7 @@ import {
   enrichProjectSummaryWithLatestPack,
   enrichProjectSummaryWithLocalWebVitals,
   harmonizeProjectSummarySignals,
+  suppressPlaceholderWebVitals,
 } from "@/lib/projectSummaryEnrichment.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
 import { decryptAesGcm } from "@/lib/cryptoAesGcm.server";
@@ -211,7 +212,7 @@ export async function getTenantProjectSummary(
 
   const enrichedSummary = harmonizeProjectSummarySignals(
     enrichProjectSummaryWithLatestPack(
-      enrichProjectSummaryWithLocalWebVitals(summary, localWebVitalsRollup),
+      suppressPlaceholderWebVitals(enrichProjectSummaryWithLocalWebVitals(summary, localWebVitalsRollup)),
       latestPackWithHistory,
     ),
   );

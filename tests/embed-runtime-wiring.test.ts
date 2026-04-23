@@ -50,7 +50,9 @@ test("embed verification paths avoid Prisma runtime imports", () => {
 
   assert.equal(verifierSource.includes("findEmbedKeyByHash"), true);
   assert.equal(verifierSource.includes("findActiveEmbedSite"), true);
+  assert.equal(verifierSource.includes("findActiveEmbedSiteByOrigin"), true);
   assert.equal(verifierSource.includes("listEmbedAllowedOrigins"), true);
+  assert.equal(verifierSource.includes("SITE_REQUIRED"), false);
 
   assert.equal(tokenSource.includes("findEmbedKeyById"), true);
   assert.equal(tokenSource.includes("findActiveEmbedSite"), true);

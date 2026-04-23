@@ -375,6 +375,20 @@ test("v5 only: cavbot_page_view can be queued and flushed without CavAi", async 
   assert.equal(h.consoleErrors.length, 0);
 });
 
+test("v5 infers the local embed ingest from the script origin when no explicit API url is provided", async () => {
+  const h = createHarness();
+  delete h.window.CAVBOT_API_URL;
+  h.window.document.currentScript = { src: "https://app.cavbot.io/cavai/cavai-analytics-v5.js" };
+
+  runScript(h, ANALYTICS_SOURCE, "cavai-analytics-v5.js");
+
+  await h.window.cavbotAnalytics.track("cavbot_page_view", { source: "script_origin_default" });
+  await h.window.cavbotAnalytics.flush("manual");
+
+  assert.ok(h.fetchCalls.length >= 1);
+  assert.equal(h.fetchCalls[0].url, "https://app.cavbot.io/api/embed/analytics");
+});
+
 test("CavAi first then v5: bridge routes cavai.trackEvent to v5.track with no duplicate pointer listeners", async () => {
   const h = createHarness();
   runScript(h, CAVAI_SOURCE, "cavai.js");

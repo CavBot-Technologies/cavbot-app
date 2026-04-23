@@ -15,4 +15,6 @@ test("local analytics runtime captures the full vitals payload promised by the U
   assert.equal(source.includes('type: "event"'), true);
   assert.equal(source.includes('type: "first-input"'), true);
   assert.equal(source.includes('first-contentful-paint'), true);
+  assert.equal(source.includes("inferScriptOrigin"), true);
+  assert.equal(source.includes('"/api/embed/analytics"'), true);
 });

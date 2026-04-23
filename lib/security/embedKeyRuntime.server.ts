@@ -149,6 +149,23 @@ export async function findActiveEmbedSite(siteId: string, projectId: number) {
   return result.rows[0] ? mapSite(result.rows[0]) : null;
 }
 
+export async function findActiveEmbedSiteByOrigin(origin: string, projectId: number) {
+  const result = await getAuthPool().query<RawSiteRow>(
+    `SELECT "id", "origin", "projectId"
+     FROM "Site"
+     WHERE "origin" = $1
+       AND "projectId" = $2
+       AND "isActive" = TRUE
+     ORDER BY
+       CASE WHEN "status" = 'VERIFIED'::"SiteStatus" THEN 0 ELSE 1 END ASC,
+       "createdAt" ASC
+     LIMIT 1`,
+    [origin, projectId],
+  );
+
+  return result.rows[0] ? mapSite(result.rows[0]) : null;
+}
+
 export async function listEmbedAllowedOrigins(siteId: string): Promise<AllowedOriginRow[]> {
   const result = await getAuthPool().query<RawAllowedOriginRow>(
     `SELECT "origin", "matchType"

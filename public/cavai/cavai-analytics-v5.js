@@ -52,7 +52,38 @@
   return; // do nothing
 }
   
-const API_URL = window.CAVBOT_API_URL || "https://api.cavbot.io/v1/events";
+  function inferScriptOrigin() {
+    try {
+      var src = "";
+      var current = document && document.currentScript;
+      if (current && current.src) src = String(current.src);
+
+      if (!src && document && typeof document.getElementsByTagName === "function") {
+        var scripts = document.getElementsByTagName("script") || [];
+        for (var i = scripts.length - 1; i >= 0; i -= 1) {
+          var candidate = scripts[i];
+          var candidateSrc = candidate && candidate.src ? String(candidate.src) : "";
+          if (!candidateSrc) continue;
+          if (
+            candidateSrc.indexOf("/cavai/cavai-analytics-v5.js") !== -1 ||
+            candidateSrc.indexOf("/sdk/v5/cavai-analytics-v5.js") !== -1 ||
+            candidateSrc.indexOf("/sdk/v5/cavai-analytics-v5.min.js") !== -1
+          ) {
+            src = candidateSrc;
+            break;
+          }
+        }
+      }
+
+      if (!src) return "";
+      return new URL(src, location.href).origin || "";
+    } catch {
+      return "";
+    }
+  }
+
+  const SCRIPT_ORIGIN = inferScriptOrigin();
+const API_URL = window.CAVBOT_API_URL || (SCRIPT_ORIGIN ? SCRIPT_ORIGIN + "/api/embed/analytics" : "https://api.cavbot.io/v1/events");
   const PROJECT_KEY = window.CAVBOT_PROJECT_KEY || "cavbot_pk_gHn737DTf4afJ2xGpBFzZQ";
 
   // Optional (recommended): set per-site in the snippet. Server can still resolve by host/origin.

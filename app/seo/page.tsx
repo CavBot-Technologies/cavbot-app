@@ -128,6 +128,8 @@ function toSlug(v: string) {
 }
 
 function nOrNull(x: unknown) {
+  if (x == null) return null;
+  if (typeof x === "string" && !x.trim()) return null;
   const v = Number(x);
   return Number.isFinite(v) ? v : null;
 }
@@ -151,6 +153,10 @@ function fmtCls(v: unknown) {
   const x = nOrNull(v);
   if (x == null) return "—";
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(x);
+}
+
+function fmtVitalState(value: number | null | undefined, formatter: (input: number) => string, fallback = "Warming") {
+  return value == null ? fallback : formatter(value);
 }
 
 function toHostPath(raw: string) {
@@ -489,7 +495,7 @@ function normalizeVitalsFromSummary(summary: unknown): VitalsPayload {
       ? String(v.updatedAt)
       : firstString(summaryRecord, "updatedAtISO");
 
-  return {
+  const normalized = {
     updatedAtISO: updatedAtISO || null,
     samples: nOrNull(r?.samples ?? r?.n ?? r?.observations ?? r?.pagesObserved),
 
@@ -499,6 +505,26 @@ function normalizeVitalsFromSummary(summary: unknown): VitalsPayload {
     fcpP75Ms: nOrNull(r?.fcpP75Ms ?? r?.fcp_p75_ms ?? r?.fcpP75 ?? r?.fcpMs),
     ttfbP75Ms: nOrNull(r?.ttfbP75Ms ?? r?.ttfb_p75_ms ?? r?.ttfbP75 ?? r?.ttfbMs),
   };
+
+  const noSamples = normalized.samples == null || normalized.samples <= 0;
+  const allPlaceholder = [
+    normalized.lcpP75Ms,
+    normalized.inpP75Ms,
+    normalized.clsP75,
+    normalized.fcpP75Ms,
+    normalized.ttfbP75Ms,
+  ].every((value) => value == null || value === 0);
+
+  if (noSamples && allPlaceholder) {
+    normalized.samples = null;
+    normalized.lcpP75Ms = null;
+    normalized.inpP75Ms = null;
+    normalized.clsP75 = null;
+    normalized.fcpP75Ms = null;
+    normalized.ttfbP75Ms = null;
+  }
+
+  return normalized;
 }
 
 /* =========================
@@ -722,6 +748,9 @@ export default async function SeoPage({ searchParams }: PageProps) {
   const clsTone = toneForCls(vitals.clsP75 ?? null);
   const fcpTone = toneForFcp(vitals.fcpP75Ms ?? null);
   const ttfbTone = toneForTtfb(vitals.ttfbP75Ms ?? null);
+  const vitalsWarmState = vitals.samples != null && vitals.samples > 0 ? "Collecting" : "Warming";
+  const vitalsWarmSub = vitals.samples != null && vitals.samples > 0 ? "Collecting enough field samples." : "Awaiting first field sample.";
+  const vitalsSamplesLabel = vitals.samples != null ? fmtInt(vitals.samples) : vitalsWarmState;
   const metadataGapRows: Array<{ id: string; label: string; count: number }> = [
     { id: "missing_title", label: "Missing Titles", count: nOrNull(seo.missingTitleCount) ?? 0 },
     { id: "missing_description", label: "Missing Descriptions", count: nOrNull(seo.missingDescriptionCount) ?? 0 },
@@ -1042,7 +1071,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
               </div><br />
               <div className="seo-pillrow">
                 <span className="seo-pill">
-                  Samples: <b>{fmtInt(vitals.samples)}</b>
+                  Samples: <b>{vitalsSamplesLabel}</b>
                 </span>
               </div>
             </div>
@@ -1050,32 +1079,32 @@ export default async function SeoPage({ searchParams }: PageProps) {
             <div className="seo-vitals">
               <div className={`seo-vital tone-${lcpTone}`}>
                 <div className="seo-vital-k">LCP (P75)</div>
-                <div className="seo-vital-v">{fmtMs(vitals.lcpP75Ms)}</div><br />
-                <div className="seo-vital-sub">Largest Contentful Paint</div>
+                <div className="seo-vital-v">{fmtVitalState(vitals.lcpP75Ms, (value) => fmtMs(value), vitalsWarmState)}</div>
+                <div className="seo-vital-sub">{vitals.lcpP75Ms != null ? "Largest Contentful Paint" : vitalsWarmSub}</div>
               </div>
 
               <div className={`seo-vital tone-${inpTone}`}>
                 <div className="seo-vital-k">INP (P75)</div>
-                <div className="seo-vital-v">{fmtMs(vitals.inpP75Ms)}</div><br />
-                <div className="seo-vital-sub">Interaction to Next Paint</div>
+                <div className="seo-vital-v">{fmtVitalState(vitals.inpP75Ms, (value) => fmtMs(value), vitalsWarmState)}</div>
+                <div className="seo-vital-sub">{vitals.inpP75Ms != null ? "Interaction to Next Paint" : vitalsWarmSub}</div>
               </div>
 
               <div className={`seo-vital tone-${clsTone}`}>
                 <div className="seo-vital-k">CLS (P75)</div>
-                <div className="seo-vital-v">{fmtCls(vitals.clsP75)}</div><br />
-                <div className="seo-vital-sub">Cumulative Layout Shift</div>
+                <div className="seo-vital-v">{fmtVitalState(vitals.clsP75, (value) => fmtCls(value), vitalsWarmState)}</div>
+                <div className="seo-vital-sub">{vitals.clsP75 != null ? "Cumulative Layout Shift" : vitalsWarmSub}</div>
               </div>
 
               <div className={`seo-vital tone-${fcpTone}`}>
                 <div className="seo-vital-k">FCP (P75)</div>
-                <div className="seo-vital-v">{fmtMs(vitals.fcpP75Ms)}</div><br />
-                <div className="seo-vital-sub">First Contentful Paint</div>
+                <div className="seo-vital-v">{fmtVitalState(vitals.fcpP75Ms, (value) => fmtMs(value), vitalsWarmState)}</div>
+                <div className="seo-vital-sub">{vitals.fcpP75Ms != null ? "First Contentful Paint" : vitalsWarmSub}</div>
               </div>
 
               <div className={`seo-vital tone-${ttfbTone}`}>
                 <div className="seo-vital-k">TTFB (P75)</div>
-                <div className="seo-vital-v">{fmtMs(vitals.ttfbP75Ms)}</div><br />
-                <div className="seo-vital-sub">Time to First Byte</div>
+                <div className="seo-vital-v">{fmtVitalState(vitals.ttfbP75Ms, (value) => fmtMs(value), vitalsWarmState)}</div>
+                <div className="seo-vital-sub">{vitals.ttfbP75Ms != null ? "Time to First Byte" : vitalsWarmSub}</div>
               </div>
             </div>
           </section>

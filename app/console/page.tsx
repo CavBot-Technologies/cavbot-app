@@ -369,6 +369,8 @@ function n(v: unknown, fallback = 0) {
   return Number.isFinite(x) ? x : fallback;
 }
 function nOrNull(v: unknown): number | null {
+  if (v == null) return null;
+  if (typeof v === "string" && !v.trim()) return null;
   const x = Number(v);
   return Number.isFinite(x) ? x : null;
 }
