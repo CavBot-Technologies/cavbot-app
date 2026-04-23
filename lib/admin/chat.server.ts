@@ -5,7 +5,7 @@ import { randomBytes } from "crypto";
 import { hasAdminScope } from "@/lib/admin/permissions";
 import { createAdminNotification } from "@/lib/admin/notifications.server";
 import { adminR2Configured, putAdminR2Object } from "@/lib/admin/r2.server";
-import { resolveAdminDepartment } from "@/lib/admin/access";
+import { resolveAdminDepartment, type AdminDepartment } from "@/lib/admin/access";
 import { getDepartmentAvatarTone } from "@/lib/admin/staffDisplay";
 import { prisma } from "@/lib/prisma";
 
@@ -33,6 +33,13 @@ type ChatThreadDetailArgs = {
   viewer: Viewer;
   threadId: string;
   mailboxUserId?: string | null;
+};
+
+type AdminChatBoxDefinition = {
+  slug: string;
+  label: string;
+  description: string;
+  allowedDepartments: readonly AdminDepartment[];
 };
 
 function safeId(value: unknown) {
@@ -100,7 +107,7 @@ function buildWelcomeToCavChatBody() {
   ].join("\n");
 }
 
-export const ADMIN_CHAT_BOX_DEFINITIONS = [
+export const ADMIN_CHAT_BOX_DEFINITIONS: readonly AdminChatBoxDefinition[] = [
   {
     slug: "command",
     label: "Command",
