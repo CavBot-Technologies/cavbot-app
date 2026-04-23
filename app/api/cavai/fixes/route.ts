@@ -4,8 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildFixPlanFromInsightPack } from "@/packages/cavai-core/src";
 import { getInsightPackForRun, persistDeterministicFixPlan } from "@/lib/cavai/intelligence.server";
 import { auditLogWrite } from "@/lib/audit";
-import { isApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
+import { isApiAuthError, requireUser } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,8 +45,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const session = await requireSession(req);
-    requireAccountContext(session);
+    const session = await requireWorkspaceResilientSession(req);
     requireUser(session);
 
     const body = (await readSanitizedJson(req, null)) as FixRequestBody | null;

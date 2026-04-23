@@ -22,6 +22,8 @@ test("legacy sites route stays on runtime-safe workspace wiring", () => {
 test("embed analytics route records local activity after successful upstream delivery", () => {
   const routeSource = read("app/api/embed/analytics/route.ts");
   const helperSource = read("lib/security/embedAnalyticsTracker.server.ts");
+  const metricsSource = read("lib/security/embedMetrics.server.ts");
+  const footerSource = read("app/api/system-footer/metrics/route.ts");
 
   assert.equal(routeSource.includes("recordAnalyticsEmbedActivityBestEffort"), true);
   assert.equal(routeSource.includes("if (response.ok)"), true);
@@ -29,11 +31,19 @@ test("embed analytics route records local activity after successful upstream del
   assert.equal(helperSource.includes('"WorkspaceNotice"'), true);
   assert.equal(helperSource.includes('"SiteEvent"'), true);
   assert.equal(helperSource.includes("analytics_ingest"), true);
+  assert.equal(metricsSource.includes('from "@/lib/prisma"'), false);
+  assert.equal(metricsSource.includes('"EmbedVerificationMetric"'), true);
+  assert.equal(footerSource.includes('from "@/lib/prisma"'), false);
+  assert.equal(footerSource.includes("getAuthPool"), true);
 });
 
 test("cavai persistence paths avoid prisma runtime access on production routes", () => {
   const packsSource = read("lib/cavai/packs.server.ts");
   const intelligenceSource = read("lib/cavai/intelligence.server.ts");
+  const diagnosticsRoute = read("app/api/cavai/diagnostics/route.ts");
+  const metricsRoute = read("app/api/metrics/route.ts");
+  const fixesRoute = read("app/api/cavai/fixes/route.ts");
+  const packRoute = read("app/api/cavai/packs/route.ts");
 
   assert.equal(packsSource.includes('from "@/lib/prisma"'), false);
   assert.equal(packsSource.includes("getAuthPool"), true);
@@ -42,4 +52,8 @@ test("cavai persistence paths avoid prisma runtime access on production routes",
   assert.equal(intelligenceSource.includes("withAuthTransaction"), true);
   assert.equal(intelligenceSource.includes('"CavAiInsightPack"'), true);
   assert.equal(intelligenceSource.includes('"CavAiFinding"'), true);
+  assert.equal(diagnosticsRoute.includes("requireWorkspaceResilientSession"), true);
+  assert.equal(metricsRoute.includes("requireWorkspaceResilientSession"), true);
+  assert.equal(fixesRoute.includes("requireWorkspaceResilientSession"), true);
+  assert.equal(packRoute.includes("requireWorkspaceResilientSession"), true);
 });

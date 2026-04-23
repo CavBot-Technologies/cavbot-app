@@ -1,4 +1,7 @@
-import { prisma } from "@/lib/prisma";
+import "server-only";
+
+import type pg from "pg";
+import { getAuthPool, newDbId, withAuthTransaction } from "@/lib/authDb";
 import { formatDayKey } from "@/lib/status/time";
 import { auditLogWrite } from "@/lib/audit";
 import { EMBED_RATE_LIMIT_LABEL } from "@/lib/security/embedRateLimit";
@@ -14,6 +17,13 @@ export const DEFAULT_EMBED_RATE_LIMIT_LABEL = EMBED_RATE_LIMIT_LABEL;
 
 const DENY_AUDIT_INTERVAL_MS = 60 * 60 * 1000;
 
+type Queryable = {
+  query: <T extends pg.QueryResultRow = pg.QueryResultRow>(
+    text: string,
+    values?: unknown[]
+  ) => Promise<pg.QueryResult<T>>;
+};
+
 type MetricParams = {
   accountId: string;
   projectId: number;
@@ -21,39 +31,6 @@ type MetricParams = {
   keyId: string;
   allowed: boolean;
 };
-
-export async function recordEmbedMetric(params: MetricParams) {
-  if (!params.accountId) return;
-  if (!params.siteId) return;
-  try {
-    const dayKey = formatDayKey(new Date());
-    await prisma.embedVerificationMetric.upsert({
-      where: {
-        projectId_siteId_keyId_dayKey: {
-          projectId: params.projectId,
-          siteId: params.siteId,
-          keyId: params.keyId,
-          dayKey,
-        },
-      },
-      create: {
-        accountId: params.accountId,
-        projectId: params.projectId,
-        siteId: params.siteId,
-        keyId: params.keyId,
-        dayKey,
-        verified: params.allowed ? 1 : 0,
-        denied: params.allowed ? 0 : 1,
-      },
-      update: {
-        verified: params.allowed ? { increment: 1 } : undefined,
-        denied: params.allowed ? undefined : { increment: 1 },
-      },
-    });
-  } catch (error) {
-    console.error("[embedMetrics] record failed", error);
-  }
-}
 
 type DeniedOriginParams = {
   accountId: string;
@@ -66,59 +43,150 @@ type DeniedOriginParams = {
   rateLimited?: boolean;
 };
 
-async function upsertDeniedOrigin(params: Omit<DeniedOriginParams, "siteId"> & { siteId: string }, dayKey: string) {
-  const lookup = {
-    projectId_siteId_keyId_dayKey_origin: {
-      projectId: params.projectId,
-      siteId: params.siteId,
-      keyId: params.keyId,
-      dayKey,
-      origin: params.origin,
-    },
-  };
+type RawDeniedOriginRow = {
+  auditLoggedAt: Date | string | null;
+};
 
-  const existing = await prisma.embedDeniedOrigin.findUnique({
-    where: lookup,
-  });
+type RawMetricSumRow = {
+  verified: number | string | null;
+  denied: number | string | null;
+};
 
-  const now = new Date();
-  if (existing) {
-    await prisma.embedDeniedOrigin.update({
-      where: lookup,
-      data: {
-        attempts: { increment: 1 },
-        lastDeniedAt: now,
-      },
-    });
-    return existing;
+type RawDeniedOriginListRow = {
+  origin: string | null;
+};
+
+function asInt(value: number | string | null | undefined) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : 0;
+}
+
+function asDate(value: Date | string | null | undefined) {
+  if (!value) return null;
+  return value instanceof Date ? value : new Date(value);
+}
+
+async function queryOne<T extends pg.QueryResultRow>(
+  queryable: Queryable,
+  text: string,
+  values: unknown[] = []
+) {
+  const result = await queryable.query<T>(text, values);
+  return result.rows[0] ?? null;
+}
+
+export async function recordEmbedMetric(params: MetricParams) {
+  if (!params.accountId || !params.siteId) return;
+  try {
+    const dayKey = formatDayKey(new Date());
+    await getAuthPool().query(
+      `INSERT INTO "EmbedVerificationMetric" (
+         "id",
+         "accountId",
+         "projectId",
+         "siteId",
+         "keyId",
+         "dayKey",
+         "verified",
+         "denied",
+         "createdAt",
+         "updatedAt"
+       )
+       VALUES (
+         $1,
+         $2,
+         $3,
+         $4,
+         $5,
+         $6,
+         $7,
+         $8,
+         NOW(),
+         NOW()
+       )
+       ON CONFLICT ("projectId", "siteId", "keyId", "dayKey") DO UPDATE
+       SET "verified" = "EmbedVerificationMetric"."verified" + EXCLUDED."verified",
+           "denied" = "EmbedVerificationMetric"."denied" + EXCLUDED."denied",
+           "updatedAt" = NOW()`,
+      [
+        newDbId(),
+        params.accountId,
+        params.projectId,
+        params.siteId,
+        params.keyId,
+        dayKey,
+        params.allowed ? 1 : 0,
+        params.allowed ? 0 : 1,
+      ]
+    );
+  } catch (error) {
+    console.error("[embedMetrics] record failed", error);
   }
+}
 
-  const created = await prisma.embedDeniedOrigin.create({
-    data: {
-      accountId: params.accountId,
-      projectId: params.projectId,
-      siteId: params.siteId,
-      keyId: params.keyId,
+async function upsertDeniedOrigin(
+  queryable: Queryable,
+  params: Omit<DeniedOriginParams, "siteId"> & { siteId: string },
+  dayKey: string
+) {
+  return queryOne<RawDeniedOriginRow>(
+    queryable,
+    `INSERT INTO "EmbedDeniedOrigin" (
+       "id",
+       "accountId",
+       "projectId",
+       "siteId",
+       "keyId",
+       "dayKey",
+       "origin",
+       "attempts",
+       "lastDeniedAt",
+       "createdAt",
+       "updatedAt"
+     )
+     VALUES (
+       $1,
+       $2,
+       $3,
+       $4,
+       $5,
+       $6,
+       $7,
+       1,
+       NOW(),
+       NOW(),
+       NOW()
+     )
+     ON CONFLICT ("projectId", "siteId", "keyId", "dayKey", "origin") DO UPDATE
+     SET "attempts" = "EmbedDeniedOrigin"."attempts" + 1,
+         "lastDeniedAt" = NOW(),
+         "updatedAt" = NOW()
+     RETURNING "auditLoggedAt"`,
+    [
+      newDbId(),
+      params.accountId,
+      params.projectId,
+      params.siteId,
+      params.keyId,
       dayKey,
-      origin: params.origin,
-      attempts: 1,
-      lastDeniedAt: now,
-    },
-  });
-  return created;
+      params.origin,
+    ]
+  );
 }
 
 export async function trackDeniedOrigin(params: DeniedOriginParams) {
-  if (!params.accountId) return;
-  if (!params.siteId) return;
+  if (!params.accountId || !params.siteId) return;
   try {
     const dayKey = formatDayKey(new Date());
-    const row = await upsertDeniedOrigin({ ...params, siteId: params.siteId }, dayKey);
-    const lastAudit = row.auditLoggedAt ? row.auditLoggedAt.getTime() : 0;
-    const interval = Date.now() - lastAudit;
-    const shouldAudit = !row.auditLoggedAt || interval > DENY_AUDIT_INTERVAL_MS;
 
-    if (shouldAudit) {
+    await withAuthTransaction(async (tx) => {
+      const row = await upsertDeniedOrigin(tx, { ...params, siteId: params.siteId! }, dayKey);
+      const lastAudit = row?.auditLoggedAt ? asDate(row.auditLoggedAt)?.getTime() ?? 0 : 0;
+      const interval = Date.now() - lastAudit;
+      const shouldAudit = !row?.auditLoggedAt || interval > DENY_AUDIT_INTERVAL_MS;
+
+      if (!shouldAudit) return;
+
       await auditLogWrite({
         request: params.request ?? null,
         accountId: params.accountId,
@@ -134,19 +202,19 @@ export async function trackDeniedOrigin(params: DeniedOriginParams) {
           keyLast4: params.keyId.slice(-4),
         },
       });
-      await prisma.embedDeniedOrigin.update({
-        where: {
-          projectId_siteId_keyId_dayKey_origin: {
-            projectId: params.projectId,
-            siteId: params.siteId,
-            keyId: params.keyId,
-            dayKey,
-            origin: params.origin,
-          },
-        },
-        data: { auditLoggedAt: new Date() },
-      });
-    }
+
+      await tx.query(
+        `UPDATE "EmbedDeniedOrigin"
+         SET "auditLoggedAt" = NOW(),
+             "updatedAt" = NOW()
+         WHERE "projectId" = $1
+           AND "siteId" = $2
+           AND "keyId" = $3
+           AND "dayKey" = $4
+           AND "origin" = $5`,
+        [params.projectId, params.siteId, params.keyId, dayKey, params.origin]
+      );
+    });
   } catch (error) {
     console.error("[embedMetrics] denied-origin tracking failed", error);
   }
@@ -159,37 +227,48 @@ export async function fetchEmbedUsage(options: {
   rateLimitLabel?: string;
 }): Promise<EmbedUsagePayload> {
   const dayKey = formatDayKey(new Date());
-  const rows = await prisma.embedVerificationMetric.findMany({
-    where: {
-      accountId: options.accountId,
-      projectId: options.projectId,
-      dayKey,
-      siteId: options.siteId ?? undefined,
-    },
-    select: {
-      verified: true,
-      denied: true,
-    },
-  });
+  const metricValues: unknown[] = [options.accountId, options.projectId, dayKey];
+  const originValues: unknown[] = [options.accountId, options.projectId, dayKey];
 
-  const verified = rows.reduce((sum, row) => sum + (row.verified ?? 0), 0);
-  const denied = rows.reduce((sum, row) => sum + (row.denied ?? 0), 0);
+  let siteClause = "";
+  if (options.siteId) {
+    metricValues.push(options.siteId);
+    originValues.push(options.siteId);
+    siteClause = ` AND "siteId" = $4`;
+  }
 
-  const topOrigins = await prisma.embedDeniedOrigin.findMany({
-    where: {
-      accountId: options.accountId,
-      projectId: options.projectId,
-      dayKey,
-      siteId: options.siteId ?? undefined,
-    },
-    orderBy: { attempts: "desc" },
-    take: 5,
-  });
+  const metrics = await queryOne<RawMetricSumRow>(
+    getAuthPool(),
+    `SELECT
+       COALESCE(SUM("verified"), 0)::int AS "verified",
+       COALESCE(SUM("denied"), 0)::int AS "denied"
+     FROM "EmbedVerificationMetric"
+     WHERE "accountId" = $1
+       AND "projectId" = $2
+       AND "dayKey" = $3${siteClause}`,
+    metricValues
+  );
+
+  const topOrigins = await getAuthPool().query<RawDeniedOriginListRow>(
+    `SELECT "origin"
+     FROM "EmbedDeniedOrigin"
+     WHERE "accountId" = $1
+       AND "projectId" = $2
+       AND "dayKey" = $3${siteClause}
+     ORDER BY "attempts" DESC, "lastDeniedAt" DESC
+     LIMIT 5`,
+    originValues
+  );
+
+  const verified = asInt(metrics?.verified);
+  const denied = asInt(metrics?.denied);
 
   return {
-    verifiedToday: verified ? verified : null,
-    deniedToday: denied ? denied : null,
+    verifiedToday: verified || null,
+    deniedToday: denied || null,
     rateLimit: options.rateLimitLabel ?? DEFAULT_EMBED_RATE_LIMIT_LABEL,
-    topDeniedOrigins: topOrigins.length ? topOrigins.map((row) => row.origin) : null,
+    topDeniedOrigins: topOrigins.rows.length
+      ? topOrigins.rows.map((row) => String(row.origin || "").trim()).filter(Boolean)
+      : null,
   };
 }

@@ -1,9 +1,8 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { EmbedInstallKind } from "@prisma/client";
 import { getSession } from "@/lib/apiAuth";
-import { prisma } from "@/lib/prisma";
+import { getAuthPool } from "@/lib/authDb";
 import { fetchEmbedUsage } from "@/lib/security/embedMetrics.server";
 import { readWorkspace } from "@/lib/workspaceStore.server";
 
@@ -35,6 +34,25 @@ function isoOrNull(value: Date | null | undefined) {
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
   return value.toISOString();
 }
+
+function asDate(value: Date | string | null | undefined) {
+  if (!value) return null;
+  return value instanceof Date ? value : new Date(value);
+}
+
+type RawInstallActivityRow = {
+  kind: string | null;
+  status: string | null;
+  lastSeenAt: Date | string | null;
+};
+
+type RawCountRow = {
+  count: number | string | null;
+};
+
+type RawLatestEventRow = {
+  createdAt: Date | string | null;
+};
 
 async function readApiActivity(params: {
   accountId: string;
@@ -75,62 +93,66 @@ async function readEventDestinationActivity(params: {
   twentyFourHoursAgo: Date;
 }) {
   try {
-    const [installs, recentEventCount, latestEvent] = await Promise.all([
-      prisma.embedInstall.findMany({
-        where: {
-          accountId: params.accountId,
-          projectId: params.projectId,
-          siteId: params.siteId ?? undefined,
-          kind: {
-            in: [
-              EmbedInstallKind.WIDGET,
-              EmbedInstallKind.ANALYTICS,
-              EmbedInstallKind.ARCADE,
-              EmbedInstallKind.BRAIN,
-            ],
-          },
-        },
-        select: {
-          kind: true,
-          status: true,
-          lastSeenAt: true,
-        },
-      }),
+    const installValues: unknown[] = [params.accountId, params.projectId];
+    let installSiteClause = "";
+    if (params.siteId) {
+      installValues.push(params.siteId);
+      installSiteClause = ` AND "siteId" = $3`;
+    }
+
+    const [installsResult, recentEventCount, latestEventResult] = await Promise.all([
+      getAuthPool().query<RawInstallActivityRow>(
+        `SELECT "kind", "status", "lastSeenAt"
+         FROM "EmbedInstall"
+         WHERE "accountId" = $1
+           AND "projectId" = $2${installSiteClause}
+           AND "kind" = ANY(ARRAY['WIDGET', 'ANALYTICS', 'ARCADE', 'BRAIN']::"EmbedInstallKind"[])`,
+        installValues
+      ),
       params.siteIds.length
-        ? prisma.siteEvent.count({
-            where: {
-              siteId: { in: params.siteIds },
-              createdAt: { gte: params.twentyFourHoursAgo },
-            },
-          })
+        ? getAuthPool()
+            .query<RawCountRow>(
+              `SELECT COUNT(*)::int AS "count"
+               FROM "SiteEvent"
+               WHERE "siteId" = ANY($1::text[])
+                 AND "createdAt" >= $2`,
+              [params.siteIds, params.twentyFourHoursAgo]
+            )
+            .then((result) => safeCount(result.rows[0]?.count))
         : Promise.resolve(0),
       params.siteIds.length
-        ? prisma.siteEvent.findFirst({
-            where: {
-              siteId: { in: params.siteIds },
-            },
-            orderBy: { createdAt: "desc" },
-            select: { createdAt: true },
-          })
-        : Promise.resolve(null),
+        ? getAuthPool().query<RawLatestEventRow>(
+            `SELECT "createdAt"
+             FROM "SiteEvent"
+             WHERE "siteId" = ANY($1::text[])
+             ORDER BY "createdAt" DESC
+             LIMIT 1`,
+            [params.siteIds]
+          )
+        : Promise.resolve({ rows: [] as RawLatestEventRow[] }),
     ]);
 
-    const activeInstalls = installs.filter((install) => install.status === "ACTIVE");
+    const installs = installsResult.rows;
+    const latestEvent = latestEventResult.rows[0] ?? null;
+
+    const activeInstalls = installs.filter((install) => String(install.status || "").toUpperCase() === "ACTIVE");
     const activeDestinations = activeInstalls.length;
     const recentDestinations = activeInstalls.reduce((count, install) => {
-      if (!(install.lastSeenAt instanceof Date)) return count;
-      if (install.lastSeenAt.getTime() >= params.twentyFourHoursAgo.getTime()) return count + 1;
+      const lastSeenAt = asDate(install.lastSeenAt);
+      if (!lastSeenAt) return count;
+      if (lastSeenAt.getTime() >= params.twentyFourHoursAgo.getTime()) return count + 1;
       return count;
     }, 0);
 
     const latestInstallSeenAt = activeInstalls.reduce<Date | null>((latest, install) => {
-      if (!(install.lastSeenAt instanceof Date)) return latest;
-      if (!latest) return install.lastSeenAt;
-      return install.lastSeenAt.getTime() > latest.getTime() ? install.lastSeenAt : latest;
+      const lastSeenAt = asDate(install.lastSeenAt);
+      if (!lastSeenAt) return latest;
+      if (!latest) return lastSeenAt;
+      return lastSeenAt.getTime() > latest.getTime() ? lastSeenAt : latest;
     }, null);
 
     const lastActivityDate = (() => {
-      const eventDate = latestEvent?.createdAt instanceof Date ? latestEvent.createdAt : null;
+      const eventDate = asDate(latestEvent?.createdAt);
       if (latestInstallSeenAt && eventDate) {
         return latestInstallSeenAt.getTime() >= eventDate.getTime() ? latestInstallSeenAt : eventDate;
       }

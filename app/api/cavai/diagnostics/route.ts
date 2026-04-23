@@ -20,10 +20,9 @@ import { augmentTrustPageFindings } from "@/lib/cavai/trust-pages.server";
 import { augmentKeywordFindings } from "@/lib/cavai/keywords.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import {
-  requireAccountContext,
-  requireSession,
   isApiAuthError,
 } from "@/lib/apiAuth";
+import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -92,8 +91,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const session = await requireSession(req);
-    requireAccountContext(session);
+    const session = await requireWorkspaceResilientSession(req);
 
     const parsed = parseNormalizedScanInputV1(rawBody);
     if (!parsed.ok) {
