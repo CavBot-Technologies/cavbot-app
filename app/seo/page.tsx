@@ -750,7 +750,6 @@ export default async function SeoPage({ searchParams }: PageProps) {
   const ttfbTone = toneForTtfb(vitals.ttfbP75Ms ?? null);
   const vitalsWarmState = vitals.samples != null && vitals.samples > 0 ? "Collecting" : "Warming";
   const vitalsWarmSub = vitals.samples != null && vitals.samples > 0 ? "Collecting enough field samples." : "Awaiting first field sample.";
-  const vitalsSamplesLabel = vitals.samples != null ? fmtInt(vitals.samples) : vitalsWarmState;
   const metadataGapRows: Array<{ id: string; label: string; count: number }> = [
     { id: "missing_title", label: "Missing Titles", count: nOrNull(seo.missingTitleCount) ?? 0 },
     { id: "missing_description", label: "Missing Descriptions", count: nOrNull(seo.missingDescriptionCount) ?? 0 },
@@ -763,6 +762,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
   const previewDescriptionLabel =
     seo.sampleDescription ||
     "This preview updates automatically once CavBot detects your live metadata.";
+  const sampleRobotsLabel = seo.sampleRobots && seo.sampleRobots.trim().length > 0 ? seo.sampleRobots.trim() : "Not captured yet";
   const previewUrlLabel = (() => {
     const raw = seo.sampleCanonical || activeSite.url || "";
     if (!raw) return "—";
@@ -1010,23 +1010,22 @@ export default async function SeoPage({ searchParams }: PageProps) {
                   <p className="cb-sub">Robots posture across observed pages.</p>
                 </div>
               </div>
-<br />
               <div className="seo-mini-grid">
                 <div className={`seo-mini tone-${noindexTone}`}>
                   <div className="seo-mini-k">NoIndex</div>
-                  <div className="seo-mini-v">{fmtPct(seo.noindexPct)}</div><br />
+                  <div className="seo-mini-v">{fmtPct(seo.noindexPct)}</div>
                   <div className="seo-mini-sub">{fmtInt(seo.noindexCount)} pages flagged</div>
                 </div>
 
                 <div className={`seo-mini tone-${nofollowTone}`}>
                   <div className="seo-mini-k">NoFollow</div>
-                  <div className="seo-mini-v">{fmtPct(seo.nofollowPct)}</div><br />
+                  <div className="seo-mini-v">{fmtPct(seo.nofollowPct)}</div>
                   <div className="seo-mini-sub">{fmtInt(seo.nofollowCount)} pages flagged</div>
                 </div>
 
                 <div className="seo-mini">
                   <div className="seo-mini-k">Sample Robots</div>
-                  <div className="seo-mini-v mono">{seo.sampleRobots || "—"}</div><br />
+                  <div className="seo-mini-v mono">{sampleRobotsLabel}</div>
                   <div className="seo-mini-sub">Representative robots meta snapshot.</div>
                 </div>
               </div>
@@ -1039,23 +1038,22 @@ export default async function SeoPage({ searchParams }: PageProps) {
                   <p className="cb-sub">Heading integrity and content density.</p>
                 </div>
               </div>
-<br />
               <div className="seo-mini-grid">
                 <div className={`seo-mini tone-${missingH1Tone}`}>
                   <div className="seo-mini-k">Missing H1</div>
-                  <div className="seo-mini-v">{fmtPct(seo.missingH1Pct)}</div><br />
+                  <div className="seo-mini-v">{fmtPct(seo.missingH1Pct)}</div>
                   <div className="seo-mini-sub">{fmtInt(seo.missingH1Count)} pages affected</div>
                 </div>
 
                 <div className={`seo-mini tone-${multiH1Tone}`}>
                   <div className="seo-mini-k">Multiple H1</div>
-                  <div className="seo-mini-v">{fmtPct(seo.multipleH1Pct)}</div><br />
+                  <div className="seo-mini-v">{fmtPct(seo.multipleH1Pct)}</div>
                   <div className="seo-mini-sub">{fmtInt(seo.multipleH1Count)} pages affected</div>
                 </div>
 
                 <div className={`seo-mini tone-${thinTone}`}>
                   <div className="seo-mini-k">Thin Content</div>
-                  <div className="seo-mini-v">{fmtPct(seo.thinContentPct)}</div><br />
+                  <div className="seo-mini-v">{fmtPct(seo.thinContentPct)}</div>
                   <div className="seo-mini-sub">{fmtInt(seo.thinContentCount)} pages affected</div>
                 </div>
               </div>
@@ -1068,14 +1066,8 @@ export default async function SeoPage({ searchParams }: PageProps) {
               <div>
                 <h2 className="cb-h2">Web Vitals</h2>
                 <p className="cb-sub">P75 vitals (when available) for the selected target and range.</p>
-              </div><br />
-              <div className="seo-pillrow">
-                <span className="seo-pill">
-                  Samples: <b>{vitalsSamplesLabel}</b>
-                </span>
               </div>
             </div>
-<br />
             <div className="seo-vitals">
               <div className={`seo-vital tone-${lcpTone}`}>
                 <div className="seo-vital-k">LCP (P75)</div>
@@ -1137,7 +1129,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
                     </div>
                     <div className={`seo-metadata-row ${seo.sampleRobots ? "is-present" : "is-missing"}`}>
                       <dt>Robots</dt>
-                      <dd className="mono">{seo.sampleRobots || "—"}</dd>
+                      <dd className="mono">{sampleRobotsLabel}</dd>
                     </div>
                   </dl>
                 </section>
@@ -1153,7 +1145,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
                   </div>
                   <div className="seo-serp-card-foot mono">
                     <span>Robots</span>
-                    <strong>{seo.sampleRobots || "—"}</strong>
+                    <strong>{sampleRobotsLabel}</strong>
                   </div>
                 </section>
               </div>
