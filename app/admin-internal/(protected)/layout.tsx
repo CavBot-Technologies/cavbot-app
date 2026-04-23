@@ -1,8 +1,6 @@
 import AdminShell from "@/components/admin/AdminShell";
 import { ApiAuthError, getAppOrigin } from "@/lib/apiAuth";
 import { getDefaultAdminPathForStaff, resolveAdminDepartment } from "@/lib/admin/access";
-import { getAdminChatUnreadCount, listAdminChatThreads } from "@/lib/admin/chat.server";
-import { hasAdminScope } from "@/lib/admin/permissions";
 import { requireAdminAccessFromRequestContext, maskStaffCode } from "@/lib/admin/staff";
 import { redirect } from "next/navigation";
 
@@ -38,44 +36,6 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
     || (String(staff.user.email || "").trim().toLowerCase() === ownerEmail ? configuredOwnerName : "")
     || emailLocal
     || "CavBot";
-  const shellViewer = {
-    id: staff.id,
-    userId: staff.userId,
-    systemRole: staff.systemRole,
-    scopes: staff.scopes,
-  };
-  const canOpenMail = hasAdminScope(shellViewer, "messaging.read");
-  let initialMailUnreadCount = 0;
-  let initialMailThreads: Array<{
-    id: string;
-    subject: string | null;
-    counterpartLabel: string | null;
-    boxLabel: string | null;
-    preview: string;
-    senderAvatarImage: string | null;
-    senderAvatarTone: string | null;
-    unread: boolean;
-    archived: boolean;
-    lastMessageAt: string;
-    isDirect: boolean;
-  }> = [];
-  let initialMailReady = false;
-
-  if (canOpenMail) {
-    try {
-      const [unread, threads] = await Promise.all([
-        getAdminChatUnreadCount({ viewer: shellViewer }),
-        listAdminChatThreads({ viewer: shellViewer }),
-      ]);
-      initialMailUnreadCount = Number(unread.unreadCount) || 0;
-      initialMailThreads = threads.filter((thread) => thread.unread && !thread.archived).slice(0, 6);
-      initialMailReady = true;
-    } catch {
-      initialMailReady = true;
-      initialMailUnreadCount = 0;
-      initialMailThreads = [];
-    }
-  }
 
   return (
     <AdminShell
@@ -92,9 +52,9 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
       }}
       homeHref={homeHref}
       appAccountHref={appAccountHref}
-      initialMailUnreadCount={initialMailUnreadCount}
-      initialMailThreads={initialMailThreads}
-      initialMailReady={initialMailReady}
+      initialMailUnreadCount={0}
+      initialMailThreads={[]}
+      initialMailReady={false}
     >
       {children}
     </AdminShell>
