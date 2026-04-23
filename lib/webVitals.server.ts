@@ -62,6 +62,15 @@ function asDate(value: Date | string | null | undefined) {
   return value instanceof Date ? value : new Date(value);
 }
 
+function asDateInput(value: unknown): Date | string | null {
+  if (value instanceof Date) return value;
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized || null;
+  }
+  return null;
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
@@ -131,10 +140,10 @@ function extractWebVitalsRecords(payload: Record<string, unknown> | null | undef
 
     const sampleAt =
       asDate(
-        record.event_timestamp ||
-          record.eventTimestamp ||
-          payloadJson.tsISO ||
-          payloadJson.detectedAt ||
+        asDateInput(record.event_timestamp) ||
+          asDateInput(record.eventTimestamp) ||
+          asDateInput(payloadJson.tsISO) ||
+          asDateInput(payloadJson.detectedAt) ||
           null,
       ) || new Date();
 
