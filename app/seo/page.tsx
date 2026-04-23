@@ -762,7 +762,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
   const previewDescriptionLabel =
     seo.sampleDescription ||
     "This preview updates automatically once CavBot detects your live metadata.";
-  const sampleRobotsLabel = seo.sampleRobots && seo.sampleRobots.trim().length > 0 ? seo.sampleRobots.trim() : "Not captured yet";
+  const sampleRobotsLabel = seo.sampleRobots && seo.sampleRobots.trim().length > 0 ? seo.sampleRobots.trim() : "—";
   const previewUrlLabel = (() => {
     const raw = seo.sampleCanonical || activeSite.url || "";
     if (!raw) return "—";
@@ -1003,7 +1003,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
 <br />
           {/* INDEXABILITY + STRUCTURE */}
           <section className="seo-split" aria-label="Indexability and structure">
-            <article className="cb-card cb-card-pad">
+            <article className="cb-card cb-card-pad seo-mini-section">
               <div className="cb-card-head">
                 <div>
                   <h2 className="cb-h2">Indexability</h2>
@@ -1031,7 +1031,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
               </div>
             </article>
 
-            <article className="cb-card cb-card-pad">
+            <article className="cb-card cb-card-pad seo-mini-section">
               <div className="cb-card-head">
                 <div>
                   <h2 className="cb-h2">Structure</h2>
