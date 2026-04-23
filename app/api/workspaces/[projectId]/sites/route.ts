@@ -20,6 +20,7 @@ import {
   findAccountTier,
   findOwnedWorkspaceProjectForSites,
   listActiveWorkspaceSites,
+  markWorkspaceSiteVerified,
   rollbackCreatedWorkspaceSite,
 } from "@/lib/workspaceSites.server";
 
@@ -395,6 +396,7 @@ export async function POST(req: Request, ctx: unknown) {
           ...getCavbotAppOrigins(),
         ]);
         await registerWorkerSite(project.id, result.site.origin, result.site.label);
+        await markWorkspaceSiteVerified(result.site.id);
       } catch (error) {
         await rollbackCreatedWorkspaceSite({
           projectId: project.id,

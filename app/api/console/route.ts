@@ -3,9 +3,9 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import type { SummaryRange } from "@/lib/cavbotApi.server";
-import { CavBotApiError, getProjectSummaryForTenant } from "@/lib/cavbotApi.server";
+import { CavBotApiError } from "@/lib/cavbotApi.server";
 import { resolveEffectiveAccountIdForSession } from "@/lib/effectiveSessionAccount.server";
-import { resolveTenantProjectAccess } from "@/lib/projectSummary.server";
+import { getTenantProjectSummary, resolveTenantProjectAccess } from "@/lib/projectSummary.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -165,17 +165,17 @@ export async function GET(req: NextRequest) {
     const siteOrigin = siteOriginFromQuery ?? siteOriginFromCookie;
     const siteId = siteIdFromQuery ?? siteIdFromCookie;
 
-    const out = await getProjectSummaryForTenant({
+    const { summary } = await getTenantProjectSummary({
+      accountId,
       projectId: project.id,
+      projectSlug,
       range,
       siteOrigin,
       siteId,
-      projectKey: access.summaryAuth.projectKey,
-      adminToken: access.summaryAuth.adminToken,
       requestId: `console_${project.id}_${Date.now()}`,
     });
 
-    return json(out, 200);
+    return json(summary, 200);
   } catch (error) {
     const { status, payload } = toPublicError(error);
     return json(payload, status);

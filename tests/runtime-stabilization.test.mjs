@@ -17,6 +17,7 @@ test("legacy sites route stays on runtime-safe workspace wiring", () => {
   assert.equal(source.includes("createDefaultAllowedOriginsForSite"), true);
   assert.equal(source.includes("rollbackCreatedWorkspaceSite"), true);
   assert.equal(source.includes("registerWorkerSite"), true);
+  assert.equal(source.includes("markWorkspaceSiteVerified"), true);
   assert.equal(source.includes("requestInitialSiteScanBestEffort"), true);
   assert.equal(source.includes("initialScan"), true);
 });
@@ -29,10 +30,14 @@ test("embed analytics route records local activity after successful upstream del
 
   assert.equal(routeSource.includes("recordAnalyticsEmbedActivityBestEffort"), true);
   assert.equal(routeSource.includes("if (response.ok)"), true);
+  assert.equal(routeSource.includes("payload: canonicalPayload"), true);
   assert.equal(helperSource.includes("'ANALYTICS'::\"EmbedInstallKind\""), true);
   assert.equal(helperSource.includes('"WorkspaceNotice"'), true);
   assert.equal(helperSource.includes('"SiteEvent"'), true);
   assert.equal(helperSource.includes("analytics_ingest"), true);
+  assert.equal(helperSource.includes("markWorkspaceSiteVerified"), true);
+  assert.equal(helperSource.includes("recordWebVitalsSamplesBestEffort"), true);
+  assert.equal(helperSource.includes("Telemetry warm scan"), true);
   assert.equal(metricsSource.includes('from "@/lib/prisma"'), false);
   assert.equal(metricsSource.includes('"EmbedVerificationMetric"'), true);
   assert.equal(footerSource.includes('from "@/lib/prisma"'), false);

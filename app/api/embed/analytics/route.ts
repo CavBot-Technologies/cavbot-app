@@ -334,17 +334,18 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
           })()
         : text;
 
-    if (response.ok) {
-      await recordAnalyticsEmbedActivityBestEffort({
-        req,
-        accountId: verification.accountId,
-        projectId: verification.projectId,
-        siteId: verification.siteId,
-        origin: canonicalSiteOrigin,
-        siteOrigin: verification.siteOrigin,
-        keyLast4: verification.keyLast4,
-      });
-    }
+      if (response.ok) {
+        await recordAnalyticsEmbedActivityBestEffort({
+          req,
+          accountId: verification.accountId,
+          projectId: verification.projectId,
+          siteId: verification.siteId,
+          origin: canonicalSiteOrigin,
+          siteOrigin: verification.siteOrigin,
+          payload: canonicalPayload,
+          keyLast4: verification.keyLast4,
+        });
+      }
 
     return new NextResponse(responseBody, {
       status: response.status,

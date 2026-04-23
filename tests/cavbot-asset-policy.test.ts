@@ -61,14 +61,20 @@ test("internal runtime policy renders only same-origin CavBot script src values"
   }
 });
 
-test("customer snippet policy remains CDN-based", () => {
+test("customer snippet policy uses the app-hosted analytics asset and keeps the rest on absolute URLs", () => {
   const customer = resolveCavbotAssetPolicy("customer_snippet");
-  const snippetScripts = [
-    customer.scripts.analytics,
-    customer.scripts.brain,
-    customer.scripts.widget,
-    customer.scripts.arcadeLoader,
-  ];
+  assert.equal(
+    customer.scripts.analytics.includes("/cavai/cavai-analytics-v5.js"),
+    true,
+    `Customer analytics script should come from the app-hosted collector: ${customer.scripts.analytics}`
+  );
+  assert.equal(
+    customer.scripts.analytics.startsWith("https://app.cavbot.io") || customer.scripts.analytics.startsWith("http://localhost:3000"),
+    true,
+    `Customer analytics script must use the app origin: ${customer.scripts.analytics}`
+  );
+
+  const snippetScripts = [customer.scripts.brain, customer.scripts.widget, customer.scripts.arcadeLoader];
 
   for (const src of snippetScripts) {
     assert.equal(
@@ -84,20 +90,16 @@ test("customer snippet policy remains CDN-based", () => {
   }
 });
 
-test("layout keeps deterministic analytics-before-brain order and no CDN fallback", () => {
-  const layoutSource = fs.readFileSync(path.join(ROOT, "app", "layout.tsx"), "utf8");
-  const analyticsId = "cb-runtime-analytics-script";
-  const brainId = "cb-runtime-brain-script";
-  const analyticsIdx = layoutSource.indexOf(analyticsId);
-  const brainIdx = layoutSource.indexOf(brainId);
+test("next config serves the analytics asset locally instead of rewriting it to the CDN", () => {
+  const nextConfigSource = fs.readFileSync(path.join(ROOT, "next.config.mjs"), "utf8");
+  assert.equal(nextConfigSource.includes('source: "/cavai/cavai-analytics-v5.js"'), false);
+  assert.equal(nextConfigSource.includes("sdk/v5/cavai-analytics-v5.min.js"), false);
+});
 
-  assert.equal(analyticsIdx >= 0, true, "Analytics runtime script tag id not found in layout");
-  assert.equal(brainIdx >= 0, true, "Brain runtime script tag id not found in layout");
-  assert.equal(
-    analyticsIdx < brainIdx,
-    true,
-    "Layout must load analytics script before brain script"
-  );
+test("app shell runtime stays off hardcoded CDN analytics fallbacks", () => {
+  const layoutSource = fs.readFileSync(path.join(ROOT, "app", "layout.tsx"), "utf8");
+  const appHostSource = fs.readFileSync(path.join(ROOT, "app", "_components", "AppHostRuntimeMounts.tsx"), "utf8");
+
   assert.equal(
     /cdn\.cavbot\.io/i.test(layoutSource),
     false,
@@ -105,9 +107,12 @@ test("layout keeps deterministic analytics-before-brain order and no CDN fallbac
   );
   assert.equal(
     /CAVBOT_CDN_BASE_URL/.test(layoutSource),
-    false,
-    "Layout must not use CDN env fallbacks for internal runtime assets"
+      false,
+      "Layout must not use CDN env fallbacks for internal runtime assets"
   );
+  assert.equal(appHostSource.includes("resolveCavbotAssetPolicy"), true);
+  assert.equal(appHostSource.includes("OFFICIAL_CDN_ASSETS.scripts.brain"), true);
+  assert.equal(appHostSource.includes("sdk/v5/cavai-analytics-v5.min.js"), false);
 });
 
 test("public arcade tree does not ship local game code bundles", () => {

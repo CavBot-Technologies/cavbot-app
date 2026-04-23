@@ -2,6 +2,7 @@ import "server-only";
 
 import type { CavAiLatestPackWithHistory } from "@/lib/cavai/packs.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
+import type { SiteWebVitalsRollup } from "@/lib/webVitals.server";
 import type { CavAiFindingV1, CavAiInsightPackV1, CavAiPriorityV1 } from "@/packages/cavai-contracts/src";
 
 type AnyRecord = Record<string, unknown>;
@@ -211,6 +212,268 @@ function derivedGuardianScore(pack: CavAiInsightPackV1) {
 function derivedScoreFromHistoryEntry(entry: CavAiLatestPackWithHistory["history"][number]) {
   const penalty = clamp(entry.priorityCount * 6 + entry.findingCount * 2, 0, 88);
   return clamp(Math.round(100 - penalty), 12, 100);
+}
+
+function scoreFromThresholds(value: number | null, goodAtOrBelow: number, okAtOrBelow: number, badAtOrBelow: number) {
+  if (value == null) return null;
+  if (value <= goodAtOrBelow) return 100;
+  if (value <= okAtOrBelow) return 75;
+  if (value <= badAtOrBelow) return 55;
+  return 25;
+}
+
+function scoreCoverage(value: number | null) {
+  if (value == null) return null;
+  return clamp(Math.round(value), 0, 100);
+}
+
+function scorePenaltyLog(count: number | null, scale = 18) {
+  if (count == null) return null;
+  const penalty = Math.log10(Math.max(0, count) + 1) * scale;
+  return clamp(100 - Math.round(penalty), 0, 100);
+}
+
+function asMetricRecord(summary: ProjectSummary & AnyRecord) {
+  const metrics = asRecord(summary.metrics) || {};
+  if (!asRecord(summary.metrics)) summary.metrics = metrics;
+  return metrics;
+}
+
+function computeSummaryGuardianScore(summary: ProjectSummary & AnyRecord) {
+  const titleCoveragePct = firstNumber(summary, [
+    "seo.rollup.titleCoveragePct",
+    "seo.titleCoveragePct",
+    "diagnostics.seo.rollup.titleCoveragePct",
+  ]);
+  const descriptionCoveragePct = firstNumber(summary, [
+    "seo.rollup.descriptionCoveragePct",
+    "seo.descriptionCoveragePct",
+    "diagnostics.seo.rollup.descriptionCoveragePct",
+  ]);
+  const canonicalCoveragePct = firstNumber(summary, [
+    "seo.rollup.canonicalCoveragePct",
+    "seo.canonicalCoveragePct",
+    "diagnostics.seo.rollup.canonicalCoveragePct",
+  ]);
+  const noindexPct = firstNumber(summary, [
+    "seo.rollup.noindexPct",
+    "seo.noindexPct",
+    "diagnostics.seo.rollup.noindexPct",
+  ]);
+  const missingH1Pct = firstNumber(summary, [
+    "seo.rollup.missingH1Pct",
+    "seo.missingH1Pct",
+    "diagnostics.seo.rollup.missingH1Pct",
+  ]);
+
+  const sessions = firstNumber(summary, ["metrics.sessions30d", "metrics.sessions", "routes.rollup.sessions"]);
+  const views404 = firstNumber(summary, [
+    "metrics.views40430d",
+    "metrics.views404_24h",
+    "controlRoom.views404Total",
+    "routes.rollup.views404Count",
+  ]);
+  const rate404Pct =
+    firstNumber(summary, ["metrics.rate404Pct", "snapshot.rate404Pct", "controlRoom.views404RatePct"])
+    ?? (views404 != null && sessions != null && sessions > 0 ? clamp((views404 / sessions) * 100, 0, 100) : null);
+  const jsErrors = firstNumber(summary, ["metrics.jsErrors30d", "metrics.jsErrors", "diagnostics.errors.totals.jsErrors"]);
+  const apiErrors = firstNumber(summary, ["metrics.apiErrors30d", "metrics.apiErrors", "diagnostics.errors.totals.apiErrors"]);
+
+  const lcpP75Ms = firstNumber(summary, [
+    "webVitals.rollup.lcpP75Ms",
+    "vitals.rollup.lcpP75Ms",
+    "performance.vitals.lcpP75Ms",
+    "metrics.avgLcpMs",
+  ]);
+  const inpP75Ms = firstNumber(summary, [
+    "webVitals.rollup.inpP75Ms",
+    "vitals.rollup.inpP75Ms",
+    "performance.vitals.inpP75Ms",
+  ]);
+  const clsP75 = firstNumber(summary, [
+    "webVitals.rollup.clsP75",
+    "vitals.rollup.clsP75",
+    "performance.vitals.clsP75",
+    "metrics.globalCls",
+  ]);
+
+  const a11yIssues = firstNumber(summary, [
+    "metrics.a11yIssues30d",
+    "diagnostics.a11y.rollup.issues",
+    "diagnostics.a11y.issues",
+  ]);
+  const contrastFails = firstNumber(summary, [
+    "metrics.contrastFailures30d",
+    "diagnostics.a11y.rollup.contrastFailCount",
+    "diagnostics.a11y.contrastFailures",
+  ]);
+  const focusWarns = firstNumber(summary, [
+    "metrics.focusInvisible30d",
+    "diagnostics.a11y.rollup.focusFailCount",
+    "diagnostics.a11y.focusWarnings",
+  ]);
+
+  const seoPieces = [
+    scoreCoverage(titleCoveragePct),
+    scoreCoverage(descriptionCoveragePct),
+    scoreCoverage(canonicalCoveragePct),
+    noindexPct == null ? null : clamp(100 - noindexPct, 0, 100),
+    missingH1Pct == null ? null : clamp(100 - missingH1Pct, 0, 100),
+  ].filter((value): value is number => value != null);
+  const seoScore = seoPieces.length ? Math.round(seoPieces.reduce((sum, value) => sum + value, 0) / seoPieces.length) : null;
+
+  const totalErrors = (jsErrors ?? 0) + (apiErrors ?? 0);
+  const stabilityPieces = [
+    scoreFromThresholds(rate404Pct, 1, 5, 12),
+    scorePenaltyLog(totalErrors, 22),
+  ].filter((value): value is number => value != null);
+  const stabilityScore = stabilityPieces.length
+    ? Math.round(stabilityPieces.reduce((sum, value) => sum + value, 0) / stabilityPieces.length)
+    : null;
+
+  const vitalsPieces = [
+    scoreFromThresholds(lcpP75Ms, 2500, 4000, 8000),
+    scoreFromThresholds(inpP75Ms, 200, 500, 1000),
+    clsP75 == null ? null : clsP75 <= 0.1 ? 100 : clsP75 <= 0.25 ? 75 : clsP75 <= 0.5 ? 55 : 25,
+  ].filter((value): value is number => value != null);
+  const vitalsScore = vitalsPieces.length
+    ? Math.round(vitalsPieces.reduce((sum, value) => sum + value, 0) / vitalsPieces.length)
+    : null;
+
+  const a11yPieces = [
+    scorePenaltyLog(a11yIssues, 18),
+    scorePenaltyLog(contrastFails, 18),
+    scorePenaltyLog(focusWarns, 16),
+  ].filter((value): value is number => value != null);
+  const accessibilityScore = a11yPieces.length
+    ? Math.round(a11yPieces.reduce((sum, value) => sum + value, 0) / a11yPieces.length)
+    : null;
+
+  const weighted = [
+    { weightPct: 30, score: seoScore },
+    { weightPct: 30, score: stabilityScore },
+    { weightPct: 25, score: vitalsScore },
+    { weightPct: 15, score: accessibilityScore },
+  ].filter((item) => item.score != null) as Array<{ weightPct: number; score: number }>;
+
+  const supportingSignals = [
+    titleCoveragePct,
+    descriptionCoveragePct,
+    canonicalCoveragePct,
+    rate404Pct,
+    jsErrors,
+    apiErrors,
+    lcpP75Ms,
+    inpP75Ms,
+    clsP75,
+    a11yIssues,
+    contrastFails,
+    focusWarns,
+  ].filter((value) => value != null).length;
+
+  const computedScore =
+    weighted.length >= 2
+      ? clamp(
+          Math.round(
+            weighted.reduce((sum, item) => sum + (item.weightPct / 100) * item.score, 0) /
+              (weighted.reduce((sum, item) => sum + item.weightPct, 0) / 100),
+          ),
+          12,
+          100,
+        )
+      : null;
+
+  return {
+    computedScore,
+    supportingSignals,
+    hasConcreteSignals: supportingSignals > 0,
+  };
+}
+
+export function enrichProjectSummaryWithLocalWebVitals(
+  summary: ProjectSummary,
+  rollup: SiteWebVitalsRollup | null,
+): ProjectSummary {
+  if (!rollup) return summary;
+
+  const enriched = { ...summary } as ProjectSummary & AnyRecord;
+  const diagnostics = ensureRecord(enriched, "diagnostics");
+  const vitals = ensureRecord(enriched, "vitals");
+  const webVitals = ensureRecord(enriched, "webVitals");
+  const performance = ensureRecord(enriched, "performance");
+  const performanceVitals = ensureRecord(performance, "vitals");
+  const diagnosticsVitals = ensureRecord(diagnostics, "vitals");
+  const metrics = asMetricRecord(enriched);
+
+  const payload = {
+    updatedAtISO: rollup.updatedAtISO,
+    rollup: {
+      samples: rollup.samples,
+      lcpP75Ms: rollup.lcpP75Ms,
+      inpP75Ms: rollup.inpP75Ms,
+      clsP75: rollup.clsP75,
+      fcpP75Ms: rollup.fcpP75Ms,
+      ttfbP75Ms: rollup.ttfbP75Ms,
+    },
+  };
+
+  enriched.webVitals = payload;
+  enriched.vitals = payload;
+  webVitals.updatedAtISO = rollup.updatedAtISO;
+  webVitals.rollup = payload.rollup;
+  vitals.updatedAtISO = rollup.updatedAtISO;
+  vitals.rollup = payload.rollup;
+  performanceVitals.updatedAtISO = rollup.updatedAtISO;
+  performanceVitals.rollup = payload.rollup;
+  diagnosticsVitals.updatedAtISO = rollup.updatedAtISO;
+  diagnosticsVitals.rollup = payload.rollup;
+
+  metrics.avgLcpMs = rollup.lcpP75Ms;
+  metrics.avgTtfbMs = rollup.ttfbP75Ms;
+  metrics.globalCls = rollup.clsP75;
+  metrics.slowPagesCount = rollup.slowPagesCount;
+  metrics.unstableLayoutPages = rollup.unstableLayoutPages;
+  metrics.webVitals = payload.rollup;
+  metrics.lcpP75Ms = rollup.lcpP75Ms;
+  metrics.inpP75Ms = rollup.inpP75Ms;
+  metrics.clsP75 = rollup.clsP75;
+  metrics.fcpP75Ms = rollup.fcpP75Ms;
+  metrics.ttfbP75Ms = rollup.ttfbP75Ms;
+
+  return enriched;
+}
+
+export function harmonizeProjectSummarySignals(summary: ProjectSummary): ProjectSummary {
+  const enriched = { ...summary } as ProjectSummary & AnyRecord;
+  const diagnostics = ensureRecord(enriched, "diagnostics");
+  const snapshot = ensureRecord(enriched, "snapshot");
+  const metrics = asMetricRecord(enriched);
+
+  const rawGuardianScore = firstNumber(enriched, [
+    "guardianScore",
+    "metrics.guardianScore",
+    "diagnostics.guardianScore",
+    "snapshot.guardianScore",
+  ]);
+  const derived = computeSummaryGuardianScore(enriched);
+  const guardianScore = derived.computedScore;
+
+  if (guardianScore != null) {
+    enriched.guardianScore = guardianScore;
+    diagnostics.guardianScore = guardianScore;
+    snapshot.guardianScore = guardianScore;
+    metrics.guardianScore = guardianScore;
+    return enriched;
+  }
+
+  if (rawGuardianScore === 80 && !derived.hasConcreteSignals) {
+    delete enriched.guardianScore;
+    delete diagnostics.guardianScore;
+    delete snapshot.guardianScore;
+    delete metrics.guardianScore;
+  }
+
+  return enriched;
 }
 
 export function enrichProjectSummaryWithLatestPack(

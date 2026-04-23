@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { enrichProjectSummaryWithLatestPack } from "../lib/projectSummaryEnrichment.server";
+import {
+  enrichProjectSummaryWithLatestPack,
+  enrichProjectSummaryWithLocalWebVitals,
+  harmonizeProjectSummarySignals,
+} from "../lib/projectSummaryEnrichment.server";
 import type { ProjectSummary } from "../lib/cavbotTypes";
 import type { CavAiLatestPackWithHistory } from "../lib/cavai/packs.server";
+import type { SiteWebVitalsRollup } from "../lib/webVitals.server";
 
 test("project summary enrichment backfills specialist diagnostics from the latest persisted pack", () => {
   const summary: ProjectSummary = {
@@ -204,4 +209,55 @@ test("project summary enrichment backfills specialist diagnostics from the lates
   assert.equal(Array.isArray(routes.topRoutes), true);
   assert.equal(controlRoom.views404Total, 11);
   assert.equal(controlRoom.unique404Routes, 1);
+});
+
+test("summary harmonization strips the frozen guardian score when no real supporting signals exist", () => {
+  const summary: ProjectSummary = {
+    project: { id: "1", name: "CavBot", projectId: 1 },
+    window: { range: "30d" },
+    metrics: {
+      guardianScore: 80,
+    },
+  };
+
+  const harmonized = harmonizeProjectSummarySignals(summary) as ProjectSummary & Record<string, unknown>;
+  const metrics = harmonized.metrics as Record<string, unknown>;
+
+  assert.equal("guardianScore" in harmonized, false);
+  assert.equal("guardianScore" in metrics, false);
+});
+
+test("local web vitals enrichment backfills both rollup fields and legacy console vitals keys", () => {
+  const summary: ProjectSummary = {
+    project: { id: "1", name: "CavBot", projectId: 1 },
+    window: { range: "30d" },
+    metrics: {},
+  };
+  const rollup: SiteWebVitalsRollup = {
+    updatedAtISO: "2026-04-23T06:15:00.000Z",
+    samples: 19,
+    lcpP75Ms: 2100,
+    inpP75Ms: 165,
+    clsP75: 0.08,
+    fcpP75Ms: 980,
+    ttfbP75Ms: 420,
+    slowPagesCount: 1,
+    unstableLayoutPages: 0,
+  };
+
+  const enriched = enrichProjectSummaryWithLocalWebVitals(summary, rollup) as ProjectSummary & Record<string, unknown>;
+  const metrics = enriched.metrics as Record<string, unknown>;
+  const webVitals = enriched.webVitals as Record<string, unknown>;
+  const vitalsRollup = webVitals.rollup as Record<string, unknown>;
+
+  assert.equal(vitalsRollup.samples, 19);
+  assert.equal(vitalsRollup.lcpP75Ms, 2100);
+  assert.equal(vitalsRollup.inpP75Ms, 165);
+  assert.equal(vitalsRollup.fcpP75Ms, 980);
+  assert.equal(vitalsRollup.ttfbP75Ms, 420);
+  assert.equal(metrics.avgLcpMs, 2100);
+  assert.equal(metrics.avgTtfbMs, 420);
+  assert.equal(metrics.globalCls, 0.08);
+  assert.equal(metrics.slowPagesCount, 1);
+  assert.equal(metrics.unstableLayoutPages, 0);
 });

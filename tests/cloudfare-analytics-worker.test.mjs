@@ -7,7 +7,7 @@ import vm from "node:vm";
 const workerSource = fs.readFileSync(path.resolve("public/codex/cloudfare-anlytics-worker.js"), "utf8");
 const workerCommonJs = workerSource
   .replace("export class RateLimiter", "class RateLimiter")
-  .replace("export default {", "const __workerDefaultExport = {")
+  .replace(/export default\s+([^;]+);/, "const __workerDefaultExport = $1;")
   .concat("\nmodule.exports = { default: __workerDefaultExport, RateLimiter };");
 
 const workerSandbox = {

@@ -42,6 +42,9 @@ test("tenant summary helper resolves per-project auth", () => {
   assert.equal(source.includes("summaryAuth"), true);
   assert.equal(source.includes("adminToken"), true);
   assert.equal(source.includes("getProjectSummaryForTenant"), true);
+  assert.equal(source.includes("fetchSiteWebVitalsRollup"), true);
+  assert.equal(source.includes("resolveSummarySite"), true);
+  assert.equal(source.includes("harmonizeProjectSummarySignals"), true);
   assert.equal(source.includes("projectAuth.server"), false);
   assert.equal(source.includes("lib/prisma"), false);
 });

@@ -22,6 +22,7 @@ test("command center workspace site route keeps secure site wiring parity", () =
   assert.equal(helper.includes("originAliases"), true);
   assert.equal(helper.includes("ON CONFLICT (\"siteId\", \"origin\") DO NOTHING"), true);
   assert.equal(source.includes("createProjectNoticeBestEffort"), true);
+  assert.equal(source.includes("markWorkspaceSiteVerified"), true);
   assert.equal(source.includes("requestInitialSiteScanBestEffort"), true);
   assert.equal(source.includes("initialScan"), true);
   assert.equal(source.includes("rollbackCreatedWorkspaceSite"), true);

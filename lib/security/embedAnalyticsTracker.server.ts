@@ -2,7 +2,11 @@ import "server-only";
 
 import { createHash } from "crypto";
 import type { NextRequest } from "next/server";
+import { getLatestPackWithHistory } from "@/lib/cavai/packs.server";
 import { newDbId, withAuthTransaction } from "@/lib/authDb";
+import { requestInitialSiteScanBestEffort } from "@/lib/scanner";
+import { payloadContainsWarmTelemetry, recordWebVitalsSamplesBestEffort } from "@/lib/webVitals.server";
+import { markWorkspaceSiteVerified } from "@/lib/workspaceSites.server";
 
 const DEDUPE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const REACTIVATION_WINDOW_MS = 30 * DEDUPE_WINDOW_MS;
@@ -275,6 +279,7 @@ export async function recordAnalyticsEmbedActivityBestEffort(args: {
   siteId: string;
   origin: string;
   siteOrigin: string;
+  payload?: Record<string, unknown> | null;
   keyLast4?: string | null;
 }) {
   try {
@@ -282,4 +287,45 @@ export async function recordAnalyticsEmbedActivityBestEffort(args: {
   } catch (error) {
     console.error("[embed/analytics] local activity tracking failed", error);
   }
+
+  await recordWebVitalsSamplesBestEffort({
+    siteId: args.siteId,
+    siteOrigin: args.siteOrigin,
+    payload: args.payload,
+  }).catch((error) => {
+    console.error("[embed/analytics] vitals capture failed", error);
+    return 0;
+  });
+
+  const verified = await markWorkspaceSiteVerified(args.siteId).catch((error) => {
+    console.error("[embed/analytics] site verification promotion failed", error);
+    return null;
+  });
+
+  if (!payloadContainsWarmTelemetry(args.payload)) return;
+
+  const hasPack = await getLatestPackWithHistory({
+    accountId: args.accountId,
+    origin: args.siteOrigin,
+    limit: 1,
+  })
+    .then((result) => Boolean(result.pack))
+    .catch((error) => {
+      console.error("[embed/analytics] pack lookup failed", error);
+      return false;
+    });
+
+  if (hasPack) return;
+
+  await requestInitialSiteScanBestEffort({
+    projectId: args.projectId,
+    siteId: verified?.id || args.siteId,
+    accountId: args.accountId,
+    operatorUserId: null,
+    ip: pickRequestIp(args.req),
+    userAgent: pickUserAgent(args.req),
+    reason: "Telemetry warm scan",
+  }).catch((error) => {
+    console.error("[embed/analytics] telemetry warm scan queue failed", error);
+  });
 }

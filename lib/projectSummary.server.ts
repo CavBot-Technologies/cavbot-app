@@ -7,11 +7,21 @@ import {
   type RequestAuthOverride,
   type SummaryRange,
 } from "@/lib/cavbotApi.server";
-import { enrichProjectSummaryWithLatestPack } from "@/lib/projectSummaryEnrichment.server";
+import {
+  enrichProjectSummaryWithLatestPack,
+  enrichProjectSummaryWithLocalWebVitals,
+  harmonizeProjectSummarySignals,
+} from "@/lib/projectSummaryEnrichment.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
 import { decryptAesGcm } from "@/lib/cryptoAesGcm.server";
 import { resolveEffectiveAccountIdFromHeaders } from "@/lib/effectiveSessionAccount.server";
 import { getLatestPackWithHistory, normalizeOriginStrict } from "@/lib/cavai/packs.server";
+import {
+  findActiveWorkspaceSite,
+  findActiveWorkspaceSiteByOrigin,
+  findOwnedWorkspaceProjectForSites,
+} from "@/lib/workspaceSites.server";
+import { fetchSiteWebVitalsRollup } from "@/lib/webVitals.server";
 
 type TenantProjectSummaryInput = {
   accountId?: string | null;
@@ -40,6 +50,11 @@ type TenantProjectAccess = {
     name: string | null;
   };
   summaryAuth: RequestAuthOverride;
+};
+
+type ResolvedSummarySite = {
+  id: string;
+  origin: string;
 };
 
 function normalizeProjectId(input: string | number | null | undefined) {
@@ -160,28 +175,75 @@ export async function getTenantProjectSummary(
   });
 
   const normalizedOrigin = normalizeOriginStrict(input.siteOrigin);
+  const selectedSite = await resolveSummarySite({
+    accountId: access.accountId,
+    projectId: access.project.id,
+    siteId: input.siteId,
+    siteOrigin: normalizedOrigin,
+  });
+  const effectiveSiteId = selectedSite?.id;
+  const effectiveSiteOrigin = selectedSite?.origin ?? normalizedOrigin ?? undefined;
 
-  const [summary, latestPackWithHistory] = await Promise.all([
+  const [summary, latestPackWithHistory, localWebVitalsRollup] = await Promise.all([
     getProjectSummaryForTenant({
       projectId: access.project.id,
       range: input.range,
-      siteId: input.siteId,
-      siteOrigin: input.siteOrigin,
+      siteId: effectiveSiteId,
+      siteOrigin: effectiveSiteOrigin,
       projectKey: access.summaryAuth.projectKey,
       adminToken: access.summaryAuth.adminToken,
       requestId: input.requestId,
     }),
-    normalizedOrigin
+    effectiveSiteOrigin
       ? getLatestPackWithHistory({
           accountId: access.accountId,
-          origin: normalizedOrigin,
+          origin: effectiveSiteOrigin,
           limit: 7,
+        }).catch(() => null)
+      : Promise.resolve(null),
+    effectiveSiteId
+      ? fetchSiteWebVitalsRollup({
+          siteId: effectiveSiteId,
+          range: input.range,
         }).catch(() => null)
       : Promise.resolve(null),
   ]);
 
+  const enrichedSummary = harmonizeProjectSummarySignals(
+    enrichProjectSummaryWithLatestPack(
+      enrichProjectSummaryWithLocalWebVitals(summary, localWebVitalsRollup),
+      latestPackWithHistory,
+    ),
+  );
+
   return {
     project: access.project,
-    summary: enrichProjectSummaryWithLatestPack(summary, latestPackWithHistory),
+    summary: enrichedSummary,
   };
+}
+
+async function resolveSummarySite(input: {
+  accountId: string;
+  projectId: number;
+  siteId?: string | null;
+  siteOrigin?: string | null;
+}): Promise<ResolvedSummarySite | null> {
+  const requestedSiteId = String(input.siteId || "").trim();
+  if (requestedSiteId) {
+    const byId = await findActiveWorkspaceSite(input.projectId, requestedSiteId).catch(() => null);
+    if (byId) return { id: byId.id, origin: byId.origin };
+  }
+
+  const normalizedOrigin = normalizeOriginStrict(input.siteOrigin);
+  if (normalizedOrigin) {
+    const byOrigin = await findActiveWorkspaceSiteByOrigin(input.projectId, normalizedOrigin).catch(() => null);
+    if (byOrigin) return { id: byOrigin.id, origin: byOrigin.origin };
+  }
+
+  const project = await findOwnedWorkspaceProjectForSites(input.accountId, input.projectId).catch(() => null);
+  const topSiteId = String(project?.topSiteId || "").trim();
+  if (!topSiteId) return null;
+
+  const topSite = await findActiveWorkspaceSite(input.projectId, topSiteId).catch(() => null);
+  return topSite ? { id: topSite.id, origin: topSite.origin } : null;
 }

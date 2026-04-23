@@ -1,4 +1,5 @@
 const DEFAULT_CDN_BASE = "https://cdn.cavbot.io";
+const DEFAULT_APP_ASSET_BASE = "https://app.cavbot.io";
 
 const INTERNAL_PATHS = {
   analyticsScript: "/cavai/cavai-analytics-v5.js",
@@ -40,6 +41,18 @@ function sanitizeCacheKey(value: string): string {
     .trim()
     .replace(/[^A-Za-z0-9._-]/g, "")
     .slice(0, 80);
+}
+
+function buildPublicAppAssetBase(): string {
+  const candidate =
+    process.env.NEXT_PUBLIC_WIDGET_CONFIG_ORIGIN ||
+    process.env.NEXT_PUBLIC_APP_ORIGIN ||
+    process.env.CAVBOT_APP_ORIGIN ||
+    process.env.APP_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.NODE_ENV !== "production" ? "http://localhost:3000" : DEFAULT_APP_ASSET_BASE);
+  const normalized = trimTrailingSlash(String(candidate || ""));
+  return normalized || DEFAULT_APP_ASSET_BASE;
 }
 
 function buildInternalCacheKey(): string | null {
@@ -95,13 +108,14 @@ function buildCustomerSnippetPolicy(): CavbotAssetPolicy {
       process.env.NEXT_PUBLIC_CAVBOT_CDN_BASE_URL ||
       DEFAULT_CDN_BASE
   );
+  const appBase = buildPublicAppAssetBase();
 
   return {
     context: "customer_snippet",
     baseUrl: cdnBase || DEFAULT_CDN_BASE,
     cacheKey: null,
     scripts: {
-      analytics: `${cdnBase || DEFAULT_CDN_BASE}/sdk/v5/cavai-analytics-v5.min.js`,
+      analytics: `${appBase}${INTERNAL_PATHS.analyticsScript}`,
       brain: `${cdnBase || DEFAULT_CDN_BASE}/sdk/cavai/v1/cavai.min.js`,
       widget: `${cdnBase || DEFAULT_CDN_BASE}/sdk/widget/v1/cavbot-widget.min.js`,
       arcadeLoader: `${cdnBase || DEFAULT_CDN_BASE}/sdk/arcade/v1/loader.min.js`,

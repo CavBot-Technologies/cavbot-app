@@ -34,6 +34,14 @@ type RawWorkspaceSiteOriginRow = {
   origin: string;
 };
 
+type RawVerifiedSiteRow = {
+  id: string;
+  projectId: number | string;
+  origin: string;
+  label: string;
+  verifiedAt: Date | string;
+};
+
 type RawAccountTierRow = {
   tier: string | null;
 };
@@ -63,6 +71,14 @@ export type WorkspaceSiteRecord = {
   origin: string;
   notes?: string;
   createdAt: Date;
+};
+
+export type WorkspaceVerifiedSiteRecord = {
+  id: string;
+  projectId: number;
+  origin: string;
+  label: string;
+  verifiedAt: Date;
 };
 
 export type WorkspaceRemovedSiteRecord = {
@@ -146,6 +162,16 @@ function normalizeSiteRow(row: RawWorkspaceSiteRow): WorkspaceSiteRecord {
     origin: String(row.origin),
     notes: row.notes == null ? undefined : String(row.notes),
     createdAt: toDate(row.createdAt),
+  };
+}
+
+function normalizeVerifiedSiteRow(row: RawVerifiedSiteRow): WorkspaceVerifiedSiteRecord {
+  return {
+    id: String(row.id),
+    projectId: toInt(row.projectId),
+    origin: String(row.origin),
+    label: String(row.label),
+    verifiedAt: toDate(row.verifiedAt),
   };
 }
 
@@ -256,6 +282,25 @@ export async function findActiveWorkspaceSiteByOrigin(projectId: number, origin:
     [projectId, candidateOrigins]
   );
   return row ? { id: String(row.id), origin: String(row.origin) } : null;
+}
+
+export async function markWorkspaceSiteVerified(siteId: string) {
+  const row = await queryOne<RawVerifiedSiteRow>(
+    getAuthPool(),
+    `UPDATE "Site"
+     SET "status" = 'VERIFIED'::"SiteStatus",
+         "verifiedAt" = COALESCE("verifiedAt", NOW()),
+         "updatedAt" = NOW()
+     WHERE "id" = $1
+       AND "isActive" = true
+       AND (
+         "status" <> 'VERIFIED'::"SiteStatus"
+         OR "verifiedAt" IS NULL
+       )
+     RETURNING "id", "projectId", "origin", "label", "verifiedAt"`,
+    [siteId]
+  );
+  return row ? normalizeVerifiedSiteRow(row) : null;
 }
 
 export async function findAccountTier(accountId: string) {

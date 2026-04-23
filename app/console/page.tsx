@@ -56,7 +56,7 @@ type ConsoleMetrics = {
   focusInvisible30d: number;
   topA11yIssueTypes: Array<{ type: string; count: number }>;
 
-  guardianScore: number;
+  guardianScore: number | null;
 
   // Allow null so UI shows "—" instead of 0% when API hasn't populated yet
   piiRiskPercent: number | null;
@@ -398,7 +398,8 @@ function fmtPct(v: unknown, digits = 1) {
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: digits }).format(x)}%`;
 }
 
-function scoreLabel(score: number) {
+function scoreLabel(score: number | null) {
+  if (score == null) return { label: "Warming", hint: "Score unlocks after enough live diagnostics land." };
   if (score >= 92) return { label: "Elite", hint: "Guardian posture is clean." };
   if (score >= 80) return { label: "Stable", hint: "Good coverage, watch regressions." };
   if (score >= 65) return { label: "At Risk", hint: "404 / errors are rising." };
@@ -567,8 +568,9 @@ function errText(e: unknown) {
   return String(e);
 }
 
-function Donut({ score, label, tone }: { score: number; label: string; tone: Tone }) {
-  const pct = clamp(score, 0, 100) / 100;
+function Donut({ score, label, tone }: { score: number | null; label: string; tone: Tone }) {
+  const safeScore = score == null ? 0 : score;
+  const pct = clamp(safeScore, 0, 100) / 100;
   const r = 46;
   const c = 2 * Math.PI * r;
   const dash = c * pct;
@@ -581,7 +583,11 @@ function Donut({ score, label, tone }: { score: number; label: string; tone: Ton
       : "rgba(139,92,255,0.92)";
 
   return (
-    <div className="cb-donut" aria-label={`Guardian Score ${fmtInt(score)} (${label})`} data-tone={tone}>
+    <div
+      className="cb-donut"
+      aria-label={score == null ? `Guardian Score warming (${label})` : `Guardian Score ${fmtInt(score)} (${label})`}
+      data-tone={tone}
+    >
       <svg viewBox="0 0 120 120" width="120" height="120" aria-hidden="true">
         <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth="10" />
         <circle
@@ -598,7 +604,7 @@ function Donut({ score, label, tone }: { score: number; label: string; tone: Ton
       </svg>
 
       <div className="cb-donut-center">
-        <div className="cb-donut-score">{fmtInt(score)}</div>
+        <div className="cb-donut-score">{score == null ? "Warming" : fmtInt(score)}</div>
         <div className="cb-donut-sub">{label}</div>
       </div>
     </div>
@@ -678,7 +684,7 @@ function normalizeConsoleMetrics(raw: unknown): ConsoleMetrics {
     focusInvisible30d: n(metrics.focusInvisible30d),
     topA11yIssueTypes: safeA11yTypes(metrics.topA11yIssueTypes),
 
-    guardianScore: n(metrics.guardianScore),
+    guardianScore: nOrNull(metrics.guardianScore),
 
     piiRiskPercent: nOrNull(metrics.piiRiskPercent),
     aggregationCoveragePercent: nOrNull(metrics.aggregationCoveragePercent),
@@ -865,7 +871,7 @@ export default async function ConsolePage({ searchParams }: PageProps) {
   const envMissing = Boolean(loadError && isEnvMissingError(loadError));
   const hasMetrics = Boolean(!loadError && metrics);
 
-  const score = metrics ? n(metrics.guardianScore) : 0;
+  const score = metrics?.guardianScore ?? null;
   const badge = scoreLabel(score);
   const scoreTone = toneForBadgeLabel(badge.label);
 
@@ -1021,7 +1027,7 @@ export default async function ConsolePage({ searchParams }: PageProps) {
       headline: "Posture is clean — keep it that way",
       body: "No priority flags are firing. Your next win is tightening polish and preventing regressions.",
       steps: ["Lock design tokens for text + rails (no drift).", "Add guardrails for layout stability (explicit sizing).", "Run weekly audits on Top Routes to stay elite."],
-      meta: `Guardian ${fmtInt(score)} · Coverage ${fmtPct(n(metrics?.aggregationCoveragePercent, 0), 0)}`,
+      meta: `Guardian ${score == null ? "Warming" : fmtInt(score)} · Coverage ${fmtPct(metrics?.aggregationCoveragePercent, 0)}`,
     };
   })();
 
@@ -1040,8 +1046,22 @@ export default async function ConsolePage({ searchParams }: PageProps) {
     metrics && n(metrics.sessions30d) > 0 ? keyboardNav / Math.max(1, n(metrics.sessions30d)) : 0;
 
   // --- SEO snapshot (derived from real metrics; no fake numbers) ---
-  const indexHealthPct =
-    metrics ? clamp(n(metrics.guardianScore) * 0.55 + n(metrics.aggregationCoveragePercent, 0) * 0.45, 0, 100) : null;
+  const indexHealthPct = (() => {
+    if (!metrics) return null;
+    const weighted = [
+      metrics.guardianScore == null ? null : { weight: 0.55, value: metrics.guardianScore },
+      metrics.aggregationCoveragePercent == null
+        ? null
+        : { weight: 0.45, value: metrics.aggregationCoveragePercent },
+    ].filter((item): item is { weight: number; value: number } => item != null);
+    if (!weighted.length) return null;
+    const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0);
+    return clamp(
+      weighted.reduce((sum, item) => sum + item.weight * item.value, 0) / Math.max(totalWeight, 0.0001),
+      0,
+      100,
+    );
+  })();
 
   const crawlCoveragePct = metrics?.aggregationCoveragePercent ?? null;
 
