@@ -17,10 +17,7 @@ function getPool() {
   if (!url) throw new Error("DATABASE_URL is missing.");
 
   const pool = new pg.Pool({ connectionString: url });
-
-  if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.__cavbot_pg_pool__ = pool;
-  }
+  globalForPrisma.__cavbot_pg_pool__ = pool;
 
   return pool;
 }
@@ -36,10 +33,7 @@ function createClient() {
 function replaceCachedPrismaClient() {
   const nextClient = createClient();
   const previousClient = globalForPrisma.__cavbot_prisma__;
-
-  if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.__cavbot_prisma__ = nextClient;
-  }
+  globalForPrisma.__cavbot_prisma__ = nextClient;
 
   if (previousClient && previousClient !== nextClient) {
     void previousClient.$disconnect().catch(() => null);
@@ -52,9 +46,7 @@ function getOrCreatePrismaClient() {
   if (globalForPrisma.__cavbot_prisma__) return globalForPrisma.__cavbot_prisma__;
 
   const client = createClient();
-  if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.__cavbot_prisma__ = client;
-  }
+  globalForPrisma.__cavbot_prisma__ = client;
   return client;
 }
 

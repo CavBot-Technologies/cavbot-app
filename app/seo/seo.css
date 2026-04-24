@@ -418,6 +418,14 @@
   grid-auto-rows: 1fr;
 }
 
+.seo-mini-grid-stack{
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.seo-mini-grid-stack .seo-mini-wide{
+  grid-column: 1 / -1;
+}
+
 .seo-split > .cb-card{
   display:flex;
   flex-direction: column;
@@ -1583,6 +1591,7 @@ body.cb-modal-open{
 
   /* CRITICAL: stop micro-cards from becoming 3 tiny columns (bleed city) */
   .seo-mini-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .seo-mini-grid-stack .seo-mini-wide{ grid-column: 1 / -1; }
   /* slightly tighten label typography on phone tiles */
   .seo-mini-k,
   .seo-vital-k{
@@ -1622,6 +1631,7 @@ body.cb-modal-open{
 @media (max-width: 420px){
   /* ultra-small phones: one column so NOTHING can bleed */
   .seo-mini-grid{ grid-template-columns: 1fr; }
+  .seo-mini-grid-stack .seo-mini-wide{ grid-column: auto; }
   .seo-favicon-metrics{ grid-template-columns: 1fr; }
   .seo-favicon-specs{ grid-template-columns: 1fr; }
   .seo-favicon-item-head{ grid-template-columns: 34px minmax(0, 1fr); }

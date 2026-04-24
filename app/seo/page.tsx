@@ -1076,7 +1076,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
                   <p className="cb-sub">Robots posture across observed pages.</p>
                 </div>
               </div>
-              <div className="seo-mini-grid">
+              <div className="seo-mini-grid seo-mini-grid-stack">
                 <div className={`seo-mini tone-${noindexTone}`}>
                   <div className="seo-mini-k">NoIndex</div>
                   <div className="seo-mini-v">{fmtPct(seo.noindexPct)}</div>
@@ -1089,7 +1089,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
                   <div className="seo-mini-sub">{fmtInt(seo.nofollowCount)} pages flagged</div>
                 </div>
 
-                <div className="seo-mini">
+                <div className="seo-mini seo-mini-wide">
                   <div className="seo-mini-k">Sample Robots</div>
                   <div className="seo-mini-v mono">{sampleRobotsLabel}</div>
                   <div className="seo-mini-sub">Representative robots meta snapshot.</div>
