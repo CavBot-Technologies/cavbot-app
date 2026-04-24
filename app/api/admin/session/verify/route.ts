@@ -47,8 +47,11 @@ function normalizeAdminSessionRole(value: string) {
   return "MEMBER";
 }
 
-async function readAdminVerifyStaff(userId: string) {
-  const result = await getAuthPool().query<AdminVerifyStaffRow>(
+async function readAdminVerifyStaffFromDb(
+  queryable: { query: <T>(text: string, values?: unknown[]) => Promise<{ rows: T[] }> },
+  userId: string,
+) {
+  const result = await queryable.query<AdminVerifyStaffRow>(
     `SELECT
        staff."id",
        staff."userId",
@@ -94,115 +97,120 @@ export async function POST(req: NextRequest) {
     requireUser(session);
 
     const authPool = getAuthPool();
-    const staff = await readAdminVerifyStaff(session.sub);
-    if (!staff || staff.status !== "ACTIVE") {
-      return json({ ok: false, error: "STAFF_NOT_ACTIVE" }, 403);
-    }
+    const authClient = await authPool.connect();
+    try {
+      const staff = await readAdminVerifyStaffFromDb(authClient, session.sub);
+      if (!staff || staff.status !== "ACTIVE") {
+        return json({ ok: false, error: "STAFF_NOT_ACTIVE" }, 403);
+      }
 
-    const ip = pickClientIp(req);
-    const limitKey = `admin:verify:${staff.userId}:${ip}`;
-    const limit = consumeInMemoryRateLimit({
-      key: limitKey,
-      limit: 10,
-      windowMs: 10 * 60_000,
-    });
-    if (!limit.allowed) {
-      return json({ ok: false, error: "RATE_LIMITED", retryAfterSec: limit.retryAfterSec }, 429);
-    }
+      const ip = pickClientIp(req);
+      const limitKey = `admin:verify:${staff.userId}:${ip}`;
+      const limit = consumeInMemoryRateLimit({
+        key: limitKey,
+        limit: 10,
+        windowMs: 10 * 60_000,
+      });
+      if (!limit.allowed) {
+        return json({ ok: false, error: "RATE_LIMITED", retryAfterSec: limit.retryAfterSec }, 429);
+      }
 
-    const body = (await readSanitizedJson(req, {} as Body)) as Body;
-    const challengeId = String(body?.challengeId || "").trim();
-    const code = String(body?.code || "").trim();
-    if (!challengeId || !/^\d{6}$/.test(code)) {
-      return json({ ok: false, error: "BAD_INPUT" }, 400);
-    }
+      const body = (await readSanitizedJson(req, {} as Body)) as Body;
+      const challengeId = String(body?.challengeId || "").trim();
+      const code = String(body?.code || "").trim();
+      if (!challengeId || !/^\d{6}$/.test(code)) {
+        return json({ ok: false, error: "BAD_INPUT" }, 400);
+      }
 
-    const token = await findAuthTokenByHash(authPool, sha256Hex(challengeId));
-    if (!token || token.type !== "EMAIL_RECOVERY") {
-      return json({ ok: false, error: "CHALLENGE_NOT_FOUND" }, 404);
-    }
-    if (token.userId !== staff.userId) {
-      return json({ ok: false, error: "CHALLENGE_SCOPE_MISMATCH" }, 403);
-    }
-    if (token.usedAt) {
-      return json({ ok: false, error: "CHALLENGE_USED" }, 409);
-    }
-    if (token.expiresAt.getTime() <= Date.now()) {
-      return json({ ok: false, error: "CHALLENGE_EXPIRED" }, 410);
-    }
+      const token = await findAuthTokenByHash(authClient, sha256Hex(challengeId));
+      if (!token || token.type !== "EMAIL_RECOVERY") {
+        return json({ ok: false, error: "CHALLENGE_NOT_FOUND" }, 404);
+      }
+      if (token.userId !== staff.userId) {
+        return json({ ok: false, error: "CHALLENGE_SCOPE_MISMATCH" }, 403);
+      }
+      if (token.usedAt) {
+        return json({ ok: false, error: "CHALLENGE_USED" }, 409);
+      }
+      if (token.expiresAt.getTime() <= Date.now()) {
+        return json({ ok: false, error: "CHALLENGE_EXPIRED" }, 410);
+      }
 
-    const meta = (token.metaJson || {}) as Record<string, unknown>;
-    if (String(meta.purpose || "").trim() !== "admin_step_up") {
-      return json({ ok: false, error: "BAD_CHALLENGE" }, 400);
-    }
-    if (String(meta.staffId || "").trim() !== staff.id) {
-      return json({ ok: false, error: "CHALLENGE_SCOPE_MISMATCH" }, 403);
-    }
+      const meta = (token.metaJson || {}) as Record<string, unknown>;
+      if (String(meta.purpose || "").trim() !== "admin_step_up") {
+        return json({ ok: false, error: "BAD_CHALLENGE" }, 400);
+      }
+      if (String(meta.staffId || "").trim() !== staff.id) {
+        return json({ ok: false, error: "CHALLENGE_SCOPE_MISMATCH" }, 403);
+      }
 
-    const expectedHash = String(meta.codeHash || "").trim();
-    if (!expectedHash || expectedHash !== sha256Hex(code)) {
-      return json({ ok: false, error: "INVALID_CODE" }, 403);
-    }
+      const expectedHash = String(meta.codeHash || "").trim();
+      if (!expectedHash || expectedHash !== sha256Hex(code)) {
+        return json({ ok: false, error: "INVALID_CODE" }, 403);
+      }
 
-    const [{ createAdminSessionToken, adminSessionCookieOptions }, { resolveAdminNextPath }] = await Promise.all([
-      import("@/lib/admin/session"),
-      import("@/lib/admin/access"),
-    ]);
-    const adminToken = await createAdminSessionToken({
-      userId: staff.userId,
-      staffId: staff.id,
-      staffCode: staff.staffCode,
-      role: normalizeAdminSessionRole(staff.systemRole),
-      stepUpMethod: "email",
-    });
-    const nextPath = resolveAdminNextPath(staff, String(meta.nextPath || "/"));
+      const [{ createAdminSessionToken, adminSessionCookieOptions }, { resolveAdminNextPath }] = await Promise.all([
+        import("@/lib/admin/session"),
+        import("@/lib/admin/access"),
+      ]);
+      const adminToken = await createAdminSessionToken({
+        userId: staff.userId,
+        staffId: staff.id,
+        staffCode: staff.staffCode,
+        role: normalizeAdminSessionRole(staff.systemRole),
+        stepUpMethod: "email",
+      });
+      const nextPath = resolveAdminNextPath(staff, String(meta.nextPath || "/"));
 
-    const loginAt = new Date();
-    await markAuthTokenUsed(authPool, token.id);
-    const [{ prisma }, { writeAdminAuditLog }] = await Promise.all([
-      import("@/lib/prisma"),
-      import("@/lib/admin/audit"),
-    ]);
-    await prisma.staffProfile.update({
-      where: { id: staff.id },
-      data: {
-        lastAdminLoginAt: loginAt,
-        lastAdminStepUpAt: loginAt,
-        onboardingStatus: "COMPLETED",
-      },
-    }).catch((updateError) => {
-      console.error("[admin/session/verify] staff profile login update failed", updateError);
-    });
-    await writeAdminAuditLog({
-      actorStaffId: staff.id,
-      actorUserId: staff.userId,
-      action: "STAFF_SIGNED_IN",
-      actionLabel: "Staff admin sign-in completed",
-      entityType: "staff_profile",
-      entityId: staff.id,
-      entityLabel: maskStaffCode(staff.staffCode),
-      request: req,
-      metaJson: {
+      const loginAt = new Date();
+      await markAuthTokenUsed(authClient, token.id);
+      const [{ prisma }, { writeAdminAuditLog }] = await Promise.all([
+        import("@/lib/prisma"),
+        import("@/lib/admin/audit"),
+      ]);
+      await prisma.staffProfile.update({
+        where: { id: staff.id },
+        data: {
+          lastAdminLoginAt: loginAt,
+          lastAdminStepUpAt: loginAt,
+          onboardingStatus: "COMPLETED",
+        },
+      }).catch((updateError) => {
+        console.error("[admin/session/verify] staff profile login update failed", updateError);
+      });
+      await writeAdminAuditLog({
+        actorStaffId: staff.id,
+        actorUserId: staff.userId,
+        action: "STAFF_SIGNED_IN",
+        actionLabel: "Staff admin sign-in completed",
+        entityType: "staff_profile",
+        entityId: staff.id,
+        entityLabel: maskStaffCode(staff.staffCode),
+        request: req,
+        metaJson: {
+          nextPath,
+        },
+      }).catch((auditError) => {
+        console.error("[admin/session/verify] audit log failed", auditError);
+      });
+
+      const response = json({
+        ok: true,
         nextPath,
-      },
-    }).catch((auditError) => {
-      console.error("[admin/session/verify] audit log failed", auditError);
-    });
+        staff: {
+          id: staff.id,
+          staffCode: maskStaffCode(staff.staffCode),
+          systemRole: staff.systemRole,
+          positionTitle: staff.positionTitle,
+        },
+      });
 
-    const response = json({
-      ok: true,
-      nextPath,
-      staff: {
-        id: staff.id,
-        staffCode: maskStaffCode(staff.staffCode),
-        systemRole: staff.systemRole,
-        positionTitle: staff.positionTitle,
-      },
-    });
-
-    const { name, ...cookieOptions } = adminSessionCookieOptions(req);
-    response.cookies.set(name, adminToken, cookieOptions);
-    return response;
+      const { name, ...cookieOptions } = adminSessionCookieOptions(req);
+      response.cookies.set(name, adminToken, cookieOptions);
+      return response;
+    } finally {
+      authClient.release();
+    }
   } catch (error) {
     console.error("[admin/session/verify] failed", error);
     return json({ ok: false, error: "ADMIN_VERIFY_FAILED" }, 500);
