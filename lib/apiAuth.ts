@@ -699,7 +699,7 @@ export function expireSessionCookie(req: Request, res: NextResponse<unknown>): N
    SESSION READERS
 ========================== */
 
-export async function getSession(req: Request): Promise<CavbotSession | null> {
+export async function readVerifiedSession(req: Request): Promise<CavbotSession | null> {
   try {
     const cookieHeader = req.headers.get("cookie") || "";
     const cookieTokens = parseCookieValues(cookieHeader, SESSION_COOKIE);
@@ -713,36 +713,45 @@ export async function getSession(req: Request): Promise<CavbotSession | null> {
     if (!cookieFirstCandidates.length) return null;
     for (const token of cookieFirstCandidates) {
       try {
-        const sess = await verifySession(token);
-        if (sess?.systemRole === "user" && sess.sub && sess.sub !== "system") {
-          try {
-            const pool = getAuthPool();
-            const userId = String(sess.sub);
-            let activeMembership = null;
-
-            if (sess.accountId) {
-              activeMembership = await findSessionMembership(pool, userId, String(sess.accountId));
-            }
-
-            if (!activeMembership || !sess.memberRole) {
-              const memberships = await findMembershipsForUser(pool, userId);
-              const active = pickPrimaryMembership(memberships);
-              if (active?.accountId) {
-                sess.accountId = String(active.accountId);
-                sess.memberRole = active.role;
-              }
-            } else {
-              sess.accountId = String(activeMembership.accountId);
-              sess.memberRole = activeMembership.role;
-            }
-          } catch {}
-        }
-        return sess;
+        return await verifySession(token);
       } catch {
         // try next candidate token
       }
     }
     return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getSession(req: Request): Promise<CavbotSession | null> {
+  try {
+    const sess = await readVerifiedSession(req);
+    if (!sess) return null;
+    if (sess?.systemRole === "user" && sess.sub && sess.sub !== "system") {
+      try {
+        const pool = getAuthPool();
+        const userId = String(sess.sub);
+        let activeMembership = null;
+
+        if (sess.accountId) {
+          activeMembership = await findSessionMembership(pool, userId, String(sess.accountId));
+        }
+
+        if (!activeMembership || !sess.memberRole) {
+          const memberships = await findMembershipsForUser(pool, userId);
+          const active = pickPrimaryMembership(memberships);
+          if (active?.accountId) {
+            sess.accountId = String(active.accountId);
+            sess.memberRole = active.role;
+          }
+        } else {
+          sess.accountId = String(activeMembership.accountId);
+          sess.memberRole = activeMembership.role;
+        }
+      } catch {}
+    }
+    return sess;
   } catch {
     return null;
   }

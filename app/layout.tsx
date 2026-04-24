@@ -83,12 +83,12 @@ type RootLayoutProps = {
 };
 
 export default async function RootLayout({ children }: RootLayoutProps) {
-  const [headerStore, authBootstrap] = await Promise.all([
-    headers(),
-    readClientAuthBootstrapServerState(),
-  ]);
+  const headerStore = headers();
   const host = headerStore.get("host");
   const renderSharedRuntime = shouldRenderSharedRootRuntime(host);
+  const authBootstrap = renderSharedRuntime
+    ? await readClientAuthBootstrapServerState()
+    : { authenticated: false, session: null, profile: null, plan: null, ts: 0 };
   const authBootstrapScript = buildClientAuthBootstrapScript(authBootstrap);
 
   return (
