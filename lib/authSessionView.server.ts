@@ -182,7 +182,7 @@ export async function readAuthSessionView(
       user: userRow,
     });
 
-    let account = fallbackAccountFromSession({
+    let account: AuthSessionViewAccount = fallbackAccountFromSession({
       accountId,
       membership: membershipRow,
       tier: membershipRow?.accountTier || "FREE",
