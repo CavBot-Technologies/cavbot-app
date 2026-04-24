@@ -4,7 +4,6 @@ import type { AdminDisciplineStatus, Prisma } from "@prisma/client";
 
 import { getAuthPool } from "@/lib/authDb";
 import { isSoftTableAccessError } from "@/lib/dbSchemaGuard";
-import { prisma } from "@/lib/prisma";
 
 export type UserDisciplineStatus = AdminDisciplineStatus;
 
@@ -77,6 +76,11 @@ type MutateUserDisciplineArgs = {
   durationDays?: 7 | 14 | 30;
   note?: string | null;
 };
+
+async function getPrismaClient() {
+  const { prisma } = await import("@/lib/prisma");
+  return prisma;
+}
 
 function safeId(value: unknown) {
   return String(value || "").trim();
@@ -324,6 +328,7 @@ export async function suspendUser(args: MutateUserDisciplineArgs): Promise<{
 
   const now = new Date();
   const suspendedUntil = new Date(now.getTime() + args.durationDays * 24 * 60 * 60 * 1000);
+  const prisma = await getPrismaClient();
   const row = await prisma.adminUserDiscipline.upsert({
     where: { userId },
     update: {
@@ -361,6 +366,7 @@ export async function restoreUser(args: { userId: string; actorStaffId?: string 
   const userId = safeId(args.userId);
   if (!userId) return null;
   const current = await readRow(userId);
+  const prisma = await getPrismaClient();
   const row = await prisma.adminUserDiscipline.upsert({
     where: { userId },
     update: {
@@ -400,6 +406,7 @@ export async function revokeUser(args: {
   if (!userId) return null;
   const now = new Date();
   const current = await readRow(userId);
+  const prisma = await getPrismaClient();
   const row = await prisma.adminUserDiscipline.upsert({
     where: { userId },
     update: {
@@ -435,6 +442,7 @@ export async function killUserSessions(args: { userId: string; actorStaffId?: st
   const userId = safeId(args.userId);
   if (!userId) return null;
   const now = new Date();
+  const prisma = await getPrismaClient();
   await prisma.userAuth.updateMany({
     where: { userId },
     data: {
@@ -469,6 +477,7 @@ export async function resetUserRecovery(args: { userId: string; actorStaffId?: s
   const userId = safeId(args.userId);
   if (!userId) return null;
   const now = new Date();
+  const prisma = await getPrismaClient();
   await prisma.authToken.deleteMany({
     where: { userId },
   });
@@ -508,6 +517,7 @@ export async function recordUserIdentityReview(args: {
   if (!userId) return null;
   const now = new Date();
   const current = await readRow(userId);
+  const prisma = await getPrismaClient();
   const row = await prisma.adminUserDiscipline.upsert({
     where: { userId },
     update: {

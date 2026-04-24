@@ -1,10 +1,7 @@
 import "server-only";
 
-import { Prisma } from "@prisma/client";
-
 import { getAuthPool } from "@/lib/authDb";
 import { isSoftTableAccessError } from "@/lib/dbSchemaGuard";
-import { prisma } from "@/lib/prisma";
 
 export type AccountDisciplineStatus = "ACTIVE" | "SUSPENDED" | "REVOKED";
 
@@ -44,6 +41,11 @@ type MutateAccountDisciplineArgs = {
 };
 
 let tableReady = false;
+
+async function getPrismaClient() {
+  const { prisma } = await import("@/lib/prisma");
+  return prisma;
+}
 
 function s(value: unknown) {
   return String(value ?? "").trim();
@@ -90,6 +92,7 @@ function normalizeRow(row: RawAccountDisciplineRow | null | undefined): AccountD
 
 async function ensureAccountDisciplineTable() {
   if (tableReady) return;
+  const prisma = await getPrismaClient();
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "AdminAccountDiscipline" (
       "accountId" TEXT PRIMARY KEY,
@@ -293,6 +296,8 @@ export async function suspendAccount(args: MutateAccountDisciplineArgs): Promise
   const now = new Date();
   const suspendedUntil = new Date(now.getTime() + args.durationDays * 24 * 60 * 60 * 1000);
   await ensureAccountDisciplineTable();
+  const prisma = await getPrismaClient();
+  const { Prisma } = await import("@prisma/client");
   await prisma.$executeRaw(
     Prisma.sql`
       INSERT INTO "AdminAccountDiscipline" (
@@ -351,6 +356,8 @@ export async function restoreAccount(args: {
   const current = await readAccountDisciplineRow(accountId);
   if (!current) return null;
   await ensureAccountDisciplineTable();
+  const prisma = await getPrismaClient();
+  const { Prisma } = await import("@prisma/client");
   await prisma.$executeRaw(
     Prisma.sql`
       UPDATE "AdminAccountDiscipline"
@@ -382,6 +389,8 @@ export async function revokeAccount(args: {
   const current = await readAccountDisciplineRow(accountId);
   const nextViolationCount = Math.max(3, toInt(args.violationCount) || toInt(current?.violationCount));
   await ensureAccountDisciplineTable();
+  const prisma = await getPrismaClient();
+  const { Prisma } = await import("@prisma/client");
   await prisma.$executeRaw(
     Prisma.sql`
       INSERT INTO "AdminAccountDiscipline" (
