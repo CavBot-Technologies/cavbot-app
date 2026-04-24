@@ -147,10 +147,7 @@ export async function POST(req: NextRequest) {
       });
       console.log("[admin/session/challenge] token-create:done");
 
-      const [{ sendEmail }, { writeAdminAuditLog }] = await Promise.all([
-        import("@/lib/email/sendEmail"),
-        import("@/lib/admin/audit"),
-      ]);
+      const { sendEmail } = await import("@/lib/email/sendEmail");
       console.log("[admin/session/challenge] email:start");
       await sendEmail({
         to: staff.userEmail,
@@ -177,22 +174,26 @@ export async function POST(req: NextRequest) {
       });
       console.log("[admin/session/challenge] email:done");
 
-      await writeAdminAuditLog({
-        actorStaffId: staff.id,
-        actorUserId: staff.userId,
-        action: "STAFF_ADMIN_STEP_UP_SENT",
-        actionLabel: "Admin step-up code sent",
-        entityType: "staff_profile",
-        entityId: staff.id,
-        entityLabel: maskStaffCode(staff.staffCode),
-        request: req,
-        metaJson: {
-          nextPath,
-          email: staff.userEmail,
-        },
-      }).catch((auditError) => {
-        console.error("[admin/session/challenge] audit log failed", auditError);
-      });
+      await import("@/lib/admin/audit")
+        .then(({ writeAdminAuditLog }) =>
+          writeAdminAuditLog({
+            actorStaffId: staff.id,
+            actorUserId: staff.userId,
+            action: "STAFF_ADMIN_STEP_UP_SENT",
+            actionLabel: "Admin step-up code sent",
+            entityType: "staff_profile",
+            entityId: staff.id,
+            entityLabel: maskStaffCode(staff.staffCode),
+            request: req,
+            metaJson: {
+              nextPath,
+              email: staff.userEmail,
+            },
+          }),
+        )
+        .catch((auditError) => {
+          console.error("[admin/session/challenge] audit log failed", auditError);
+        });
       console.log("[admin/session/challenge] response");
 
       return json({

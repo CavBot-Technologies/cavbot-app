@@ -164,35 +164,36 @@ export async function POST(req: NextRequest) {
 
       const loginAt = new Date();
       await markAuthTokenUsed(authClient, token.id);
-      const [{ prisma }, { writeAdminAuditLog }] = await Promise.all([
-        import("@/lib/prisma"),
-        import("@/lib/admin/audit"),
-      ]);
-      await prisma.staffProfile.update({
-        where: { id: staff.id },
-        data: {
-          lastAdminLoginAt: loginAt,
-          lastAdminStepUpAt: loginAt,
-          onboardingStatus: "COMPLETED",
-        },
-      }).catch((updateError) => {
+      await authClient.query(
+        `UPDATE "StaffProfile"
+         SET
+           "lastAdminLoginAt" = $2,
+           "lastAdminStepUpAt" = $2,
+           "onboardingStatus" = 'COMPLETED'
+         WHERE "id" = $1`,
+        [staff.id, loginAt.toISOString()],
+      ).catch((updateError) => {
         console.error("[admin/session/verify] staff profile login update failed", updateError);
       });
-      await writeAdminAuditLog({
-        actorStaffId: staff.id,
-        actorUserId: staff.userId,
-        action: "STAFF_SIGNED_IN",
-        actionLabel: "Staff admin sign-in completed",
-        entityType: "staff_profile",
-        entityId: staff.id,
-        entityLabel: maskStaffCode(staff.staffCode),
-        request: req,
-        metaJson: {
-          nextPath,
-        },
-      }).catch((auditError) => {
-        console.error("[admin/session/verify] audit log failed", auditError);
-      });
+      await import("@/lib/admin/audit")
+        .then(({ writeAdminAuditLog }) =>
+          writeAdminAuditLog({
+            actorStaffId: staff.id,
+            actorUserId: staff.userId,
+            action: "STAFF_SIGNED_IN",
+            actionLabel: "Staff admin sign-in completed",
+            entityType: "staff_profile",
+            entityId: staff.id,
+            entityLabel: maskStaffCode(staff.staffCode),
+            request: req,
+            metaJson: {
+              nextPath,
+            },
+          }),
+        )
+        .catch((auditError) => {
+          console.error("[admin/session/verify] audit log failed", auditError);
+        });
 
       const response = json({
         ok: true,
