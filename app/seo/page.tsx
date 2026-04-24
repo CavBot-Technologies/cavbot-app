@@ -94,6 +94,18 @@ function firstArray(...values: unknown[]): unknown[] | null {
   return null;
 }
 
+function firstCollectionRecord(value: unknown): UnknownRecord | null {
+  const arr = asArray(value);
+  if (arr?.length) {
+    for (const item of arr) {
+      const rec = asRecord(item);
+      if (rec) return rec;
+    }
+    return null;
+  }
+  return asRecord(value);
+}
+
 type SeoWorkspace = WorkspacePayload & {
   // Some pages/components have historically stored selection pointers here.
   // Keep these additive without narrowing WorkspacePayload (avoid TS incompatibilities).
@@ -155,19 +167,21 @@ function fmtCls(v: unknown) {
   if (x == null) return "—";
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(x);
 }
-function normalizeVitalMetric(v: unknown) {
+function normalizeMsVitalMetric(v: unknown) {
   const x = nOrNull(v);
   if (x == null) return null;
   return x > 0 ? x : null;
 }
+function normalizeClsVitalMetric(v: unknown) {
+  const x = nOrNull(v);
+  if (x == null) return null;
+  return x >= 0 ? x : null;
+}
 function fmtVitalMs(v: unknown) {
-  return fmtMs(normalizeVitalMetric(v));
+  return fmtMs(normalizeMsVitalMetric(v));
 }
 function fmtVitalCls(v: unknown) {
-  return fmtCls(normalizeVitalMetric(v));
-}
-function fmtVitalDisplay(v: number | null, formatter: (value: number) => string) {
-  return v == null ? "Collecting" : formatter(v);
+  return fmtCls(normalizeClsVitalMetric(v));
 }
 
 function toHostPath(raw: string) {
@@ -494,17 +508,22 @@ type VitalsPayload = {
 
 function normalizeVitalsFromSummary(summary: unknown): VitalsPayload {
   const summaryRecord = asRecord(summary);
+  const performanceRecord = firstCollectionRecord(summaryRecord?.performance);
+  const guardianRecord = firstCollectionRecord(summaryRecord?.guardian);
+  const diagnosticsRecord = firstCollectionRecord(summaryRecord?.diagnostics);
+  const metricsRecord = asRecord(summaryRecord?.metrics);
   const v = firstRecord(
     summaryRecord?.webVitals,
     summaryRecord?.vitals,
-    firstRecord(summaryRecord?.performance)?.vitals,
-    firstRecord(summaryRecord?.performance)?.webVitals,
-    firstRecord(summaryRecord?.guardian)?.vitals,
-    firstRecord(summaryRecord?.diagnostics)?.vitals,
+    performanceRecord?.vitals,
+    performanceRecord?.webVitals,
+    guardianRecord?.vitals,
+    diagnosticsRecord?.vitals,
+    metricsRecord?.webVitals,
     null
   );
 
-  const r = firstRecord(v?.rollup, v?.summary, v?.p75, v) ?? null;
+  const r = firstRecord(v?.rollup, v?.summary, v?.p75, v, metricsRecord) ?? null;
 
   const updatedAtISO =
     v?.updatedAtISO != null
@@ -517,11 +536,11 @@ function normalizeVitalsFromSummary(summary: unknown): VitalsPayload {
     updatedAtISO: updatedAtISO || null,
     samples: nOrNull(r?.samples ?? r?.n ?? r?.observations ?? r?.pagesObserved),
 
-    lcpP75Ms: nOrNull(r?.lcpP75Ms ?? r?.lcp_p75_ms ?? r?.lcpP75 ?? r?.lcpMs),
+    lcpP75Ms: nOrNull(r?.lcpP75Ms ?? r?.lcp_p75_ms ?? r?.lcpP75 ?? r?.lcpMs ?? metricsRecord?.avgLcpMs),
     inpP75Ms: nOrNull(r?.inpP75Ms ?? r?.inp_p75_ms ?? r?.inpP75 ?? r?.inpMs),
-    clsP75: nOrNull(r?.clsP75 ?? r?.cls_p75 ?? r?.cls),
+    clsP75: nOrNull(r?.clsP75 ?? r?.cls_p75 ?? r?.cls ?? metricsRecord?.globalCls),
     fcpP75Ms: nOrNull(r?.fcpP75Ms ?? r?.fcp_p75_ms ?? r?.fcpP75 ?? r?.fcpMs),
-    ttfbP75Ms: nOrNull(r?.ttfbP75Ms ?? r?.ttfb_p75_ms ?? r?.ttfbP75 ?? r?.ttfbMs),
+    ttfbP75Ms: nOrNull(r?.ttfbP75Ms ?? r?.ttfb_p75_ms ?? r?.ttfbP75 ?? r?.ttfbMs ?? metricsRecord?.ttfbP75Ms),
   };
 
   const noSamples = normalized.samples == null || normalized.samples <= 0;
@@ -770,11 +789,11 @@ export default async function SeoPage({ searchParams }: PageProps) {
   const multiH1Tone = toneFromIssuePct(seo.multipleH1Pct ?? null);
   const thinTone = toneFromIssuePct(seo.thinContentPct ?? null);
 
-  const lcpVital = normalizeVitalMetric(vitals.lcpP75Ms);
-  const inpVital = normalizeVitalMetric(vitals.inpP75Ms);
-  const clsVital = normalizeVitalMetric(vitals.clsP75);
-  const fcpVital = normalizeVitalMetric(vitals.fcpP75Ms);
-  const ttfbVital = normalizeVitalMetric(vitals.ttfbP75Ms);
+  const lcpVital = normalizeMsVitalMetric(vitals.lcpP75Ms);
+  const inpVital = normalizeMsVitalMetric(vitals.inpP75Ms);
+  const clsVital = normalizeClsVitalMetric(vitals.clsP75);
+  const fcpVital = normalizeMsVitalMetric(vitals.fcpP75Ms);
+  const ttfbVital = normalizeMsVitalMetric(vitals.ttfbP75Ms);
 
   const lcpTone = toneForLcp(lcpVital);
   const inpTone = toneForInp(inpVital);
@@ -1118,31 +1137,31 @@ export default async function SeoPage({ searchParams }: PageProps) {
             <div className="seo-vitals">
               <div className={`seo-vital tone-${lcpTone}`}>
                 <div className="seo-vital-k">LCP (P75)</div>
-                <div className={`seo-vital-v${lcpVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(lcpVital, fmtVitalMs)}</div>
+                <div className={`seo-vital-v${lcpVital == null ? " is-empty" : ""}`}>{fmtVitalMs(lcpVital)}</div>
                 <div className="seo-vital-sub">Largest Contentful Paint</div>
               </div>
 
               <div className={`seo-vital tone-${inpTone}`}>
                 <div className="seo-vital-k">INP (P75)</div>
-                <div className={`seo-vital-v${inpVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(inpVital, fmtVitalMs)}</div>
+                <div className={`seo-vital-v${inpVital == null ? " is-empty" : ""}`}>{fmtVitalMs(inpVital)}</div>
                 <div className="seo-vital-sub">Interaction to Next Paint</div>
               </div>
 
               <div className={`seo-vital tone-${clsTone}`}>
                 <div className="seo-vital-k">CLS (P75)</div>
-                <div className={`seo-vital-v${clsVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(clsVital, fmtVitalCls)}</div>
+                <div className={`seo-vital-v${clsVital == null ? " is-empty" : ""}`}>{fmtVitalCls(clsVital)}</div>
                 <div className="seo-vital-sub">Cumulative Layout Shift</div>
               </div>
 
               <div className={`seo-vital tone-${fcpTone}`}>
                 <div className="seo-vital-k">FCP (P75)</div>
-                <div className={`seo-vital-v${fcpVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(fcpVital, fmtVitalMs)}</div>
+                <div className={`seo-vital-v${fcpVital == null ? " is-empty" : ""}`}>{fmtVitalMs(fcpVital)}</div>
                 <div className="seo-vital-sub">First Contentful Paint</div>
               </div>
 
               <div className={`seo-vital tone-${ttfbTone}`}>
                 <div className="seo-vital-k">TTFB (P75)</div>
-                <div className={`seo-vital-v${ttfbVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(ttfbVital, fmtVitalMs)}</div>
+                <div className={`seo-vital-v${ttfbVital == null ? " is-empty" : ""}`}>{fmtVitalMs(ttfbVital)}</div>
                 <div className="seo-vital-sub">Time to First Byte</div>
               </div>
             </div>
