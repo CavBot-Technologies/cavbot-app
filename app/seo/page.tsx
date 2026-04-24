@@ -29,6 +29,7 @@ import {
   faviconSourceLabel,
   type FaviconIntelligenceResult,
 } from "@/lib/seo/faviconIntelligence";
+import { fetchLiveMetadataSnapshot } from "@/lib/seo/liveMetadata";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -154,9 +155,16 @@ function fmtCls(v: unknown) {
   if (x == null) return "—";
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(x);
 }
-
-function fmtVitalState(value: number | null | undefined, formatter: (input: number) => string, fallback = "Warming") {
-  return value == null ? fallback : formatter(value);
+function normalizeVitalMetric(v: unknown) {
+  const x = nOrNull(v);
+  if (x == null) return null;
+  return x > 0 ? x : null;
+}
+function fmtVitalMs(v: unknown) {
+  return fmtMs(normalizeVitalMetric(v));
+}
+function fmtVitalCls(v: unknown) {
+  return fmtCls(normalizeVitalMetric(v));
 }
 
 function toHostPath(raw: string) {
@@ -169,6 +177,13 @@ function toHostPath(raw: string) {
   } catch {
     return s;
   }
+}
+
+function nonEmptyText(value: unknown): string | null {
+  const text = toStringSafe(value);
+  if (!text) return null;
+  const cleaned = text.trim();
+  return cleaned ? cleaned : null;
 }
 
 type ClientTarget = { id: string; label?: string | null; origin: string };
@@ -665,6 +680,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
   let seo: SeoPayload = {};
   let vitals: VitalsPayload = {};
   let favicon: FaviconIntelligenceResult | null = null;
+  let liveMetadata: Awaited<ReturnType<typeof fetchLiveMetadataSnapshot>> = null;
 
   try {
     const { summary: loadedSummary } = await getTenantProjectSummary({
@@ -688,6 +704,14 @@ export default async function SeoPage({ searchParams }: PageProps) {
     });
   } catch {
     favicon = null;
+  }
+
+  try {
+    liveMetadata = await fetchLiveMetadataSnapshot({
+      origin: activeSite.url || "",
+    });
+  } catch {
+    liveMetadata = null;
   }
 
   const updatedAtISO = seo.updatedAtISO || vitals.updatedAtISO || null;
@@ -743,28 +767,49 @@ export default async function SeoPage({ searchParams }: PageProps) {
   const multiH1Tone = toneFromIssuePct(seo.multipleH1Pct ?? null);
   const thinTone = toneFromIssuePct(seo.thinContentPct ?? null);
 
-  const lcpTone = toneForLcp(vitals.lcpP75Ms ?? null);
-  const inpTone = toneForInp(vitals.inpP75Ms ?? null);
-  const clsTone = toneForCls(vitals.clsP75 ?? null);
-  const fcpTone = toneForFcp(vitals.fcpP75Ms ?? null);
-  const ttfbTone = toneForTtfb(vitals.ttfbP75Ms ?? null);
-  const vitalsWarmState = vitals.samples != null && vitals.samples > 0 ? "Collecting" : "Warming";
-  const vitalsWarmSub = vitals.samples != null && vitals.samples > 0 ? "Collecting enough field samples." : "Awaiting first field sample.";
+  const lcpVital = normalizeVitalMetric(vitals.lcpP75Ms);
+  const inpVital = normalizeVitalMetric(vitals.inpP75Ms);
+  const clsVital = normalizeVitalMetric(vitals.clsP75);
+  const fcpVital = normalizeVitalMetric(vitals.fcpP75Ms);
+  const ttfbVital = normalizeVitalMetric(vitals.ttfbP75Ms);
+
+  const lcpTone = toneForLcp(lcpVital);
+  const inpTone = toneForInp(inpVital);
+  const clsTone = toneForCls(clsVital);
+  const fcpTone = toneForFcp(fcpVital);
+  const ttfbTone = toneForTtfb(ttfbVital);
   const metadataGapRows: Array<{ id: string; label: string; count: number }> = [
     { id: "missing_title", label: "Missing Titles", count: nOrNull(seo.missingTitleCount) ?? 0 },
     { id: "missing_description", label: "Missing Descriptions", count: nOrNull(seo.missingDescriptionCount) ?? 0 },
     { id: "missing_canonical", label: "Missing Canonicals", count: nOrNull(seo.missingCanonicalCount) ?? 0 },
   ];
   const metadataGapTotal = metadataGapRows.reduce((sum, row) => sum + row.count, 0);
-  const hasLivePreviewData = Boolean(seo.sampleTitle || seo.sampleDescription || seo.sampleCanonical);
-  const hasLivePreviewTitle = Boolean(seo.sampleTitle && seo.sampleTitle.trim().length > 0);
-  const previewTitleLabel = seo.sampleTitle || `${activeSite.label} — Page Title`;
-  const previewDescriptionLabel =
-    seo.sampleDescription ||
-    "This preview updates automatically once CavBot detects your live metadata.";
-  const sampleRobotsLabel = seo.sampleRobots && seo.sampleRobots.trim().length > 0 ? seo.sampleRobots.trim() : "—";
+  const representativePage =
+    (seo.pages || []).find((page) => page.title || page.metaDescription || page.canonical || page.robots) || null;
+  const representativeTitle =
+    nonEmptyText(seo.sampleTitle) || nonEmptyText(representativePage?.title) || nonEmptyText(liveMetadata?.title) || null;
+  const representativeDescription =
+    nonEmptyText(seo.sampleDescription) ||
+    nonEmptyText(representativePage?.metaDescription) ||
+    nonEmptyText(liveMetadata?.description) ||
+    null;
+  const representativeCanonical =
+    nonEmptyText(seo.sampleCanonical) ||
+    nonEmptyText(representativePage?.canonical) ||
+    nonEmptyText(liveMetadata?.canonical) ||
+    nonEmptyText(liveMetadata?.pageUrl) ||
+    null;
+  const representativeRobots =
+    nonEmptyText(seo.sampleRobots) || nonEmptyText(representativePage?.robots) || nonEmptyText(liveMetadata?.robots) || null;
+  const hasLivePreviewData = Boolean(
+    representativeTitle || representativeDescription || representativeCanonical || representativeRobots
+  );
+  const hasLivePreviewTitle = Boolean(representativeTitle);
+  const previewTitleLabel = representativeTitle || `${activeSite.label} — Page Title`;
+  const previewDescriptionLabel = representativeDescription || "No live meta description was detected for this route.";
+  const sampleRobotsLabel = representativeRobots || "—";
   const previewUrlLabel = (() => {
-    const raw = seo.sampleCanonical || activeSite.url || "";
+    const raw = representativeCanonical || activeSite.url || "";
     if (!raw) return "—";
     try {
       const parsed = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw.replace(/^\/\//, "")}`);
@@ -905,7 +950,6 @@ export default async function SeoPage({ searchParams }: PageProps) {
     rankedFaviconIcons[0]?.url ||
     "";
   const faviconPreviewUrl = faviconPreviewFromPrimary || faviconPreviewFallbackUrl || "";
-  const faviconPreviewLabel = faviconPreviewUrl ? toHostPath(faviconPreviewUrl) : "No icon detected";
 
   return (
     <AppShell title="Workspace" subtitle="Workspace command center">
@@ -1061,7 +1105,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
           </section>
 <br /><br />
           {/* WEB VITALS */}
-          <section className="cb-card cb-card-pad" aria-label="Web Vitals">
+          <section className="cb-card cb-card-pad seo-vitals-card" aria-label="Web Vitals">
             <div className="cb-card-head">
               <div>
                 <h2 className="cb-h2">Web Vitals</h2>
@@ -1071,32 +1115,32 @@ export default async function SeoPage({ searchParams }: PageProps) {
             <div className="seo-vitals">
               <div className={`seo-vital tone-${lcpTone}`}>
                 <div className="seo-vital-k">LCP (P75)</div>
-                <div className="seo-vital-v">{fmtVitalState(vitals.lcpP75Ms, (value) => fmtMs(value), vitalsWarmState)}</div>
-                <div className="seo-vital-sub">{vitals.lcpP75Ms != null ? "Largest Contentful Paint" : vitalsWarmSub}</div>
+                <div className={`seo-vital-v${lcpVital == null ? " is-empty" : ""}`}>{fmtVitalMs(lcpVital)}</div>
+                <div className="seo-vital-sub">Largest Contentful Paint</div>
               </div>
 
               <div className={`seo-vital tone-${inpTone}`}>
                 <div className="seo-vital-k">INP (P75)</div>
-                <div className="seo-vital-v">{fmtVitalState(vitals.inpP75Ms, (value) => fmtMs(value), vitalsWarmState)}</div>
-                <div className="seo-vital-sub">{vitals.inpP75Ms != null ? "Interaction to Next Paint" : vitalsWarmSub}</div>
+                <div className={`seo-vital-v${inpVital == null ? " is-empty" : ""}`}>{fmtVitalMs(inpVital)}</div>
+                <div className="seo-vital-sub">Interaction to Next Paint</div>
               </div>
 
               <div className={`seo-vital tone-${clsTone}`}>
                 <div className="seo-vital-k">CLS (P75)</div>
-                <div className="seo-vital-v">{fmtVitalState(vitals.clsP75, (value) => fmtCls(value), vitalsWarmState)}</div>
-                <div className="seo-vital-sub">{vitals.clsP75 != null ? "Cumulative Layout Shift" : vitalsWarmSub}</div>
+                <div className={`seo-vital-v${clsVital == null ? " is-empty" : ""}`}>{fmtVitalCls(clsVital)}</div>
+                <div className="seo-vital-sub">Cumulative Layout Shift</div>
               </div>
 
               <div className={`seo-vital tone-${fcpTone}`}>
                 <div className="seo-vital-k">FCP (P75)</div>
-                <div className="seo-vital-v">{fmtVitalState(vitals.fcpP75Ms, (value) => fmtMs(value), vitalsWarmState)}</div>
-                <div className="seo-vital-sub">{vitals.fcpP75Ms != null ? "First Contentful Paint" : vitalsWarmSub}</div>
+                <div className={`seo-vital-v${fcpVital == null ? " is-empty" : ""}`}>{fmtVitalMs(fcpVital)}</div>
+                <div className="seo-vital-sub">First Contentful Paint</div>
               </div>
 
               <div className={`seo-vital tone-${ttfbTone}`}>
                 <div className="seo-vital-k">TTFB (P75)</div>
-                <div className="seo-vital-v">{fmtVitalState(vitals.ttfbP75Ms, (value) => fmtMs(value), vitalsWarmState)}</div>
-                <div className="seo-vital-sub">{vitals.ttfbP75Ms != null ? "Time to First Byte" : vitalsWarmSub}</div>
+                <div className={`seo-vital-v${ttfbVital == null ? " is-empty" : ""}`}>{fmtVitalMs(ttfbVital)}</div>
+                <div className="seo-vital-sub">Time to First Byte</div>
               </div>
             </div>
           </section>
@@ -1115,19 +1159,19 @@ export default async function SeoPage({ searchParams }: PageProps) {
                 <section className="seo-metadata-panel" aria-label="Captured metadata">
                   <div className="seo-metadata-kicker">Captured Metadata</div>
                   <dl className="seo-metadata-list">
-                    <div className={`seo-metadata-row ${seo.sampleTitle ? "is-present" : "is-missing"}`}>
+                    <div className={`seo-metadata-row ${representativeTitle ? "is-present" : "is-missing"}`}>
                       <dt>Title</dt>
-                      <dd className="mono">{seo.sampleTitle || "—"}</dd>
+                      <dd className="mono">{representativeTitle || "—"}</dd>
                     </div>
-                    <div className={`seo-metadata-row ${seo.sampleDescription ? "is-present" : "is-missing"}`}>
+                    <div className={`seo-metadata-row ${representativeDescription ? "is-present" : "is-missing"}`}>
                       <dt>Description</dt>
-                      <dd className="mono">{seo.sampleDescription || "—"}</dd>
+                      <dd className="mono">{representativeDescription || "—"}</dd>
                     </div>
-                    <div className={`seo-metadata-row ${seo.sampleCanonical ? "is-present" : "is-missing"}`}>
+                    <div className={`seo-metadata-row ${representativeCanonical ? "is-present" : "is-missing"}`}>
                       <dt>Canonical</dt>
-                      <dd className="mono">{seo.sampleCanonical || "—"}</dd>
+                      <dd className="mono">{representativeCanonical || "—"}</dd>
                     </div>
-                    <div className={`seo-metadata-row ${seo.sampleRobots ? "is-present" : "is-missing"}`}>
+                    <div className={`seo-metadata-row ${representativeRobots ? "is-present" : "is-missing"}`}>
                       <dt>Robots</dt>
                       <dd className="mono">{sampleRobotsLabel}</dd>
                     </div>
@@ -1136,7 +1180,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
 
                 <section className="seo-serp-card" role="note" aria-label="Search snippet preview">
                   <div className="seo-serp-card-top">
-                    <div className="seo-serp-card-state">{hasLivePreviewData ? "Live data" : "Awaiting data"}</div>
+                    <div className="seo-serp-card-state">{hasLivePreviewData ? "Live data" : "No live metadata found"}</div>
                   </div>
                   <div className={`seo-serp-card-body${hasLivePreviewData ? "" : " is-awaiting"}`}>
                     <div className={`seo-serp-card-title${hasLivePreviewTitle ? "" : " is-placeholder"}`}>{previewTitleLabel}</div>
@@ -1221,9 +1265,6 @@ export default async function SeoPage({ searchParams }: PageProps) {
                     —
                   </div>
                 )}
-                <div className="seo-favicon-metric-sub mono" title={faviconPreviewUrl || undefined}>
-                  {faviconPreviewLabel}
-                </div>
               </article>
               <article className="seo-favicon-metric tone-neutral" role="listitem">
                 <div className="seo-favicon-metric-k">Detected</div>

@@ -484,18 +484,22 @@
   gap: 12px;
 }
 
+.seo-vitals-card .cb-card-head{
+  margin-bottom: 24px;
+}
+
 .seo-vital{
   border: 1px solid rgba(255,255,255,0.10);
   background: rgba(0,0,0,0.10);
   border-radius: var(--r-md);
-  padding: 12px;
+  padding: 14px;
   overflow: hidden; /* HARD STOP */
   min-width: 0;
   min-height: 0;
   box-shadow: none;
   display:flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .seo-vital.tone-good,
@@ -527,6 +531,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.seo-vital-v.is-empty{
+  color: rgba(197,206,231,0.72);
 }
 
 .seo-vital-sub{
@@ -772,16 +780,6 @@
   font-weight: 760;
 }
 
-.seo-favicon-metric-sub{
-  margin-top: 8px;
-  color: rgba(184,196,225,0.72);
-  font-size: 9px;
-  line-height: 1.3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .seo-favicon-metric-preview{
   display:flex;
   flex-direction: column;
@@ -791,11 +789,6 @@
 }
 
 .seo-favicon-metric-preview .seo-favicon-metric-k{
-  font-size: 8px;
-}
-
-.seo-favicon-metric-preview .seo-favicon-metric-sub{
-  margin-top: 6px;
   font-size: 8px;
 }
 
