@@ -15,13 +15,11 @@ const APP_RUNTIME_PROJECT_KEY = String(process.env.NEXT_PUBLIC_CAVBOT_PROJECT_KE
 const APP_RUNTIME_SITE_ID = String(
   process.env.NEXT_PUBLIC_CAVBOT_SITE_PUBLIC_ID || process.env.NEXT_PUBLIC_CAVBOT_SITE_ID || "",
 ).trim();
-const APP_RUNTIME_ANALYTICS_BOOTSTRAP = APP_RUNTIME_PROJECT_KEY
+const APP_RUNTIME_ANALYTICS_BOOTSTRAP = APP_RUNTIME_PROJECT_KEY && APP_RUNTIME_SITE_ID
   ? `(function(){window.CAVBOT_API_URL=window.CAVBOT_API_URL||"/api/embed/analytics";window.CAVBOT_PROJECT_KEY=window.CAVBOT_PROJECT_KEY||${JSON.stringify(APP_RUNTIME_PROJECT_KEY)};${
-      APP_RUNTIME_SITE_ID
-        ? `window.CAVBOT_SITE_PUBLIC_ID=window.CAVBOT_SITE_PUBLIC_ID||${JSON.stringify(
-            APP_RUNTIME_SITE_ID,
-          )};window.CAVBOT_SITE_ID=window.CAVBOT_SITE_ID||${JSON.stringify(APP_RUNTIME_SITE_ID)};`
-        : ""
+      `window.CAVBOT_SITE_PUBLIC_ID=window.CAVBOT_SITE_PUBLIC_ID||${JSON.stringify(
+        APP_RUNTIME_SITE_ID,
+      )};window.CAVBOT_SITE_ID=window.CAVBOT_SITE_ID||${JSON.stringify(APP_RUNTIME_SITE_ID)};`
     }})();`
   : null;
 

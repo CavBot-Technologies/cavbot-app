@@ -15,6 +15,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
+const WORKSPACES_ROUTE_TIMEOUT_MS = 3_000;
+
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
   Pragma: "no-cache",
@@ -64,6 +66,56 @@ function json(data: unknown, init?: number | ResponseInit, rid?: string) {
     ...resInit,
     headers: withBaseHeaders(resInit.headers, rid),
   });
+}
+
+async function withWorkspacesDeadline<T>(
+  promise: Promise<T>,
+  timeoutMs = WORKSPACES_ROUTE_TIMEOUT_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("WORKSPACES_ROUTE_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function fallbackProjectIdFromReq(req: NextRequest) {
+  return (
+    parseProjectId(req.cookies.get("cb_active_project_id")?.value) ??
+    parseProjectId(req.cookies.get("cb_pid")?.value)
+  );
+}
+
+function degradedProjectsFallback(req: NextRequest, rid: string) {
+  const fallbackProjectId = fallbackProjectIdFromReq(req);
+  if (!fallbackProjectId) return null;
+
+  return json(
+    {
+      projects: [
+        {
+          id: fallbackProjectId,
+          name: "Default Project",
+          slug: "default",
+          region: "US-WEST",
+          retentionDays: 30,
+          topSiteId: null,
+          createdAt: new Date(0).toISOString(),
+        },
+      ],
+      activeProjectId: fallbackProjectId,
+      degraded: true,
+      requestId: rid,
+    },
+    200,
+    rid,
+  );
 }
 
 function boolFromString(v: string | null): boolean | null {
@@ -231,13 +283,15 @@ export async function GET(req: NextRequest) {
     accountId = sess.accountId || null;
 
     const includeInactive = includeInactiveFromQuery(req);
-    const out = await listWorkspaces(req, accountId!, includeInactive);
+    const out = await withWorkspacesDeadline(listWorkspaces(req, accountId!, includeInactive));
     return json(out, 200, rid);
   } catch (e) {
     if (isApiAuthError(e)) {
       const { status, payload } = mapError(e);
       return json({ ...payload, requestId: rid }, status, rid);
     }
+    const degraded = degradedProjectsFallback(req, rid);
+    if (degraded) return degraded;
     return workspaceBootstrapFailureResponse(rid, accountId, e);
   }
 }
@@ -257,13 +311,15 @@ export async function POST(req: NextRequest) {
     const body = (await safeJsonBody<ListWorkspacesBody>(req)) || {};
     const includeInactive = Boolean(body.includeInactive) || includeInactiveFromQuery(req);
 
-    const out = await listWorkspaces(req, accountId!, includeInactive);
+    const out = await withWorkspacesDeadline(listWorkspaces(req, accountId!, includeInactive));
     return json(out, 200, rid);
   } catch (e) {
     if (isApiAuthError(e)) {
       const { status, payload } = mapError(e);
       return json({ ...payload, requestId: rid }, status, rid);
     }
+    const degraded = degradedProjectsFallback(req, rid);
+    if (degraded) return degraded;
     return workspaceBootstrapFailureResponse(rid, accountId, e);
   }
 }

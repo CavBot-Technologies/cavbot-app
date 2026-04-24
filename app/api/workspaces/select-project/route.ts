@@ -11,6 +11,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
+const SELECT_PROJECT_TIMEOUT_MS = 2_000;
+
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
   Pragma: "no-cache",
@@ -48,6 +50,23 @@ function json(data: unknown, init?: number | ResponseInit, rid?: string) {
   });
 }
 
+async function withSelectProjectDeadline<T>(
+  promise: Promise<T>,
+  timeoutMs = SELECT_PROJECT_TIMEOUT_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("WORKSPACE_SELECT_PROJECT_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function mapError(e: unknown): { status: number; payload: Record<string, unknown> } {
   if (isApiAuthError(e)) {
     const status = e.status || 401;
@@ -67,6 +86,7 @@ function parseProjectId(v: unknown): number | null {
 
 export async function POST(req: NextRequest) {
   const rid = requestIdFrom(req);
+  let pid: number | null = null;
 
   try {
     const sess = await requireLowRiskWorkspaceSession(req);
@@ -77,18 +97,20 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await readSanitizedJson(req, null as null | Record<string, unknown>);
-    const pid = parseProjectId(body?.projectId);
+    pid = parseProjectId(body?.projectId);
 
     if (!pid) {
       return json({ error: "BAD_REQUEST" as ApiErrorCode, requestId: rid }, 400, rid);
     }
 
     // VERIFY: project must belong to this session's account
-    const project = await findAccountWorkspaceProject({
-      accountId: sess.accountId!,
-      projectId: pid,
-      select: { id: true },
-    });
+    const project = await withSelectProjectDeadline(
+      findAccountWorkspaceProject({
+        accountId: sess.accountId!,
+        projectId: pid,
+        select: { id: true },
+      }),
+    );
 
     if (!project) {
       return json({ error: "NOT_FOUND" as ApiErrorCode, requestId: rid }, 404, rid);
@@ -112,6 +134,23 @@ export async function POST(req: NextRequest) {
 
     return res;
   } catch (e) {
+    if (isApiAuthError(e)) {
+      const { status, payload } = mapError(e);
+      return json({ ...payload, requestId: rid }, status, rid);
+    }
+    if (pid) {
+      const res = json({ ok: true, projectId: pid, degraded: true, requestId: rid }, 200, rid);
+      const cookieOpts = {
+        httpOnly: true,
+        sameSite: "lax" as const,
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 30,
+      };
+      res.cookies.set("cb_active_project_id", String(pid), cookieOpts);
+      res.cookies.set("cb_pid", String(pid), cookieOpts);
+      return res;
+    }
     const { status, payload } = mapError(e);
     return json({ ...payload, requestId: rid }, status, rid);
   }

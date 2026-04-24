@@ -5,7 +5,7 @@ import { isApiAuthError } from "@/lib/apiAuth";
 import { findAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
 import { getWorkspaceProjectScanStatus, getWorkspaceScanUsage } from "@/lib/workspaceScans.server";
 import { getPlanLimits, PLANS } from "@/lib/plans";
-import { requireWorkspaceSession } from "@/lib/workspaceAuth.server";
+import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
 
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
@@ -40,7 +40,7 @@ async function getParams(ctx: unknown): Promise<{ projectId?: string }> {
 
 export async function GET(req: NextRequest, ctx: unknown) {
   try {
-    const session = await requireWorkspaceSession(req);
+    const session = await requireWorkspaceResilientSession(req);
     const accountId = String(session.accountId || "").trim();
     if (!accountId) return json({ error: "UNAUTHORIZED" }, 401);
 

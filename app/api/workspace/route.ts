@@ -19,6 +19,8 @@ import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const WORKSPACE_ROUTE_TIMEOUT_MS = 3_000;
+
 type WorkspaceSite = {
   id: string;
   label: string;
@@ -35,6 +37,7 @@ type WorkspacePayload = {
   sites: WorkspaceSite[];
   topSiteId: string;
   activeSiteId: string;
+  degraded?: boolean;
 };
 
 const NO_STORE_HEADERS: Record<string, string> = {
@@ -73,6 +76,23 @@ function json<T>(payload: T, init?: number | ResponseInit, rid?: string) {
   });
 }
 
+async function withWorkspaceDeadline<T>(
+  promise: Promise<T>,
+  timeoutMs = WORKSPACE_ROUTE_TIMEOUT_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("WORKSPACE_ROUTE_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function cookieKeyActive(projectId: number) {
   return `cb_active_site_id__${projectId}`;
 }
@@ -108,6 +128,22 @@ function emptyPayload(): WorkspacePayload {
     sites: [],
     topSiteId: "",
     activeSiteId: "",
+  };
+}
+
+function fallbackWorkspacePayload(req: NextRequest) {
+  const projectId = parseFallbackProjectId(req);
+  if (!projectId) return null;
+
+  return {
+    ok: true,
+    projectId,
+    hasWorkspace: true,
+    hasSites: false,
+    sites: [],
+    topSiteId: "",
+    activeSiteId: "",
+    degraded: true,
   };
 }
 
@@ -187,10 +223,10 @@ export async function GET(req: NextRequest) {
     const sess = await requireWorkspaceResilientSession(req);
     accountId = sess.accountId || null;
 
-    const project = await resolveWorkspaceProjectForRead(req, sess);
+    const project = await withWorkspaceDeadline(resolveWorkspaceProjectForRead(req, sess));
     if (!project) return json(emptyPayload(), 200, rid);
 
-    const rows = await listActiveWorkspaceSites(project.id);
+    const rows = await withWorkspaceDeadline(listActiveWorkspaceSites(project.id));
 
     const sites: WorkspaceSite[] = rows.map((row) => ({
       id: row.id,
@@ -229,6 +265,8 @@ export async function GET(req: NextRequest) {
       const { status, payload } = mapAuthError(error);
       return json({ ...payload, requestId: rid }, status, rid);
     }
+    const fallback = fallbackWorkspacePayload(req);
+    if (fallback) return json({ ...fallback, requestId: rid }, 200, rid);
     return workspaceBootstrapFailureResponse(rid, accountId, error);
   }
 }
@@ -245,14 +283,14 @@ export async function POST(req: NextRequest) {
       | null
       | { projectId?: number | string; activeSiteId?: string };
 
-    const project = await resolveWorkspaceProjectForMutation(req, sess, body?.projectId);
+    const project = await withWorkspaceDeadline(resolveWorkspaceProjectForMutation(req, sess, body?.projectId));
     if (!project) {
       return json({ ok: false, error: "NOT_FOUND", requestId: rid }, 404, rid);
     }
 
     const activeSiteId = String(body?.activeSiteId || "").trim();
     if (activeSiteId) {
-      const site = await findActiveWorkspaceSite(project.id, activeSiteId);
+      const site = await withWorkspaceDeadline(findActiveWorkspaceSite(project.id, activeSiteId));
       if (!site) return json({ ok: false, error: "SITE_NOT_FOUND", requestId: rid }, 404, rid);
     }
 
@@ -271,6 +309,8 @@ export async function POST(req: NextRequest) {
       const { status, payload } = mapAuthError(error);
       return json({ ...payload, requestId: rid }, status, rid);
     }
+    const fallback = fallbackWorkspacePayload(req);
+    if (fallback) return json({ ...fallback, requestId: rid }, 200, rid);
     return workspaceBootstrapFailureResponse(rid, accountId, error);
   }
 }
@@ -283,7 +323,7 @@ export async function DELETE(req: NextRequest) {
     const sess = await requireWorkspaceResilientSession(req);
     accountId = sess.accountId || null;
 
-    const project = await resolveWorkspaceProjectForMutation(req, sess);
+    const project = await withWorkspaceDeadline(resolveWorkspaceProjectForMutation(req, sess));
     if (!project) return json({ ok: true, requestId: rid }, 200, rid);
 
     const res = json({ ok: true, requestId: rid }, 200, rid);
@@ -301,6 +341,8 @@ export async function DELETE(req: NextRequest) {
       const { status, payload } = mapAuthError(error);
       return json({ ...payload, requestId: rid }, status, rid);
     }
+    const fallback = fallbackWorkspacePayload(req);
+    if (fallback) return json({ ...fallback, requestId: rid }, 200, rid);
     return workspaceBootstrapFailureResponse(rid, accountId, error);
   }
 }

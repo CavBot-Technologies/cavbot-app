@@ -13,6 +13,8 @@ import { requireLowRiskWorkspaceSession } from "@/lib/workspaceAuth.server";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+const WORKSPACE_SELECTION_TIMEOUT_MS = 2_000;
+
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
   Pragma: "no-cache",
@@ -21,6 +23,7 @@ const NO_STORE_HEADERS: Record<string, string> = {
 };
 
 const KEY_ACTIVE_PROJECT_ID = "cb_active_project_id";
+const KEY_LEGACY_PROJECT_ID = "cb_pid";
 const KEY_ACTIVE_SITE_ORIGIN_PREFIX = "cb_active_site_origin__";
 const KEY_TOP_SITE_ORIGIN_PREFIX = "cb_top_site_origin__";
 const KEY_ACTIVE_SITE_ID_PREFIX = "cb_active_site_id__";
@@ -46,6 +49,23 @@ function json(payload: WorkspaceSelectionPayload, init?: number | ResponseInit, 
     ...resInit,
     headers: withBaseHeaders(resInit.headers, rid),
   });
+}
+
+async function withWorkspaceSelectionDeadline<T>(
+  promise: Promise<T>,
+  timeoutMs = WORKSPACE_SELECTION_TIMEOUT_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("WORKSPACE_SELECTION_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function parseProjectId(raw: unknown): number | null {
@@ -118,26 +138,36 @@ type WorkspaceSelectionBody = {
 
 export async function POST(req: NextRequest) {
   const rid = requestIdFrom(req);
+  let fallbackProjectId: number | null = null;
+  let body: WorkspaceSelectionBody | null = null;
 
   try {
     const session = await requireLowRiskWorkspaceSession(req);
 
-    const body = (await readSanitizedJson(req, ({}))) as WorkspaceSelectionBody;
+    body = (await readSanitizedJson(req, ({}))) as WorkspaceSelectionBody;
+    fallbackProjectId =
+      parseProjectId(body?.projectId) ??
+      parseProjectId(req.cookies.get(KEY_ACTIVE_PROJECT_ID)?.value) ??
+      parseProjectId(req.cookies.get(KEY_LEGACY_PROJECT_ID)?.value);
 
     const requestedProjectId = parseProjectId(body?.projectId);
     const project = requestedProjectId
-      ? await findAccountWorkspaceProject({
-          accountId: session.accountId!,
-          projectId: requestedProjectId,
-          select: { id: true },
-        })
-      : await resolveAccountWorkspaceProject({
-          accountId: session.accountId!,
-          select: { id: true },
-          requestedProjectId: parseProjectId(req.cookies.get(KEY_ACTIVE_PROJECT_ID)?.value),
-          fallbackProjectId: parseProjectId(req.cookies.get("cb_pid")?.value),
-          ensureActive: true,
-        });
+      ? await withWorkspaceSelectionDeadline(
+          findAccountWorkspaceProject({
+            accountId: session.accountId!,
+            projectId: requestedProjectId,
+            select: { id: true },
+          }),
+        )
+      : await withWorkspaceSelectionDeadline(
+          resolveAccountWorkspaceProject({
+            accountId: session.accountId!,
+            select: { id: true },
+            requestedProjectId: parseProjectId(req.cookies.get(KEY_ACTIVE_PROJECT_ID)?.value),
+            fallbackProjectId: parseProjectId(req.cookies.get(KEY_LEGACY_PROJECT_ID)?.value),
+            ensureActive: true,
+          }),
+        );
 
     if (!project) {
       return json({ error: "PROJECT_NOT_FOUND", requestId: rid }, 404, rid);
@@ -190,12 +220,51 @@ export async function POST(req: NextRequest) {
     );
 
     setCookie(res, KEY_ACTIVE_PROJECT_ID, pidStr);
+    setCookie(res, KEY_LEGACY_PROJECT_ID, pidStr);
     setCookie(res, `${KEY_ACTIVE_SITE_ID_PREFIX}${pidStr}`, activeSiteId);
     setCookie(res, `${KEY_ACTIVE_SITE_ORIGIN_PREFIX}${pidStr}`, activeSiteOrigin || "");
     setCookie(res, `${KEY_TOP_SITE_ORIGIN_PREFIX}${pidStr}`, topSiteOrigin || "");
 
     return res;
   } catch (e: unknown) {
+    if (isApiAuthError(e)) {
+      const { status, payload } = toPublicError(e);
+      return json({ ...payload, requestId: rid }, status, rid);
+    }
+    if (fallbackProjectId) {
+      const pidStr = String(fallbackProjectId);
+      const activeSiteId = String(body?.activeSiteId ?? "").trim();
+      const topSiteId = String(body?.topSiteId ?? "").trim();
+      let activeSiteOrigin: string | undefined = undefined;
+      let topSiteOrigin: string | undefined = undefined;
+      try {
+        activeSiteOrigin = normalizeMaybeOrigin(body?.activeSiteOrigin);
+      } catch {}
+      try {
+        topSiteOrigin = normalizeMaybeOrigin(body?.topSiteOrigin);
+      } catch {}
+
+      const res = json(
+        {
+          ok: true,
+          projectId: fallbackProjectId,
+          activeSiteId: activeSiteId || undefined,
+          activeSiteOrigin: activeSiteOrigin || undefined,
+          topSiteId: topSiteId || undefined,
+          topSiteOrigin: topSiteOrigin || undefined,
+          degraded: true,
+          requestId: rid,
+        },
+        200,
+        rid,
+      );
+      setCookie(res, KEY_ACTIVE_PROJECT_ID, pidStr);
+      setCookie(res, KEY_LEGACY_PROJECT_ID, pidStr);
+      setCookie(res, `${KEY_ACTIVE_SITE_ID_PREFIX}${pidStr}`, activeSiteId);
+      setCookie(res, `${KEY_ACTIVE_SITE_ORIGIN_PREFIX}${pidStr}`, activeSiteOrigin || "");
+      setCookie(res, `${KEY_TOP_SITE_ORIGIN_PREFIX}${pidStr}`, topSiteOrigin || "");
+      return res;
+    }
     const { status, payload } = toPublicError(e);
     return json({ ...payload, requestId: rid }, status, rid);
   }

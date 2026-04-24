@@ -867,6 +867,41 @@ async function apiJSON<T>(url: string, init?: RequestInit): Promise<T> {
   throw lastFetchError || new ApiRequestError(`REQUEST_RETRY_EXHAUSTED for ${url}`);
 }
 
+async function fetchJsonSoft<T>(
+  url: string,
+  init?: RequestInit & { timeoutMs?: number },
+): Promise<{ ok: boolean; status: number; data: T | null }> {
+  const timeoutMs = Number(init?.timeoutMs || 0) > 0 ? Number(init?.timeoutMs) : 3_500;
+  const controller = new AbortController();
+  const forwardAbort = () => controller.abort();
+  if (init?.signal) {
+    if (init.signal.aborted) controller.abort();
+    else init.signal.addEventListener("abort", forwardAbort, { once: true });
+  }
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      credentials: "include",
+      cache: "no-store",
+      ...init,
+      signal: controller.signal,
+      headers: {
+        ...(init?.headers || {}),
+        accept: "application/json",
+        ...(init?.body ? { "content-type": "application/json" } : {}),
+      },
+    });
+    const data = await res.json().catch(() => null);
+    return { ok: res.ok, status: res.status, data: data as T | null };
+  } catch {
+    return { ok: false, status: 0, data: null };
+  } finally {
+    window.clearTimeout(timer);
+    if (init?.signal) init.signal.removeEventListener("abort", forwardAbort);
+  }
+}
+
 
 async function persistActiveProjectCookie(projectId: number) {
   if (!Number.isFinite(projectId) || projectId <= 0) return;
@@ -1609,15 +1644,8 @@ function CommandDeckPageInner() {
       method: "GET",
     });
 
-    if (data.degraded) {
-      throw new ApiRequestError("Workspace bootstrap returned a degraded response.", {
-        code: "WORKSPACE_BOOTSTRAP_FAILED",
-        requestId: typeof data.requestId === "string" ? data.requestId : undefined,
-        retryable: false,
-      });
-    }
-
-    const list = Array.isArray(data.projects) ? data.projects : [];
+    const cachedProjects = readCachedWorkspaceProjects();
+    const list = Array.isArray(data.projects) && data.projects.length ? data.projects : cachedProjects;
     if (!list.length) {
       throw new ApiRequestError("Workspace bootstrap returned no active project.", {
         code: "WORKSPACE_BOOTSTRAP_FAILED",
@@ -3041,20 +3069,49 @@ function ProfileCard() {
 
     (async () => {
       try {
-        const [pRes, meRes, teamRes] = await Promise.all([
-          fetch("/api/settings/account", { method: "GET", cache: "no-store", signal: ctrl.signal }),
-          fetch("/api/auth/me", { method: "GET", cache: "no-store", signal: ctrl.signal }),
-          fetch("/api/members", { method: "GET", cache: "no-store", signal: ctrl.signal }),
+        const [pResult, meResult, teamResult, billingResult] = await Promise.all([
+          fetchJsonSoft<ProfileApiResponse>("/api/settings/account", { method: "GET", signal: ctrl.signal, timeoutMs: 4_000 }),
+          fetchJsonSoft<AuthMeResponse>("/api/auth/me", { method: "GET", signal: ctrl.signal, timeoutMs: 3_500 }),
+          fetchJsonSoft<MembersApiResponse>("/api/members", { method: "GET", signal: ctrl.signal, timeoutMs: 4_000 }),
+          fetchJsonSoft<{
+            computed?: { currentPlanId?: string | null; seatLimit?: number | null };
+          }>("/api/billing/summary", { method: "GET", signal: ctrl.signal, timeoutMs: 3_500 }),
         ]);
-
-
-        const pJson = (await pRes.json().catch(() => ({}))) as ProfileApiResponse;
-        const meJson = (await meRes.json().catch(() => ({}))) as AuthMeResponse;
-        const teamJson = (await teamRes.json().catch(() => ({}))) as MembersApiResponse;
         if (!alive) return;
 
+        const pResOk = pResult.ok;
+        const meResOk = meResult.ok;
+        const teamResOk = teamResult.ok;
+        const pJson = (pResult.data || {}) as ProfileApiResponse;
+        const meJson = (meResult.data || {}) as AuthMeResponse;
+        const teamJson = (teamResult.data || {}) as MembersApiResponse;
 
-        if (pRes.ok && pJson?.ok) {
+        const billingPlanIdRaw = String(billingResult.data?.computed?.currentPlanId || "").trim().toLowerCase();
+        const billingPlanId: PlanId | null =
+          billingResult.ok && (billingPlanIdRaw === "free" || billingPlanIdRaw === "premium" || billingPlanIdRaw === "premium_plus")
+            ? (billingPlanIdRaw as PlanId)
+            : null;
+
+        if (billingPlanId) {
+          const billingPlanLabel =
+            billingPlanId === "premium_plus" ? "PREMIUM+" : billingPlanId === "premium" ? "PREMIUM" : "FREE";
+          const billingPlanDetail = {
+            planKey: billingPlanId,
+            planLabel: billingPlanLabel,
+            trialActive: false,
+          };
+          try {
+            window.dispatchEvent(new CustomEvent("cb:plan", { detail: billingPlanDetail }));
+            globalThis.__cbLocalStore.setItem("cb_plan_context_v1", JSON.stringify(billingPlanDetail));
+          } catch {}
+          setPlan(billingPlanLabel);
+          const billingSeatLimit = Number(PLANS[billingPlanId]?.limits?.seats ?? 0);
+          if (billingSeatLimit > 0) {
+            setSeatLimit(billingSeatLimit);
+          }
+        }
+
+        if (pResOk && pJson?.ok) {
           const name = String(pJson?.profile?.fullName || "").trim();
           const em = String(pJson?.profile?.email || "").trim();
           const bi = String(pJson?.profile?.bio || "").trim();
@@ -3089,7 +3146,7 @@ function ProfileCard() {
         }
 
 
-        if (meRes.ok && meJson?.ok) {
+        if (meResOk && meJson?.ok) {
           const planKey = resolvePlanIdFromTier(meJson?.account);
           const planLabel = planTierLabelFromAccount(meJson?.account);
           const planLimits = getPlanLimits(planKey);
@@ -3117,7 +3174,7 @@ function ProfileCard() {
         }
 
 
-        if (teamRes.ok && teamJson?.ok) {
+        if (teamResOk && teamJson?.ok) {
           const members = Array.isArray(teamJson?.members) ? teamJson.members : [];
           const invites = Array.isArray(teamJson?.invites) ? teamJson.invites : [];
 
