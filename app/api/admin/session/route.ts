@@ -71,38 +71,49 @@ async function readAdminSessionStaff(userId: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await readVerifiedSession(req);
-  if (!session) {
+  try {
+    const session = await readVerifiedSession(req);
+    if (!session) {
+      return json({ ok: true, authenticated: false, adminAuthenticated: false });
+    }
+    requireUser(session);
+
+    const [adminSession, staff] = await Promise.all([
+      getAdminSession(req).catch((error) => {
+        console.error("[admin/session] getAdminSession failed", error);
+        return null;
+      }),
+      readAdminSessionStaff(session.sub).catch((error) => {
+        console.error("[admin/session] readAdminSessionStaff failed", error);
+        return null;
+      }),
+    ]);
+
+    return json({
+      ok: true,
+      authenticated: true,
+      adminAuthenticated: Boolean(adminSession && staff && staff.id === adminSession.staffId),
+      staffEligible: Boolean(staff && staff.status === "ACTIVE"),
+      staff: staff
+          ? {
+            id: staff.id,
+            userId: staff.userId,
+            email: staff.userEmail,
+            displayName: staff.userDisplayName || staff.userFullName || staff.userEmail || maskStaffCode(staff.staffCode),
+            avatarImage: staff.userAvatarImage || null,
+            staffCode: maskStaffCode(staff.staffCode),
+            department: resolveAdminDepartment(staff),
+            systemRole: staff.systemRole,
+            positionTitle: staff.positionTitle,
+            status: staff.status,
+            lastAdminLoginAt: staff.lastAdminLoginAt ? new Date(staff.lastAdminLoginAt).toISOString() : null,
+          }
+        : null,
+    });
+  } catch (error) {
+    console.error("[admin/session] failed", error);
     return json({ ok: true, authenticated: false, adminAuthenticated: false });
   }
-  requireUser(session);
-
-  const [adminSession, staff] = await Promise.all([
-    getAdminSession(req),
-    readAdminSessionStaff(session.sub),
-  ]);
-
-  return json({
-    ok: true,
-    authenticated: true,
-    adminAuthenticated: Boolean(adminSession && staff && staff.id === adminSession.staffId),
-    staffEligible: Boolean(staff && staff.status === "ACTIVE"),
-    staff: staff
-        ? {
-          id: staff.id,
-          userId: staff.userId,
-          email: staff.userEmail,
-          displayName: staff.userDisplayName || staff.userFullName || staff.userEmail || maskStaffCode(staff.staffCode),
-          avatarImage: staff.userAvatarImage || null,
-          staffCode: maskStaffCode(staff.staffCode),
-          department: resolveAdminDepartment(staff),
-          systemRole: staff.systemRole,
-          positionTitle: staff.positionTitle,
-          status: staff.status,
-          lastAdminLoginAt: staff.lastAdminLoginAt ? new Date(staff.lastAdminLoginAt).toISOString() : null,
-        }
-      : null,
-  });
 }
 
 export async function DELETE(req: NextRequest) {
