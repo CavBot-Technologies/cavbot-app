@@ -509,15 +509,14 @@ export async function POST(req: Request) {
         memberRole,
         sessionVersion: resolveIssuedSessionVersion(userAuth.sessionVersion),
       });
-
-
-      touchUserLastLogin(authClient, user.id).catch(() => {});
-
-
       const res = json({ ok: true, accountId: active.accountId, memberRole }, 200);
 
 
       writeSessionCookie(req, res, token);
+
+      touchUserLastLogin(getAuthPool(), user.id).catch((error) => {
+        console.warn("[auth/login] non-fatal last login touch failure", error);
+      });
 
       try {
         const firstProject = await findFirstProjectIdByAccount(authClient, active.accountId);
