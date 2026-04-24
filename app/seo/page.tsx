@@ -1104,7 +1104,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
                   <p className="cb-sub">Heading integrity and content density.</p>
                 </div>
               </div>
-              <div className="seo-mini-grid">
+              <div className="seo-mini-grid seo-mini-grid-stack">
                 <div className={`seo-mini tone-${missingH1Tone}`}>
                   <div className="seo-mini-k">Missing H1</div>
                   <div className="seo-mini-v">{fmtPct(seo.missingH1Pct)}</div>
@@ -1117,7 +1117,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
                   <div className="seo-mini-sub">{fmtInt(seo.multipleH1Count)} pages affected</div>
                 </div>
 
-                <div className={`seo-mini tone-${thinTone}`}>
+                <div className={`seo-mini seo-mini-wide tone-${thinTone}`}>
                   <div className="seo-mini-k">Thin Content</div>
                   <div className="seo-mini-v">{fmtPct(seo.thinContentPct)}</div>
                   <div className="seo-mini-sub">{fmtInt(seo.thinContentCount)} pages affected</div>
