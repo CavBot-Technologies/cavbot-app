@@ -3,7 +3,6 @@ import type { Prisma } from "@prisma/client";
 import { ApiAuthError, requireAccountContext, requireSession, requireUser } from "@/lib/apiAuth";
 import {
   cavcloudErrorResponse,
-  isCavCloudServiceUnavailableError,
   jsonNoStore,
   withCavCloudDeadline,
 } from "@/lib/cavcloud/http.server";
@@ -84,12 +83,7 @@ function buildStaticDegradedSummaryResponse() {
   return jsonNoStore(degradedSummaryPayload(), 200);
 }
 
-async function buildDegradedSummaryResponse(req: Request) {
-  const sess = await requireSession(req);
-  requireAccountContext(sess);
-  requireUser(sess);
-
-  const accountId = String(sess.accountId || "");
+async function buildDegradedSummaryResponseForAccount(accountId: string) {
   try {
     const plan = await withCavCloudDeadline(
       getEffectiveAccountPlanContext(accountId).catch(() => null),
@@ -105,8 +99,18 @@ async function buildDegradedSummaryResponse(req: Request) {
   }
 }
 
+async function buildDegradedSummaryResponse(req: Request) {
+  const sess = await requireSession(req);
+  requireAccountContext(sess);
+  requireUser(sess);
+
+  const accountId = String(sess.accountId || "");
+  return buildDegradedSummaryResponseForAccount(accountId);
+}
+
 export async function GET(req: Request) {
   let sessionValidated = false;
+  let validatedAccountId: string | null = null;
 
   try {
     const sess = await requireSession(req);
@@ -115,6 +119,7 @@ export async function GET(req: Request) {
     sessionValidated = true;
 
     const accountId = String(sess.accountId || "").trim();
+    validatedAccountId = accountId;
 
     const imageWhere: Prisma.CavCloudFileWhereInput = {
       accountId,
@@ -188,11 +193,8 @@ export async function GET(req: Request) {
     if (err instanceof ApiAuthError) {
       return cavcloudErrorResponse(err, "Failed to load CavCloud summary.");
     }
-    if (sessionValidated && isCavCloudServiceUnavailableError(err)) {
-      return buildStaticDegradedSummaryResponse();
-    }
-    if (sessionValidated) {
-      return buildStaticDegradedSummaryResponse();
+    if (sessionValidated && validatedAccountId) {
+      return buildDegradedSummaryResponseForAccount(validatedAccountId);
     }
     if (
       isMissingCavCloudTablesError(err) ||

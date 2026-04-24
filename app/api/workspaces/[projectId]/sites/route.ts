@@ -39,6 +39,8 @@ import { requestInitialSiteScanBestEffort } from "@/lib/scanner";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const WORKSPACE_SITES_TIMEOUT_MS = 3_500;
+
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
   Pragma: "no-cache",
@@ -66,6 +68,23 @@ function json(data: unknown, init?: number | ResponseInit, rid?: string) {
     ...resInit,
     headers: withBaseHeaders(resInit.headers, rid),
   });
+}
+
+async function withWorkspaceSitesDeadline<T>(
+  promise: Promise<T>,
+  timeoutMs = WORKSPACE_SITES_TIMEOUT_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("WORKSPACE_SITES_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function parseProjectId(raw: string): number | null {
@@ -271,22 +290,30 @@ async function createProjectNoticeBestEffort(projectId: number, origin: string, 
 
 export async function GET(req: Request, ctx: unknown) {
   const rid = requestIdFrom(req);
+  let projectId: number | null = null;
 
   try {
     const sess = await requireWorkspaceSession(req);
 
     const params = await getParams(ctx);
-    const projectId = parseProjectId(params?.projectId || "");
+    projectId = parseProjectId(params?.projectId || "");
     if (!projectId) return json({ error: "BAD_PROJECT", requestId: rid }, 400, rid);
 
-    const project = await findOwnedWorkspaceProjectForSites(sess.accountId, projectId);
-    if (!project) return json({ error: "NOT_FOUND", requestId: rid }, 404, rid);
+    const payload = await withWorkspaceSitesDeadline((async () => {
+      const project = await findOwnedWorkspaceProjectForSites(sess.accountId, projectId!);
+      if (!project) return null;
 
-    const sites = await listActiveWorkspaceSites(project.id, "asc");
+      const sites = await listActiveWorkspaceSites(project.id, "asc");
+      return { topSiteId: project.topSiteId, sites };
+    })());
 
-    return json({ topSiteId: project.topSiteId, sites }, 200, rid);
+    if (!payload) return json({ error: "NOT_FOUND", requestId: rid }, 404, rid);
+    return json(payload, 200, rid);
   } catch (e) {
     if (isApiAuthError(e)) return json({ error: e.code, requestId: rid }, e.status, rid);
+    if (projectId) {
+      return json({ topSiteId: null, sites: [], degraded: true, requestId: rid }, 200, rid);
+    }
     return json({ error: "SERVER_ERROR", requestId: rid }, 500, rid);
   }
 }
