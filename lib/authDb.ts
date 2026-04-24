@@ -384,10 +384,7 @@ export function getAuthPool() {
   const pool = new pg.Pool({
     connectionString: databaseUrl(),
   });
-
-  if (process.env.NODE_ENV !== "production") {
-    global.__cavbotAuthPool = pool;
-  }
+  global.__cavbotAuthPool = pool;
 
   return pool;
 }
