@@ -212,7 +212,7 @@ export async function GET(req: Request) {
       return expireSessionCookie(req, res);
     }
 
-    const sessionView = await readAuthSessionView(sess, 1_500);
+    const sessionView = await readAuthSessionView(sess);
     const sessionDisplayName =
       sessionView?.user.displayName
       || sessionView?.user.fullName

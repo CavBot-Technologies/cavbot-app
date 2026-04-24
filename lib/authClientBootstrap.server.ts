@@ -54,7 +54,7 @@ export async function readClientAuthBootstrapServerState(): Promise<CavbotClient
     if (!userId || !accountId || (memberRole !== "OWNER" && memberRole !== "ADMIN" && memberRole !== "MEMBER")) {
       return { authenticated: false, session: null, profile: null, plan: null, ts: Date.now() };
     }
-    const view = await readAuthSessionView(sess, 1_500);
+    const view = await readAuthSessionView(sess);
     const plan = view
       ? (() => {
           const planId: PlanId =

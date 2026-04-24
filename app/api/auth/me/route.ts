@@ -160,7 +160,7 @@ export async function GET(req: Request) {
       return json({ ok: true, authenticated: true, degraded: false, session: sess, capabilities: { aiReady: false } }, 200);
     }
 
-    const view = await readAuthSessionView(sess, AUTH_ME_TIMEOUT_MS);
+    const view = await readAuthSessionView(sess);
     if (!view) {
       return json(buildSessionFallbackPayload(sess), 200);
     }

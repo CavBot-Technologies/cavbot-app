@@ -18,8 +18,6 @@ import {
 import { resolvePlanIdFromTier } from "@/lib/plans";
 import { normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 
-const DEFAULT_AUTH_SESSION_VIEW_TIMEOUT_MS = 1_800;
-
 function s(value: unknown) {
   return String(value ?? "").trim();
 }
@@ -57,23 +55,6 @@ function asDate(value: unknown, fallback?: Date | null) {
   if (value instanceof Date) return value;
   const parsed = new Date(String(value));
   return Number.isFinite(parsed.getTime()) ? parsed : fallback ?? null;
-}
-
-async function withDeadline<T>(
-  promise: Promise<T>,
-  timeoutMs = DEFAULT_AUTH_SESSION_VIEW_TIMEOUT_MS,
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error("AUTH_SESSION_VIEW_TIMEOUT")), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
 }
 
 export type AuthSessionViewUser = AuthUser & {
@@ -173,7 +154,6 @@ function computeTrialDaysLeft(account: {
 
 export async function readAuthSessionView(
   session: CavbotSession,
-  timeoutMs = DEFAULT_AUTH_SESSION_VIEW_TIMEOUT_MS,
 ): Promise<AuthSessionView | null> {
   if (session.systemRole !== "user") return null;
 
@@ -182,80 +162,80 @@ export async function readAuthSessionView(
   if (!userId || !accountId) return null;
 
   try {
-    return await withDeadline((async () => {
-      const pool = getAuthPool();
-      let degraded = false;
+    const pool = getAuthPool();
+    let degraded = false;
 
-      const [userRow, membershipRow, accountRow, subscriptionRow] = await Promise.all([
-        findUserById(pool, userId).catch(() => {
-          degraded = true;
-          return null;
-        }),
-        findSessionMembership(pool, userId, accountId).catch(() => {
-          degraded = true;
-          return null;
-        }),
-        findAccountById(pool, accountId).catch(() => {
-          degraded = true;
-          return null;
-        }),
-        findLatestEntitledSubscription(accountId, pool).catch(() => {
-          degraded = true;
-          return null;
-        }),
-      ]);
+    const membershipRow = await findSessionMembership(pool, userId, accountId).catch(() => {
+      degraded = true;
+      return null;
+    });
 
-      const user = fallbackUserFromSession({
-        userId,
-        session,
-        membership: membershipRow,
-        user: userRow,
+    const userRow = await findUserById(pool, userId).catch(() => {
+      degraded = true;
+      return null;
+    });
+
+    const user = fallbackUserFromSession({
+      userId,
+      session,
+      membership: membershipRow,
+      user: userRow,
+    });
+
+    let account = fallbackAccountFromSession({
+      accountId,
+      membership: membershipRow,
+      tier: membershipRow?.accountTier || "FREE",
+    });
+
+    const accountRow = await findAccountById(pool, accountId).catch(() => {
+      degraded = true;
+      return null;
+    });
+
+    if (accountRow) {
+      const subscriptionRow = await findLatestEntitledSubscription(accountId, pool).catch(() => {
+        degraded = true;
+        return null;
       });
+      account = {
+        id: accountRow.id,
+        name: accountRow.name ?? membershipRow?.accountName ?? null,
+        slug: accountRow.slug ?? membershipRow?.accountSlug ?? null,
+        tier: s(accountRow.tier).toUpperCase() || account.tier,
+        tierEffective: planTierTokenFromPlanId(
+          resolveEffectivePlanId({
+            account: accountRow,
+            subscription: subscriptionRow,
+          }),
+        ),
+        createdAt: accountRow.createdAt,
+        trialSeatActive: Boolean(accountRow.trialSeatActive),
+        trialStartedAt: asDate(accountRow.trialStartedAt),
+        trialEndsAt: asDate(accountRow.trialEndsAt),
+        trialEverUsed: Boolean(accountRow.trialEverUsed),
+        trialActive: isTrialSeatEntitled(accountRow),
+        trialDaysLeft: isTrialSeatEntitled(accountRow) ? computeTrialDaysLeft(accountRow) : 0,
+      };
+    }
 
-      const account = accountRow
-        ? {
-            id: accountRow.id,
-            name: accountRow.name ?? membershipRow?.accountName ?? null,
-            slug: accountRow.slug ?? membershipRow?.accountSlug ?? null,
-            tier: s(accountRow.tier).toUpperCase() || "FREE",
-            tierEffective: planTierTokenFromPlanId(
-              resolveEffectivePlanId({
-                account: accountRow,
-                subscription: subscriptionRow,
-              }),
-            ),
-            createdAt: accountRow.createdAt,
-            trialSeatActive: Boolean(accountRow.trialSeatActive),
-            trialStartedAt: asDate(accountRow.trialStartedAt),
-            trialEndsAt: asDate(accountRow.trialEndsAt),
-            trialEverUsed: Boolean(accountRow.trialEverUsed),
-            trialActive: isTrialSeatEntitled(accountRow),
-            trialDaysLeft: isTrialSeatEntitled(accountRow) ? computeTrialDaysLeft(accountRow) : 0,
-          }
-        : fallbackAccountFromSession({
-            accountId,
-            membership: membershipRow,
-            tier: membershipRow?.accountTier || "FREE",
-          });
-
-      return {
-        degraded,
-        user,
-        membership: membershipRow ?? {
-          id: "",
-          accountId,
-          userId,
-          role: normalizeRole(session.memberRole),
-          createdAt: new Date(0),
-          userEmail: user.email,
-          userDisplayName: user.displayName,
-          accountName: account.name || "",
-          accountSlug: account.slug || "",
-          accountTier: account.tier,
-        },
-        account,
-      } satisfies AuthSessionView;
-    })(), timeoutMs);
+    return {
+      degraded,
+      user,
+      membership: membershipRow ?? {
+        id: "",
+        accountId,
+        userId,
+        role: normalizeRole(session.memberRole),
+        createdAt: new Date(0),
+        userEmail: user.email,
+        userDisplayName: user.displayName,
+        accountName: account.name || "",
+        accountSlug: account.slug || "",
+        accountTier: account.tier,
+      },
+      account,
+    } satisfies AuthSessionView;
   } catch {
     return {
       degraded: true,

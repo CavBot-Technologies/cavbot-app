@@ -19,9 +19,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const BILLING_SUMMARY_TIMEOUT_MS = 2_800;
-const BILLING_OPTIONAL_TIMEOUT_MS = 900;
-
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
   Pragma: "no-cache",
@@ -32,20 +29,6 @@ const NO_STORE_HEADERS: Record<string, string> = {
 function json<T>(data: T, init?: number | ResponseInit) {
   const resInit: ResponseInit = typeof init === "number" ? { status: init } : init ?? {};
   return NextResponse.json(data, { ...resInit, headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS } });
-}
-
-async function withBillingDeadline<T>(promise: Promise<T>, timeoutMs = BILLING_SUMMARY_TIMEOUT_MS): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error("BILLING_SUMMARY_TIMEOUT")), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
 }
 
 function toIsoOrNull(d: Date | null | undefined) {
@@ -181,7 +164,7 @@ function buildFallbackBillingSummary(args: {
 
 export async function GET(req: NextRequest) {
   try {
-    const sess = await withBillingDeadline(readVerifiedSession(req), 1_000).catch(() => null);
+    const sess = await readVerifiedSession(req).catch(() => null);
     if (!sess || sess.systemRole !== "user") {
       return json({ ok: false, error: "UNAUTHORIZED", message: "UNAUTHORIZED" }, 401);
     }
@@ -190,8 +173,8 @@ export async function GET(req: NextRequest) {
     const userId = String(sess.sub || "").trim();
     if (!accountId) return json(buildEmptyBillingSummary(), 200);
 
-    const view = await readAuthSessionView(sess, 1_600);
-    const account = await withBillingDeadline(readBillingAccount(accountId), 1_600).catch(() => null) as SummaryAccountRecord | null;
+    const view = await readAuthSessionView(sess);
+    const account = await readBillingAccount(accountId).catch(() => null) as SummaryAccountRecord | null;
 
     if (!account) {
       if (view?.account) {
@@ -208,38 +191,20 @@ export async function GET(req: NextRequest) {
       return json(buildEmptyBillingSummary(), 200);
     }
 
-    const planResolution = await withBillingDeadline(
-      resolveBillingPlanResolution({
-        accountId,
-        account,
-        repair: false,
-      }),
-      1_600,
-    ).catch(() => null);
+    const planResolution = await resolveBillingPlanResolution({
+      accountId,
+      account,
+      repair: false,
+    }).catch(() => null);
 
     const currentPlanId =
       planResolution?.currentPlanId
       ?? resolvePlanIdFromTier(view?.account.tierEffective || account.tier || "FREE");
     const planDef = PLANS[currentPlanId];
 
-    const usageMetrics = await withBillingDeadline(
-      readBillingUsageMetrics(accountId).catch(() => ({ seatsUsed: 0, websitesUsed: 0 })),
-      BILLING_OPTIONAL_TIMEOUT_MS,
-    ).catch(() => ({ seatsUsed: 0, websitesUsed: 0 }));
+    const usageMetrics = await readBillingUsageMetrics(accountId).catch(() => ({ seatsUsed: 0, websitesUsed: 0 }));
 
-    const latestStripeSub = await withBillingDeadline(
-      readLatestBillingSubscription(accountId, { provider: "stripe" }).catch(() => null),
-      BILLING_OPTIONAL_TIMEOUT_MS,
-    ).catch(() => null);
-
-    const latestAnySub = !latestStripeSub
-      ? await withBillingDeadline(
-          readLatestBillingSubscription(accountId).catch(() => null),
-          BILLING_OPTIONAL_TIMEOUT_MS,
-        ).catch(() => null)
-      : null;
-
-    const subRow = latestStripeSub || latestAnySub;
+    const subRow = await readLatestBillingSubscription(accountId).catch(() => null);
 
     const seatLimit = limitToNullable(planDef.limits.seats);
     const websiteLimit = limitToNullable(planDef.limits.websites);
@@ -284,15 +249,12 @@ export async function GET(req: NextRequest) {
     const providerConnected = Boolean(subscription?.provider === "stripe" || account.stripeCustomerId);
     const portalReady = Boolean(account.stripeCustomerId);
     const qwenCoderUsage = userId
-      ? await withBillingDeadline(
-          getQwenCoderPopoverState({
-            accountId,
-            userId,
-            planId: currentPlanId,
-            sessionId: null,
-          }).catch(() => null),
-          BILLING_OPTIONAL_TIMEOUT_MS,
-        ).catch(() => null)
+      ? await getQwenCoderPopoverState({
+          accountId,
+          userId,
+          planId: currentPlanId,
+          sessionId: null,
+        }).catch(() => null)
       : null;
 
     return json(
