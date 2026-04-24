@@ -81,11 +81,11 @@ function poolConfig(connectionString: string): pg.PoolConfig {
 
   const config: pg.PoolConfig = {
     connectionString,
-    // Keep the edge pool intentionally small to avoid connection storms against the
-    // remote Postgres proxy, but leave enough time for short bursts and queueing.
-    max: envPositiveInt("CAVBOT_PG_POOL_MAX", workerd ? 1 : 10),
+    // Keep the edge pool bounded, but large enough that one slow request cannot
+    // starve every other auth/bootstrap read in the same isolate.
+    max: envPositiveInt("CAVBOT_PG_POOL_MAX", workerd ? 4 : 10),
     idleTimeoutMillis: envPositiveInt("CAVBOT_PG_IDLE_TIMEOUT_MS", workerd ? 30_000 : 30_000),
-    connectionTimeoutMillis: envPositiveInt("CAVBOT_PG_CONNECT_TIMEOUT_MS", workerd ? 10_000 : 5_000),
+    connectionTimeoutMillis: envPositiveInt("CAVBOT_PG_CONNECT_TIMEOUT_MS", workerd ? 30_000 : 5_000),
     keepAlive: true,
   };
 
