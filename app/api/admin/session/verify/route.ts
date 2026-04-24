@@ -4,8 +4,6 @@ import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { assertWriteOrigin, getSession, requireUser } from "@/lib/apiAuth";
-import { resolveAdminNextPath } from "@/lib/admin/access";
-import { adminSessionCookieOptions, createAdminSessionToken } from "@/lib/admin/session";
 import { getAuthPool, findAuthTokenByHash, markAuthTokenUsed } from "@/lib/authDb";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -146,6 +144,10 @@ export async function POST(req: NextRequest) {
       return json({ ok: false, error: "INVALID_CODE" }, 403);
     }
 
+    const [{ createAdminSessionToken, adminSessionCookieOptions }, { resolveAdminNextPath }] = await Promise.all([
+      import("@/lib/admin/session"),
+      import("@/lib/admin/access"),
+    ]);
     const adminToken = await createAdminSessionToken({
       userId: staff.userId,
       staffId: staff.id,
