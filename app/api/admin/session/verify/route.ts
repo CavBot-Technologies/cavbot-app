@@ -6,8 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { assertWriteOrigin, getSession, requireUser } from "@/lib/apiAuth";
 import { resolveAdminNextPath } from "@/lib/admin/access";
 import { adminSessionCookieOptions, createAdminSessionToken } from "@/lib/admin/session";
-import { getAuthPool, findAuthTokenByHash, findUserById, markAuthTokenUsed } from "@/lib/authDb";
-import { ensureStaffProfileForUser, maskStaffCode } from "@/lib/admin/staff";
+import { getAuthPool, findAuthTokenByHash, markAuthTokenUsed } from "@/lib/authDb";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
 import { writeAdminAuditLog } from "@/lib/admin/audit";
 import { prisma } from "@/lib/prisma";
@@ -29,6 +28,46 @@ function json<T>(payload: T, init?: number | ResponseInit) {
     ...base,
     headers: { ...(base.headers || {}), ...NO_STORE_HEADERS },
   });
+}
+
+type AdminVerifyStaffRow = {
+  id: string;
+  userId: string;
+  staffCode: string;
+  systemRole: string;
+  positionTitle: string;
+  status: string;
+  scopes: string[] | null;
+};
+
+function maskStaffCode(value: string | null | undefined) {
+  const digits = String(value || "").replace(/\D+/g, "").slice(-4);
+  return digits ? `•••• ${digits.padStart(4, "0")}` : "••••";
+}
+
+function normalizeAdminSessionRole(value: string) {
+  const role = String(value || "").trim().toUpperCase();
+  if (role === "OWNER" || role === "ADMIN" || role === "READ_ONLY") return role;
+  return "MEMBER";
+}
+
+async function readAdminVerifyStaff(userId: string) {
+  const result = await getAuthPool().query<AdminVerifyStaffRow>(
+    `SELECT
+       staff."id",
+       staff."userId",
+       staff."staffCode",
+       staff."systemRole",
+       staff."positionTitle",
+       staff."status",
+       staff."scopes"
+     FROM "StaffProfile" staff
+     WHERE staff."userId" = $1
+     LIMIT 1`,
+    [userId],
+  );
+
+  return result.rows[0] ?? null;
 }
 
 function sha256Hex(value: string) {
@@ -59,8 +98,7 @@ export async function POST(req: NextRequest) {
     requireUser(session);
 
     const authPool = getAuthPool();
-    const user = await findUserById(authPool, session.sub);
-    const staff = await ensureStaffProfileForUser(session.sub, user?.email || null);
+    const staff = await readAdminVerifyStaff(session.sub);
     if (!staff || staff.status !== "ACTIVE") {
       return json({ ok: false, error: "STAFF_NOT_ACTIVE" }, 403);
     }
@@ -114,7 +152,7 @@ export async function POST(req: NextRequest) {
       userId: staff.userId,
       staffId: staff.id,
       staffCode: staff.staffCode,
-      role: staff.systemRole,
+      role: normalizeAdminSessionRole(staff.systemRole),
       stepUpMethod: "email",
     });
     const nextPath = resolveAdminNextPath(staff, String(meta.nextPath || "/"));

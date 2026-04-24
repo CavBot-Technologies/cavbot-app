@@ -6,8 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { assertWriteOrigin, getSession, requireUser } from "@/lib/apiAuth";
 import { resolveAdminNextPath } from "@/lib/admin/access";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
-import { getAuthPool, createAuthTokenRecord, findUserById } from "@/lib/authDb";
-import { ensureStaffProfileForUser, maskStaffCode } from "@/lib/admin/staff";
+import { getAuthPool, createAuthTokenRecord } from "@/lib/authDb";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { writeAdminAuditLog } from "@/lib/admin/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -28,6 +27,43 @@ function json<T>(payload: T, init?: number | ResponseInit) {
     ...base,
     headers: { ...(base.headers || {}), ...NO_STORE_HEADERS },
   });
+}
+
+type AdminStepUpStaffRow = {
+  id: string;
+  userId: string;
+  staffCode: string;
+  systemRole: string;
+  positionTitle: string;
+  status: string;
+  scopes: string[] | null;
+  userEmail: string;
+};
+
+function maskStaffCode(value: string | null | undefined) {
+  const digits = String(value || "").replace(/\D+/g, "").slice(-4);
+  return digits ? `•••• ${digits.padStart(4, "0")}` : "••••";
+}
+
+async function readAdminStepUpStaff(userId: string) {
+  const result = await getAuthPool().query<AdminStepUpStaffRow>(
+    `SELECT
+       staff."id",
+       staff."userId",
+       staff."staffCode",
+       staff."systemRole",
+       staff."positionTitle",
+       staff."status",
+       staff."scopes",
+       user_row."email" AS "userEmail"
+     FROM "StaffProfile" staff
+     INNER JOIN "User" user_row ON user_row."id" = staff."userId"
+     WHERE staff."userId" = $1
+     LIMIT 1`,
+    [userId],
+  );
+
+  return result.rows[0] ?? null;
 }
 
 function sha256Hex(value: string) {
@@ -65,8 +101,7 @@ export async function POST(req: NextRequest) {
     requireUser(session);
 
     const authPool = getAuthPool();
-    const user = await findUserById(authPool, session.sub);
-    const staff = await ensureStaffProfileForUser(session.sub, user?.email || null);
+    const staff = await readAdminStepUpStaff(session.sub);
     if (!staff || staff.status !== "ACTIVE") {
       return json({ ok: false, error: "STAFF_NOT_ACTIVE" }, 403);
     }
@@ -104,7 +139,7 @@ export async function POST(req: NextRequest) {
     });
 
     await sendEmail({
-      to: staff.user.email,
+      to: staff.userEmail,
       subject: "Your Caverify access code",
       html: `
         <div style="font-family: ui-sans-serif, system-ui; line-height:1.6;">
@@ -138,7 +173,7 @@ export async function POST(req: NextRequest) {
       request: req,
       metaJson: {
         nextPath,
-        email: staff.user.email,
+        email: staff.userEmail,
       },
     }).catch((auditError) => {
       console.error("[admin/session/challenge] audit log failed", auditError);
@@ -148,7 +183,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       challengeId,
       expiresAt: expiresAt.toISOString(),
-      maskedEmail: staff.user.email.replace(/(^.).*(@.*$)/, "$1•••$2"),
+      maskedEmail: staff.userEmail.replace(/(^.).*(@.*$)/, "$1•••$2"),
     });
   } catch (error) {
     if (error instanceof Error && error.message === "AUTH_REQUIRED") {
