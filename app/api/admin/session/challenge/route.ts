@@ -3,7 +3,7 @@ import "server-only";
 import { createHash, randomInt } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import { assertWriteOrigin, getSession, requireUser } from "@/lib/apiAuth";
+import { assertWriteOrigin, readVerifiedSession, requireUser } from "@/lib/apiAuth";
 import { resolveAdminNextPath } from "@/lib/admin/access";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
 import { getAuthPool, createAuthTokenRecord } from "@/lib/authDb";
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
   try {
     assertWriteOrigin(req);
 
-    const session = await getSession(req);
+    const session = await readVerifiedSession(req);
     if (!session) return json({ ok: false, error: "AUTH_REQUIRED" }, 401);
     requireUser(session);
 

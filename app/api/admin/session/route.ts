@@ -2,7 +2,7 @@ import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
 
-import { assertWriteOrigin, getSession, requireUser } from "@/lib/apiAuth";
+import { assertWriteOrigin, readVerifiedSession, requireUser } from "@/lib/apiAuth";
 import { resolveAdminDepartment } from "@/lib/admin/access";
 import { clearAdminSessionCookie, getAdminSession } from "@/lib/admin/session";
 import { getAuthPool } from "@/lib/authDb";
@@ -71,7 +71,7 @@ async function readAdminSessionStaff(userId: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await getSession(req);
+  const session = await readVerifiedSession(req);
   if (!session) {
     return json({ ok: true, authenticated: false, adminAuthenticated: false });
   }
@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     assertWriteOrigin(req);
-    const session = await getSession(req);
+    const session = await readVerifiedSession(req);
     const response = json({ ok: true });
     clearAdminSessionCookie(response);
 
