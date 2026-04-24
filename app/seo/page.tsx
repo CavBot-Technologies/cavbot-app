@@ -166,6 +166,9 @@ function fmtVitalMs(v: unknown) {
 function fmtVitalCls(v: unknown) {
   return fmtCls(normalizeVitalMetric(v));
 }
+function fmtVitalDisplay(v: number | null, formatter: (value: number) => string) {
+  return v == null ? "Collecting" : formatter(v);
+}
 
 function toHostPath(raw: string) {
   const s = String(raw || "").trim();
@@ -1115,31 +1118,31 @@ export default async function SeoPage({ searchParams }: PageProps) {
             <div className="seo-vitals">
               <div className={`seo-vital tone-${lcpTone}`}>
                 <div className="seo-vital-k">LCP (P75)</div>
-                <div className={`seo-vital-v${lcpVital == null ? " is-empty" : ""}`}>{fmtVitalMs(lcpVital)}</div>
+                <div className={`seo-vital-v${lcpVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(lcpVital, fmtVitalMs)}</div>
                 <div className="seo-vital-sub">Largest Contentful Paint</div>
               </div>
 
               <div className={`seo-vital tone-${inpTone}`}>
                 <div className="seo-vital-k">INP (P75)</div>
-                <div className={`seo-vital-v${inpVital == null ? " is-empty" : ""}`}>{fmtVitalMs(inpVital)}</div>
+                <div className={`seo-vital-v${inpVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(inpVital, fmtVitalMs)}</div>
                 <div className="seo-vital-sub">Interaction to Next Paint</div>
               </div>
 
               <div className={`seo-vital tone-${clsTone}`}>
                 <div className="seo-vital-k">CLS (P75)</div>
-                <div className={`seo-vital-v${clsVital == null ? " is-empty" : ""}`}>{fmtVitalCls(clsVital)}</div>
+                <div className={`seo-vital-v${clsVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(clsVital, fmtVitalCls)}</div>
                 <div className="seo-vital-sub">Cumulative Layout Shift</div>
               </div>
 
               <div className={`seo-vital tone-${fcpTone}`}>
                 <div className="seo-vital-k">FCP (P75)</div>
-                <div className={`seo-vital-v${fcpVital == null ? " is-empty" : ""}`}>{fmtVitalMs(fcpVital)}</div>
+                <div className={`seo-vital-v${fcpVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(fcpVital, fmtVitalMs)}</div>
                 <div className="seo-vital-sub">First Contentful Paint</div>
               </div>
 
               <div className={`seo-vital tone-${ttfbTone}`}>
                 <div className="seo-vital-k">TTFB (P75)</div>
-                <div className={`seo-vital-v${ttfbVital == null ? " is-empty" : ""}`}>{fmtVitalMs(ttfbVital)}</div>
+                <div className={`seo-vital-v${ttfbVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(ttfbVital, fmtVitalMs)}</div>
                 <div className="seo-vital-sub">Time to First Byte</div>
               </div>
             </div>

@@ -537,6 +537,14 @@
   color: rgba(197,206,231,0.72);
 }
 
+.seo-vital-v.is-pending{
+  color: rgba(197,206,231,0.84);
+  font-size: 15px;
+  font-weight: 700;
+  white-space: normal;
+  text-overflow: clip;
+}
+
 .seo-vital-sub{
   color: rgba(234,240,255,0.68);
   font-size: 11px;
@@ -1625,7 +1633,7 @@ body.cb-modal-open{
   =========================== */
 .seo-metadata-shell{
   display:grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   align-items: stretch;
 }
