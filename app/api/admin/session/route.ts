@@ -5,9 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { assertWriteOrigin, getSession, requireUser } from "@/lib/apiAuth";
 import { resolveAdminDepartment } from "@/lib/admin/access";
 import { clearAdminSessionCookie, getAdminSession } from "@/lib/admin/session";
-import { ensureStaffProfileForUser, getStaffProfileByUserId, maskStaffCode } from "@/lib/admin/staff";
-import { findUserById, getAuthPool } from "@/lib/authDb";
-import { writeAdminAuditLog } from "@/lib/admin/audit";
+import { getAuthPool } from "@/lib/authDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +25,51 @@ function json<T>(payload: T, init?: number | ResponseInit) {
   });
 }
 
+type AdminSessionStaffRow = {
+  id: string;
+  userId: string;
+  staffCode: string;
+  systemRole: string;
+  positionTitle: string;
+  status: string;
+  scopes: string[] | null;
+  lastAdminLoginAt: Date | string | null;
+  userEmail: string;
+  userDisplayName: string | null;
+  userFullName: string | null;
+  userAvatarImage: string | null;
+};
+
+function maskStaffCode(value: string | null | undefined) {
+  const digits = String(value || "").replace(/\D+/g, "").slice(-4);
+  return digits ? `•••• ${digits.padStart(4, "0")}` : "••••";
+}
+
+async function readAdminSessionStaff(userId: string) {
+  const result = await getAuthPool().query<AdminSessionStaffRow>(
+    `SELECT
+       staff."id",
+       staff."userId",
+       staff."staffCode",
+       staff."systemRole",
+       staff."positionTitle",
+       staff."status",
+       staff."scopes",
+       staff."lastAdminLoginAt",
+       user_row."email" AS "userEmail",
+       user_row."displayName" AS "userDisplayName",
+       user_row."fullName" AS "userFullName",
+       user_row."avatarImage" AS "userAvatarImage"
+     FROM "StaffProfile" staff
+     INNER JOIN "User" user_row ON user_row."id" = staff."userId"
+     WHERE staff."userId" = $1
+     LIMIT 1`,
+    [userId],
+  );
+
+  return result.rows[0] ?? null;
+}
+
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
   if (!session) {
@@ -34,11 +77,9 @@ export async function GET(req: NextRequest) {
   }
   requireUser(session);
 
-  const user = await findUserById(getAuthPool(), session.sub);
-
   const [adminSession, staff] = await Promise.all([
     getAdminSession(req),
-    ensureStaffProfileForUser(session.sub, user?.email || null),
+    readAdminSessionStaff(session.sub),
   ]);
 
   return json({
@@ -47,18 +88,18 @@ export async function GET(req: NextRequest) {
     adminAuthenticated: Boolean(adminSession && staff && staff.id === adminSession.staffId),
     staffEligible: Boolean(staff && staff.status === "ACTIVE"),
     staff: staff
-      ? {
+        ? {
           id: staff.id,
           userId: staff.userId,
-          email: staff.user.email,
-          displayName: staff.user.displayName || staff.user.fullName || staff.user.email || maskStaffCode(staff.staffCode),
-          avatarImage: staff.user.avatarImage || null,
+          email: staff.userEmail,
+          displayName: staff.userDisplayName || staff.userFullName || staff.userEmail || maskStaffCode(staff.staffCode),
+          avatarImage: staff.userAvatarImage || null,
           staffCode: maskStaffCode(staff.staffCode),
           department: resolveAdminDepartment(staff),
           systemRole: staff.systemRole,
           positionTitle: staff.positionTitle,
           status: staff.status,
-          lastAdminLoginAt: staff.lastAdminLoginAt?.toISOString() || null,
+          lastAdminLoginAt: staff.lastAdminLoginAt ? new Date(staff.lastAdminLoginAt).toISOString() : null,
         }
       : null,
   });
@@ -72,8 +113,9 @@ export async function DELETE(req: NextRequest) {
     clearAdminSessionCookie(response);
 
     if (session && session.systemRole === "user") {
-      const staff = await getStaffProfileByUserId(session.sub);
+      const staff = await readAdminSessionStaff(session.sub);
       if (staff) {
+        const { writeAdminAuditLog } = await import("@/lib/admin/audit");
         await writeAdminAuditLog({
           actorStaffId: staff.id,
           actorUserId: staff.userId,
