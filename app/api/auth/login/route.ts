@@ -216,6 +216,12 @@ function newEmailCode() {
  * - metaJson: { purpose:"2fa_email", codeHash, userId, accountId, uaHash, ipHash, ... }
  */
 async function createEmail2faChallenge(args: {
+  queryable: {
+    query: <T extends import("pg").QueryResultRow = import("pg").QueryResultRow>(
+      text: string,
+      values?: unknown[],
+    ) => Promise<import("pg").QueryResult<T>>;
+  };
   userId: string;
   accountId: string;
   email: string;
@@ -235,7 +241,7 @@ async function createEmail2faChallenge(args: {
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
 
 
-  await createAuthTokenRecord(getAuthPool(), {
+  await createAuthTokenRecord(args.queryable, {
     userId: args.userId,
     type: "EMAIL_RECOVERY",
     tokenHash: sha256Hex(challengeId),
@@ -287,245 +293,249 @@ async function createEmail2faChallenge(args: {
 
 export async function POST(req: Request) {
   try {
-    const pool = getAuthPool();
     const ownerStaffCodeCandidates = new Set(getOwnerStaffCodeCandidates());
     assertWriteOrigin(req);
+    const authClient = await getAuthPool().connect();
+    try {
 
-
-    const body = await readBody(req);
-    const verificationGate = ensureActionVerification(req, {
-      actionType: "login",
-      route: "/auth",
-      sessionIdHint: extractVerifySessionId(req, body?.verificationSessionId),
-      verificationGrantToken: extractVerifyGrantToken(req, body?.verificationGrantToken),
-    });
-    if (!verificationGate.ok) {
-      return json(
-        buildVerifyErrorPayload(verificationGate),
-        verificationGate.decision === "block" ? 429 : 403,
-      );
-    }
-
-    const verifySessionHint = verificationGate.sessionId;
-    const reject = (payload: Record<string, unknown>, status: number) => {
-      recordVerifyActionFailure(req, { actionType: "login", sessionIdHint: verifySessionHint });
-      return json(payload, status);
-    };
-
-    const rawIdentifier = safeString(body?.email ?? body?.username ?? body?.identifier);
-    const normalizedIdentifier = rawIdentifier.trim();
-    const treatAsEmail =
-      normalizedIdentifier.includes("@") && !normalizedIdentifier.startsWith("@");
-    const email = treatAsEmail ? normalizeEmail(normalizedIdentifier) : "";
-    const username = treatAsEmail ? "" : normalizeUsername(normalizedIdentifier);
-    const staffCode = treatAsEmail ? "" : normalizeStaffCode(normalizedIdentifier);
-    const password = safeString(body?.password);
-
-
-    if ((!email && !username) || !password) return reject({ ok: false, error: "missing_credentials" }, 400);
-    if (staffCode && isRetiredStaffCode(staffCode)) {
-      return reject({ ok: false, error: "invalid_credentials" }, 401);
-    }
-
-
-    let user = email ? await findUserByEmail(pool, email) : await findUserByUsername(pool, username);
-    if (!user && staffCode) {
-      if (ownerStaffCodeCandidates.has(staffCode)) {
-        await ensureAdminOwnerBootstrapLazy().catch(() => null);
+      const body = await readBody(req);
+      const verificationGate = ensureActionVerification(req, {
+        actionType: "login",
+        route: "/auth",
+        sessionIdHint: extractVerifySessionId(req, body?.verificationSessionId),
+        verificationGrantToken: extractVerifyGrantToken(req, body?.verificationGrantToken),
+      });
+      if (!verificationGate.ok) {
+        return json(
+          buildVerifyErrorPayload(verificationGate),
+          verificationGate.decision === "block" ? 429 : 403,
+        );
       }
-      const staffUserId = await findUserIdByStaffCode(pool, staffCode);
-      if (staffUserId) {
-        user = await findUserById(pool, staffUserId);
+
+      const verifySessionHint = verificationGate.sessionId;
+      const reject = (payload: Record<string, unknown>, status: number) => {
+        recordVerifyActionFailure(req, { actionType: "login", sessionIdHint: verifySessionHint });
+        return json(payload, status);
+      };
+
+      const rawIdentifier = safeString(body?.email ?? body?.username ?? body?.identifier);
+      const normalizedIdentifier = rawIdentifier.trim();
+      const treatAsEmail =
+        normalizedIdentifier.includes("@") && !normalizedIdentifier.startsWith("@");
+      const email = treatAsEmail ? normalizeEmail(normalizedIdentifier) : "";
+      const username = treatAsEmail ? "" : normalizeUsername(normalizedIdentifier);
+      const staffCode = treatAsEmail ? "" : normalizeStaffCode(normalizedIdentifier);
+      const password = safeString(body?.password);
+
+
+      if ((!email && !username) || !password) return reject({ ok: false, error: "missing_credentials" }, 400);
+      if (staffCode && isRetiredStaffCode(staffCode)) {
+        return reject({ ok: false, error: "invalid_credentials" }, 401);
       }
-    }
-    const userAuth = user ? await findUserAuth(pool, user.id) : null;
-    const memberships = user ? await findMembershipsForUser(pool, user.id) : [];
 
 
-    if (!user || !userAuth) return reject({ ok: false, error: "invalid_credentials" }, 401);
-
-    const activeCandidate =
-      memberships.length
-        ? pickPrimaryMembership(memberships)
-        : null;
-    const geo = readCoarseRequestGeo(req);
-
-
-    const salt = String(userAuth.passwordSalt || "");
-    const hash = String(userAuth.passwordHash || "");
-    if (!salt || !hash) return json({ ok: false, error: "auth_record_invalid" }, 500);
-
-
-    const itersRaw = userAuth.passwordIters;
-    const itersCandidate = Number(itersRaw);
-    const iters =
-      Number.isFinite(itersCandidate) && itersCandidate > 0 ? itersCandidate : DEFAULT_PBKDF2_ITERS;
-
-
-    const ok = await verifyPassword(password, salt, iters, hash);
-    if (!ok) {
-      if (activeCandidate?.accountId) {
-        await auditLogWrite({
-          request: req,
-          action: "AUTH_LOGIN_FAILED",
-          accountId: activeCandidate.accountId,
-          operatorUserId: user.id,
-          targetType: "auth",
-          targetId: user.id,
-          metaJson: {
-            security_event: "login_password_failed",
-            reason: "invalid_credentials",
-            location: geo.label,
-            geoRegion: geo.region,
-            geoCountry: geo.country,
-          },
-        });
+      let user = email ? await findUserByEmail(authClient, email) : await findUserByUsername(authClient, username);
+      if (!user && staffCode) {
+        if (ownerStaffCodeCandidates.has(staffCode)) {
+          await ensureAdminOwnerBootstrapLazy().catch(() => null);
+        }
+        const staffUserId = await findUserIdByStaffCode(authClient, staffCode);
+        if (staffUserId) {
+          user = await findUserById(authClient, staffUserId);
+        }
       }
-      return reject({ ok: false, error: "invalid_credentials" }, 401);
-    }
+      const userAuth = user ? await findUserAuth(authClient, user.id) : null;
+      const memberships = user ? await findMembershipsForUser(authClient, user.id) : [];
 
 
-    if (!memberships.length) return reject({ ok: false, error: "no_account_membership" }, 403);
+      if (!user || !userAuth) return reject({ ok: false, error: "invalid_credentials" }, 401);
 
-
-    const active = activeCandidate ?? memberships[0];
-    {
-      const restriction = await getRestrictedUserError(user.id);
-      if (restriction) return reject({ ok: false, error: restriction }, 403);
-    }
-    {
-      const restriction = await getRestrictedAccountError(active.accountId);
-      if (restriction) return reject({ ok: false, error: restriction }, 403);
-    }
-
-
-    await auditLogWrite({
-      request: req,
-      action: "AUTH_SIGNED_IN",
-      accountId: active.accountId,
-      operatorUserId: user.id,
-      targetType: "auth",
-      targetId: user.id,
-      targetLabel: user.email || user.username || user.id,
-      metaJson: {
-        security_event: "login_password_ok",
-        method: "password",
-        location: geo.label,
-        geoRegion: geo.region,
-        geoCountry: geo.country,
-      },
-    });
-
-
-    // If 2FA enabled -> Stage A returns challengeRequired (no session cookie)
-    const email2fa = Boolean(userAuth.twoFactorEmailEnabled);
-    const app2fa = Boolean(userAuth.twoFactorAppEnabled);
-
-
-  if (email2fa || app2fa) {
-    // EMAIL 2FA (ships now)
-    if (email2fa) {
-      const ua = String(req.headers.get("user-agent") || "");
-      const ip = pickClientIp(req);
+      const activeCandidate =
+        memberships.length
+          ? pickPrimaryMembership(memberships)
+          : null;
       const geo = readCoarseRequestGeo(req);
 
 
-      const ch = await createEmail2faChallenge({
-        userId: user.id,
+      const salt = String(userAuth.passwordSalt || "");
+      const hash = String(userAuth.passwordHash || "");
+      if (!salt || !hash) return json({ ok: false, error: "auth_record_invalid" }, 500);
+
+
+      const itersRaw = userAuth.passwordIters;
+      const itersCandidate = Number(itersRaw);
+      const iters =
+        Number.isFinite(itersCandidate) && itersCandidate > 0 ? itersCandidate : DEFAULT_PBKDF2_ITERS;
+
+
+      const ok = await verifyPassword(password, salt, iters, hash);
+      if (!ok) {
+        if (activeCandidate?.accountId) {
+          await auditLogWrite({
+            request: req,
+            action: "AUTH_LOGIN_FAILED",
+            accountId: activeCandidate.accountId,
+            operatorUserId: user.id,
+            targetType: "auth",
+            targetId: user.id,
+            metaJson: {
+              security_event: "login_password_failed",
+              reason: "invalid_credentials",
+              location: geo.label,
+              geoRegion: geo.region,
+              geoCountry: geo.country,
+            },
+          });
+        }
+        return reject({ ok: false, error: "invalid_credentials" }, 401);
+      }
+
+
+      if (!memberships.length) return reject({ ok: false, error: "no_account_membership" }, 403);
+
+
+      const active = activeCandidate ?? memberships[0];
+      {
+        const restriction = await getRestrictedUserError(user.id);
+        if (restriction) return reject({ ok: false, error: restriction }, 403);
+      }
+      {
+        const restriction = await getRestrictedAccountError(active.accountId);
+        if (restriction) return reject({ ok: false, error: restriction }, 403);
+      }
+
+
+      await auditLogWrite({
+        request: req,
+        action: "AUTH_SIGNED_IN",
         accountId: active.accountId,
-        email: user.email,
-        ua,
-        ip,
-        geoLabel: geo.label,
+        operatorUserId: user.id,
+        targetType: "auth",
+        targetId: user.id,
+        targetLabel: user.email || user.username || user.id,
+        metaJson: {
+          security_event: "login_password_ok",
+          method: "password",
+          location: geo.label,
+          geoRegion: geo.region,
+          geoCountry: geo.country,
+        },
       });
 
 
-      recordVerifyActionSuccess(req, { actionType: "login", sessionIdHint: verifySessionHint });
-      return json(
-        {
-          ok: true,
-          challengeRequired: true,
-          method: "email",
-          challengeId: ch.challengeId,
-          expiresAt: ch.expiresAt.toISOString(),
-          redirectTo: `/auth/challenge?challengeId=${encodeURIComponent(ch.challengeId)}&method=email`,
-        },
-        200
-      );
-    }
+    // If 2FA enabled -> Stage A returns challengeRequired (no session cookie)
+      const email2fa = Boolean(userAuth.twoFactorEmailEnabled);
+      const app2fa = Boolean(userAuth.twoFactorAppEnabled);
 
 
-    // AUTHENTICATOR APP 2FA (ships now — no resend)
-    // We still route through the same challenge page, but verification must validate TOTP.
-    const challengeId = newChallengeId();
+      if (email2fa || app2fa) {
+        // EMAIL 2FA (ships now)
+        if (email2fa) {
+          const ua = String(req.headers.get("user-agent") || "");
+          const ip = pickClientIp(req);
+          const geo = readCoarseRequestGeo(req);
 
 
-    await createAuthTokenRecord(pool, {
-      userId: user.id,
-      type: "EMAIL_RECOVERY",
-      tokenHash: sha256Hex(challengeId),
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-      metaJson: {
-        purpose: "2fa_app",
-        accountId: active.accountId,
-      },
-    });
+          const ch = await createEmail2faChallenge({
+            queryable: authClient,
+            userId: user.id,
+            accountId: active.accountId,
+            email: user.email,
+            ua,
+            ip,
+            geoLabel: geo.label,
+          });
 
 
-    recordVerifyActionSuccess(req, { actionType: "login", sessionIdHint: verifySessionHint });
-    return json(
-      {
-        ok: true,
-        challengeRequired: true,
-        method: "app",
-        challengeId,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-        redirectTo: `/auth/challenge?challengeId=${encodeURIComponent(challengeId)}&method=app`,
-      },
-      200
-    );
-  }
-
-    // No 2FA -> mint session immediately (legacy behavior)
-    const memberRole = normalizeRole(active.role);
-    const token = await createUserSession({
-      userId: user.id,
-      accountId: active.accountId,
-      memberRole,
-      sessionVersion: resolveIssuedSessionVersion(userAuth.sessionVersion),
-    });
+          recordVerifyActionSuccess(req, { actionType: "login", sessionIdHint: verifySessionHint });
+          return json(
+            {
+              ok: true,
+              challengeRequired: true,
+              method: "email",
+              challengeId: ch.challengeId,
+              expiresAt: ch.expiresAt.toISOString(),
+              redirectTo: `/auth/challenge?challengeId=${encodeURIComponent(ch.challengeId)}&method=email`,
+            },
+            200
+          );
+        }
 
 
-    touchUserLastLogin(pool, user.id).catch(() => {});
+        // AUTHENTICATOR APP 2FA (ships now — no resend)
+        // We still route through the same challenge page, but verification must validate TOTP.
+        const challengeId = newChallengeId();
 
 
-    const res = json({ ok: true, accountId: active.accountId, memberRole }, 200);
+        await createAuthTokenRecord(authClient, {
+          userId: user.id,
+          type: "EMAIL_RECOVERY",
+          tokenHash: sha256Hex(challengeId),
+          expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+          metaJson: {
+            purpose: "2fa_app",
+            accountId: active.accountId,
+          },
+        });
 
 
-    writeSessionCookie(req, res, token);
-
-    try {
-      const firstProject = await findFirstProjectIdByAccount(pool, active.accountId);
-
-      if (firstProject?.id) {
-        const pointerCookieOpts = {
-          httpOnly: true,
-          sameSite: "lax" as const,
-          secure: process.env.NODE_ENV === "production",
-          path: "/",
-          maxAge: 60 * 60 * 24 * 30,
-        };
-
-        res.cookies.set("cb_active_project_id", String(firstProject.id), pointerCookieOpts);
-        res.cookies.set("cb_pid", String(firstProject.id), pointerCookieOpts);
+        recordVerifyActionSuccess(req, { actionType: "login", sessionIdHint: verifySessionHint });
+        return json(
+          {
+            ok: true,
+            challengeRequired: true,
+            method: "app",
+            challengeId,
+            expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+            redirectTo: `/auth/challenge?challengeId=${encodeURIComponent(challengeId)}&method=app`,
+          },
+          200
+        );
       }
-    } catch (error) {
-      console.warn("[auth/login] non-fatal project pointer cookie failure", error);
+
+      // No 2FA -> mint session immediately (legacy behavior)
+      const memberRole = normalizeRole(active.role);
+      const token = await createUserSession({
+        userId: user.id,
+        accountId: active.accountId,
+        memberRole,
+        sessionVersion: resolveIssuedSessionVersion(userAuth.sessionVersion),
+      });
+
+
+      touchUserLastLogin(authClient, user.id).catch(() => {});
+
+
+      const res = json({ ok: true, accountId: active.accountId, memberRole }, 200);
+
+
+      writeSessionCookie(req, res, token);
+
+      try {
+        const firstProject = await findFirstProjectIdByAccount(authClient, active.accountId);
+
+        if (firstProject?.id) {
+          const pointerCookieOpts = {
+            httpOnly: true,
+            sameSite: "lax" as const,
+            secure: process.env.NODE_ENV === "production",
+            path: "/",
+            maxAge: 60 * 60 * 24 * 30,
+          };
+
+          res.cookies.set("cb_active_project_id", String(firstProject.id), pointerCookieOpts);
+          res.cookies.set("cb_pid", String(firstProject.id), pointerCookieOpts);
+        }
+      } catch (error) {
+        console.warn("[auth/login] non-fatal project pointer cookie failure", error);
+      }
+
+
+      recordVerifyActionSuccess(req, { actionType: "login", sessionIdHint: verifySessionHint });
+      return res;
+    } finally {
+      authClient.release();
     }
-
-
-    recordVerifyActionSuccess(req, { actionType: "login", sessionIdHint: verifySessionHint });
-    return res;
   } catch (error) {
     console.error("[auth/login] unexpected failure", error);
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
