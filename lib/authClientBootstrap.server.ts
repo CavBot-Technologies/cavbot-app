@@ -2,13 +2,7 @@ import "server-only";
 
 import { headers } from "next/headers";
 import { getAppOrigin, readVerifiedSession } from "@/lib/apiAuth";
-import {
-  findLatestEntitledSubscription,
-  isTrialSeatEntitled,
-  planTierTokenFromPlanId,
-  resolveEffectivePlanId,
-} from "@/lib/accountPlan.server";
-import { findAccountById, getAuthPool } from "@/lib/authDb";
+import { readAuthSessionView } from "@/lib/authSessionView.server";
 import type { CavbotClientAuthBootstrap } from "@/lib/clientAuthBootstrap";
 import type { PlanId } from "@/lib/plans";
 
@@ -23,74 +17,6 @@ function jsonForInlineScript(value: unknown) {
     .replace(/&/g, "\\u0026")
     .replace(/\u2028/g, "\\u2028")
     .replace(/\u2029/g, "\\u2029");
-}
-
-const AUTH_BOOTSTRAP_PLAN_TIMEOUT_MS = 1_500;
-
-function planLabelForId(planId: PlanId): "FREE" | "PREMIUM" | "PREMIUM+" {
-  if (planId === "premium_plus") return "PREMIUM+";
-  if (planId === "premium") return "PREMIUM";
-  return "FREE";
-}
-
-function trialDaysLeft(account: { trialEndsAt?: Date | null } | null) {
-  const endsAtMs = account?.trialEndsAt instanceof Date ? account.trialEndsAt.getTime() : null;
-  if (!endsAtMs || !Number.isFinite(endsAtMs)) return 0;
-  const diff = endsAtMs - Date.now();
-  if (diff <= 0) return 0;
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
-}
-
-async function withBootstrapDeadline<T>(promise: Promise<T>, timeoutMs = AUTH_BOOTSTRAP_PLAN_TIMEOUT_MS): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error("AUTH_BOOTSTRAP_TIMEOUT")), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
-async function readPlanBootstrapState(args: {
-  accountId: string;
-  memberRole: "OWNER" | "ADMIN" | "MEMBER";
-}) {
-  const accountId = s(args.accountId);
-  if (!accountId) return null;
-
-  try {
-    const pool = getAuthPool();
-    const [account, subscription] = await withBootstrapDeadline(
-      Promise.all([
-        findAccountById(pool, accountId),
-        findLatestEntitledSubscription(accountId, pool),
-      ]),
-    );
-
-    if (!account && !subscription) return null;
-
-    const planId = resolveEffectivePlanId({
-      account,
-      subscription,
-    });
-    const planTier = planTierTokenFromPlanId(planId);
-    const trialActive = isTrialSeatEntitled(account);
-
-    return {
-      planId,
-      planTier,
-      planLabel: planLabelForId(planId),
-      memberRole: args.memberRole,
-      trialActive,
-      trialDaysLeft: trialActive ? trialDaysLeft(account) : 0,
-    };
-  } catch {
-    return null;
-  }
 }
 
 async function buildRequestFromHeaders() {
@@ -128,11 +54,43 @@ export async function readClientAuthBootstrapServerState(): Promise<CavbotClient
     if (!userId || !accountId || (memberRole !== "OWNER" && memberRole !== "ADMIN" && memberRole !== "MEMBER")) {
       return { authenticated: false, session: null, profile: null, plan: null, ts: Date.now() };
     }
-
-    const plan = await readPlanBootstrapState({
-      accountId,
-      memberRole: memberRole as "OWNER" | "ADMIN" | "MEMBER",
-    });
+    const view = await readAuthSessionView(sess, 1_500);
+    const plan = view
+      ? (() => {
+          const planId: PlanId =
+            view.account.tierEffective === "PREMIUM_PLUS"
+              ? "premium_plus"
+              : view.account.tierEffective === "PREMIUM"
+                ? "premium"
+                : "free";
+          const planLabel: "FREE" | "PREMIUM" | "PREMIUM+" =
+            view.account.tierEffective === "PREMIUM_PLUS"
+              ? "PREMIUM+"
+              : view.account.tierEffective === "PREMIUM"
+                ? "PREMIUM"
+                : "FREE";
+          return {
+            planId,
+          planTier: view.account.tierEffective,
+            planLabel,
+          memberRole: memberRole as "OWNER" | "ADMIN" | "MEMBER",
+          trialActive: Boolean(view.account.trialActive),
+          trialDaysLeft: view.account.trialActive ? Math.max(0, Math.trunc(Number(view.account.trialDaysLeft || 0)) || 0) : 0,
+          };
+        })()
+      : null;
+    const profile = view
+      ? {
+          fullName: s(view.user.fullName || view.user.displayName),
+          email: s(view.user.email),
+          username: s(view.user.username),
+          initials: s(view.user.initials).slice(0, 3).toUpperCase(),
+          avatarTone: s(view.user.avatarTone).toLowerCase() || "lime",
+          avatarImage: s(view.user.avatarImage),
+          publicProfileEnabled:
+            typeof view.user.publicProfileEnabled === "boolean" ? view.user.publicProfileEnabled : null,
+        }
+      : null;
 
     return {
       authenticated: true,
@@ -141,7 +99,7 @@ export async function readClientAuthBootstrapServerState(): Promise<CavbotClient
         accountId,
         memberRole: memberRole as "OWNER" | "ADMIN" | "MEMBER",
       },
-      profile: null,
+      profile,
       plan,
       ts: Date.now(),
     };

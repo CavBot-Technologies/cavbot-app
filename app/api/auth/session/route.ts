@@ -14,6 +14,7 @@ import {
   writeSessionCookie,
 } from "@/lib/apiAuth";
 import type { CavbotSession } from "@/lib/apiAuth";
+import { readAuthSessionView } from "@/lib/authSessionView.server";
 
 
 export const runtime = "nodejs";
@@ -211,6 +212,17 @@ export async function GET(req: Request) {
       return expireSessionCookie(req, res);
     }
 
+    const sessionView = await readAuthSessionView(sess, 1_500);
+    const sessionDisplayName =
+      sessionView?.user.displayName
+      || sessionView?.user.fullName
+      || null;
+    const sessionEmail = sessionView?.user.email || null;
+    const accountTier =
+      sessionView?.account.tierEffective
+      || sessionView?.account.tier
+      || null;
+
     const response = json(
       {
         ok: true,
@@ -219,17 +231,19 @@ export async function GET(req: Request) {
         signedOut: false,
         session: {
           userId,
-          email: null,
-          displayName: null,
+          email: sessionEmail,
+          displayName: sessionDisplayName,
           accountId,
-          memberRole: normalizeRole(sess.memberRole),
+          memberRole: normalizeRole(sessionView?.membership?.role || sess.memberRole),
         },
         account: {
           id: accountId,
-          slug: null,
-          tier: null,
-          name: null,
+          slug: sessionView?.account.slug || null,
+          tier: accountTier,
+          tierEffective: sessionView?.account.tierEffective || null,
+          name: sessionView?.account.name || null,
         },
+        degraded: Boolean(sessionView?.degraded),
         client,
       },
       200

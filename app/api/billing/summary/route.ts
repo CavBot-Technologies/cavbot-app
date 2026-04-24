@@ -2,10 +2,10 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession, isApiAuthError } from "@/lib/apiAuth";
-import { PLANS } from "@/lib/plans";
+import { isApiAuthError, readVerifiedSession } from "@/lib/apiAuth";
+import { readAuthSessionView } from "@/lib/authSessionView.server";
+import { PLANS, resolvePlanIdFromTier } from "@/lib/plans";
 import { getQwenCoderPopoverState } from "@/src/lib/ai/qwen-coder-credits.server";
-import { resolveBillingAccountContext } from "@/lib/billingAccount.server";
 import { resolveBillingPlanResolution, type BillingPlanSource } from "@/lib/billingPlan.server";
 import {
   normalizeBillingCycleValue,
@@ -19,6 +19,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+const BILLING_SUMMARY_TIMEOUT_MS = 2_800;
+const BILLING_OPTIONAL_TIMEOUT_MS = 900;
+
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
   Pragma: "no-cache",
@@ -29,6 +32,20 @@ const NO_STORE_HEADERS: Record<string, string> = {
 function json<T>(data: T, init?: number | ResponseInit) {
   const resInit: ResponseInit = typeof init === "number" ? { status: init } : init ?? {};
   return NextResponse.json(data, { ...resInit, headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS } });
+}
+
+async function withBillingDeadline<T>(promise: Promise<T>, timeoutMs = BILLING_SUMMARY_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("BILLING_SUMMARY_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function toIsoOrNull(d: Date | null | undefined) {
@@ -78,6 +95,7 @@ function buildEmptyBillingSummary() {
       portalReady: false,
     },
     qwenCoderUsage: null,
+    degraded: true,
   };
 }
 
@@ -114,40 +132,111 @@ type SummaryComputedRecord = {
   portalReady: boolean;
 };
 
+function buildFallbackBillingSummary(args: {
+  accountId: string;
+  accountSlug?: string | null;
+  tierEffective?: string | null;
+  tier?: string | null;
+}) {
+  const currentPlanId = resolvePlanIdFromTier(args.tierEffective || args.tier || "FREE");
+  const planDef = PLANS[currentPlanId];
+  return {
+    ok: true,
+    degraded: true,
+    account: {
+      id: args.accountId,
+      slug: String(args.accountSlug || ""),
+      tier: String(args.tierEffective || args.tier || "FREE").toUpperCase() || "FREE",
+      billingEmail: null,
+      trialSeatActive: false,
+      trialStartedAt: null,
+      trialEndsAt: null,
+      pendingDowngradePlanId: null,
+      pendingDowngradeBilling: null,
+      pendingDowngradeAt: null,
+      pendingDowngradeEffectiveAt: null,
+      lastUpgradePlanId: null,
+      lastUpgradeBilling: null,
+      lastUpgradeAt: null,
+      lastUpgradeProrated: null,
+      stripeCustomerId: null,
+    },
+    subscription: null,
+    computed: {
+      currentPlanId,
+      planSource: "fallback" as const,
+      authoritative: false,
+      seatLimit: limitToNullable(planDef.limits.seats),
+      websiteLimit: limitToNullable(planDef.limits.websites),
+      seatsUsed: 0,
+      websitesUsed: 0,
+      billingCycle: "monthly" as const,
+      providerConnected: false,
+      stripeConnected: false,
+      portalReady: false,
+    },
+    qwenCoderUsage: null,
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
-    const sess = await requireSession(req);
-    const billingCtx = await resolveBillingAccountContext(sess);
-    const accountId = billingCtx.accountId;
-    const userId = billingCtx.userId;
+    const sess = await withBillingDeadline(readVerifiedSession(req), 1_000).catch(() => null);
+    if (!sess || sess.systemRole !== "user") {
+      return json({ ok: false, error: "UNAUTHORIZED", message: "UNAUTHORIZED" }, 401);
+    }
 
-    const account = (await readBillingAccount(accountId)) as SummaryAccountRecord | null;
+    const accountId = String(sess.accountId || "").trim();
+    const userId = String(sess.sub || "").trim();
+    if (!accountId) return json(buildEmptyBillingSummary(), 200);
 
-    if (!account) return json(buildEmptyBillingSummary(), 200);
+    const view = await readAuthSessionView(sess, 1_600);
+    const account = await withBillingDeadline(readBillingAccount(accountId), 1_600).catch(() => null) as SummaryAccountRecord | null;
 
-    const planResolution = await resolveBillingPlanResolution({
-      accountId,
-      account,
-      repair: true,
-    });
-    const currentPlanId = planResolution.currentPlanId;
+    if (!account) {
+      if (view?.account) {
+        return json(
+          buildFallbackBillingSummary({
+            accountId,
+            accountSlug: view.account.slug,
+            tierEffective: view.account.tierEffective,
+            tier: view.account.tier,
+          }),
+          200,
+        );
+      }
+      return json(buildEmptyBillingSummary(), 200);
+    }
+
+    const planResolution = await withBillingDeadline(
+      resolveBillingPlanResolution({
+        accountId,
+        account,
+        repair: false,
+      }),
+      1_600,
+    ).catch(() => null);
+
+    const currentPlanId =
+      planResolution?.currentPlanId
+      ?? resolvePlanIdFromTier(view?.account.tierEffective || account.tier || "FREE");
     const planDef = PLANS[currentPlanId];
 
-    const usageMetrics = await readBillingUsageMetrics(accountId).catch((error) => {
-      console.error("[billing/summary] usage metrics lookup failed", error);
-      return { seatsUsed: 0, websitesUsed: 0 };
-    });
+    const usageMetrics = await withBillingDeadline(
+      readBillingUsageMetrics(accountId).catch(() => ({ seatsUsed: 0, websitesUsed: 0 })),
+      BILLING_OPTIONAL_TIMEOUT_MS,
+    ).catch(() => ({ seatsUsed: 0, websitesUsed: 0 }));
 
-    const latestStripeSub = await readLatestBillingSubscription(accountId, { provider: "stripe" }).catch((error) => {
-      console.error("[billing/summary] latest stripe subscription select failed", error);
-      return null;
-    });
+    const latestStripeSub = await withBillingDeadline(
+      readLatestBillingSubscription(accountId, { provider: "stripe" }).catch(() => null),
+      BILLING_OPTIONAL_TIMEOUT_MS,
+    ).catch(() => null);
 
     const latestAnySub = !latestStripeSub
-      ? await readLatestBillingSubscription(accountId).catch((error) => {
-          console.error("[billing/summary] latest subscription select failed", error);
-          return null;
-        })
+      ? await withBillingDeadline(
+          readLatestBillingSubscription(accountId).catch(() => null),
+          BILLING_OPTIONAL_TIMEOUT_MS,
+        ).catch(() => null)
       : null;
 
     const subRow = latestStripeSub || latestAnySub;
@@ -161,58 +250,60 @@ export async function GET(req: NextRequest) {
       ?? normalizeBillingCycleValue(account.lastUpgradeBilling)
       ?? "monthly";
 
-    let subscription = null;
-
-    if (subRow) {
-      subscription = {
-        ...subRow,
-        currentPeriodStart: toIsoOrNull(subRow.currentPeriodStart),
-        currentPeriodEnd: toIsoOrNull(subRow.currentPeriodEnd),
-      };
-    } else if (account.trialSeatActive) {
-      subscription = {
-        status: "TRIALING",
-        tier: account.tier,
-        currentPeriodStart: toIsoOrNull(account.trialStartedAt),
-        currentPeriodEnd: toIsoOrNull(account.trialEndsAt),
-        provider: null,
-        customerId: account.stripeCustomerId || null,
-        billingCycle,
-        stripePriceId: null,
-        stripeSubscriptionId: null,
-      };
-    } else {
-      subscription = {
-        status: "ACTIVE",
-        tier: account.tier,
-        currentPeriodStart: null,
-        currentPeriodEnd: null,
-        provider: null,
-        customerId: account.stripeCustomerId || null,
-        billingCycle,
-        stripePriceId: null,
-        stripeSubscriptionId: null,
-      };
-    }
+    const subscription = subRow
+      ? {
+          ...subRow,
+          currentPeriodStart: toIsoOrNull(subRow.currentPeriodStart),
+          currentPeriodEnd: toIsoOrNull(subRow.currentPeriodEnd),
+        }
+      : account.trialSeatActive
+        ? {
+            status: "TRIALING",
+            tier: account.tier,
+            currentPeriodStart: toIsoOrNull(account.trialStartedAt),
+            currentPeriodEnd: toIsoOrNull(account.trialEndsAt),
+            provider: null,
+            customerId: account.stripeCustomerId || null,
+            billingCycle,
+            stripePriceId: null,
+            stripeSubscriptionId: null,
+          }
+        : {
+            status: "ACTIVE",
+            tier: account.tier,
+            currentPeriodStart: null,
+            currentPeriodEnd: null,
+            provider: null,
+            customerId: account.stripeCustomerId || null,
+            billingCycle,
+            stripePriceId: null,
+            stripeSubscriptionId: null,
+          };
 
     const stripeConnected = Boolean(account.stripeCustomerId);
     const providerConnected = Boolean(subscription?.provider === "stripe" || account.stripeCustomerId);
     const portalReady = Boolean(account.stripeCustomerId);
     const qwenCoderUsage = userId
-      ? await getQwenCoderPopoverState({
-          accountId,
-          userId,
-          planId: currentPlanId,
-          sessionId: null,
-        }).catch(() => null)
+      ? await withBillingDeadline(
+          getQwenCoderPopoverState({
+            accountId,
+            userId,
+            planId: currentPlanId,
+            sessionId: null,
+          }).catch(() => null),
+          BILLING_OPTIONAL_TIMEOUT_MS,
+        ).catch(() => null)
       : null;
 
     return json(
       {
         ok: true,
+        degraded: Boolean(view?.degraded),
         account: {
           ...account,
-          tier: planResolution.repairedStoredTier ?? account.tier,
+          tier:
+            planResolution?.repairedStoredTier
+            ?? String(view?.account.tierEffective || account.tier).toUpperCase(),
           pendingDowngradeAt: toIsoOrNull(account.pendingDowngradeAt),
           pendingDowngradeEffectiveAt: toIsoOrNull(account.pendingDowngradeEffectiveAt),
           lastUpgradeAt: toIsoOrNull(account.lastUpgradeAt),
@@ -222,8 +313,8 @@ export async function GET(req: NextRequest) {
         subscription,
         computed: {
           currentPlanId,
-          planSource: planResolution.planSource,
-          authoritative: planResolution.authoritative,
+          planSource: planResolution?.planSource ?? "fallback",
+          authoritative: Boolean(planResolution?.authoritative),
           seatLimit,
           websiteLimit,
           seatsUsed: usageMetrics.seatsUsed,
@@ -235,7 +326,7 @@ export async function GET(req: NextRequest) {
         } satisfies SummaryComputedRecord,
         qwenCoderUsage,
       },
-      200
+      200,
     );
   } catch (error) {
     if (isApiAuthError(error) && error.code === "ACCOUNT_CONTEXT_REQUIRED") {

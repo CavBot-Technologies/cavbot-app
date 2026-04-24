@@ -763,9 +763,26 @@ export async function getSession(req: Request): Promise<CavbotSession | null> {
 // ownership checks after calling this helper.
 export async function requireLowRiskWriteSession(req: Request): Promise<CavbotSession> {
   assertWriteOrigin(req);
-  const sess = await getSession(req);
-  if (!sess) throw new ApiAuthError("UNAUTHORIZED", 401);
-  return sess;
+  const verified = await readVerifiedSession(req);
+  if (!verified) throw new ApiAuthError("UNAUTHORIZED", 401);
+
+  // Low-risk routes should continue to work from a valid signed session even when
+  // the auth backend is slow or temporarily unavailable.
+  if (verified.systemRole !== "user" || (verified.accountId && verified.memberRole)) {
+    return verified;
+  }
+
+  try {
+    const hydrated = await Promise.race([
+      getSession(req),
+      new Promise<null>((resolve) => {
+        setTimeout(() => resolve(null), 1_200);
+      }),
+    ]);
+    return hydrated || verified;
+  } catch {
+    return verified;
+  }
 }
 
 function canFailOpenAuthenticatedRead(req: Request) {
