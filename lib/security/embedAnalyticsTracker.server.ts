@@ -356,6 +356,6 @@ export async function recordAnalyticsEmbedActivityBestEffort(args: {
         userAgent: pickUserAgent(args.req),
         reason: "Telemetry warm scan",
       }),
-    { queued: false, reason: "timed_out" as const },
+    { queued: false, reason: "queue_failed" as const },
   );
 }

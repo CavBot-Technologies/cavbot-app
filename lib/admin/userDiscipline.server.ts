@@ -123,7 +123,7 @@ function serializeState(
 }
 
 function mergeMetadata(
-  current: Prisma.JsonValue | null | undefined,
+  current: unknown,
   patch: Record<string, unknown>,
 ): Prisma.InputJsonValue {
   return {
