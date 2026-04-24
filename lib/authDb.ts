@@ -2,6 +2,7 @@ import "server-only";
 
 import pg from "pg";
 import { randomUUID } from "crypto";
+import { createLoggedPgPool } from "@/lib/pgPool.server";
 import { normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 
 export type MemberRole = "OWNER" | "ADMIN" | "MEMBER";
@@ -219,17 +220,7 @@ declare global {
 }
 
 function createAuthPool(connectionString: string) {
-  const pool = new pg.Pool({
-    connectionString,
-    max: 1,
-    idleTimeoutMillis: 30_000,
-  });
-
-  pool.on("error", (error) => {
-    console.error("[authDb] pg pool idle client error", error);
-  });
-
-  return pool;
+  return createLoggedPgPool(connectionString, "authDb");
 }
 
 function databaseUrl() {

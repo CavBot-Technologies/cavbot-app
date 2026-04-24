@@ -2,6 +2,7 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
+import { createLoggedPgPool } from "@/lib/pgPool.server";
 
 declare global {
   var __cavbotPrisma: PrismaClient | undefined;
@@ -9,17 +10,7 @@ declare global {
 }
 
 function createPgPool(connectionString: string) {
-  const pool = new pg.Pool({
-    connectionString,
-    max: 1,
-    idleTimeoutMillis: 30_000,
-  });
-
-  pool.on("error", (error) => {
-    console.error("[db] pg pool idle client error", error);
-  });
-
-  return pool;
+  return createLoggedPgPool(connectionString, "db");
 }
 
 function makePrisma() {

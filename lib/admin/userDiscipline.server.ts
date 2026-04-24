@@ -2,6 +2,7 @@ import "server-only";
 
 import type { AdminDisciplineStatus, Prisma } from "@prisma/client";
 
+import { getAuthPool } from "@/lib/authDb";
 import { isSoftTableAccessError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
 
@@ -49,6 +50,27 @@ type UserDisciplineRow = Prisma.AdminUserDisciplineGetPayload<{
   select: typeof userDisciplineStateSelect;
 }>;
 
+type RawUserDisciplineRow = {
+  userId: string;
+  status: UserDisciplineStatus;
+  violationCount: number | bigint | null;
+  suspendedUntil: Date | string | null;
+  suspendedAt: Date | string | null;
+  suspendedByStaffId: string | null;
+  suspensionDays: number | bigint | null;
+  revokedAt: Date | string | null;
+  revokedByStaffId: string | null;
+  lastRecoveryResetAt: Date | string | null;
+  lastSessionKillAt: Date | string | null;
+  lastIdentityReviewAt: Date | string | null;
+  lastIdentityReviewById: string | null;
+  note: string | null;
+  metadataJson: unknown;
+  updatedAt: Date | string;
+};
+
+type UserDisciplineSerializableRow = UserDisciplineRow | RawUserDisciplineRow;
+
 type MutateUserDisciplineArgs = {
   userId: string;
   actorStaffId?: string | null;
@@ -71,13 +93,13 @@ function toISO(value: Date | string | null | undefined) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-function asRecord(value: Prisma.JsonValue | null | undefined) {
+function asRecord(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
 }
 
 function serializeState(
-  row: UserDisciplineRow | null,
+  row: UserDisciplineSerializableRow | null,
 ): UserDisciplineState | null {
   if (!row?.userId) return null;
   return {
@@ -96,7 +118,7 @@ function serializeState(
     lastIdentityReviewById: safeId(row.lastIdentityReviewById) || null,
     note: row.note || null,
     metadata: asRecord(row.metadataJson),
-    updatedAtISO: row.updatedAt.toISOString(),
+    updatedAtISO: toISO(row.updatedAt) || new Date(0).toISOString(),
   };
 }
 
@@ -110,78 +132,88 @@ function mergeMetadata(
   } as Prisma.InputJsonValue;
 }
 
-type AdminUserDisciplineDelegate = {
-  findUnique: (args: {
-    where: { userId: string };
-    select: typeof userDisciplineStateSelect;
-  }) => Promise<UserDisciplineRow | null>;
-  findMany: (args: {
-    where?: { userId?: { in: string[] }; status?: { in: UserDisciplineStatus[] } };
-    orderBy?: Array<{ updatedAt: "desc" | "asc" }>;
-    take?: number;
-    select: typeof userDisciplineStateSelect;
-  }) => Promise<UserDisciplineRow[]>;
-  upsert: (...args: unknown[]) => Promise<UserDisciplineRow>;
-};
-
-function getUserDisciplineDelegate(): AdminUserDisciplineDelegate | null {
-  const candidate = (prisma as PrismaClientLike).adminUserDiscipline as
-    | Record<string, unknown>
-    | null
-    | undefined;
-  if (!candidate || typeof candidate !== "object") return null;
-  if (typeof candidate.findUnique !== "function") return null;
-  if (typeof candidate.findMany !== "function") return null;
-  if (typeof candidate.upsert !== "function") return null;
-  return candidate as AdminUserDisciplineDelegate;
-}
-
-type PrismaClientLike = {
-  adminUserDiscipline?: unknown;
-};
-
 async function readRow(userId: string) {
-  const delegate = getUserDisciplineDelegate();
-  if (!delegate) return null;
   try {
-    return await delegate.findUnique({
-      where: { userId },
-      select: userDisciplineStateSelect,
-    });
+    const result = await getAuthPool().query<RawUserDisciplineRow>(
+      `SELECT
+         "userId",
+         "status",
+         "violationCount",
+         "suspendedUntil",
+         "suspendedAt",
+         "suspendedByStaffId",
+         "suspensionDays",
+         "revokedAt",
+         "revokedByStaffId",
+         "lastRecoveryResetAt",
+         "lastSessionKillAt",
+         "lastIdentityReviewAt",
+         "lastIdentityReviewById",
+         "note",
+         "metadataJson",
+         "updatedAt"
+       FROM "AdminUserDiscipline"
+       WHERE "userId" = $1
+       LIMIT 1`,
+      [userId],
+    );
+    return result.rows[0] ?? null;
   } catch (err) {
     if (isSoftTableAccessError(err, ["AdminUserDiscipline"])) return null;
     throw err;
   }
+}
+
+function normalizeExpiredSuspension(
+  state: UserDisciplineState | null,
+): UserDisciplineState | null {
+  if (!state || state.status !== "SUSPENDED" || !state.suspendedUntilISO) return state;
+  if (new Date(state.suspendedUntilISO).getTime() > Date.now()) return state;
+  return {
+    ...state,
+    status: "ACTIVE",
+    suspendedUntilISO: null,
+    suspendedAtISO: null,
+    suspendedByStaffId: null,
+    suspensionDays: null,
+  };
 }
 
 export async function getUserDisciplineState(userIdInput: string): Promise<UserDisciplineState | null> {
   const userId = safeId(userIdInput);
   if (!userId) return null;
-  const row = await readRow(userId);
-  const current = serializeState(row);
-  if (!current || current.status !== "SUSPENDED" || !current.suspendedUntilISO) return current;
-  if (new Date(current.suspendedUntilISO).getTime() > Date.now()) return current;
-  try {
-    await restoreUser({ userId, actorStaffId: current.suspendedByStaffId, note: current.note });
-    return serializeState(await readRow(userId));
-  } catch (err) {
-    if (isSoftTableAccessError(err, ["AdminUserDiscipline"])) return null;
-    throw err;
-  }
+  return normalizeExpiredSuspension(serializeState(await readRow(userId)));
 }
 
 export async function getUserDisciplineMap(userIdsInput: string[]) {
   const userIds = Array.from(new Set((Array.isArray(userIdsInput) ? userIdsInput : []).map((value) => safeId(value)).filter(Boolean)));
   if (!userIds.length) return new Map<string, UserDisciplineState>();
-  const delegate = getUserDisciplineDelegate();
-  if (!delegate) return new Map<string, UserDisciplineState>();
-
-  let rows: UserDisciplineRow[] = [];
+  let rows: RawUserDisciplineRow[] = [];
   try {
-    rows = await delegate.findMany({
-      where: { userId: { in: userIds } },
-      select: userDisciplineStateSelect,
-    });
+    rows = (
+      await getAuthPool().query<RawUserDisciplineRow>(
+        `SELECT
+           "userId",
+           "status",
+           "violationCount",
+           "suspendedUntil",
+           "suspendedAt",
+           "suspendedByStaffId",
+           "suspensionDays",
+           "revokedAt",
+           "revokedByStaffId",
+           "lastRecoveryResetAt",
+           "lastSessionKillAt",
+           "lastIdentityReviewAt",
+           "lastIdentityReviewById",
+           "note",
+           "metadataJson",
+           "updatedAt"
+         FROM "AdminUserDiscipline"
+         WHERE "userId" = ANY($1::text[])`,
+        [userIds],
+      )
+    ).rows;
   } catch (err) {
     if (isSoftTableAccessError(err, ["AdminUserDiscipline"])) {
       return new Map<string, UserDisciplineState>();
@@ -208,17 +240,60 @@ export async function listUserDisciplineStates(args?: {
 }) {
   const statuses = Array.from(new Set((args?.statuses || []).filter(Boolean)));
   const take = Math.min(Math.max(Number(args?.take) || 40, 1), 200);
-  const delegate = getUserDisciplineDelegate();
-  if (!delegate) return [];
-
-  let rows: UserDisciplineRow[] = [];
+  let rows: RawUserDisciplineRow[] = [];
   try {
-    rows = await delegate.findMany({
-      where: statuses.length ? { status: { in: statuses } } : undefined,
-      orderBy: [{ updatedAt: "desc" }],
-      take,
-      select: userDisciplineStateSelect,
-    });
+    rows = statuses.length
+      ? (
+          await getAuthPool().query<RawUserDisciplineRow>(
+            `SELECT
+               "userId",
+               "status",
+               "violationCount",
+               "suspendedUntil",
+               "suspendedAt",
+               "suspendedByStaffId",
+               "suspensionDays",
+               "revokedAt",
+               "revokedByStaffId",
+               "lastRecoveryResetAt",
+               "lastSessionKillAt",
+               "lastIdentityReviewAt",
+               "lastIdentityReviewById",
+               "note",
+               "metadataJson",
+               "updatedAt"
+             FROM "AdminUserDiscipline"
+             WHERE "status" = ANY($1::text[])
+             ORDER BY "updatedAt" DESC
+             LIMIT $2`,
+            [statuses, take],
+          )
+        ).rows
+      : (
+          await getAuthPool().query<RawUserDisciplineRow>(
+            `SELECT
+               "userId",
+               "status",
+               "violationCount",
+               "suspendedUntil",
+               "suspendedAt",
+               "suspendedByStaffId",
+               "suspensionDays",
+               "revokedAt",
+               "revokedByStaffId",
+               "lastRecoveryResetAt",
+               "lastSessionKillAt",
+               "lastIdentityReviewAt",
+               "lastIdentityReviewById",
+               "note",
+               "metadataJson",
+               "updatedAt"
+             FROM "AdminUserDiscipline"
+             ORDER BY "updatedAt" DESC
+             LIMIT $1`,
+            [take],
+          )
+        ).rows;
   } catch (err) {
     if (isSoftTableAccessError(err, ["AdminUserDiscipline"])) return [];
     throw err;

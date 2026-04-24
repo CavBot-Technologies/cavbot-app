@@ -2,6 +2,7 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 
+import { getAuthPool } from "@/lib/authDb";
 import { isSoftTableAccessError } from "@/lib/dbSchemaGuard";
 import { prisma } from "@/lib/prisma";
 
@@ -117,51 +118,51 @@ async function ensureAccountDisciplineTable() {
 
 async function readAccountDisciplineRow(accountId: string) {
   try {
-    const rows = await prisma.$queryRaw<RawAccountDisciplineRow[]>(
-      Prisma.sql`
-        SELECT
-          "accountId",
-          "status",
-          "violationCount",
-          "suspendedUntil",
-          "suspendedAt",
-          "suspendedByStaffId",
-          "suspensionDays",
-          "revokedAt",
-          "revokedByStaffId",
-          "note",
-          "updatedAt"
-        FROM "AdminAccountDiscipline"
-        WHERE "accountId" = ${accountId}
-        LIMIT 1
-      `,
+    const result = await getAuthPool().query<RawAccountDisciplineRow>(
+      `SELECT
+         "accountId",
+         "status",
+         "violationCount",
+         "suspendedUntil",
+         "suspendedAt",
+         "suspendedByStaffId",
+         "suspensionDays",
+         "revokedAt",
+         "revokedByStaffId",
+         "note",
+         "updatedAt"
+       FROM "AdminAccountDiscipline"
+       WHERE "accountId" = $1
+       LIMIT 1`,
+      [accountId],
     );
-    return normalizeRow(rows[0]);
+    return normalizeRow(result.rows[0]);
   } catch (err) {
     if (isSoftTableAccessError(err, ["AdminAccountDiscipline"])) return null;
     throw err;
   }
 }
 
+function normalizeExpiredSuspension(
+  state: AccountDisciplineState | null,
+): AccountDisciplineState | null {
+  if (!state || state.status !== "SUSPENDED" || !state.suspendedUntilISO) return state;
+  const suspendedUntilMs = new Date(state.suspendedUntilISO).getTime();
+  if (!Number.isFinite(suspendedUntilMs) || suspendedUntilMs > Date.now()) return state;
+  return {
+    ...state,
+    status: "ACTIVE",
+    suspendedUntilISO: null,
+    suspendedAtISO: null,
+    suspendedByStaffId: null,
+    suspensionDays: null,
+  };
+}
+
 export async function getAccountDisciplineState(accountIdInput: string): Promise<AccountDisciplineState | null> {
   const accountId = s(accountIdInput);
   if (!accountId) return null;
-  const current = await readAccountDisciplineRow(accountId);
-  if (!current) return null;
-  if (current.status !== "SUSPENDED" || !current.suspendedUntilISO) return current;
-  const suspendedUntilMs = new Date(current.suspendedUntilISO).getTime();
-  if (!Number.isFinite(suspendedUntilMs) || suspendedUntilMs > Date.now()) return current;
-  try {
-    await restoreAccount({
-      accountId,
-      actorStaffId: current.suspendedByStaffId,
-      note: current.note,
-    });
-    return readAccountDisciplineRow(accountId);
-  } catch (err) {
-    if (isSoftTableAccessError(err, ["AdminAccountDiscipline"])) return null;
-    throw err;
-  }
+  return normalizeExpiredSuspension(await readAccountDisciplineRow(accountId));
 }
 
 export async function getAccountDisciplineMap(accountIds: string[]) {
@@ -169,24 +170,25 @@ export async function getAccountDisciplineMap(accountIds: string[]) {
   if (!ids.length) return new Map<string, AccountDisciplineState>();
   let rows: RawAccountDisciplineRow[] = [];
   try {
-    rows = await prisma.$queryRaw<RawAccountDisciplineRow[]>(
-      Prisma.sql`
-        SELECT
-          "accountId",
-          "status",
-          "violationCount",
-          "suspendedUntil",
-          "suspendedAt",
-          "suspendedByStaffId",
-          "suspensionDays",
-          "revokedAt",
-          "revokedByStaffId",
-          "note",
-          "updatedAt"
-        FROM "AdminAccountDiscipline"
-        WHERE "accountId" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}`), ", ")})
-      `,
-    );
+    rows = (
+      await getAuthPool().query<RawAccountDisciplineRow>(
+        `SELECT
+           "accountId",
+           "status",
+           "violationCount",
+           "suspendedUntil",
+           "suspendedAt",
+           "suspendedByStaffId",
+           "suspensionDays",
+           "revokedAt",
+           "revokedByStaffId",
+           "note",
+           "updatedAt"
+         FROM "AdminAccountDiscipline"
+         WHERE "accountId" = ANY($1::text[])`,
+        [ids],
+      )
+    ).rows;
   } catch (err) {
     if (isSoftTableAccessError(err, ["AdminAccountDiscipline"])) {
       return new Map<string, AccountDisciplineState>();
@@ -218,45 +220,47 @@ export async function listAccountDisciplineStates(args?: {
   let rows: RawAccountDisciplineRow[] = [];
   try {
     rows = statuses.length
-      ? await prisma.$queryRaw<RawAccountDisciplineRow[]>(
-          Prisma.sql`
-            SELECT
-              "accountId",
-              "status",
-              "violationCount",
-              "suspendedUntil",
-              "suspendedAt",
-              "suspendedByStaffId",
-              "suspensionDays",
-              "revokedAt",
-              "revokedByStaffId",
-              "note",
-              "updatedAt"
-            FROM "AdminAccountDiscipline"
-            WHERE "status" IN (${Prisma.join(statuses.map((status) => Prisma.sql`${status}`), ", ")})
-            ORDER BY "updatedAt" DESC
-            LIMIT ${take}
-          `,
-        )
-      : await prisma.$queryRaw<RawAccountDisciplineRow[]>(
-          Prisma.sql`
-            SELECT
-              "accountId",
-              "status",
-              "violationCount",
-              "suspendedUntil",
-              "suspendedAt",
-              "suspendedByStaffId",
-              "suspensionDays",
-              "revokedAt",
-              "revokedByStaffId",
-              "note",
-              "updatedAt"
-            FROM "AdminAccountDiscipline"
-            ORDER BY "updatedAt" DESC
-            LIMIT ${take}
-          `,
-        );
+      ? (
+          await getAuthPool().query<RawAccountDisciplineRow>(
+            `SELECT
+               "accountId",
+               "status",
+               "violationCount",
+               "suspendedUntil",
+               "suspendedAt",
+               "suspendedByStaffId",
+               "suspensionDays",
+               "revokedAt",
+               "revokedByStaffId",
+               "note",
+               "updatedAt"
+             FROM "AdminAccountDiscipline"
+             WHERE "status" = ANY($1::text[])
+             ORDER BY "updatedAt" DESC
+             LIMIT $2`,
+            [statuses, take],
+          )
+        ).rows
+      : (
+          await getAuthPool().query<RawAccountDisciplineRow>(
+            `SELECT
+               "accountId",
+               "status",
+               "violationCount",
+               "suspendedUntil",
+               "suspendedAt",
+               "suspendedByStaffId",
+               "suspensionDays",
+               "revokedAt",
+               "revokedByStaffId",
+               "note",
+               "updatedAt"
+             FROM "AdminAccountDiscipline"
+             ORDER BY "updatedAt" DESC
+             LIMIT $1`,
+            [take],
+          )
+        ).rows;
   } catch (err) {
     if (isSoftTableAccessError(err, ["AdminAccountDiscipline"])) return [];
     throw err;

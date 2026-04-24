@@ -10,6 +10,7 @@ import { markWorkspaceSiteVerified } from "@/lib/workspaceSites.server";
 
 const DEDUPE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const REACTIVATION_WINDOW_MS = 30 * DEDUPE_WINDOW_MS;
+const BEST_EFFORT_TIMEOUT_MS = 1_500;
 
 type Queryable = {
   query: <T = unknown>(text: string, values?: unknown[]) => Promise<{ rows: T[] }>;
@@ -52,6 +53,31 @@ function trimOrNull(value: string | null | undefined, maxLen: number) {
 async function queryOne<T>(queryable: Queryable, text: string, values: unknown[] = []) {
   const result = await queryable.query<T>(text, values);
   return result.rows[0] ?? null;
+}
+
+async function runBoundedBestEffort<T>(
+  label: string,
+  work: () => Promise<T>,
+  fallback: T,
+  timeoutMs = BEST_EFFORT_TIMEOUT_MS,
+) {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race<T>([
+      work(),
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => {
+          console.warn(`[embed/analytics] ${label} timed out`);
+          resolve(fallback);
+        }, timeoutMs);
+      }),
+    ]);
+  } catch (error) {
+    console.error(`[embed/analytics] ${label} failed`, error);
+    return fallback;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function recordAnalyticsEmbedActivity(args: {
@@ -282,50 +308,54 @@ export async function recordAnalyticsEmbedActivityBestEffort(args: {
   payload?: Record<string, unknown> | null;
   keyLast4?: string | null;
 }) {
-  try {
-    await recordAnalyticsEmbedActivity(args);
-  } catch (error) {
-    console.error("[embed/analytics] local activity tracking failed", error);
-  }
-
-  await recordWebVitalsSamplesBestEffort({
-    siteId: args.siteId,
-    siteOrigin: args.siteOrigin,
-    payload: args.payload,
-  }).catch((error) => {
-    console.error("[embed/analytics] vitals capture failed", error);
-    return 0;
-  });
-
-  const verified = await markWorkspaceSiteVerified(args.siteId).catch((error) => {
-    console.error("[embed/analytics] site verification promotion failed", error);
-    return null;
-  });
+  const [, , verified] = await Promise.all([
+    runBoundedBestEffort("local activity tracking", () => recordAnalyticsEmbedActivity(args), undefined),
+    runBoundedBestEffort(
+      "vitals capture",
+      () =>
+        recordWebVitalsSamplesBestEffort({
+          siteId: args.siteId,
+          siteOrigin: args.siteOrigin,
+          payload: args.payload,
+        }),
+      0,
+    ),
+    runBoundedBestEffort(
+      "site verification promotion",
+      () => markWorkspaceSiteVerified(args.siteId),
+      null,
+    ),
+  ]);
 
   if (!payloadContainsWarmTelemetry(args.payload)) return;
 
-  const hasPack = await getLatestPackWithHistory({
-    accountId: args.accountId,
-    origin: args.siteOrigin,
-    limit: 1,
-  })
-    .then((result) => Boolean(result.pack))
-    .catch((error) => {
-      console.error("[embed/analytics] pack lookup failed", error);
-      return false;
-    });
+  const hasPack = await runBoundedBestEffort(
+    "pack lookup",
+    async () => {
+      const result = await getLatestPackWithHistory({
+        accountId: args.accountId,
+        origin: args.siteOrigin,
+        limit: 1,
+      });
+      return Boolean(result.pack);
+    },
+    false,
+  );
 
   if (hasPack) return;
 
-  await requestInitialSiteScanBestEffort({
-    projectId: args.projectId,
-    siteId: verified?.id || args.siteId,
-    accountId: args.accountId,
-    operatorUserId: null,
-    ip: pickRequestIp(args.req),
-    userAgent: pickUserAgent(args.req),
-    reason: "Telemetry warm scan",
-  }).catch((error) => {
-    console.error("[embed/analytics] telemetry warm scan queue failed", error);
-  });
+  await runBoundedBestEffort(
+    "telemetry warm scan queue",
+    () =>
+      requestInitialSiteScanBestEffort({
+        projectId: args.projectId,
+        siteId: verified?.id || args.siteId,
+        accountId: args.accountId,
+        operatorUserId: null,
+        ip: pickRequestIp(args.req),
+        userAgent: pickUserAgent(args.req),
+        reason: "Telemetry warm scan",
+      }),
+    { queued: false, reason: "timed_out" as const },
+  );
 }
