@@ -1154,24 +1154,39 @@
   display:grid;
   grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
   gap: 9px;
+  grid-auto-rows: minmax(208px, auto);
+  max-height: calc((208px * 2) + 9px);
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.seo-favicon-grid::-webkit-scrollbar{
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .seo-favicon-item{
+  position: relative;
   border: 1px solid rgba(255,255,255,0.09);
   border-radius: 10px;
-  background: rgba(255,255,255,0.02);
-  padding: 9px;
+  background: rgba(3,8,22,0.94);
+  padding: 10px 10px 42px;
   display:flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
+  min-height: 208px;
+  height: 100%;
 }
 
 .seo-favicon-item-head{
   display:grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items:center;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  align-items:start;
 }
 
 .seo-favicon-preview-shell{
@@ -1179,7 +1194,7 @@
   height: 36px;
   border-radius: 8px;
   border: 1px solid rgba(255,255,255,0.1);
-  background: rgba(0,0,0,0.18);
+  background: rgba(0,0,0,0.22);
   display:flex;
   align-items:center;
   justify-content:center;
@@ -1197,9 +1212,12 @@
   color: rgba(236,242,255,0.94);
   font-size: 10px;
   line-height: 1.3;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
   text-overflow: ellipsis;
+  word-break: break-word;
 }
 
 .seo-favicon-item-source{
@@ -1211,53 +1229,18 @@
   letter-spacing: 0.06em;
 }
 
-.seo-favicon-item-status{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  height: 20px;
-  padding: 0 7px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.04);
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-weight: 700;
-  white-space: nowrap;
-  color: rgba(234,240,255,0.86);
-}
-
-.seo-favicon-item-status.tone-good{
-  border-color: rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.04);
-  color: rgba(234,240,255,0.86);
-}
-
-.seo-favicon-item-status.tone-warn{
-  border-color: rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.04);
-  color: rgba(234,240,255,0.86);
-}
-
-.seo-favicon-item-status.tone-bad{
-  border-color: rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.04);
-  color: rgba(234,240,255,0.86);
-}
-
 .seo-favicon-specs{
   margin: 0;
   display:grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  gap: 7px;
 }
 
 .seo-favicon-spec{
   border: 1px solid rgba(255,255,255,0.07);
   border-radius: 8px;
-  background: rgba(0,0,0,0.14);
-  padding: 6px 7px;
+  background: rgba(1,3,15,0.76);
+  padding: 8px 9px;
   min-width: 0;
 }
 
@@ -1277,6 +1260,126 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.seo-favicon-info{
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  margin: 0;
+}
+
+.seo-favicon-info summary{
+  list-style: none;
+}
+
+.seo-favicon-info summary::-webkit-details-marker{
+  display: none;
+}
+
+.seo-favicon-infoButton{
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(197,206,231,0.72);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.seo-favicon-infoButton:hover,
+.seo-favicon-info:focus-within .seo-favicon-infoButton,
+.seo-favicon-info[open] .seo-favicon-infoButton{
+  color: rgba(247,251,255,0.94);
+}
+
+.seo-favicon-infoGlyph{
+  width: 16px;
+  height: 16px;
+  display: block;
+  background-color: currentColor;
+  -webkit-mask: url("/icons/app/info-square-svgrepo-com.svg") center/contain no-repeat;
+  mask: url("/icons/app/info-square-svgrepo-com.svg") center/contain no-repeat;
+}
+
+.seo-favicon-infoPanel{
+  position: absolute;
+  right: 0;
+  bottom: 24px;
+  width: min(260px, calc(100vw - 48px));
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(234,240,255,0.14);
+  background: rgba(10,14,28,0.96);
+  box-shadow: 0 22px 44px rgba(0,0,0,0.34);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px);
+  transition: opacity .16s ease, transform .16s ease, visibility .16s ease;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.seo-favicon-info:hover .seo-favicon-infoPanel,
+.seo-favicon-info:focus-within .seo-favicon-infoPanel,
+.seo-favicon-info[open] .seo-favicon-infoPanel{
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.seo-favicon-info[open] .seo-favicon-infoPanel{
+  pointer-events: auto;
+}
+
+.seo-favicon-infoPanelTitle{
+  color: rgba(247,251,255,0.95);
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.seo-favicon-infoList{
+  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.seo-favicon-infoRow{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.seo-favicon-infoRow dt{
+  color: rgba(181,194,223,0.72);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.seo-favicon-infoRow dd{
+  margin: 0;
+  color: rgba(244,248,255,0.9);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.seo-favicon-infoRow dd.tone-good{
+  color: rgba(158,236,191,0.94);
+}
+
+.seo-favicon-infoRow dd.tone-warn{
+  color: rgba(255,226,145,0.94);
+}
+
+.seo-favicon-infoRow dd.tone-bad{
+  color: rgba(255,168,168,0.94);
 }
 
 .seo-favicon-tags{
@@ -1646,7 +1749,6 @@ body.cb-modal-open{
   .seo-favicon-metrics{ grid-template-columns: 1fr; }
   .seo-favicon-specs{ grid-template-columns: 1fr; }
   .seo-favicon-item-head{ grid-template-columns: 34px minmax(0, 1fr); }
-  .seo-favicon-item-status{ grid-column: 1 / -1; width: fit-content; }
 }
 
 /* ==========================

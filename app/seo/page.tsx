@@ -1131,7 +1131,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
             <div className="cb-card-head">
               <div>
                 <h2 className="cb-h2">Web Vitals</h2>
-                <p className="cb-sub">P75 vitals (when available) for the selected target and range.</p>
+                <p className="cb-sub">P75 vitals for the selected target and range.</p>
               </div>
             </div>
             <div className="seo-vitals">
@@ -1378,13 +1378,6 @@ export default async function SeoPage({ searchParams }: PageProps) {
                         </div>
                         <div className="seo-favicon-item-source">{faviconSourceLabel(icon.source)}</div>
                       </div>
-                      <span
-                        className={`seo-favicon-item-status ${
-                          icon.status === "ok" ? "tone-good" : icon.status === "broken" ? "tone-bad" : "tone-warn"
-                        }`}
-                      >
-                        {icon.status}
-                      </span>
                     </div>
 
                     <dl className="seo-favicon-specs">
@@ -1406,36 +1399,45 @@ export default async function SeoPage({ searchParams }: PageProps) {
                       </div>
                     </dl>
 
-                    <div className="seo-favicon-tags">
-                      <div className="seo-favicon-tagblock">
-                        <div className="seo-favicon-tagk">Primary usage</div>
-                        <div className="seo-chips">
-                          {icon.primaryKinds.length ? (
-                            icon.primaryKinds.map((kind) => (
-                              <span key={kind} className="seo-chip-mini">
-                                {faviconPrimaryLabel(kind)}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="seo-chip-mini">—</span>
-                          )}
-                        </div>
+                    <details className="seo-favicon-info">
+                      <summary
+                        className="seo-favicon-infoButton"
+                        aria-label={`More favicon details for ${toHostPath(icon.url)}`}
+                      >
+                        <span className="seo-favicon-infoGlyph" aria-hidden="true" />
+                      </summary>
+                      <div className="seo-favicon-infoPanel" role="tooltip" aria-label="Favicon detail tooltip">
+                        <div className="seo-favicon-infoPanelTitle">Asset details</div>
+                        <dl className="seo-favicon-infoList">
+                          <div className="seo-favicon-infoRow">
+                            <dt>Status</dt>
+                            <dd
+                              className={`${
+                                icon.status === "ok" ? "tone-good" : icon.status === "broken" ? "tone-bad" : "tone-warn"
+                              }`}
+                            >
+                              {icon.status === "ok" ? "OK" : icon.status === "warn" ? "Review" : "Broken"}
+                            </dd>
+                          </div>
+                          <div className="seo-favicon-infoRow">
+                            <dt>Primary usage</dt>
+                            <dd>
+                              {icon.primaryKinds.length
+                                ? icon.primaryKinds.map((kind) => faviconPrimaryLabel(kind)).join(" · ")
+                                : "—"}
+                            </dd>
+                          </div>
+                          <div className="seo-favicon-infoRow">
+                            <dt>Signals</dt>
+                            <dd>
+                              {icon.warningCodes.length
+                                ? icon.warningCodes.map((warningCode) => faviconIssueLabel(warningCode)).join(" · ")
+                                : "Clean"}
+                            </dd>
+                          </div>
+                        </dl>
                       </div>
-                      <div className="seo-favicon-tagblock">
-                        <div className="seo-favicon-tagk">Signals</div>
-                        <div className="seo-chips">
-                          {icon.warningCodes.length ? (
-                            icon.warningCodes.slice(0, 3).map((warningCode) => (
-                              <span key={warningCode} className="seo-chip-mini">
-                                {faviconIssueLabel(warningCode)}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="seo-chip-mini tone-good">Clean</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+                    </details>
                   </article>
                 ))}
               </div>
