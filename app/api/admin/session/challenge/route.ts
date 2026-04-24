@@ -96,15 +96,19 @@ type Body = {
 export async function POST(req: NextRequest) {
   try {
     assertWriteOrigin(req);
+    console.log("[admin/session/challenge] start");
 
     const session = await readVerifiedSession(req);
+    console.log("[admin/session/challenge] session", { hasSession: Boolean(session) });
     if (!session) return json({ ok: false, error: "AUTH_REQUIRED" }, 401);
     requireUser(session);
 
     const authPool = getAuthPool();
     const authClient = await authPool.connect();
     try {
+      console.log("[admin/session/challenge] auth-client:connected");
       const staff = await readAdminStepUpStaffFromDb(authClient, session.sub);
+      console.log("[admin/session/challenge] staff", { hasStaff: Boolean(staff), staffStatus: staff?.status ?? null });
       if (!staff || staff.status !== "ACTIVE") {
         return json({ ok: false, error: "STAFF_NOT_ACTIVE" }, 403);
       }
@@ -127,6 +131,7 @@ export async function POST(req: NextRequest) {
       const code = newEmailCode();
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
+      console.log("[admin/session/challenge] token-create:start");
       await createAuthTokenRecord(authClient, {
         userId: staff.userId,
         type: "EMAIL_RECOVERY",
@@ -140,11 +145,13 @@ export async function POST(req: NextRequest) {
           nextPath,
         },
       });
+      console.log("[admin/session/challenge] token-create:done");
 
       const [{ sendEmail }, { writeAdminAuditLog }] = await Promise.all([
         import("@/lib/email/sendEmail"),
         import("@/lib/admin/audit"),
       ]);
+      console.log("[admin/session/challenge] email:start");
       await sendEmail({
         to: staff.userEmail,
         subject: "Your Caverify access code",
@@ -168,6 +175,7 @@ export async function POST(req: NextRequest) {
           </div>
         `,
       });
+      console.log("[admin/session/challenge] email:done");
 
       await writeAdminAuditLog({
         actorStaffId: staff.id,
@@ -185,6 +193,7 @@ export async function POST(req: NextRequest) {
       }).catch((auditError) => {
         console.error("[admin/session/challenge] audit log failed", auditError);
       });
+      console.log("[admin/session/challenge] response");
 
       return json({
         ok: true,
