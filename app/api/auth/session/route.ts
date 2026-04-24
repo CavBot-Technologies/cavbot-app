@@ -7,7 +7,6 @@ import {
   createSystemSession,
   readVerifiedSession,
   createUserSession,
-  requireSession,
   requireSystemToken,
   expireSessionCookie,
   isApiAuthError,
@@ -15,14 +14,6 @@ import {
   writeSessionCookie,
 } from "@/lib/apiAuth";
 import type { CavbotSession } from "@/lib/apiAuth";
-import {
-  findUserAuth,
-  findMembershipsForUser,
-  findUserByEmail,
-  getAuthPool,
-  pickPrimaryMembership,
-} from "@/lib/authDb";
-import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
 
 
 export const runtime = "nodejs";
@@ -102,6 +93,7 @@ function toStringValue(value: unknown): string | undefined {
 }
 
 async function readBody(req: Request): Promise<SessionBody> {
+  const { readSanitizedFormData, readSanitizedJson } = await import("@/lib/security/userInput");
   const ct = req.headers.get("content-type") || "";
   if (ct.includes("application/json")) {
     const raw = (await readSanitizedJson(req, ({}))) as Record<string, unknown>;
@@ -196,11 +188,13 @@ function makeClientMeta(req: Request) {
  *   Session history requires a real Session table + capture on login/refresh.
  */
 export async function GET(req: Request) {
-  let sess: CavbotSession | null = await readVerifiedSession(req).catch(() => null);
+  const sess: CavbotSession | null = await readVerifiedSession(req).catch(() => null);
 
   try {
     const client = makeClientMeta(req);
-    sess = await requireSession(req);
+    if (!sess) {
+      return json({ ok: true, authed: false, signedOut: false, client }, 200);
+    }
 
     // System session (ops)
     if (sess.systemRole === "system") {
@@ -314,6 +308,13 @@ export async function POST(req: Request) {
   try {
     // INTERNAL ONLY
     requireSystemToken(req);
+    const {
+      findUserAuth,
+      findMembershipsForUser,
+      findUserByEmail,
+      getAuthPool,
+      pickPrimaryMembership,
+    } = await import("@/lib/authDb");
 
 
     const body = await readBody(req);
