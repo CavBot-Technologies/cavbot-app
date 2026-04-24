@@ -88,13 +88,16 @@ type Body = {
 export async function POST(req: NextRequest) {
   try {
     assertWriteOrigin(req);
+    console.log("[admin/session/verify] start");
 
     const session = await getSession(req);
+    console.log("[admin/session/verify] session", { hasSession: Boolean(session) });
     if (!session) return json({ ok: false, error: "AUTH_REQUIRED" }, 401);
     requireUser(session);
 
     const authPool = getAuthPool();
     const staff = await readAdminVerifyStaff(session.sub);
+    console.log("[admin/session/verify] staff", { hasStaff: Boolean(staff), staffStatus: staff?.status ?? null });
     if (!staff || staff.status !== "ACTIVE") {
       return json({ ok: false, error: "STAFF_NOT_ACTIVE" }, 403);
     }
@@ -113,11 +116,14 @@ export async function POST(req: NextRequest) {
     const body = (await readSanitizedJson(req, {} as Body)) as Body;
     const challengeId = String(body?.challengeId || "").trim();
     const code = String(body?.code || "").trim();
+    console.log("[admin/session/verify] parsed-body", { hasChallengeId: Boolean(challengeId), codeLength: code.length });
     if (!challengeId || !/^\d{6}$/.test(code)) {
       return json({ ok: false, error: "BAD_INPUT" }, 400);
     }
 
+    console.log("[admin/session/verify] token-lookup:start");
     const token = await findAuthTokenByHash(authPool, sha256Hex(challengeId));
+    console.log("[admin/session/verify] token-lookup:done", { hasToken: Boolean(token), tokenType: token?.type ?? null });
     if (!token || token.type !== "EMAIL_RECOVERY") {
       return json({ ok: false, error: "CHALLENGE_NOT_FOUND" }, 404);
     }
@@ -140,7 +146,9 @@ export async function POST(req: NextRequest) {
     }
 
     const expectedHash = String(meta.codeHash || "").trim();
+    console.log("[admin/session/verify] compare-code", { hasExpectedHash: Boolean(expectedHash) });
     if (!expectedHash || expectedHash !== sha256Hex(code)) {
+      console.log("[admin/session/verify] invalid-code");
       return json({ ok: false, error: "INVALID_CODE" }, 403);
     }
 
