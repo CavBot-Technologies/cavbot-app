@@ -36,9 +36,6 @@ import { sendEmail } from "@/lib/email/sendEmail"; // <-- must exist (you alread
 import { normalizeUsername } from "@/lib/username";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
 import { pickClientIp, readCoarseRequestGeo } from "@/lib/requestGeo";
-import { ensureAdminOwnerBootstrap, getOwnerStaffCodeCandidates, isRetiredStaffCode } from "@/lib/admin/staff";
-import { getAccountDisciplineState } from "@/lib/admin/accountDiscipline.server";
-import { getUserDisciplineState } from "@/lib/admin/userDiscipline.server";
 
 
 export const dynamic = "force-dynamic";
@@ -72,6 +69,35 @@ function normalizeStaffCode(value: unknown) {
   return `CAV-${digits.padStart(6, "0").slice(-6)}`;
 }
 
+const RETIRED_STAFF_CODES = ["CAV-000001"] as const;
+
+function env(name: string) {
+  return String(process.env[name] || "").trim();
+}
+
+function getConfiguredOwnerStaffCode() {
+  const configured = normalizeStaffCode(env("CAVBOT_ADMIN_STAFF_CODE") || env("ADMIN_OWNER_STAFF_CODE"));
+  if (!configured || RETIRED_STAFF_CODES.includes(configured as (typeof RETIRED_STAFF_CODES)[number])) return "";
+  return configured;
+}
+
+function getOwnerStaffCodeCandidates() {
+  const configured = getConfiguredOwnerStaffCode();
+  return configured ? [configured] : [];
+}
+
+function isRetiredStaffCode(value: string | null | undefined) {
+  const normalized = normalizeStaffCode(value);
+  return Boolean(
+    normalized && RETIRED_STAFF_CODES.includes(normalized as (typeof RETIRED_STAFF_CODES)[number]),
+  );
+}
+
+async function ensureAdminOwnerBootstrapLazy() {
+  const adminStaffModule = await import("@/lib/admin/staff");
+  return adminStaffModule.ensureAdminOwnerBootstrap();
+}
+
 
 function safeString(x: unknown) {
   return typeof x === "string" ? x : String(x ?? "");
@@ -80,7 +106,8 @@ function safeString(x: unknown) {
 async function getRestrictedAccountError(accountId: string) {
   let discipline = null;
   try {
-    discipline = await getAccountDisciplineState(accountId);
+    const accountDisciplineModule = await import("@/lib/admin/accountDiscipline.server");
+    discipline = await accountDisciplineModule.getAccountDisciplineState(accountId);
   } catch (error) {
     console.warn("[auth/login] non-fatal account discipline lookup failure", error);
     return "";
@@ -93,7 +120,8 @@ async function getRestrictedAccountError(accountId: string) {
 async function getRestrictedUserError(userId: string) {
   let discipline = null;
   try {
-    discipline = await getUserDisciplineState(userId);
+    const userDisciplineModule = await import("@/lib/admin/userDiscipline.server");
+    discipline = await userDisciplineModule.getUserDisciplineState(userId);
   } catch (error) {
     console.warn("[auth/login] non-fatal user discipline lookup failure", error);
     return "";
@@ -303,7 +331,7 @@ export async function POST(req: Request) {
     let user = email ? await findUserByEmail(pool, email) : await findUserByUsername(pool, username);
     if (!user && staffCode) {
       if (ownerStaffCodeCandidates.has(staffCode)) {
-        await ensureAdminOwnerBootstrap().catch(() => null);
+        await ensureAdminOwnerBootstrapLazy().catch(() => null);
       }
       const staffUserId = await findUserIdByStaffCode(pool, staffCode);
       if (staffUserId) {

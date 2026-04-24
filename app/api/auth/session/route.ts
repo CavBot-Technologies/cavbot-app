@@ -5,7 +5,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import {
   createSystemSession,
-  getSession,
+  readVerifiedSession,
   createUserSession,
   requireSession,
   requireSystemToken,
@@ -16,16 +16,12 @@ import {
 } from "@/lib/apiAuth";
 import type { CavbotSession } from "@/lib/apiAuth";
 import {
-  compareMembershipPriority,
   findUserAuth,
   findMembershipsForUser,
-  findSessionMembership,
   findUserByEmail,
   getAuthPool,
-  membershipTierRank,
   pickPrimaryMembership,
 } from "@/lib/authDb";
-import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
 
 
@@ -67,13 +63,6 @@ function resolveIssuedSessionVersion(value: unknown) {
 
 function normalizeEmail(x: unknown) {
   return String(x ?? "").trim().toLowerCase();
-}
-
-function planTierToken(planId: unknown) {
-  const value = String(planId || "").trim().toLowerCase();
-  if (value === "premium_plus") return "PREMIUM_PLUS";
-  if (value === "premium") return "PREMIUM";
-  return "FREE";
 }
 
 function buildDegradedBootstrapFromSession(sess: CavbotSession) {
@@ -207,11 +196,10 @@ function makeClientMeta(req: Request) {
  *   Session history requires a real Session table + capture on login/refresh.
  */
 export async function GET(req: Request) {
-  let sess: CavbotSession | null = await getSession(req).catch(() => null);
+  let sess: CavbotSession | null = await readVerifiedSession(req).catch(() => null);
 
   try {
     const client = makeClientMeta(req);
-    const pool = getAuthPool();
     sess = await requireSession(req);
 
     // System session (ops)
@@ -229,32 +217,6 @@ export async function GET(req: Request) {
       return expireSessionCookie(req, res);
     }
 
-
-    // Validate membership still exists (prevents stale cookies causing loops)
-    const membership = await findSessionMembership(pool, userId, accountId);
-
-
-    if (!membership) {
-      const res = json({ ok: true, authed: false, signedOut: true, reason: "no_membership", client }, 200);
-      return expireSessionCookie(req, res);
-    }
-
-    const memberships = await findMembershipsForUser(pool, userId);
-    const primaryMembership = pickPrimaryMembership(memberships);
-    const shouldPromoteMembership = primaryMembership
-      ? (
-          primaryMembership.accountId !== membership.accountId &&
-          membershipTierRank(primaryMembership.accountTier) > membershipTierRank(membership.accountTier) &&
-          compareMembershipPriority(primaryMembership, membership) < 0
-        )
-      : false;
-    const promotedMembership = shouldPromoteMembership && primaryMembership
-      ? await findSessionMembership(pool, userId, primaryMembership.accountId)
-      : null;
-    const effectiveMembership = promotedMembership ?? membership;
-    const effectivePlan = await getEffectiveAccountPlanContext(effectiveMembership.accountId).catch(() => null);
-    // IMPORTANT:
-    // membership.role is the source-of-truth (cookie role can be stale)
     const response = json(
       {
         ok: true,
@@ -262,29 +224,28 @@ export async function GET(req: Request) {
         mode: "user",
         signedOut: false,
         session: {
-          userId: effectiveMembership.userId,
-          email: effectiveMembership.userEmail,
-          displayName: effectiveMembership.userDisplayName,
-          accountId: effectiveMembership.accountId,
-          memberRole: effectiveMembership.role,
+          userId,
+          email: null,
+          displayName: null,
+          accountId,
+          memberRole: normalizeRole(sess.memberRole),
         },
         account: {
-          id: effectiveMembership.accountId,
-          slug: effectiveMembership.accountSlug,
-          tier: effectiveMembership.accountTier,
-          tierEffective: planTierToken(effectivePlan?.planId),
-          name: effectiveMembership.accountName,
+          id: accountId,
+          slug: null,
+          tier: null,
+          name: null,
         },
         client,
       },
       200
     );
     const sharedSessionCookieEnabled = Boolean(sessionCookieOptions(req).domain);
-    if (promotedMembership || sharedSessionCookieEnabled) {
+    if (sharedSessionCookieEnabled) {
       const token = await createUserSession({
-        userId: effectiveMembership.userId,
-        accountId: effectiveMembership.accountId,
-        memberRole: normalizeRole(effectiveMembership.role),
+        userId,
+        accountId,
+        memberRole: normalizeRole(sess.memberRole),
         sessionVersion: resolveIssuedSessionVersion(sess.sv),
       });
       return writeSessionCookie(req, response, token);
