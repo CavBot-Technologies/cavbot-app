@@ -1091,7 +1091,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
 
                 <div className="seo-mini seo-mini-wide">
                   <div className="seo-mini-k">Sample Robots</div>
-                  <div className="seo-mini-v mono">{sampleRobotsLabel}</div>
+                  <div className="seo-mini-v seo-mini-v-copy mono">{sampleRobotsLabel}</div>
                   <div className="seo-mini-sub">Representative robots meta snapshot.</div>
                 </div>
               </div>
