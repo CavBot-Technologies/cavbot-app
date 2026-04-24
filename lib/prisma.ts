@@ -10,13 +10,27 @@ const globalForPrisma = globalThis as unknown as {
 
 const DEV_PRISMA_MODEL_PROP = /^[a-z][A-Za-z0-9_]*$/;
 
+function createPgPool(connectionString: string) {
+  const pool = new pg.Pool({
+    connectionString,
+    max: 1,
+    idleTimeoutMillis: 30_000,
+  });
+
+  pool.on("error", (error) => {
+    console.error("[prisma] pg pool idle client error", error);
+  });
+
+  return pool;
+}
+
 function getPool() {
   if (globalForPrisma.__cavbot_pg_pool__) return globalForPrisma.__cavbot_pg_pool__;
 
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is missing.");
 
-  const pool = new pg.Pool({ connectionString: url });
+  const pool = createPgPool(url);
   globalForPrisma.__cavbot_pg_pool__ = pool;
 
   return pool;

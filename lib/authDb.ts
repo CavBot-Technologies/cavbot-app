@@ -218,6 +218,20 @@ declare global {
   var __cavbotAuthPool: pg.Pool | undefined;
 }
 
+function createAuthPool(connectionString: string) {
+  const pool = new pg.Pool({
+    connectionString,
+    max: 1,
+    idleTimeoutMillis: 30_000,
+  });
+
+  pool.on("error", (error) => {
+    console.error("[authDb] pg pool idle client error", error);
+  });
+
+  return pool;
+}
+
 function databaseUrl() {
   const value = String(process.env.DATABASE_URL || "").trim();
   if (!value) throw new Error("DATABASE_URL is missing.");
@@ -381,9 +395,7 @@ function mapAuthToken(row: RawAuthTokenRow): AuthTokenRecord {
 export function getAuthPool() {
   if (global.__cavbotAuthPool) return global.__cavbotAuthPool;
 
-  const pool = new pg.Pool({
-    connectionString: databaseUrl(),
-  });
+  const pool = createAuthPool(databaseUrl());
   global.__cavbotAuthPool = pool;
 
   return pool;

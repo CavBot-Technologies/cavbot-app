@@ -8,15 +8,25 @@ declare global {
   var __cavbotPgPool: pg.Pool | undefined;
 }
 
+function createPgPool(connectionString: string) {
+  const pool = new pg.Pool({
+    connectionString,
+    max: 1,
+    idleTimeoutMillis: 30_000,
+  });
+
+  pool.on("error", (error) => {
+    console.error("[db] pg pool idle client error", error);
+  });
+
+  return pool;
+}
+
 function makePrisma() {
   const url = String(process.env.DATABASE_URL || "").trim();
   if (!url) throw new Error("DATABASE_URL is missing");
 
-  const pool =
-    global.__cavbotPgPool ||
-    new pg.Pool({
-      connectionString: url,
-    });
+  const pool = global.__cavbotPgPool || createPgPool(url);
 
   global.__cavbotPgPool = pool;
 
