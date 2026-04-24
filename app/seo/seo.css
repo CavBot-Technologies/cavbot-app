@@ -1474,6 +1474,156 @@
   color: rgba(255,255,255,0.90);
 }
 
+.seo-audit-list{
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.seo-audit-entry{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.seo-audit-card{
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: var(--r-md);
+  background: rgba(3,8,22,0.92);
+  padding: 16px;
+}
+
+.seo-audit-cardHead{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.seo-audit-kicker{
+  color: rgba(181,194,223,0.72);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.seo-audit-title{
+  margin: 6px 0 0;
+  color: rgba(247,251,255,0.95);
+  font-size: 14px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.seo-audit-count{
+  flex: 0 0 auto;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(1,3,15,0.72);
+  color: rgba(247,251,255,0.92);
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.seo-audit-facts{
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.seo-audit-fact{
+  min-width: 0;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px;
+  background: rgba(1,3,15,0.74);
+  padding: 11px 12px;
+}
+
+.seo-audit-fact.is-wide{
+  grid-column: 1 / -1;
+}
+
+.seo-audit-fact dt{
+  margin: 0;
+  color: rgba(181,194,223,0.72);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.seo-audit-fact dd{
+  margin: 8px 0 0;
+  color: rgba(244,248,255,0.92);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.seo-audit-signalsCard{
+  padding-top: 15px;
+}
+
+.seo-audit-signalList{
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+.seo-audit-signalItem{
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  color: rgba(236,242,255,0.88);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.seo-audit-signalDot{
+  width: 7px;
+  height: 7px;
+  margin-top: 6px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: rgba(185,200,90,0.92);
+  box-shadow: 0 0 0 4px rgba(185,200,90,0.10);
+}
+
+.seo-audit-clean{
+  border: 1px dashed rgba(255,255,255,0.12);
+  border-radius: 10px;
+  background: rgba(1,3,15,0.5);
+  padding: 12px 13px;
+}
+
+.seo-audit-cleanTitle{
+  color: rgba(247,251,255,0.94);
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 1.3;
+}
+
+.seo-audit-cleanSub{
+  margin-top: 5px;
+  color: rgba(197,206,231,0.7);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 /* ==========================
   PILLS / MONO
   =========================== */
@@ -1673,6 +1823,8 @@ body.cb-modal-open{
   .seo-vitals{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .seo-samples{ grid-template-columns: 1fr; }
   .seo-favicon-metrics{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .seo-audit-facts{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .seo-audit-signalList{ grid-template-columns: 1fr; }
 }
 
 @media (max-width: 640px){
@@ -1739,6 +1891,19 @@ body.cb-modal-open{
 
   .seo-favicon-grid{
     grid-template-columns: 1fr;
+  }
+
+  .seo-audit-cardHead{
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .seo-audit-facts{
+    grid-template-columns: 1fr;
+  }
+
+  .seo-audit-fact.is-wide{
+    grid-column: auto;
   }
 }
 

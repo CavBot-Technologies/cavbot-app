@@ -1459,48 +1459,74 @@ export default async function SeoPage({ searchParams }: PageProps) {
             </div>
 <br /><br />
             {pages.length ? (
-              <div className="seo-tablewrap">
-                <table className="seo-table" aria-label="SEO page audits table">
-                  <thead>
-                    <tr>
-                      <th>Path</th>
-                      <th>Title</th>
-                      <th>Description</th>
-                      <th>Canonical</th>
-                      <th className="t-right">H1</th>
-                      <th className="t-right">Words</th>
-                      <th>Signals</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pages.map((p, i) => {
-                      const sigs = issueChips(p);
-                      return (
-                        <tr key={`${p.urlPath || "p"}-${i}`}>
-                          <td className="mono">{p.urlPath || "—"}</td>
-                          <td className="mono">{p.title ? p.title.slice(0, 72) : "—"}</td>
-                          <td className="mono">{p.metaDescription ? p.metaDescription.slice(0, 72) : "—"}</td>
-                          <td className="mono">{p.canonical ? p.canonical.slice(0, 72) : "—"}</td>
-                          <td className="t-right">{fmtInt(p.h1Count)}</td>
-                          <td className="t-right">{fmtInt(p.wordCount)}</td>
-                          <td>
-                            <div className="seo-chips">
-                              {sigs.length ? (
-                                sigs.map((s, idx) => (
-                                  <span key={idx} className="seo-chip-mini">
-                                    {s}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="seo-chip-mini tone-good">Clean</span>
-                              )}
+              <div className="seo-audit-list" aria-label="SEO page audits list">
+                {pages.map((p, i) => {
+                  const sigs = issueChips(p);
+                  const auditFacts = [
+                    { id: "path", label: "Path", value: p.urlPath || "—", mono: true, wide: true },
+                    { id: "title", label: "Title", value: p.title ? p.title.slice(0, 72) : "—", mono: true },
+                    {
+                      id: "description",
+                      label: "Description",
+                      value: p.metaDescription ? p.metaDescription.slice(0, 72) : "—",
+                      mono: true,
+                    },
+                    { id: "canonical", label: "Canonical", value: p.canonical ? p.canonical.slice(0, 72) : "—", mono: true },
+                    { id: "h1", label: "H1", value: fmtInt(p.h1Count), mono: false },
+                    { id: "words", label: "Words", value: fmtInt(p.wordCount), mono: false },
+                  ];
+
+                  return (
+                    <article key={`${p.urlPath || "p"}-${i}`} className="seo-audit-entry">
+                      <section className="seo-audit-card" aria-label={`Page state for ${p.urlPath || "page"}`}>
+                        <div className="seo-audit-cardHead">
+                          <div>
+                            <div className="seo-audit-kicker">Page State</div>
+                            <h3 className="seo-audit-title">Page metadata snapshot</h3>
+                          </div>
+                        </div>
+                        <dl className="seo-audit-facts">
+                          {auditFacts.map((fact) => (
+                            <div
+                              key={fact.id}
+                              className={`seo-audit-fact${fact.wide ? " is-wide" : ""}`}
+                            >
+                              <dt>{fact.label}</dt>
+                              <dd className={fact.mono ? "mono" : undefined}>{fact.value}</dd>
                             </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                          ))}
+                        </dl>
+                      </section>
+
+                      <section className="seo-audit-card seo-audit-signalsCard" aria-label={`Signals for ${p.urlPath || "page"}`}>
+                        <div className="seo-audit-cardHead">
+                          <div>
+                            <div className="seo-audit-kicker">Signals</div>
+                            <h3 className="seo-audit-title">Detected issues and action items</h3>
+                          </div>
+                          <div className="seo-audit-count">{fmtInt(sigs.length)}</div>
+                        </div>
+                        {sigs.length ? (
+                          <ul className="seo-audit-signalList">
+                            {sigs.map((signal, idx) => (
+                              <li key={`${signal}-${idx}`} className="seo-audit-signalItem">
+                                <span className="seo-audit-signalDot" aria-hidden="true" />
+                                <span>{signal}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="seo-audit-clean">
+                            <div className="seo-audit-cleanTitle">No visible issues detected.</div>
+                            <div className="seo-audit-cleanSub">
+                              CavBot did not surface any active metadata or structure issues for this page.
+                            </div>
+                          </div>
+                        )}
+                      </section>
+                    </article>
+                  );
+                })}
               </div>
             ) : (
               <div className="seo-empty">
