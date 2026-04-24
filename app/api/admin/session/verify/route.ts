@@ -8,8 +8,6 @@ import { resolveAdminNextPath } from "@/lib/admin/access";
 import { adminSessionCookieOptions, createAdminSessionToken } from "@/lib/admin/session";
 import { getAuthPool, findAuthTokenByHash, markAuthTokenUsed } from "@/lib/authDb";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
-import { writeAdminAuditLog } from "@/lib/admin/audit";
-import { prisma } from "@/lib/prisma";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -159,6 +157,10 @@ export async function POST(req: NextRequest) {
 
     const loginAt = new Date();
     await markAuthTokenUsed(authPool, token.id);
+    const [{ prisma }, { writeAdminAuditLog }] = await Promise.all([
+      import("@/lib/prisma"),
+      import("@/lib/admin/audit"),
+    ]);
     await prisma.staffProfile.update({
       where: { id: staff.id },
       data: {
