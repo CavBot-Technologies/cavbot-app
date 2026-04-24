@@ -208,6 +208,14 @@ function newEmailCode() {
   return String(randomInt(0, 1000000)).padStart(6, "0");
 }
 
+async function writeLoginAuditSafely(params: Parameters<typeof auditLogWrite>[0]) {
+  try {
+    await auditLogWrite(params);
+  } catch (error) {
+    console.warn("[auth/login] non-fatal audit write failure", error);
+  }
+}
+
 
 /**
  * We store email 2FA codes in AuthToken, without adding new enums:
@@ -371,7 +379,7 @@ export async function POST(req: Request) {
       const ok = await verifyPassword(password, salt, iters, hash);
       if (!ok) {
         if (activeCandidate?.accountId) {
-          await auditLogWrite({
+          await writeLoginAuditSafely({
             request: req,
             action: "AUTH_LOGIN_FAILED",
             accountId: activeCandidate.accountId,
@@ -405,7 +413,7 @@ export async function POST(req: Request) {
       }
 
 
-      await auditLogWrite({
+      await writeLoginAuditSafely({
         request: req,
         action: "AUTH_SIGNED_IN",
         accountId: active.accountId,
