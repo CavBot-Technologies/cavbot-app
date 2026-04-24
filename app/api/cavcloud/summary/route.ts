@@ -18,8 +18,8 @@ export const revalidate = 0;
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "avif", "gif", "svg", "bmp", "heic", "heif", "tif", "tiff"] as const;
 const VIDEO_EXTENSIONS = ["mp4", "mov", "m4v", "webm", "ogv", "ogg", "avi", "mkv", "wmv", "flv", "3gp"] as const;
-const SUMMARY_TIMEOUT_MS = 8_000;
-const SUMMARY_FALLBACK_PLAN_TIMEOUT_MS = 1_500;
+const SUMMARY_TIMEOUT_MS = 4_000;
+const SUMMARY_FALLBACK_PLAN_TIMEOUT_MS = 750;
 
 function toSafeNumber(value: bigint): number {
   if (value < BigInt(0)) return 0;
@@ -189,6 +189,9 @@ export async function GET(req: Request) {
       return cavcloudErrorResponse(err, "Failed to load CavCloud summary.");
     }
     if (sessionValidated && isCavCloudServiceUnavailableError(err)) {
+      return buildStaticDegradedSummaryResponse();
+    }
+    if (sessionValidated) {
       return buildStaticDegradedSummaryResponse();
     }
     if (

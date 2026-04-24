@@ -43,6 +43,8 @@ const DEFAULT_CAVCLOUD_COLLAB_POLICY = {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+const AUTH_ME_TIMEOUT_MS = 3_500;
+
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
   Pragma: "no-cache",
@@ -56,6 +58,20 @@ function json<T>(payload: T, init?: number | ResponseInit) {
     ...resInit,
     headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS },
   });
+}
+
+async function withAuthMeDeadline<T>(promise: Promise<T>, timeoutMs = AUTH_ME_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("AUTH_ME_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function firstInitialChar(input: string) {
@@ -263,9 +279,6 @@ export async function GET(req: Request) {
   let sess: CavbotSession | null = await getSession(req).catch(() => null);
 
   try {
-    const pool = getAuthPool();
-    let degraded = false;
-
     try {
       sess = await requireSession(req);
     } catch (error) {
@@ -276,196 +289,200 @@ export async function GET(req: Request) {
     }
 
     if (sess.systemRole === "system") {
-      return json({ ok: true, authenticated: true, degraded, session: sess, capabilities: { aiReady: false } }, 200);
+      return json({ ok: true, authenticated: true, degraded: false, session: sess, capabilities: { aiReady: false } }, 200);
     }
 
-    const userId = String(sess?.sub || "").trim();
-    const accountId = sess?.accountId ? String(sess.accountId).trim() : null;
+    return await withAuthMeDeadline((async () => {
+      const pool = getAuthPool();
+      let degraded = false;
+      const userId = String(sess?.sub || "").trim();
+      const accountId = sess?.accountId ? String(sess.accountId).trim() : null;
 
-    if (!userId) {
-      return json({ ok: true, authenticated: false, signedOut: true, capabilities: { aiReady: false } }, 200);
-    }
-
-    let user: AuthUser | null = null;
-    let userLookupFailed = false;
-    try {
-      user = await findUserById(pool, userId);
-    } catch {
-      userLookupFailed = true;
-      degraded = true;
-    }
-
-    if (!user) {
-      if (!userLookupFailed) {
+      if (!userId) {
         return json({ ok: true, authenticated: false, signedOut: true, capabilities: { aiReady: false } }, 200);
       }
-      user = buildFallbackUser(userId, sess);
-    }
 
-    const normalizedUser = {
-      ...user,
-      ...normalizeCavbotFounderProfile({
-        username: user.username,
-        displayName: user.displayName,
-        fullName: user.fullName,
-      }),
-    };
-    const initials = deriveInitials(normalizedUser.displayName, normalizedUser.username);
-
-    let membership: MembershipRecord | null = null;
-    let account: PrismaAccount | null = null;
-    let accountWithComputed: AccountWithComputed | null = null;
-    let collabPolicy = { ...DEFAULT_CAVCLOUD_COLLAB_POLICY };
-
-    let membershipLookupFailed = false;
-    const currentMembershipRecord = accountId
-      ? await findSessionMembership(pool, userId, accountId).catch(() => {
-          membershipLookupFailed = true;
-          degraded = true;
-          return null;
-        })
-      : null;
-    const fallbackMembership = membershipLookupFailed ? fallbackMembershipFromSession(sess) : null;
-    const baselineMembershipRecord = currentMembershipRecord ?? fallbackMembership;
-    const memberships = await findMembershipsForUser(pool, userId).catch(() => {
-      degraded = true;
-      return [];
-    });
-    const primaryMembership = pickPrimaryMembership(memberships);
-    const shouldPromoteMembership = primaryMembership
-      ? (
-          primaryMembership.accountId !== baselineMembershipRecord?.accountId &&
-          (
-            !baselineMembershipRecord ||
-            membershipTierRank(primaryMembership.accountTier) > membershipTierRank(baselineMembershipRecord.accountTier)
-          ) &&
-          (
-            !baselineMembershipRecord ||
-            compareMembershipPriority(
-              {
-                role: primaryMembership.role,
-                createdAt: primaryMembership.createdAt,
-                accountTier: primaryMembership.accountTier,
-              },
-              {
-                role: baselineMembershipRecord.role,
-                createdAt: baselineMembershipRecord.createdAt,
-                accountTier: baselineMembershipRecord.accountTier,
-              }
-            ) < 0
-          )
-        )
-      : false;
-    const promotedMembershipRecord = shouldPromoteMembership && primaryMembership
-      ? await findSessionMembership(pool, userId, primaryMembership.accountId).catch(() => {
-          degraded = true;
-          return null;
-        })
-      : null;
-    const effectiveMembershipRecord = promotedMembershipRecord ?? currentMembershipRecord ?? fallbackMembership;
-
-    if (!effectiveMembershipRecord) {
-      return json({ ok: true, authenticated: false, signedOut: true, capabilities: { aiReady: false } }, 200);
-    }
-
-    membership = {
-      role: effectiveMembershipRecord.role,
-      createdAt: effectiveMembershipRecord.createdAt,
-      accountId: effectiveMembershipRecord.accountId,
-      userId: effectiveMembershipRecord.userId,
-      accountName: effectiveMembershipRecord.accountName,
-      accountSlug: effectiveMembershipRecord.accountSlug,
-      accountTier: effectiveMembershipRecord.accountTier,
-    };
-
-    const effectiveAccountId = String(effectiveMembershipRecord.accountId || "").trim();
-
-    await clearExpiredTrialSeat(pool, effectiveAccountId).catch(() => {
-      degraded = true;
-    });
-    let accountLookupFailed = false;
-    const [accountRecord, entitledSubscription] = await Promise.all([
-      findAccountById(pool, effectiveAccountId).catch(() => {
-        accountLookupFailed = true;
+      let user: AuthUser | null = null;
+      let userLookupFailed = false;
+      try {
+        user = await findUserById(pool, userId);
+      } catch {
+        userLookupFailed = true;
         degraded = true;
-        return null;
-      }),
-      findLatestEntitledSubscription(effectiveAccountId).catch(() => {
-        degraded = true;
-        return null;
-      }),
-    ]);
-
-    if (!accountRecord) {
-      if (!accountLookupFailed) {
-        return json({ ok: true, authenticated: false, signedOut: true, capabilities: { aiReady: false } }, 200);
       }
-      accountWithComputed = buildFallbackAccountFromMembership({
-        sess,
-        membership,
-        entitledSubscription,
-      });
-    } else {
-      account = accountRecord;
 
-      const eff = computeEffectiveTier(account);
-      const effectivePlanId = resolveEffectivePlanId({
-        account,
-        subscription: entitledSubscription,
-      });
-      accountWithComputed = {
-        ...account,
-        tierEffective: planTierTokenFromPlanId(effectivePlanId),
-        trialActive: eff.trialActive,
-        trialDaysLeft: eff.daysLeft,
+      if (!user) {
+        if (!userLookupFailed) {
+          return json({ ok: true, authenticated: false, signedOut: true, capabilities: { aiReady: false } }, 200);
+        }
+        user = buildFallbackUser(userId, sess);
+      }
+
+      const normalizedUser = {
+        ...user,
+        ...normalizeCavbotFounderProfile({
+          username: user.username,
+          displayName: user.displayName,
+          fullName: user.fullName,
+        }),
       };
-    }
+      const initials = deriveInitials(normalizedUser.displayName, normalizedUser.username);
 
-    collabPolicy = { ...DEFAULT_CAVCLOUD_COLLAB_POLICY };
-    const aiReady = Boolean(accountRecord && effectiveAccountId);
+      let membership: MembershipRecord | null = null;
+      let account: PrismaAccount | null = null;
+      let accountWithComputed: AccountWithComputed | null = null;
+      let collabPolicy = { ...DEFAULT_CAVCLOUD_COLLAB_POLICY };
 
-    const responseUser = {
-      ...normalizedUser,
-      initials,
-    };
-    const sharedSessionCookieEnabled = Boolean(sessionCookieOptions(req).domain);
-    const shouldRefreshSharedSessionCookie = Boolean(promotedMembershipRecord) || sharedSessionCookieEnabled;
-    const response = json(
-      {
-        ok: true,
-        authenticated: true,
-        degraded,
-        session: membership
-          ? {
-              ...sess,
-              accountId: membership.accountId,
-              memberRole: membership.role,
-            }
-          : sess,
-        user: responseUser,
-        profile: responseUser,
-        account: accountWithComputed ?? account,
-        membership,
-        capabilities: {
-          aiReady,
-        },
-        policy: {
-          ...collabPolicy,
-          allowArcadeCollaboratorAccess: Boolean(collabPolicy.enableContributorLinks),
-        },
-      },
-      200
-    );
-    if (shouldRefreshSharedSessionCookie) {
-      const token = await createUserSession({
-        userId: membership.userId,
-        accountId: membership.accountId,
-        memberRole: normalizeMemberRole(membership.role),
-        sessionVersion: resolveIssuedSessionVersion(sess.sv),
+      let membershipLookupFailed = false;
+      const currentMembershipRecord = accountId
+        ? await findSessionMembership(pool, userId, accountId).catch(() => {
+            membershipLookupFailed = true;
+            degraded = true;
+            return null;
+          })
+        : null;
+      const fallbackMembership = membershipLookupFailed ? fallbackMembershipFromSession(sess) : null;
+      const baselineMembershipRecord = currentMembershipRecord ?? fallbackMembership;
+      const memberships = await findMembershipsForUser(pool, userId).catch(() => {
+        degraded = true;
+        return [];
       });
-      return writeSessionCookie(req, response, token);
-    }
-    return response;
+      const primaryMembership = pickPrimaryMembership(memberships);
+      const shouldPromoteMembership = primaryMembership
+        ? (
+            primaryMembership.accountId !== baselineMembershipRecord?.accountId &&
+            (
+              !baselineMembershipRecord ||
+              membershipTierRank(primaryMembership.accountTier) > membershipTierRank(baselineMembershipRecord.accountTier)
+            ) &&
+            (
+              !baselineMembershipRecord ||
+              compareMembershipPriority(
+                {
+                  role: primaryMembership.role,
+                  createdAt: primaryMembership.createdAt,
+                  accountTier: primaryMembership.accountTier,
+                },
+                {
+                  role: baselineMembershipRecord.role,
+                  createdAt: baselineMembershipRecord.createdAt,
+                  accountTier: baselineMembershipRecord.accountTier,
+                }
+              ) < 0
+            )
+          )
+        : false;
+      const promotedMembershipRecord = shouldPromoteMembership && primaryMembership
+        ? await findSessionMembership(pool, userId, primaryMembership.accountId).catch(() => {
+            degraded = true;
+            return null;
+          })
+        : null;
+      const effectiveMembershipRecord = promotedMembershipRecord ?? currentMembershipRecord ?? fallbackMembership;
+
+      if (!effectiveMembershipRecord) {
+        return json({ ok: true, authenticated: false, signedOut: true, capabilities: { aiReady: false } }, 200);
+      }
+
+      membership = {
+        role: effectiveMembershipRecord.role,
+        createdAt: effectiveMembershipRecord.createdAt,
+        accountId: effectiveMembershipRecord.accountId,
+        userId: effectiveMembershipRecord.userId,
+        accountName: effectiveMembershipRecord.accountName,
+        accountSlug: effectiveMembershipRecord.accountSlug,
+        accountTier: effectiveMembershipRecord.accountTier,
+      };
+
+      const effectiveAccountId = String(effectiveMembershipRecord.accountId || "").trim();
+
+      await clearExpiredTrialSeat(pool, effectiveAccountId).catch(() => {
+        degraded = true;
+      });
+      let accountLookupFailed = false;
+      const [accountRecord, entitledSubscription] = await Promise.all([
+        findAccountById(pool, effectiveAccountId).catch(() => {
+          accountLookupFailed = true;
+          degraded = true;
+          return null;
+        }),
+        findLatestEntitledSubscription(effectiveAccountId).catch(() => {
+          degraded = true;
+          return null;
+        }),
+      ]);
+
+      if (!accountRecord) {
+        if (!accountLookupFailed) {
+          return json({ ok: true, authenticated: false, signedOut: true, capabilities: { aiReady: false } }, 200);
+        }
+        accountWithComputed = buildFallbackAccountFromMembership({
+          sess,
+          membership,
+          entitledSubscription,
+        });
+      } else {
+        account = accountRecord;
+
+        const eff = computeEffectiveTier(account);
+        const effectivePlanId = resolveEffectivePlanId({
+          account,
+          subscription: entitledSubscription,
+        });
+        accountWithComputed = {
+          ...account,
+          tierEffective: planTierTokenFromPlanId(effectivePlanId),
+          trialActive: eff.trialActive,
+          trialDaysLeft: eff.daysLeft,
+        };
+      }
+
+      collabPolicy = { ...DEFAULT_CAVCLOUD_COLLAB_POLICY };
+      const aiReady = Boolean(accountRecord && effectiveAccountId);
+
+      const responseUser = {
+        ...normalizedUser,
+        initials,
+      };
+      const sharedSessionCookieEnabled = Boolean(sessionCookieOptions(req).domain);
+      const shouldRefreshSharedSessionCookie = Boolean(promotedMembershipRecord) || sharedSessionCookieEnabled;
+      const response = json(
+        {
+          ok: true,
+          authenticated: true,
+          degraded,
+          session: membership
+            ? {
+                ...sess,
+                accountId: membership.accountId,
+                memberRole: membership.role,
+              }
+            : sess,
+          user: responseUser,
+          profile: responseUser,
+          account: accountWithComputed ?? account,
+          membership,
+          capabilities: {
+            aiReady,
+          },
+          policy: {
+            ...collabPolicy,
+            allowArcadeCollaboratorAccess: Boolean(collabPolicy.enableContributorLinks),
+          },
+        },
+        200
+      );
+      if (shouldRefreshSharedSessionCookie) {
+        const token = await createUserSession({
+          userId: membership.userId,
+          accountId: membership.accountId,
+          memberRole: normalizeMemberRole(membership.role),
+          sessionVersion: resolveIssuedSessionVersion(sess.sv),
+        });
+        return writeSessionCookie(req, response, token);
+      }
+      return response;
+    })());
   } catch (error) {
     if (isApiAuthError(error) && (error.status === 401 || error.status === 403)) {
       return json({ ok: true, authenticated: false, signedOut: true, error: error.code, capabilities: { aiReady: false } }, 200);

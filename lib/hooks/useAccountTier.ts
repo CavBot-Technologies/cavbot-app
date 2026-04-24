@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { resolveTierFromAccount, type Tier } from "@/lib/billing/featureGates";
-import { readBootClientPlanBootstrap, subscribeClientPlan } from "@/lib/clientPlan";
+import { publishClientPlan, readBootClientPlanBootstrap, subscribeClientPlan } from "@/lib/clientPlan";
 
 let cachedTier: Tier | null = null;
 let fetchPromise: Promise<Tier> | null = null;
@@ -15,14 +15,27 @@ async function fetchTierOnce(): Promise<Tier> {
   if (fetchPromise) return fetchPromise;
   fetchPromise = (async () => {
     try {
+      const billingResponse = await fetch("/api/billing/summary", { method: "GET", cache: "no-store" });
+      const billingPayload = await billingResponse.json().catch(() => ({}));
+      const billingPlanId = String(billingPayload?.computed?.currentPlanId || "").trim();
+      if (billingResponse.ok && (billingPlanId === "free" || billingPlanId === "premium" || billingPlanId === "premium_plus")) {
+        const tier = billingPlanId as Tier;
+        cachedTier = tier;
+        publishClientPlan({ planId: tier, preserveStrongerCached: true });
+        return tier;
+      }
+
       const response = await fetch("/api/auth/me", { method: "GET", cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       const tier = resolveTierFromAccount(payload?.account);
       cachedTier = tier;
+      publishClientPlan({ planId: tier, preserveStrongerCached: true });
       return tier;
     } catch {
-      cachedTier = "free";
-      return "free";
+      const bootTier = readBootTier();
+      const tier = bootTier ?? cachedTier ?? "free";
+      cachedTier = tier;
+      return tier;
     } finally {
       fetchPromise = null;
     }
@@ -44,7 +57,6 @@ export function useAccountTier(): Tier {
     const bootTier = readBootTier();
     if (bootTier) {
       cachedTier = bootTier;
-      setTier((prev) => (prev === bootTier ? prev : bootTier));
     }
 
     let cancelled = false;

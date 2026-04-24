@@ -9,6 +9,8 @@ import { readWorkspace } from "@/lib/workspaceStore.server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const FOOTER_METRICS_TIMEOUT_MS = 3_500;
+
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
   Pragma: "no-cache",
@@ -22,6 +24,20 @@ function json(payload: unknown, init?: number | ResponseInit) {
     ...base,
     headers: { ...(base.headers || {}), ...NO_STORE_HEADERS },
   });
+}
+
+async function withFooterDeadline<T>(promise: Promise<T>, timeoutMs = FOOTER_METRICS_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("FOOTER_METRICS_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function safeCount(value: unknown) {
@@ -198,36 +214,37 @@ export async function GET(req: NextRequest) {
         200
       );
     }
+    const accountId = String(session.accountId);
 
-    const workspace = await readWorkspace({ accountId: session.accountId });
-    const site =
-      workspace.sites.find((row) => row.id === workspace.activeSiteId) ??
-      workspace.sites[0] ??
-      null;
+    const payload = await withFooterDeadline((async () => {
+      const workspace = await readWorkspace({ accountId: session.accountId });
+      const site =
+        workspace.sites.find((row) => row.id === workspace.activeSiteId) ??
+        workspace.sites[0] ??
+        null;
 
-    const now = new Date();
-    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const siteIds = site?.id
-      ? [site.id]
-      : workspace.sites.map((row) => String(row.id || "").trim()).filter(Boolean);
+      const now = new Date();
+      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const siteIds = site?.id
+        ? [site.id]
+        : workspace.sites.map((row) => String(row.id || "").trim()).filter(Boolean);
 
-    const [apiActivity, eventDestinationActivity] = await Promise.all([
-      readApiActivity({
-        accountId: session.accountId,
-        projectId: workspace.projectId,
-        siteId: site?.id ?? null,
-      }),
-      readEventDestinationActivity({
-        accountId: session.accountId,
-        projectId: workspace.projectId,
-        siteId: site?.id ?? null,
-        siteIds,
-        twentyFourHoursAgo,
-      }),
-    ]);
+      const [apiActivity, eventDestinationActivity] = await Promise.all([
+        readApiActivity({
+          accountId,
+          projectId: workspace.projectId,
+          siteId: site?.id ?? null,
+        }),
+        readEventDestinationActivity({
+          accountId,
+          projectId: workspace.projectId,
+          siteId: site?.id ?? null,
+          siteIds,
+          twentyFourHoursAgo,
+        }),
+      ]);
 
-    return json(
-      {
+      return {
         ok: true,
         generatedAt: now.toISOString(),
         workspace: {
@@ -237,9 +254,10 @@ export async function GET(req: NextRequest) {
         },
         apiActivity,
         eventDestinationActivity,
-      },
-      200
-    );
+      };
+    })());
+
+    return json(payload, 200);
   } catch {
     return json(
       {
