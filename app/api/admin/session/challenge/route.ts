@@ -7,8 +7,6 @@ import { assertWriteOrigin, getSession, requireUser } from "@/lib/apiAuth";
 import { resolveAdminNextPath } from "@/lib/admin/access";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
 import { getAuthPool, createAuthTokenRecord } from "@/lib/authDb";
-import { sendEmail } from "@/lib/email/sendEmail";
-import { writeAdminAuditLog } from "@/lib/admin/audit";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -138,6 +136,10 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    const [{ sendEmail }, { writeAdminAuditLog }] = await Promise.all([
+      import("@/lib/email/sendEmail"),
+      import("@/lib/admin/audit"),
+    ]);
     await sendEmail({
       to: staff.userEmail,
       subject: "Your Caverify access code",
