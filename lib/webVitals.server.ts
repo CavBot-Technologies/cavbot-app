@@ -241,11 +241,27 @@ export async function fetchSiteWebVitalsRollup(args: {
        SELECT
          "createdAt",
          NULLIF(COALESCE("meta"->>'routePath', "meta"->>'path'), '') AS route_path,
-         CASE WHEN NULLIF("meta"->>'lcpMs', '') ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN NULLIF("meta"->>'lcpMs', '')::double precision END AS lcp_ms,
-         CASE WHEN NULLIF("meta"->>'inpMs', '') ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN NULLIF("meta"->>'inpMs', '')::double precision END AS inp_ms,
+         CASE
+           WHEN NULLIF("meta"->>'lcpMs', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+             AND NULLIF("meta"->>'lcpMs', '')::double precision > 0
+           THEN NULLIF("meta"->>'lcpMs', '')::double precision
+         END AS lcp_ms,
+         CASE
+           WHEN NULLIF("meta"->>'inpMs', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+             AND NULLIF("meta"->>'inpMs', '')::double precision > 0
+           THEN NULLIF("meta"->>'inpMs', '')::double precision
+         END AS inp_ms,
          CASE WHEN NULLIF("meta"->>'cls', '') ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN NULLIF("meta"->>'cls', '')::double precision END AS cls,
-         CASE WHEN NULLIF("meta"->>'fcpMs', '') ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN NULLIF("meta"->>'fcpMs', '')::double precision END AS fcp_ms,
-         CASE WHEN NULLIF("meta"->>'ttfbMs', '') ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN NULLIF("meta"->>'ttfbMs', '')::double precision END AS ttfb_ms
+         CASE
+           WHEN NULLIF("meta"->>'fcpMs', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+             AND NULLIF("meta"->>'fcpMs', '')::double precision > 0
+           THEN NULLIF("meta"->>'fcpMs', '')::double precision
+         END AS fcp_ms,
+         CASE
+           WHEN NULLIF("meta"->>'ttfbMs', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+             AND NULLIF("meta"->>'ttfbMs', '')::double precision > 0
+           THEN NULLIF("meta"->>'ttfbMs', '')::double precision
+         END AS ttfb_ms
        FROM "SiteEvent"
        WHERE "siteId" = $1
          AND "type" = 'WEB_VITALS_SAMPLE'
@@ -273,10 +289,22 @@ export async function fetchSiteWebVitalsRollup(args: {
     `WITH samples AS (
        SELECT
          NULLIF(COALESCE("meta"->>'routePath', "meta"->>'path'), '') AS route_path,
-         CASE WHEN NULLIF("meta"->>'lcpMs', '') ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN NULLIF("meta"->>'lcpMs', '')::double precision END AS lcp_ms,
-         CASE WHEN NULLIF("meta"->>'inpMs', '') ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN NULLIF("meta"->>'inpMs', '')::double precision END AS inp_ms,
+         CASE
+           WHEN NULLIF("meta"->>'lcpMs', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+             AND NULLIF("meta"->>'lcpMs', '')::double precision > 0
+           THEN NULLIF("meta"->>'lcpMs', '')::double precision
+         END AS lcp_ms,
+         CASE
+           WHEN NULLIF("meta"->>'inpMs', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+             AND NULLIF("meta"->>'inpMs', '')::double precision > 0
+           THEN NULLIF("meta"->>'inpMs', '')::double precision
+         END AS inp_ms,
          CASE WHEN NULLIF("meta"->>'cls', '') ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN NULLIF("meta"->>'cls', '')::double precision END AS cls,
-         CASE WHEN NULLIF("meta"->>'ttfbMs', '') ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN NULLIF("meta"->>'ttfbMs', '')::double precision END AS ttfb_ms
+         CASE
+           WHEN NULLIF("meta"->>'ttfbMs', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+             AND NULLIF("meta"->>'ttfbMs', '')::double precision > 0
+           THEN NULLIF("meta"->>'ttfbMs', '')::double precision
+         END AS ttfb_ms
        FROM "SiteEvent"
        WHERE "siteId" = $1
          AND "type" = 'WEB_VITALS_SAMPLE'

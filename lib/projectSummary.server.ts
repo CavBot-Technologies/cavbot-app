@@ -61,7 +61,7 @@ type ResolvedSummarySite = {
 const SUMMARY_SITE_RESOLUTION_TIMEOUT_MS = 1_200;
 const SUMMARY_REMOTE_FETCH_TIMEOUT_MS = 2_000;
 const SUMMARY_PACK_ENRICH_TIMEOUT_MS = 2_000;
-const SUMMARY_VITALS_ROLLUP_TIMEOUT_MS = 1_500;
+const SUMMARY_VITALS_ROLLUP_TIMEOUT_MS = 2_500;
 
 async function withSummaryStageDeadline<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null;
