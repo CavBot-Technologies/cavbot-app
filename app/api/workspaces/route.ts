@@ -16,6 +16,7 @@ export const runtime = "nodejs";
 export const revalidate = 0;
 
 const WORKSPACES_ROUTE_TIMEOUT_MS = 3_000;
+const WORKSPACES_SESSION_TIMEOUT_MS = 1_500;
 
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
@@ -279,7 +280,10 @@ export async function GET(req: NextRequest) {
   const rid = requestIdFrom(req);
   let accountId: string | null = null;
   try {
-    const sess = await requireWorkspaceResilientSession(req);
+    const sess = await withWorkspacesDeadline(
+      requireWorkspaceResilientSession(req),
+      WORKSPACES_SESSION_TIMEOUT_MS,
+    );
     accountId = sess.accountId || null;
 
     const includeInactive = includeInactiveFromQuery(req);
@@ -305,7 +309,10 @@ export async function POST(req: NextRequest) {
   const rid = requestIdFrom(req);
   let accountId: string | null = null;
   try {
-    const sess = await requireWorkspaceResilientSession(req);
+    const sess = await withWorkspacesDeadline(
+      requireWorkspaceResilientSession(req),
+      WORKSPACES_SESSION_TIMEOUT_MS,
+    );
     accountId = sess.accountId || null;
 
     const body = (await safeJsonBody<ListWorkspacesBody>(req)) || {};

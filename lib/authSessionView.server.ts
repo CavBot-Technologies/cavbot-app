@@ -18,6 +18,8 @@ import {
 import { resolvePlanIdFromTier } from "@/lib/plans";
 import { normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 
+const AUTH_SESSION_VIEW_QUERY_TIMEOUT_MS = 900;
+
 function s(value: unknown) {
   return String(value ?? "").trim();
 }
@@ -55,6 +57,23 @@ function asDate(value: unknown, fallback?: Date | null) {
   if (value instanceof Date) return value;
   const parsed = new Date(String(value));
   return Number.isFinite(parsed.getTime()) ? parsed : fallback ?? null;
+}
+
+async function withAuthSessionViewDeadline<T>(
+  promise: Promise<T>,
+  timeoutMs = AUTH_SESSION_VIEW_QUERY_TIMEOUT_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("AUTH_SESSION_VIEW_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export type AuthSessionViewUser = AuthUser & {
@@ -165,12 +184,14 @@ export async function readAuthSessionView(
     const pool = getAuthPool();
     let degraded = false;
 
-    const membershipRow = await findSessionMembership(pool, userId, accountId).catch(() => {
+    const membershipRow = await withAuthSessionViewDeadline(
+      findSessionMembership(pool, userId, accountId),
+    ).catch(() => {
       degraded = true;
       return null;
     });
 
-    const userRow = await findUserById(pool, userId).catch(() => {
+    const userRow = await withAuthSessionViewDeadline(findUserById(pool, userId)).catch(() => {
       degraded = true;
       return null;
     });
@@ -188,13 +209,15 @@ export async function readAuthSessionView(
       tier: membershipRow?.accountTier || "FREE",
     });
 
-    const accountRow = await findAccountById(pool, accountId).catch(() => {
+    const accountRow = await withAuthSessionViewDeadline(findAccountById(pool, accountId)).catch(() => {
       degraded = true;
       return null;
     });
 
     if (accountRow) {
-      const subscriptionRow = await findLatestEntitledSubscription(accountId, pool).catch(() => {
+      const subscriptionRow = await withAuthSessionViewDeadline(
+        findLatestEntitledSubscription(accountId, pool),
+      ).catch(() => {
         degraded = true;
         return null;
       });

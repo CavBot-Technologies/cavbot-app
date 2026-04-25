@@ -19,6 +19,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const AUTH_ME_TIMEOUT_MS = 3_000;
+const AUTH_ME_VIEW_TIMEOUT_MS = 1_500;
 
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
@@ -160,7 +161,7 @@ export async function GET(req: Request) {
       return json({ ok: true, authenticated: true, degraded: false, session: sess, capabilities: { aiReady: false } }, 200);
     }
 
-    const view = await readAuthSessionView(sess);
+    const view = await withAuthMeDeadline(readAuthSessionView(sess), AUTH_ME_VIEW_TIMEOUT_MS).catch(() => null);
     if (!view) {
       return json(buildSessionFallbackPayload(sess), 200);
     }

@@ -84,9 +84,27 @@ function authBackendUnavailableError() {
 
 const SESSION_TTL_SECONDS = 60 * 60 * 8; // 8 hours
 const CLOUDFLARE_PBKDF2_ITER_LIMIT = 100_000;
+const AUTH_BACKEND_READ_TIMEOUT_MS = 1_200;
 
 function nowSec() {
   return Math.floor(Date.now() / 1000);
+}
+
+async function withAuthBackendReadDeadline<T>(
+  promise: Promise<T>,
+  timeoutMs = AUTH_BACKEND_READ_TIMEOUT_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("AUTH_BACKEND_READ_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function env(name: string) {
@@ -735,11 +753,13 @@ export async function getSession(req: Request): Promise<CavbotSession | null> {
         let activeMembership = null;
 
         if (sess.accountId) {
-          activeMembership = await findSessionMembership(pool, userId, String(sess.accountId));
+          activeMembership = await withAuthBackendReadDeadline(
+            findSessionMembership(pool, userId, String(sess.accountId)),
+          );
         }
 
         if (!activeMembership || !sess.memberRole) {
-          const memberships = await findMembershipsForUser(pool, userId);
+          const memberships = await withAuthBackendReadDeadline(findMembershipsForUser(pool, userId));
           const active = pickPrimaryMembership(memberships);
           if (active?.accountId) {
             sess.accountId = String(active.accountId);
@@ -803,7 +823,7 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
     const pool = getAuthPool();
     if (!sess.accountId || !sess.memberRole) {
       try {
-        const memberships = await findMembershipsForUser(pool, userId);
+        const memberships = await withAuthBackendReadDeadline(findMembershipsForUser(pool, userId));
         const active = pickPrimaryMembership(memberships);
 
         if (!active?.accountId) throw new ApiAuthError("UNAUTHORIZED", 401);
@@ -820,7 +840,7 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
     // Requires UserAuth.sessionVersion. In dev/bootstrap, schema may lag; don't brick the app.
     let auth: { sessionVersion: number | null } | null = null;
     try {
-      auth = await findUserAuth(pool, userId);
+      auth = await withAuthBackendReadDeadline(findUserAuth(pool, userId));
     } catch {
       if (canFailOpenAuthenticatedRead(req)) return sess;
       throw authBackendUnavailableError();
@@ -830,7 +850,7 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
       // OAuth-only users may not have a UserAuth row yet; allow signed session tokens
       // for those identities so protected APIs do not hard-fail.
       try {
-        if (await userHasOAuthIdentity(pool, userId)) return sess;
+        if (await withAuthBackendReadDeadline(userHasOAuthIdentity(pool, userId))) return sess;
       } catch {
         if (canFailOpenAuthenticatedRead(req)) return sess;
         throw authBackendUnavailableError();
@@ -856,7 +876,9 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
       throw new ApiAuthError("SESSION_REVOKED", 401);
     }
     try {
-      const discipline = await getAccountDisciplineState(String(sess.accountId || ""));
+      const discipline = await withAuthBackendReadDeadline(
+        getAccountDisciplineState(String(sess.accountId || "")),
+      );
       if (discipline?.status === "REVOKED") {
         throw new ApiAuthError("ACCOUNT_REVOKED", 403);
       }
