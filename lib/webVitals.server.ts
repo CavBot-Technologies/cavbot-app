@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { SummaryRange } from "@/lib/cavbotApi.server";
-import { getAuthPool, newDbId, withAuthTransaction } from "@/lib/authDb";
+import { newDbId, withAuthTransaction, withDedicatedAuthClient } from "@/lib/authDb";
 
 type WebVitalsRecord = {
   routePath: string;
@@ -236,8 +236,9 @@ export async function fetchSiteWebVitalsRollup(args: {
   const interval = rangeToInterval(args.range);
   const values = [args.siteId, interval];
 
-  const rollup = await getAuthPool().query<RawRollupRow>(
-    `WITH samples AS (
+  return withDedicatedAuthClient(async (client) => {
+    const rollup = await client.query<RawRollupRow>(
+      `WITH samples AS (
        SELECT
          "createdAt",
          NULLIF(COALESCE("meta"->>'routePath', "meta"->>'path'), '') AS route_path,
@@ -282,11 +283,11 @@ export async function fetchSiteWebVitalsRollup(args: {
        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY fcp_ms) FILTER (WHERE fcp_ms IS NOT NULL) AS "fcpP75Ms",
        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY ttfb_ms) FILTER (WHERE ttfb_ms IS NOT NULL) AS "ttfbP75Ms"
      FROM samples`,
-    values,
-  );
+      values,
+    );
 
-  const routeRollup = await getAuthPool().query<RawRouteRollupRow>(
-    `WITH samples AS (
+    const routeRollup = await client.query<RawRouteRollupRow>(
+      `WITH samples AS (
        SELECT
          NULLIF(COALESCE("meta"->>'routePath', "meta"->>'path'), '') AS route_path,
          CASE
@@ -329,24 +330,25 @@ export async function fetchSiteWebVitalsRollup(args: {
        )::int AS "slowPagesCount",
        COUNT(*) FILTER (WHERE COALESCE(cls_p75, 0) > 0.25)::int AS "unstableLayoutPages"
      FROM route_rollups`,
-    values,
-  );
+      values,
+    );
 
-  const row = rollup.rows[0];
-  if (!row || asInt(row.samples) <= 0) return null;
+    const row = rollup.rows[0];
+    if (!row || asInt(row.samples) <= 0) return null;
 
-  const routeRow = routeRollup.rows[0];
-  const updatedAt = asDate(row.updatedAt);
+    const routeRow = routeRollup.rows[0];
+    const updatedAt = asDate(row.updatedAt);
 
-  return {
-    updatedAtISO: updatedAt ? updatedAt.toISOString() : null,
-    samples: asInt(row.samples),
-    lcpP75Ms: asNumber(row.lcpP75Ms),
-    inpP75Ms: asNumber(row.inpP75Ms),
-    clsP75: asNumber(row.clsP75),
-    fcpP75Ms: asNumber(row.fcpP75Ms),
-    ttfbP75Ms: asNumber(row.ttfbP75Ms),
-    slowPagesCount: asInt(routeRow?.slowPagesCount),
-    unstableLayoutPages: asInt(routeRow?.unstableLayoutPages),
-  };
+    return {
+      updatedAtISO: updatedAt ? updatedAt.toISOString() : null,
+      samples: asInt(row.samples),
+      lcpP75Ms: asNumber(row.lcpP75Ms),
+      inpP75Ms: asNumber(row.inpP75Ms),
+      clsP75: asNumber(row.clsP75),
+      fcpP75Ms: asNumber(row.fcpP75Ms),
+      ttfbP75Ms: asNumber(row.ttfbP75Ms),
+      slowPagesCount: asInt(routeRow?.slowPagesCount),
+      unstableLayoutPages: asInt(routeRow?.unstableLayoutPages),
+    };
+  });
 }
