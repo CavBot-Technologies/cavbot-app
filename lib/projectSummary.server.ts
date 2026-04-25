@@ -59,7 +59,7 @@ type ResolvedSummarySite = {
 };
 
 const SUMMARY_SITE_RESOLUTION_TIMEOUT_MS = 1_200;
-const SUMMARY_REMOTE_FETCH_TIMEOUT_MS = 3_500;
+const SUMMARY_REMOTE_FETCH_TIMEOUT_MS = 2_000;
 const SUMMARY_PACK_ENRICH_TIMEOUT_MS = 2_000;
 const SUMMARY_VITALS_ROLLUP_TIMEOUT_MS = 1_500;
 
@@ -75,6 +75,45 @@ async function withSummaryStageDeadline<T>(promise: Promise<T>, timeoutMs: numbe
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+function buildFallbackProjectSummary(input: {
+  project: TenantProjectAccess["project"];
+  range?: SummaryRange;
+  selectedSite: ResolvedSummarySite | null;
+  siteOrigin?: string;
+}): ProjectSummary {
+  const activeSiteOrigin = input.selectedSite?.origin ?? input.siteOrigin ?? undefined;
+  const activeSite = activeSiteOrigin
+    ? {
+        id: input.selectedSite?.id ?? "active",
+        label: activeSiteOrigin,
+        origin: activeSiteOrigin,
+      }
+    : undefined;
+
+  const summary = {
+    project: {
+      id: String(input.project.id),
+      projectId: input.project.id,
+      name: input.project.name ?? undefined,
+    },
+    window: {
+      range: input.range ?? "30d",
+    },
+    sites: activeSite ? [activeSite] : [],
+    activeSite,
+    metrics: {},
+  } as ProjectSummary & Record<string, unknown>;
+
+  summary.diagnostics = {
+    summarySource: "local-fallback",
+  };
+  summary.snapshot = {
+    summarySource: "local-fallback",
+  };
+
+  return summary;
 }
 
 function normalizeProjectId(input: string | number | null | undefined) {
@@ -221,7 +260,7 @@ export async function getTenantProjectSummary(
       }),
       SUMMARY_REMOTE_FETCH_TIMEOUT_MS,
       "PROJECT_SUMMARY_TIMEOUT",
-    ),
+    ).catch(() => null),
     effectiveSiteOrigin
       ? withSummaryStageDeadline(
           getLatestPackWithHistory({
@@ -245,9 +284,18 @@ export async function getTenantProjectSummary(
       : Promise.resolve(null),
   ]);
 
+  const baseSummary =
+    summary ??
+    buildFallbackProjectSummary({
+      project: access.project,
+      range: input.range,
+      selectedSite,
+      siteOrigin: effectiveSiteOrigin,
+    });
+
   const enrichedSummary = harmonizeProjectSummarySignals(
     enrichProjectSummaryWithLatestPack(
-      suppressPlaceholderWebVitals(enrichProjectSummaryWithLocalWebVitals(summary, localWebVitalsRollup)),
+      suppressPlaceholderWebVitals(enrichProjectSummaryWithLocalWebVitals(baseSummary, localWebVitalsRollup)),
       latestPackWithHistory,
     ),
   );

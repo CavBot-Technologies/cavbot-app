@@ -8,7 +8,7 @@ import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const SUMMARY_ROUTE_TIMEOUT_MS = 4_000;
+const SUMMARY_ROUTE_TIMEOUT_MS = 8_000;
 
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
