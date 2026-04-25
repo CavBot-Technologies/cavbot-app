@@ -235,6 +235,39 @@ export async function listActiveWorkspaceSites(projectId: number, order: "asc" |
   });
 }
 
+export async function readOwnedWorkspaceSitesBootstrap(
+  accountId: string,
+  projectId: number,
+  order: "asc" | "desc" = "desc"
+) {
+  return withDedicatedAuthClient(async (authClient) => {
+    const project = await queryOne<RawProjectSiteSummaryRow>(
+      authClient,
+      `SELECT "id", "topSiteId"
+       FROM "Project"
+       WHERE "id" = $1
+         AND "accountId" = $2
+       LIMIT 1`,
+      [projectId, accountId]
+    );
+    if (!project) return null;
+
+    const result = await authClient.query<RawWorkspaceSiteRow>(
+      `SELECT "id", "label", "origin", "notes", "createdAt"
+       FROM "Site"
+       WHERE "projectId" = $1
+         AND "isActive" = true
+       ORDER BY "createdAt" ${order === "asc" ? "ASC" : "DESC"}`,
+      [projectId]
+    );
+
+    return {
+      topSiteId: project.topSiteId == null ? null : String(project.topSiteId),
+      sites: result.rows.map(normalizeSiteRow),
+    };
+  });
+}
+
 export async function listRemovedWorkspaceSites(projectId: number) {
   const result = await getAuthPool().query<RawWorkspaceDeletionRow>(
     `SELECT

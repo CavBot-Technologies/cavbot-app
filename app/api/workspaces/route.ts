@@ -5,8 +5,7 @@ import { isApiAuthError } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import {
   classifyWorkspaceBootstrapError,
-  listAccountWorkspaceProjects,
-  resolveAccountWorkspaceProject,
+  readAccountWorkspaceBootstrap,
 } from "@/lib/workspaceProjects.server";
 import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
 import crypto from "crypto";
@@ -15,8 +14,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
-const WORKSPACES_ROUTE_TIMEOUT_MS = 4_000;
-const WORKSPACES_SESSION_TIMEOUT_MS = 2_500;
+const WORKSPACES_ROUTE_TIMEOUT_MS = 8_000;
+const WORKSPACES_SESSION_TIMEOUT_MS = 5_500;
 
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
@@ -157,40 +156,21 @@ async function listWorkspaces(
   accountId: string,
   includeInactive: boolean
 ) {
-  let activeProject: { id: number } | null = null;
+  let workspaceBootstrap: Awaited<ReturnType<typeof readAccountWorkspaceBootstrap>>;
   try {
-    activeProject = await resolveAccountWorkspaceProject({
+    workspaceBootstrap = await readAccountWorkspaceBootstrap({
       accountId,
-      select: { id: true },
       requestedProjectId: parseProjectId(req.cookies.get("cb_active_project_id")?.value),
       fallbackProjectId: parseProjectId(req.cookies.get("cb_pid")?.value),
-      includeInactive: false,
+      includeInactive,
       ensureActive: true,
     });
   } catch (error) {
     throw new WorkspaceBootstrapStageError("resolve_active_project", error);
   }
-  const activeProjectId = activeProject?.id ?? null;
-
-  let projects: Array<{
-    id: number;
-    name: string | null;
-    slug: string;
-    region: string;
-    retentionDays: number;
-    topSiteId: string | null;
-    createdAt: Date;
-  }> = [];
-  try {
-    // Keep workspace bootstrap flat and minimal.
-    // Route/site metadata is loaded on follow-up reads after the active project is known.
-    projects = await listAccountWorkspaceProjects(accountId, includeInactive);
-  } catch (error) {
-    throw new WorkspaceBootstrapStageError("list_projects", error);
-  }
 
   // Return JSON-safe timestamps (clean client hydration)
-  const out = projects.map((p) => ({
+  const out = workspaceBootstrap.projects.map((p) => ({
     id: p.id,
     name: p.name,
     slug: p.slug,
@@ -200,7 +180,7 @@ async function listWorkspaces(
     createdAt: p.createdAt.toISOString(),
   }));
 
-  return { projects: out, activeProjectId: activeProjectId ?? null };
+  return { projects: out, activeProjectId: workspaceBootstrap.activeProjectId ?? null };
 }
 
 function mapError(e: unknown): { status: number; payload: Record<string, unknown> } {

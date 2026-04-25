@@ -294,6 +294,72 @@ export async function listAccountWorkspaceProjects(accountId: string, includeIna
   });
 }
 
+export async function readAccountWorkspaceBootstrap(args: {
+  accountId: string;
+  requestedProjectId?: number | null;
+  fallbackProjectId?: number | null;
+  includeInactive?: boolean;
+  ensureActive?: boolean;
+}) {
+  const includeInactive = Boolean(args.includeInactive);
+  const candidateIds = Array.from(
+    new Set(
+      [args.requestedProjectId, args.fallbackProjectId].filter(
+        (value): value is number => Number.isInteger(value) && Number(value) > 0
+      )
+    )
+  );
+
+  return withDedicatedAuthClient(async (authClient) => {
+    let activeProject = null as WorkspaceProjectRow | null;
+
+    for (const projectId of candidateIds) {
+      activeProject = await findProjectByIdFrom(
+        authClient,
+        args.accountId,
+        projectId,
+        includeInactive
+      );
+      if (activeProject) break;
+    }
+
+    if (!activeProject) {
+      activeProject = await findFirstProjectFrom(authClient, args.accountId, includeInactive);
+    }
+
+    if (!activeProject && args.ensureActive !== false) {
+      const ensured = await ensureActiveWorkspaceProject(args.accountId);
+      activeProject = await findProjectByIdFrom(
+        authClient,
+        args.accountId,
+        ensured.id,
+        includeInactive
+      );
+    }
+
+    const result = await authClient.query<RawProjectListRow>(
+      `SELECT
+         "id",
+         "name",
+         "slug",
+         "region",
+         "retentionDays",
+         "topSiteId",
+         "createdAt"
+       FROM "Project"
+       WHERE "accountId" = $1
+         ${includeInactive ? "" : 'AND "isActive" = true'}
+       ORDER BY "id" ASC`,
+      [args.accountId]
+    );
+
+    return {
+      activeProjectId: activeProject?.id ?? null,
+      projects: result.rows.map(normalizeProjectListRow),
+    };
+  });
+}
+
 export async function ensureActiveWorkspaceProject(accountId: string) {
   const existing = await findFirstProjectFrom(getAuthPool(), accountId, false);
   if (existing) return projectPayloadForSelect(existing, {

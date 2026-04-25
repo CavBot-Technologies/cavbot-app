@@ -4,7 +4,6 @@ import { cookies } from "next/headers";
 import { withDedicatedAuthClient } from "@/lib/authDb";
 import { resolveEffectiveAccountIdFromHeaders } from "@/lib/effectiveSessionAccount.server";
 import { originsShareWebsiteContext } from "@/originMatch";
-import { findAccountTier, listActiveWorkspaceSites } from "@/lib/workspaceSites.server";
 
 type SiteDTO = {
   id: string;
@@ -50,6 +49,18 @@ type ProjectPointer = {
 type RawProjectPointerRow = {
   id: number | string;
   topSiteId: string | null;
+};
+
+type RawWorkspaceSiteRow = {
+  id: string;
+  label: string;
+  origin: string;
+  notes: string | null;
+  createdAt: Date | string;
+};
+
+type RawAccountTierRow = {
+  tier: string | null;
 };
 
 const KEY_ACTIVE_PROJECT_ID = "cb_active_project_id";
@@ -127,56 +138,65 @@ async function inferAccountIdFromSessionCookie(): Promise<string | null> {
   return resolveEffectiveAccountIdFromHeaders();
 }
 
+async function findProjectPointerFrom(
+  queryable: { query: <T>(text: string, values?: unknown[]) => Promise<{ rows: T[] }> },
+  projectId: number,
+) {
+  const result = await queryable.query<RawProjectPointerRow>(
+    `SELECT "id", "topSiteId"
+     FROM "Project"
+     WHERE "id" = $1
+     LIMIT 1`,
+    [projectId],
+  );
+  return asProjectPointer(result.rows[0]);
+}
+
 async function findProjectPointer(projectId: number) {
-  return withDedicatedAuthClient(async (authClient) => {
-    const result = await authClient.query<RawProjectPointerRow>(
-      `SELECT "id", "topSiteId"
-       FROM "Project"
-       WHERE "id" = $1
-       LIMIT 1`,
-      [projectId],
-    );
-    return asProjectPointer(result.rows[0]);
-  });
+  return withDedicatedAuthClient((authClient) => findProjectPointerFrom(authClient, projectId));
 }
 
-async function findOwnedProjectPointer(projectId: number, accountId: string) {
-  return withDedicatedAuthClient(async (authClient) => {
-    const result = await authClient.query<RawProjectPointerRow>(
-      `SELECT "id", "topSiteId"
-       FROM "Project"
-       WHERE "id" = $1
-         AND "accountId" = $2
-         AND "isActive" = true
-       LIMIT 1`,
-      [projectId, accountId],
-    );
-    return asProjectPointer(result.rows[0]);
-  });
+async function findOwnedProjectPointerFrom(
+  queryable: { query: <T>(text: string, values?: unknown[]) => Promise<{ rows: T[] }> },
+  projectId: number,
+  accountId: string,
+) {
+  const result = await queryable.query<RawProjectPointerRow>(
+    `SELECT "id", "topSiteId"
+     FROM "Project"
+     WHERE "id" = $1
+       AND "accountId" = $2
+       AND "isActive" = true
+     LIMIT 1`,
+    [projectId, accountId],
+  );
+  return asProjectPointer(result.rows[0]);
 }
 
-async function findFirstOwnedProjectPointer(accountId: string) {
-  return withDedicatedAuthClient(async (authClient) => {
-    const result = await authClient.query<RawProjectPointerRow>(
-      `SELECT "id", "topSiteId"
-       FROM "Project"
-       WHERE "accountId" = $1
-         AND "isActive" = true
-       ORDER BY "createdAt" ASC
-       LIMIT 1`,
-      [accountId],
-    );
-    return asProjectPointer(result.rows[0]);
-  });
+async function findFirstOwnedProjectPointerFrom(
+  queryable: { query: <T>(text: string, values?: unknown[]) => Promise<{ rows: T[] }> },
+  accountId: string,
+) {
+  const result = await queryable.query<RawProjectPointerRow>(
+    `SELECT "id", "topSiteId"
+     FROM "Project"
+     WHERE "accountId" = $1
+       AND "isActive" = true
+     ORDER BY "createdAt" ASC
+     LIMIT 1`,
+    [accountId],
+  );
+  return asProjectPointer(result.rows[0]);
 }
 
-async function resolveProjectPointerForAccount(
+async function resolveProjectPointerForAccountFrom(
+  queryable: { query: <T>(text: string, values?: unknown[]) => Promise<{ rows: T[] }> },
   requestedProjectId: number,
   fallbackProjectId: number | null,
   accountId?: string,
 ) {
   if (!accountId) {
-    return (await findProjectPointer(requestedProjectId)) ?? { id: requestedProjectId, topSiteId: null };
+    return (await findProjectPointerFrom(queryable, requestedProjectId)) ?? { id: requestedProjectId, topSiteId: null };
   }
 
   const candidateIds = Array.from(
@@ -188,11 +208,11 @@ async function resolveProjectPointerForAccount(
   );
 
   for (const projectId of candidateIds) {
-    const owned = await findOwnedProjectPointer(projectId, accountId);
+    const owned = await findOwnedProjectPointerFrom(queryable, projectId, accountId);
     if (owned) return owned;
   }
 
-  return (await findFirstOwnedProjectPointer(accountId)) ?? { id: requestedProjectId, topSiteId: null };
+  return (await findFirstOwnedProjectPointerFrom(queryable, accountId)) ?? { id: requestedProjectId, topSiteId: null };
 }
 
 export async function readWorkspace(opts?: { accountId?: string }): Promise<WorkspacePayload> {
@@ -203,18 +223,62 @@ export async function readWorkspace(opts?: { accountId?: string }): Promise<Work
     undefined;
 
   let resolvedProject: ProjectPointer;
+  let sites: SiteDTO[] = [];
+  let tierStr: string | null = null;
   try {
-    resolvedProject = await resolveProjectPointerForAccount(
-      projectPointers.requestedProjectId,
-      projectPointers.fallbackProjectId,
-      accountId,
-    );
+    if (accountId) {
+      const workspaceState = await withDedicatedAuthClient(async (authClient) => {
+        const resolvedProject = await resolveProjectPointerForAccountFrom(
+          authClient,
+          projectPointers.requestedProjectId,
+          projectPointers.fallbackProjectId,
+          accountId,
+        );
+        const siteResult = await authClient.query<RawWorkspaceSiteRow>(
+          `SELECT "id", "label", "origin", "notes", "createdAt"
+           FROM "Site"
+           WHERE "projectId" = $1
+             AND "isActive" = true
+           ORDER BY "createdAt" DESC`,
+          [resolvedProject.id],
+        );
+        const tierResult = await authClient.query<RawAccountTierRow>(
+          `SELECT "tier"
+           FROM "Account"
+           WHERE "id" = $1
+           LIMIT 1`,
+          [accountId],
+        );
+        return {
+          resolvedProject,
+          sites: siteResult.rows.map((row) => ({
+            id: row.id,
+            label: row.label,
+            origin: row.origin,
+            createdAt: new Date(row.createdAt).getTime(),
+            notes: row.notes ?? undefined,
+          })),
+          tier: tierResult.rows[0]?.tier ? String(tierResult.rows[0].tier) : null,
+        };
+      });
+      resolvedProject = workspaceState.resolvedProject;
+      sites = workspaceState.sites;
+      tierStr = workspaceState.tier;
+    } else {
+      resolvedProject =
+        (await findProjectPointer(projectPointers.requestedProjectId).catch(() => null)) ?? {
+          id: projectPointers.requestedProjectId,
+          topSiteId: null,
+        };
+    }
   } catch {
     resolvedProject =
       (await findProjectPointer(projectPointers.requestedProjectId).catch(() => null)) ?? {
         id: projectPointers.requestedProjectId,
         topSiteId: null,
       };
+    sites = [];
+    tierStr = null;
   }
 
   const projectId = resolvedProject.id;
@@ -230,15 +294,6 @@ export async function readWorkspace(opts?: { accountId?: string }): Promise<Work
   const activeSiteOriginHint = await cookieGetDecoded(`${KEY_ACTIVE_SITE_ORIGIN_PREFIX}${projectIdStr}`);
   const topSiteOriginHint = await cookieGetDecoded(`${KEY_TOP_SITE_ORIGIN_PREFIX}${projectIdStr}`);
   const activeSiteIdHint = await cookieGetDecoded(`${KEY_ACTIVE_SITE_ID_PREFIX}${projectIdStr}`);
-
-  const rows = await listActiveWorkspaceSites(projectId, "desc").catch(() => []);
-  const sites: SiteDTO[] = rows.map((row) => ({
-    id: row.id,
-    label: row.label,
-    origin: row.origin,
-    createdAt: row.createdAt.getTime(),
-    notes: row.notes ?? undefined,
-  }));
 
   const firstSite = sites[0] ?? null;
   const topSiteByProject = resolvedProject.topSiteId
@@ -261,8 +316,6 @@ export async function readWorkspace(opts?: { accountId?: string }): Promise<Work
   const activeSiteId = activeSite?.id ?? "";
   const topSiteOrigin = topSite?.origin ?? "";
   const activeSiteOrigin = activeSite?.origin ?? topSiteOrigin;
-
-  const tierStr = accountId ? await findAccountTier(accountId).catch(() => null) : null;
 
   return {
     projectId,

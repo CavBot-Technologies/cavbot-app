@@ -18,10 +18,10 @@ import {
   createProjectNotice,
   createWorkspaceSite,
   findAccountTier,
-  findOwnedWorkspaceProjectForSites,
-  listActiveWorkspaceSites,
   markWorkspaceSiteVerified,
+  readOwnedWorkspaceSitesBootstrap,
   rollbackCreatedWorkspaceSite,
+  findOwnedWorkspaceProjectForSites,
 } from "@/lib/workspaceSites.server";
 
 // Plan system enforcement
@@ -39,7 +39,7 @@ import { requestInitialSiteScanBestEffort } from "@/lib/scanner";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const WORKSPACE_SITES_TIMEOUT_MS = 3_500;
+const WORKSPACE_SITES_TIMEOUT_MS = 5_000;
 
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
@@ -299,13 +299,9 @@ export async function GET(req: Request, ctx: unknown) {
     projectId = parseProjectId(params?.projectId || "");
     if (!projectId) return json({ error: "BAD_PROJECT", requestId: rid }, 400, rid);
 
-    const payload = await withWorkspaceSitesDeadline((async () => {
-      const project = await findOwnedWorkspaceProjectForSites(sess.accountId, projectId!);
-      if (!project) return null;
-
-      const sites = await listActiveWorkspaceSites(project.id, "asc");
-      return { topSiteId: project.topSiteId, sites };
-    })());
+    const payload = await withWorkspaceSitesDeadline(
+      readOwnedWorkspaceSitesBootstrap(sess.accountId, projectId!, "asc")
+    );
 
     if (!payload) return json({ error: "NOT_FOUND", requestId: rid }, 404, rid);
     return json(payload, 200, rid);
