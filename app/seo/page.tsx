@@ -40,6 +40,7 @@ type PageProps = {
 
 type RangeKey = "24h" | "7d" | "14d" | "30d";
 const SEO_RENDER_TIMEOUT_MS = 2_500;
+const SEO_SUMMARY_TIMEOUT_MS = 8_000;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -732,7 +733,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
         range: range === "30d" ? "30d" : "7d",
         siteOrigin: activeSite.url || undefined,
       }),
-      3_000,
+      SEO_SUMMARY_TIMEOUT_MS,
     );
     const { summary: loadedSummary } = summaryResult;
     summary = loadedSummary;
