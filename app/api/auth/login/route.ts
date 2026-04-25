@@ -103,6 +103,15 @@ function safeString(x: unknown) {
   return typeof x === "string" ? x : String(x ?? "");
 }
 
+function isDebugLoginRequest(req: Request) {
+  return /\bcodex-debug-login\b/i.test(String(req.headers.get("user-agent") || ""));
+}
+
+function logDebugLogin(enabled: boolean, stage: string, detail?: Record<string, unknown>) {
+  if (!enabled) return;
+  console.log("[auth/login][trace]", stage, detail || {});
+}
+
 async function getRestrictedAccountError(accountId: string) {
   let discipline = null;
   try {
@@ -302,16 +311,20 @@ async function createEmail2faChallenge(args: {
 export async function POST(req: Request) {
   try {
     const ownerStaffCodeCandidates = new Set(getOwnerStaffCodeCandidates());
+    const debugLogin = isDebugLoginRequest(req);
     assertWriteOrigin(req);
+    logDebugLogin(debugLogin, "origin_ok");
     const authClient = getAuthPool();
 
       const body = await readBody(req);
+      logDebugLogin(debugLogin, "body_read", { hasEmail: Boolean(body?.email), hasUsername: Boolean(body?.username), hasIdentifier: Boolean(body?.identifier) });
       const verificationGate = ensureActionVerification(req, {
         actionType: "login",
         route: "/auth",
         sessionIdHint: extractVerifySessionId(req, body?.verificationSessionId),
         verificationGrantToken: extractVerifyGrantToken(req, body?.verificationGrantToken),
       });
+      logDebugLogin(debugLogin, "verification_checked", { ok: verificationGate.ok, decision: verificationGate.decision });
       if (!verificationGate.ok) {
         return json(
           buildVerifyErrorPayload(verificationGate),
@@ -342,6 +355,7 @@ export async function POST(req: Request) {
 
 
       let user = email ? await findUserByEmail(authClient, email) : await findUserByUsername(authClient, username);
+      logDebugLogin(debugLogin, "user_lookup_complete", { found: Boolean(user), viaEmail: Boolean(email), viaStaffCode: Boolean(staffCode) });
       if (!user && staffCode) {
         if (ownerStaffCodeCandidates.has(staffCode)) {
           await ensureAdminOwnerBootstrapLazy().catch(() => null);
@@ -352,7 +366,9 @@ export async function POST(req: Request) {
         }
       }
       const userAuth = user ? await findUserAuth(authClient, user.id) : null;
+      logDebugLogin(debugLogin, "user_auth_lookup_complete", { found: Boolean(userAuth) });
       const memberships = user ? await findMembershipsForUser(authClient, user.id) : [];
+      logDebugLogin(debugLogin, "memberships_lookup_complete", { count: memberships.length });
 
 
       if (!user || !userAuth) return reject({ ok: false, error: "invalid_credentials" }, 401);
@@ -376,6 +392,7 @@ export async function POST(req: Request) {
 
 
       const ok = await verifyPassword(password, salt, iters, hash);
+      logDebugLogin(debugLogin, "password_verify_complete", { ok, iters });
       if (!ok) {
         if (activeCandidate?.accountId) {
           await writeLoginAuditSafely({
@@ -404,10 +421,12 @@ export async function POST(req: Request) {
       const active = activeCandidate ?? memberships[0];
       {
         const restriction = await getRestrictedUserError(user.id);
+        logDebugLogin(debugLogin, "user_discipline_complete", { restriction });
         if (restriction) return reject({ ok: false, error: restriction }, 403);
       }
       {
         const restriction = await getRestrictedAccountError(active.accountId);
+        logDebugLogin(debugLogin, "account_discipline_complete", { restriction });
         if (restriction) return reject({ ok: false, error: restriction }, 403);
       }
 
@@ -428,11 +447,13 @@ export async function POST(req: Request) {
           geoCountry: geo.country,
         },
       });
+      logDebugLogin(debugLogin, "audit_complete");
 
 
     // If 2FA enabled -> Stage A returns challengeRequired (no session cookie)
       const email2fa = Boolean(userAuth.twoFactorEmailEnabled);
       const app2fa = Boolean(userAuth.twoFactorAppEnabled);
+      logDebugLogin(debugLogin, "two_factor_checked", { email2fa, app2fa });
 
 
       if (email2fa || app2fa) {
@@ -508,6 +529,7 @@ export async function POST(req: Request) {
         memberRole,
         sessionVersion: resolveIssuedSessionVersion(userAuth.sessionVersion),
       });
+      logDebugLogin(debugLogin, "session_created");
       const res = json({ ok: true, accountId: active.accountId, memberRole }, 200);
 
 
@@ -519,6 +541,7 @@ export async function POST(req: Request) {
 
       try {
         const firstProject = await findFirstProjectIdByAccount(authClient, active.accountId);
+        logDebugLogin(debugLogin, "first_project_lookup_complete", { found: Boolean(firstProject?.id) });
 
         if (firstProject?.id) {
           const pointerCookieOpts = {
@@ -538,6 +561,7 @@ export async function POST(req: Request) {
 
 
       recordVerifyActionSuccess(req, { actionType: "login", sessionIdHint: verifySessionHint });
+      logDebugLogin(debugLogin, "success_response_ready");
       return res;
   } catch (error) {
     console.error("[auth/login] unexpected failure", error);
