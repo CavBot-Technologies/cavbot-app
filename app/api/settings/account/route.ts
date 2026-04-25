@@ -5,8 +5,9 @@ import { revalidateTag, unstable_noStore as noStore } from "next/cache";
 import type { AuditAction, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isBasicUsername, isReservedUsername, isValidUsername, normalizeUsername } from "@/lib/username";
-import { findUserById, getAuthPool } from "@/lib/authDb";
+import { findPublicProfileUserById, findUserById, withDedicatedAuthClient } from "@/lib/authDb";
 import { isApiAuthError, requireSession, requireUser } from "@/lib/apiAuth";
+import { readAuthSessionView } from "@/lib/authSessionView.server";
 import {
   buildAutoWorkspaceSlugCandidates,
   buildPersonalWorkspaceName,
@@ -32,6 +33,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const ALLOW_EMAIL_CHANGE = true;
+const SETTINGS_ACCOUNT_PROFILE_TIMEOUT_MS = 1_800;
 
 type ToneKey = "lime" | "violet" | "blue" | "white" | "navy" | "transparent";
 const MAX_CUSTOM_LINKS = 6;
@@ -341,6 +343,23 @@ function authRequiredProfilePayload(errorCode = "UNAUTHORIZED") {
   } as const;
 }
 
+async function withSettingsProfileDeadline<T>(
+  promise: Promise<T>,
+  timeoutMs = SETTINGS_ACCOUNT_PROFILE_TIMEOUT_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("SETTINGS_ACCOUNT_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function requireAuthenticatedProfileSession(req: Request): Promise<{
   session: Awaited<ReturnType<typeof requireSession>>;
   userId: string;
@@ -363,6 +382,16 @@ export async function GET(req: Request) {
   try {
     const info = await requireAuthenticatedProfileSession(req);
     userId = info.userId;
+
+    const fastProfile = await withSettingsProfileDeadline(
+      withDedicatedAuthClient((authClient) => findPublicProfileUserById(authClient, info.userId)),
+    ).catch(() => null);
+    if (fastProfile) {
+      return jsonNoStore(
+        { ok: true, profile: normalizePublicProfileSettings(fastProfile as unknown as Record<string, unknown>) },
+        { status: 200 },
+      );
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: info.userId },
@@ -424,7 +453,21 @@ export async function GET(req: Request) {
     console.error("GET /api/settings/account failed:", e);
     if (userId) {
       try {
-        const fallbackUser = await findUserById(getAuthPool(), userId);
+        const authView = await withSettingsProfileDeadline(
+          requireAuthenticatedProfileSession(req).then((info) => readAuthSessionView(info.session)),
+          1_200,
+        ).catch(() => null);
+        if (authView?.user) {
+          return jsonNoStore(
+            {
+              ok: true,
+              degraded: true,
+              profile: normalizePublicProfileSettings(authView.user as unknown as Record<string, unknown>),
+            },
+            { status: 200 }
+          );
+        }
+        const fallbackUser = await withDedicatedAuthClient((authClient) => findUserById(authClient, userId));
         if (fallbackUser) {
           return jsonNoStore(
             {

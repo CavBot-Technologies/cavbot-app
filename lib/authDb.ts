@@ -628,6 +628,60 @@ export async function findPublicProfileUserByUsername(queryable: Queryable, user
   return row ? mapPublicProfileUser(row) : null;
 }
 
+export async function findPublicProfileUserById(queryable: Queryable, userId: string) {
+  const row = await queryOne<RawPublicProfileUserRow>(
+    queryable,
+    `SELECT
+        "id",
+        "email",
+        "username",
+        "displayName",
+        "usernameChangeCount",
+        "lastUsernameChangeAt",
+        "publicProfileEnabled",
+        "avatarImage",
+        "avatarTone",
+        "createdAt",
+        "lastLoginAt",
+        "emailVerifiedAt",
+        "fullName",
+        "bio",
+        "companyName",
+        "companySubcategory",
+        "country",
+        "region",
+        "githubUrl",
+        "instagramUrl",
+        "linkedinUrl",
+        "customLinkUrl",
+        "showCavbotProfileLink",
+        "publicShowReadme",
+        "publicShowWorkspaceSnapshot",
+        "publicShowHealthOverview",
+        "publicShowCapabilities",
+        "publicShowArtifacts",
+        "publicShowPlanTier",
+        "publicShowBio",
+        "publicShowIdentityLinks",
+        "publicShowIdentityLocation",
+        "publicShowIdentityEmail",
+        "publicWorkspaceId",
+        "publicStatusEnabled",
+        "publicStatusMode",
+        "publicStatusNote",
+        "publicStatusUpdatedAt",
+        "showStatusOnPublicProfile",
+        "userStatus",
+        "userStatusNote",
+        "userStatusUpdatedAt"
+      FROM "User"
+      WHERE "id" = $1
+      LIMIT 1`,
+    [userId],
+  );
+  return row ? mapPublicProfileUser(row) : null;
+}
+
 export async function findUserAuth(queryable: Queryable, userId: string) {
   const row = await queryOne<RawUserAuthRow>(
     queryable,

@@ -444,32 +444,30 @@ export async function readBillingUsageMetrics(
   accountId: string,
   queryable: Queryable = getAuthPool(),
 ): Promise<BillingUsageMetrics> {
-  const [members, invites, sites] = await Promise.all([
-    queryable.query<RawCountRow>(
-      `SELECT COUNT(*)::int AS total
-       FROM "Membership"
-       WHERE "accountId" = $1`,
-      [accountId],
-    ),
-    queryable.query<RawCountRow>(
-      `SELECT COUNT(*)::int AS total
-       FROM "Invite"
-       WHERE "accountId" = $1
-         AND UPPER(COALESCE("status"::text, '')) = 'PENDING'
-         AND ("expiresAt" IS NULL OR "expiresAt" > NOW())`,
-      [accountId],
-    ),
-    queryable.query<RawCountRow>(
-      `SELECT COUNT(*)::int AS total
-       FROM "Site" AS s
-       INNER JOIN "Project" AS p
-         ON p."id" = s."projectId"
-       WHERE p."accountId" = $1
-         AND COALESCE(p."isActive", false) = true
-         AND COALESCE(s."isActive", false) = true`,
-      [accountId],
-    ),
-  ]);
+  const members = await queryable.query<RawCountRow>(
+    `SELECT COUNT(*)::int AS total
+     FROM "Membership"
+     WHERE "accountId" = $1`,
+    [accountId],
+  );
+  const invites = await queryable.query<RawCountRow>(
+    `SELECT COUNT(*)::int AS total
+     FROM "Invite"
+     WHERE "accountId" = $1
+       AND UPPER(COALESCE("status"::text, '')) = 'PENDING'
+       AND ("expiresAt" IS NULL OR "expiresAt" > NOW())`,
+    [accountId],
+  );
+  const sites = await queryable.query<RawCountRow>(
+    `SELECT COUNT(*)::int AS total
+     FROM "Site" AS s
+     INNER JOIN "Project" AS p
+       ON p."id" = s."projectId"
+     WHERE p."accountId" = $1
+       AND COALESCE(p."isActive", false) = true
+       AND COALESCE(s."isActive", false) = true`,
+    [accountId],
+  );
 
   return {
     seatsUsed: asNumber(members.rows[0]?.total) + asNumber(invites.rows[0]?.total),

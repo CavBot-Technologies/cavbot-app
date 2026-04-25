@@ -39,8 +39,26 @@ type PageProps = {
 };
 
 type RangeKey = "24h" | "7d" | "14d" | "30d";
+const SEO_RENDER_TIMEOUT_MS = 2_500;
 
 type UnknownRecord = Record<string, unknown>;
+
+async function withSeoDeadline<T>(
+  promise: Promise<T>,
+  timeoutMs = SEO_RENDER_TIMEOUT_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("SEO_RENDER_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 function asRecord(value: unknown): UnknownRecord | null {
   return value && typeof value === "object" ? (value as UnknownRecord) : null;
@@ -705,11 +723,15 @@ export default async function SeoPage({ searchParams }: PageProps) {
   let liveMetadata: Awaited<ReturnType<typeof fetchLiveMetadataSnapshot>> = null;
 
   try {
-    const { summary: loadedSummary } = await getTenantProjectSummary({
-      projectId,
-      range: range === "30d" ? "30d" : "7d",
-      siteOrigin: activeSite.url || undefined,
-    });
+    const summaryResult = await withSeoDeadline(
+      getTenantProjectSummary({
+        projectId,
+        range: range === "30d" ? "30d" : "7d",
+        siteOrigin: activeSite.url || undefined,
+      }),
+      3_000,
+    );
+    const { summary: loadedSummary } = summaryResult;
     summary = loadedSummary;
     seo = normalizeSeoFromSummary(summary);
     vitals = normalizeVitalsFromSummary(summary);
@@ -719,22 +741,21 @@ export default async function SeoPage({ searchParams }: PageProps) {
     vitals = {};
   }
 
-  try {
-    favicon = await buildFaviconIntelligence({
-      origin: activeSite.url || "",
-      summary,
-    });
-  } catch {
-    favicon = null;
-  }
-
-  try {
-    liveMetadata = await fetchLiveMetadataSnapshot({
-      origin: activeSite.url || "",
-    });
-  } catch {
-    liveMetadata = null;
-  }
+  const [faviconResult, liveMetadataResult] = await Promise.all([
+    withSeoDeadline(
+      buildFaviconIntelligence({
+        origin: activeSite.url || "",
+        summary,
+      }),
+    ).catch(() => null),
+    withSeoDeadline(
+      fetchLiveMetadataSnapshot({
+        origin: activeSite.url || "",
+      }),
+    ).catch(() => null),
+  ]);
+  favicon = faviconResult;
+  liveMetadata = liveMetadataResult;
 
   const updatedAtISO = seo.updatedAtISO || vitals.updatedAtISO || null;
   const updatedAtLabel = updatedAtISO ? String(updatedAtISO).replace("T", " ").replace("Z", " UTC").slice(0, 19) : "—";

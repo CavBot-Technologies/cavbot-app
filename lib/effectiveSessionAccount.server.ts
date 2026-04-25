@@ -6,10 +6,29 @@ import { getAppOrigin, getSession, type CavbotSession } from "@/lib/apiAuth";
 import {
   compareMembershipPriority,
   findMembershipsForUser,
-  getAuthPool,
   membershipTierRank,
   pickPrimaryMembership,
+  withDedicatedAuthClient,
 } from "@/lib/authDb";
+
+const EFFECTIVE_ACCOUNT_LOOKUP_TIMEOUT_MS = 650;
+
+async function withEffectiveAccountDeadline<T>(
+  promise: Promise<T>,
+  timeoutMs = EFFECTIVE_ACCOUNT_LOOKUP_TIMEOUT_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("EFFECTIVE_ACCOUNT_LOOKUP_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 export async function resolveEffectiveAccountIdForSession(
   session: CavbotSession | null | undefined,
@@ -21,7 +40,10 @@ export async function resolveEffectiveAccountIdForSession(
   if (!userId) return currentAccountId || null;
 
   try {
-    const memberships = await findMembershipsForUser(getAuthPool(), userId);
+    const memberships = await withEffectiveAccountDeadline(
+      withDedicatedAuthClient((authClient) => findMembershipsForUser(authClient, userId)),
+      currentAccountId ? EFFECTIVE_ACCOUNT_LOOKUP_TIMEOUT_MS : 1_200,
+    );
     const primaryMembership = pickPrimaryMembership(memberships);
     if (!primaryMembership) return currentAccountId || null;
 

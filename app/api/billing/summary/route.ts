@@ -3,6 +3,7 @@ import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthError, readVerifiedSession } from "@/lib/apiAuth";
+import { withDedicatedAuthClient } from "@/lib/authDb";
 import { readAuthSessionView } from "@/lib/authSessionView.server";
 import { PLANS, resolvePlanIdFromTier } from "@/lib/plans";
 import { getQwenCoderPopoverState } from "@/src/lib/ai/qwen-coder-credits.server";
@@ -26,7 +27,7 @@ const NO_STORE_HEADERS: Record<string, string> = {
   Vary: "Cookie",
 };
 
-const BILLING_SUMMARY_TIMEOUT_MS = 1_500;
+const BILLING_SUMMARY_TIMEOUT_MS = 2_500;
 
 function json<T>(data: T, init?: number | ResponseInit) {
   const resInit: ResponseInit = typeof init === "number" ? { status: init } : init ?? {};
@@ -181,6 +182,33 @@ function buildFallbackBillingSummary(args: {
   };
 }
 
+async function readBillingSnapshot(accountId: string) {
+  return withDedicatedAuthClient(async (authClient) => {
+    const account = await readBillingAccount(accountId, authClient);
+    if (!account) {
+      return {
+        account: null,
+        subRow: null,
+        usageMetrics: { seatsUsed: 0, websitesUsed: 0 },
+      };
+    }
+
+    const subRow = await readLatestBillingSubscription(accountId, {
+      queryable: authClient,
+    }).catch(() => null);
+    const usageMetrics = await readBillingUsageMetrics(accountId, authClient).catch(() => ({
+      seatsUsed: 0,
+      websitesUsed: 0,
+    }));
+
+    return {
+      account,
+      subRow,
+      usageMetrics,
+    };
+  });
+}
+
 export async function GET(req: NextRequest) {
   try {
     const sess = await readVerifiedSession(req).catch(() => null);
@@ -193,7 +221,8 @@ export async function GET(req: NextRequest) {
     if (!accountId) return json(buildEmptyBillingSummary(), 200);
 
     const view = await withBillingDeadline(readAuthSessionView(sess)).catch(() => null);
-    const account = await withBillingDeadline(readBillingAccount(accountId)).catch(() => null) as SummaryAccountRecord | null;
+    const billingSnapshot = await withBillingDeadline(readBillingSnapshot(accountId)).catch(() => null);
+    const account = (billingSnapshot?.account ?? null) as SummaryAccountRecord | null;
 
     if (!account) {
       if (view?.account) {
@@ -223,12 +252,12 @@ export async function GET(req: NextRequest) {
       ?? resolvePlanIdFromTier(view?.account.tierEffective || account.tier || "FREE");
     const planDef = PLANS[currentPlanId];
 
-    const usageMetrics = await withBillingDeadline(readBillingUsageMetrics(accountId)).catch(() => ({
+    const usageMetrics = billingSnapshot?.usageMetrics ?? {
       seatsUsed: 0,
       websitesUsed: 0,
-    }));
+    };
 
-    const subRow = await withBillingDeadline(readLatestBillingSubscription(accountId)).catch(() => null);
+    const subRow = billingSnapshot?.subRow ?? null;
 
     const seatLimit = limitToNullable(planDef.limits.seats);
     const websiteLimit = limitToNullable(planDef.limits.websites);
