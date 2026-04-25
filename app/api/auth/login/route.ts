@@ -303,8 +303,7 @@ export async function POST(req: Request) {
   try {
     const ownerStaffCodeCandidates = new Set(getOwnerStaffCodeCandidates());
     assertWriteOrigin(req);
-    const authClient = await getAuthPool().connect();
-    try {
+    const authClient = getAuthPool();
 
       const body = await readBody(req);
       const verificationGate = ensureActionVerification(req, {
@@ -540,9 +539,6 @@ export async function POST(req: Request) {
 
       recordVerifyActionSuccess(req, { actionType: "login", sessionIdHint: verifySessionHint });
       return res;
-    } finally {
-      authClient.release();
-    }
   } catch (error) {
     console.error("[auth/login] unexpected failure", error);
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
