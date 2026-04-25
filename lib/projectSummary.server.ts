@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getAuthPool } from "@/lib/authDb";
+import { withDedicatedAuthClient } from "@/lib/authDb";
 import {
   getEnv,
   getProjectSummaryForTenant,
@@ -78,45 +78,45 @@ async function findProjectForAccount(input: {
   projectId?: number;
   projectSlug?: string;
 }) {
-  const pool = getAuthPool();
+  return withDedicatedAuthClient(async (authClient) => {
+    const byId = input.projectId
+      ? await authClient.query<ProjectAccessRow>(
+          `SELECT "id", "slug", "name", "serverKeyEnc", "serverKeyEncIv"
+           FROM "Project"
+           WHERE "id" = $1
+             AND "accountId" = $2
+             AND "isActive" = true
+           LIMIT 1`,
+          [input.projectId, input.accountId],
+        )
+      : null;
+    if (byId?.rows[0]) return byId.rows[0];
 
-  const byId = input.projectId
-    ? await pool.query<ProjectAccessRow>(
-        `SELECT "id", "slug", "name", "serverKeyEnc", "serverKeyEncIv"
-         FROM "Project"
-         WHERE "id" = $1
-           AND "accountId" = $2
-           AND "isActive" = true
-         LIMIT 1`,
-        [input.projectId, input.accountId],
-      )
-    : null;
-  if (byId?.rows[0]) return byId.rows[0];
+    const projectSlug = String(input.projectSlug || "").trim();
+    const bySlug = projectSlug
+      ? await authClient.query<ProjectAccessRow>(
+          `SELECT "id", "slug", "name", "serverKeyEnc", "serverKeyEncIv"
+           FROM "Project"
+           WHERE "slug" = $1
+             AND "accountId" = $2
+             AND "isActive" = true
+           LIMIT 1`,
+          [projectSlug, input.accountId],
+        )
+      : null;
+    if (bySlug?.rows[0]) return bySlug.rows[0];
 
-  const projectSlug = String(input.projectSlug || "").trim();
-  const bySlug = projectSlug
-    ? await pool.query<ProjectAccessRow>(
-        `SELECT "id", "slug", "name", "serverKeyEnc", "serverKeyEncIv"
-         FROM "Project"
-         WHERE "slug" = $1
-           AND "accountId" = $2
-           AND "isActive" = true
-         LIMIT 1`,
-        [projectSlug, input.accountId],
-      )
-    : null;
-  if (bySlug?.rows[0]) return bySlug.rows[0];
-
-  const first = await pool.query<ProjectAccessRow>(
-    `SELECT "id", "slug", "name", "serverKeyEnc", "serverKeyEncIv"
-     FROM "Project"
-     WHERE "accountId" = $1
-       AND "isActive" = true
-     ORDER BY "createdAt" ASC
-     LIMIT 1`,
-    [input.accountId],
-  );
-  return first.rows[0] ?? null;
+    const first = await authClient.query<ProjectAccessRow>(
+      `SELECT "id", "slug", "name", "serverKeyEnc", "serverKeyEncIv"
+       FROM "Project"
+       WHERE "accountId" = $1
+         AND "isActive" = true
+       ORDER BY "createdAt" ASC
+       LIMIT 1`,
+      [input.accountId],
+    );
+    return first.rows[0] ?? null;
+  });
 }
 
 export async function resolveTenantProjectAccess(input: {

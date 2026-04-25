@@ -5,6 +5,7 @@ import {
   getAuthPool,
   newDbId,
   pgUniqueViolationMentions,
+  withDedicatedAuthClient,
   withAuthTransaction,
 } from "@/lib/authDb";
 import { expandRelatedExactOrigins } from "@/originMatch";
@@ -206,28 +207,32 @@ async function makeUniqueSiteSlug(queryable: Queryable, projectId: number, base:
 }
 
 export async function findOwnedWorkspaceProjectForSites(accountId: string, projectId: number) {
-  const row = await queryOne<RawProjectSiteSummaryRow>(
-    getAuthPool(),
-    `SELECT "id", "topSiteId"
-     FROM "Project"
-     WHERE "id" = $1
-       AND "accountId" = $2
-     LIMIT 1`,
-    [projectId, accountId]
+  const row = await withDedicatedAuthClient((authClient) =>
+    queryOne<RawProjectSiteSummaryRow>(
+      authClient,
+      `SELECT "id", "topSiteId"
+       FROM "Project"
+       WHERE "id" = $1
+         AND "accountId" = $2
+       LIMIT 1`,
+      [projectId, accountId]
+    )
   );
   return row ? normalizeProjectSiteSummary(row) : null;
 }
 
 export async function listActiveWorkspaceSites(projectId: number, order: "asc" | "desc" = "desc") {
-  const result = await getAuthPool().query<RawWorkspaceSiteRow>(
-    `SELECT "id", "label", "origin", "notes", "createdAt"
-     FROM "Site"
-     WHERE "projectId" = $1
-       AND "isActive" = true
-     ORDER BY "createdAt" ${order === "asc" ? "ASC" : "DESC"}`,
-    [projectId]
-  );
-  return result.rows.map(normalizeSiteRow);
+  return withDedicatedAuthClient(async (authClient) => {
+    const result = await authClient.query<RawWorkspaceSiteRow>(
+      `SELECT "id", "label", "origin", "notes", "createdAt"
+       FROM "Site"
+       WHERE "projectId" = $1
+         AND "isActive" = true
+       ORDER BY "createdAt" ${order === "asc" ? "ASC" : "DESC"}`,
+      [projectId]
+    );
+    return result.rows.map(normalizeSiteRow);
+  });
 }
 
 export async function listRemovedWorkspaceSites(projectId: number) {
@@ -262,53 +267,59 @@ export async function listRemovedWorkspaceSites(projectId: number) {
 }
 
 export async function findActiveWorkspaceSite(projectId: number, siteId: string) {
-  const row = await queryOne<RawWorkspaceSiteOriginRow>(
-    getAuthPool(),
-    `SELECT "id", "origin"
-     FROM "Site"
-     WHERE "projectId" = $1
-       AND "id" = $2
-       AND "isActive" = true
-     LIMIT 1`,
-    [projectId, siteId]
+  const row = await withDedicatedAuthClient((authClient) =>
+    queryOne<RawWorkspaceSiteOriginRow>(
+      authClient,
+      `SELECT "id", "origin"
+       FROM "Site"
+       WHERE "projectId" = $1
+         AND "id" = $2
+         AND "isActive" = true
+       LIMIT 1`,
+      [projectId, siteId]
+    )
   );
   return row ? { id: String(row.id), origin: String(row.origin) } : null;
 }
 
 export async function findActiveWorkspaceSiteByOrigin(projectId: number, origin: string) {
   const candidateOrigins = expandRelatedExactOrigins(origin);
-  const row = await queryOne<RawWorkspaceSiteOriginRow>(
-    getAuthPool(),
-    `SELECT "id", "origin"
-     FROM "Site"
-     WHERE "projectId" = $1
-       AND "origin" = ANY($2::text[])
-       AND "isActive" = true
-     LIMIT 1`,
-    [projectId, candidateOrigins]
+  const row = await withDedicatedAuthClient((authClient) =>
+    queryOne<RawWorkspaceSiteOriginRow>(
+      authClient,
+      `SELECT "id", "origin"
+       FROM "Site"
+       WHERE "projectId" = $1
+         AND "origin" = ANY($2::text[])
+         AND "isActive" = true
+       LIMIT 1`,
+      [projectId, candidateOrigins]
+    )
   );
   return row ? { id: String(row.id), origin: String(row.origin) } : null;
 }
 
 export async function findOwnedWorkspaceSiteByOrigin(accountId: string, origin: string) {
   const candidateOrigins = expandRelatedExactOrigins(origin);
-  const row = await queryOne<RawOwnedWorkspaceSiteRow>(
-    getAuthPool(),
-    `SELECT
-       project."id" AS "projectId",
-       site."id" AS "siteId",
-       site."origin" AS "origin"
-     FROM "Site" site
-     INNER JOIN "Project" project ON project."id" = site."projectId"
-     WHERE project."accountId" = $1
-       AND project."isActive" = true
-       AND site."isActive" = true
-       AND site."origin" = ANY($2::text[])
-     ORDER BY
-       CASE WHEN project."topSiteId" = site."id" THEN 0 ELSE 1 END ASC,
-       site."createdAt" DESC
-     LIMIT 1`,
-    [accountId, candidateOrigins],
+  const row = await withDedicatedAuthClient((authClient) =>
+    queryOne<RawOwnedWorkspaceSiteRow>(
+      authClient,
+      `SELECT
+         project."id" AS "projectId",
+         site."id" AS "siteId",
+         site."origin" AS "origin"
+       FROM "Site" site
+       INNER JOIN "Project" project ON project."id" = site."projectId"
+       WHERE project."accountId" = $1
+         AND project."isActive" = true
+         AND site."isActive" = true
+         AND site."origin" = ANY($2::text[])
+       ORDER BY
+         CASE WHEN project."topSiteId" = site."id" THEN 0 ELSE 1 END ASC,
+         site."createdAt" DESC
+       LIMIT 1`,
+      [accountId, candidateOrigins],
+    )
   );
   return row
     ? {
@@ -339,13 +350,15 @@ export async function markWorkspaceSiteVerified(siteId: string) {
 }
 
 export async function findAccountTier(accountId: string) {
-  const row = await queryOne<RawAccountTierRow>(
-    getAuthPool(),
-    `SELECT "tier"
-     FROM "Account"
-     WHERE "id" = $1
-     LIMIT 1`,
-    [accountId]
+  const row = await withDedicatedAuthClient((authClient) =>
+    queryOne<RawAccountTierRow>(
+      authClient,
+      `SELECT "tier"
+       FROM "Account"
+       WHERE "id" = $1
+       LIMIT 1`,
+      [accountId]
+    )
   );
   return row?.tier ? String(row.tier) : null;
 }

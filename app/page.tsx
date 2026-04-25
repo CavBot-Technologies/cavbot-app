@@ -2845,7 +2845,10 @@ type AuthMeResponse = {
   trialActive?: boolean;
   daysLeft?: number;
   profile?: {
-    username?: string;
+    username?: string | null;
+    email?: string | null;
+    displayName?: string | null;
+    fullName?: string | null;
   };
 };
 
@@ -3152,6 +3155,8 @@ function ProfileCard() {
           const planLimits = getPlanLimits(planKey);
           const planSeatLimit = Number(planLimits?.seats ?? 0);
           const meUsername = String(meJson?.profile?.username || "").trim();
+          const meEmail = String(meJson?.profile?.email || "").trim();
+          const meName = String(meJson?.profile?.fullName || meJson?.profile?.displayName || "").trim();
 
           const planDetail = {
             planKey,
@@ -3170,7 +3175,26 @@ function ProfileCard() {
             setSeatLimit(planSeatLimit);
           }
 
+          if (meName) {
+            setFullName(meName);
+            try {
+              globalThis.__cbLocalStore.setItem("cb_profile_fullName_v1", meName);
+            } catch {}
+          }
+
+          if (meEmail) {
+            setEmail(meEmail);
+            try {
+              globalThis.__cbLocalStore.setItem("cb_profile_email_v1", meEmail);
+            } catch {}
+          }
+
           if (meUsername) setUsername(meUsername);
+          if (meUsername) {
+            try {
+              globalThis.__cbLocalStore.setItem("cb_profile_username_v1", meUsername);
+            } catch {}
+          }
         }
 
 

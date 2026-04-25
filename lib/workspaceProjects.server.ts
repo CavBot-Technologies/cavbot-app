@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import type pg from "pg";
 import { randomBytes } from "crypto";
 
-import { getAuthPool, isPgUniqueViolation, withAuthTransaction } from "@/lib/authDb";
+import { getAuthPool, isPgUniqueViolation, withAuthTransaction, withDedicatedAuthClient } from "@/lib/authDb";
 import { isPermissionDeniedError, isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { createProjectKeyMaterial } from "@/lib/projectKeyMaterial.server";
 
@@ -273,23 +273,25 @@ export function classifyWorkspaceBootstrapError(error: unknown): {
 }
 
 export async function listAccountWorkspaceProjects(accountId: string, includeInactive = false) {
-  const result = await getAuthPool().query<RawProjectListRow>(
-    `SELECT
-       "id",
-       "name",
-       "slug",
-       "region",
-       "retentionDays",
-       "topSiteId",
-       "createdAt"
-     FROM "Project"
-     WHERE "accountId" = $1
-       ${includeInactive ? "" : 'AND "isActive" = true'}
-     ORDER BY "id" ASC`,
-    [accountId]
-  );
+  return withDedicatedAuthClient(async (authClient) => {
+    const result = await authClient.query<RawProjectListRow>(
+      `SELECT
+         "id",
+         "name",
+         "slug",
+         "region",
+         "retentionDays",
+         "topSiteId",
+         "createdAt"
+       FROM "Project"
+       WHERE "accountId" = $1
+         ${includeInactive ? "" : 'AND "isActive" = true'}
+       ORDER BY "id" ASC`,
+      [accountId]
+    );
 
-  return result.rows.map(normalizeProjectListRow);
+    return result.rows.map(normalizeProjectListRow);
+  });
 }
 
 export async function ensureActiveWorkspaceProject(accountId: string) {
@@ -384,11 +386,13 @@ export async function findAccountWorkspaceProject<T extends Prisma.ProjectSelect
   includeInactive?: boolean;
 }) {
   if (!args.projectId) return null;
-  const row = await findProjectByIdFrom(
-    getAuthPool(),
-    args.accountId,
-    args.projectId,
-    Boolean(args.includeInactive)
+  const row = await withDedicatedAuthClient((authClient) =>
+    findProjectByIdFrom(
+      authClient,
+      args.accountId,
+      args.projectId!,
+      Boolean(args.includeInactive)
+    )
   );
   return row ? projectPayloadForSelect(row, args.select) : null;
 }
@@ -419,10 +423,12 @@ export async function resolveAccountWorkspaceProject<T extends Prisma.ProjectSel
     if (ownedProject) return ownedProject;
   }
 
-  const firstProject = await findFirstProjectFrom(
-    getAuthPool(),
-    args.accountId,
-    Boolean(args.includeInactive)
+  const firstProject = await withDedicatedAuthClient((authClient) =>
+    findFirstProjectFrom(
+      authClient,
+      args.accountId,
+      Boolean(args.includeInactive)
+    )
   );
   if (firstProject) return projectPayloadForSelect(firstProject, args.select);
   if (args.ensureActive === false) return null;

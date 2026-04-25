@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cookies } from "next/headers";
-import { getAuthPool } from "@/lib/authDb";
+import { withDedicatedAuthClient } from "@/lib/authDb";
 import { resolveEffectiveAccountIdFromHeaders } from "@/lib/effectiveSessionAccount.server";
 import { originsShareWebsiteContext } from "@/originMatch";
 import { findAccountTier, listActiveWorkspaceSites } from "@/lib/workspaceSites.server";
@@ -128,40 +128,46 @@ async function inferAccountIdFromSessionCookie(): Promise<string | null> {
 }
 
 async function findProjectPointer(projectId: number) {
-  const result = await getAuthPool().query<RawProjectPointerRow>(
-    `SELECT "id", "topSiteId"
-     FROM "Project"
-     WHERE "id" = $1
-     LIMIT 1`,
-    [projectId],
-  );
-  return asProjectPointer(result.rows[0]);
+  return withDedicatedAuthClient(async (authClient) => {
+    const result = await authClient.query<RawProjectPointerRow>(
+      `SELECT "id", "topSiteId"
+       FROM "Project"
+       WHERE "id" = $1
+       LIMIT 1`,
+      [projectId],
+    );
+    return asProjectPointer(result.rows[0]);
+  });
 }
 
 async function findOwnedProjectPointer(projectId: number, accountId: string) {
-  const result = await getAuthPool().query<RawProjectPointerRow>(
-    `SELECT "id", "topSiteId"
-     FROM "Project"
-     WHERE "id" = $1
-       AND "accountId" = $2
-       AND "isActive" = true
-     LIMIT 1`,
-    [projectId, accountId],
-  );
-  return asProjectPointer(result.rows[0]);
+  return withDedicatedAuthClient(async (authClient) => {
+    const result = await authClient.query<RawProjectPointerRow>(
+      `SELECT "id", "topSiteId"
+       FROM "Project"
+       WHERE "id" = $1
+         AND "accountId" = $2
+         AND "isActive" = true
+       LIMIT 1`,
+      [projectId, accountId],
+    );
+    return asProjectPointer(result.rows[0]);
+  });
 }
 
 async function findFirstOwnedProjectPointer(accountId: string) {
-  const result = await getAuthPool().query<RawProjectPointerRow>(
-    `SELECT "id", "topSiteId"
-     FROM "Project"
-     WHERE "accountId" = $1
-       AND "isActive" = true
-     ORDER BY "createdAt" ASC
-     LIMIT 1`,
-    [accountId],
-  );
-  return asProjectPointer(result.rows[0]);
+  return withDedicatedAuthClient(async (authClient) => {
+    const result = await authClient.query<RawProjectPointerRow>(
+      `SELECT "id", "topSiteId"
+       FROM "Project"
+       WHERE "accountId" = $1
+         AND "isActive" = true
+       ORDER BY "createdAt" ASC
+       LIMIT 1`,
+      [accountId],
+    );
+    return asProjectPointer(result.rows[0]);
+  });
 }
 
 async function resolveProjectPointerForAccount(

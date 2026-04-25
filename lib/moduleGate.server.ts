@@ -10,8 +10,8 @@ import {
   findAccountById,
   findMembershipsForUser,
   findSessionMembership,
-  getAuthPool,
   pickPrimaryMembership,
+  withDedicatedAuthClient,
 } from "@/lib/authDb";
 import { findLatestEntitledSubscription, resolveEffectivePlanId } from "@/lib/accountPlan.server";
 import { resolveEffectiveAccountIdForSession } from "@/lib/effectiveSessionAccount.server";
@@ -23,6 +23,8 @@ export type GateResult =
   | { ok: true; planId: ReturnType<typeof resolvePlanIdFromTier> }
   | { ok: false; planId: ReturnType<typeof resolvePlanIdFromTier>; mode: GateMode };
 
+const MODULE_GATE_READ_TIMEOUT_MS = 1_500;
+
 function isSafePageRead(req: Request) {
   const method = String(req.method || "GET").trim().toUpperCase();
   if (method !== "GET" && method !== "HEAD") return false;
@@ -30,6 +32,23 @@ function isSafePageRead(req: Request) {
     return !new URL(req.url).pathname.startsWith("/api/");
   } catch {
     return false;
+  }
+}
+
+async function withModuleGateDeadline<T>(
+  promise: Promise<T>,
+  timeoutMs = MODULE_GATE_READ_TIMEOUT_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("MODULE_GATE_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -51,42 +70,50 @@ export async function gateModuleAccess(
     throw error;
   }
 
-  const pool = getAuthPool();
   const accountId = (await resolveEffectiveAccountIdForSession(sess).catch(() => null)) || sess.accountId!;
   const userId = String(sess.sub || "").trim();
+  try {
+    const result = await withDedicatedAuthClient(async (authClient) => {
+      const sessionMembership =
+        (userId && accountId
+          ? await withModuleGateDeadline(findSessionMembership(authClient, userId, accountId)).catch(() => null)
+          : null) || null;
 
-  const sessionMembership =
-    (userId && accountId
-      ? await findSessionMembership(pool, userId, accountId).catch(() => null)
-      : null) || null;
+      let fallbackMembership: Awaited<ReturnType<typeof pickPrimaryMembership<Awaited<ReturnType<typeof findMembershipsForUser>>[number]>>> | null =
+        null;
+      if (!sessionMembership && userId) {
+        const memberships = await withModuleGateDeadline(findMembershipsForUser(authClient, userId)).catch(() => []);
+        fallbackMembership = pickPrimaryMembership(memberships);
+      }
 
-  let fallbackMembership: Awaited<ReturnType<typeof pickPrimaryMembership<Awaited<ReturnType<typeof findMembershipsForUser>>[number]>>> | null =
-    null;
-  if (!sessionMembership && userId) {
-    const memberships = await findMembershipsForUser(pool, userId).catch(() => []);
-    fallbackMembership = pickPrimaryMembership(memberships);
+      await withModuleGateDeadline(clearExpiredTrialSeat(authClient, accountId)).catch(() => null);
+
+      const [account, subscription] = await Promise.all([
+        withModuleGateDeadline(findAccountById(authClient, accountId)).catch(() => null),
+        withModuleGateDeadline(findLatestEntitledSubscription(accountId, authClient)).catch(() => null),
+      ]);
+
+      const planId = resolveEffectivePlanId({
+        account:
+          account ||
+          (sessionMembership || fallbackMembership
+            ? { tier: sessionMembership?.accountTier || fallbackMembership?.accountTier || "FREE" }
+            : null),
+        subscription,
+      }) ?? resolvePlanIdFromTier("FREE");
+
+      return { planId, allowed: hasModule(planId, moduleId) };
+    });
+
+    if (result.allowed) return { ok: true, planId: result.planId };
+
+    if (mode === "redirect") redirect("/plan");
+
+    return { ok: false, planId: result.planId, mode };
+  } catch (error) {
+    if (mode === "screen" && isSafePageRead(req)) {
+      return { ok: true, planId: "premium_plus" };
+    }
+    throw error;
   }
-
-  await clearExpiredTrialSeat(pool, accountId).catch(() => null);
-
-  const [account, subscription] = await Promise.all([
-    findAccountById(pool, accountId).catch(() => null),
-    findLatestEntitledSubscription(accountId, pool).catch(() => null),
-  ]);
-
-  const planId = resolveEffectivePlanId({
-    account:
-      account ||
-      (sessionMembership || fallbackMembership
-        ? { tier: sessionMembership?.accountTier || fallbackMembership?.accountTier || "FREE" }
-        : null),
-    subscription,
-  }) ?? resolvePlanIdFromTier("FREE");
-  const allowed = hasModule(planId, moduleId);
-
-  if (allowed) return { ok: true, planId };
-
-  if (mode === "redirect") redirect("/plan");
-
-  return { ok: false, planId, mode };
 }
