@@ -671,7 +671,9 @@ export default async function SeoPage({ searchParams }: PageProps) {
     headers: new Headers(requestHeaders),
   });
 
-  const gate = await gateModuleAccess(req, "seo");
+  const gatePromise = gateModuleAccess(req, "seo");
+  const workspacePromise = withSeoDeadline(readWorkspace(), 2_500).catch(() => null);
+  const gate = await gatePromise;
 
   if (!gate.ok) {
     return (
@@ -687,12 +689,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
 
   const range = (typeof sp?.range === "string" ? sp.range : "24h") as RangeKey;
 
-  let ws: SeoWorkspace | null = null;
-  try {
-    ws = await readWorkspace();
-  } catch {
-    ws = null;
-  }
+  const ws = (await workspacePromise) as SeoWorkspace | null;
 
   const targets = normalizeTargets(ws);
   const sites = targets.map((t) => ({ id: t.id, label: resolveSiteLabel(t), url: t.origin }));
@@ -722,6 +719,12 @@ export default async function SeoPage({ searchParams }: PageProps) {
   let favicon: FaviconIntelligenceResult | null = null;
   let liveMetadata: Awaited<ReturnType<typeof fetchLiveMetadataSnapshot>> = null;
 
+  const liveMetadataPromise = withSeoDeadline(
+    fetchLiveMetadataSnapshot({
+      origin: activeSite.url || "",
+    }),
+  ).catch(() => null);
+
   try {
     const summaryResult = await withSeoDeadline(
       getTenantProjectSummary({
@@ -748,11 +751,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
         summary,
       }),
     ).catch(() => null),
-    withSeoDeadline(
-      fetchLiveMetadataSnapshot({
-        origin: activeSite.url || "",
-      }),
-    ).catch(() => null),
+    liveMetadataPromise,
   ]);
   favicon = faviconResult;
   liveMetadata = liveMetadataResult;

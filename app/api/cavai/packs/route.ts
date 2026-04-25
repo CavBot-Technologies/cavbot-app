@@ -8,6 +8,8 @@ import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const CAVAI_PACKS_ROUTE_TIMEOUT_MS = 3_000;
+
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
   Pragma: "no-cache",
@@ -27,6 +29,20 @@ function parseLimit(input: string | null): number {
   const value = Number(input);
   if (!Number.isFinite(value)) return 6;
   return Math.max(1, Math.min(25, Math.trunc(value)));
+}
+
+async function withPacksDeadline<T>(promise: Promise<T>, timeoutMs = CAVAI_PACKS_ROUTE_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("CAVAI_PACKS_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -50,11 +66,13 @@ export async function GET(req: NextRequest) {
     }
 
     const limit = parseLimit(url.searchParams.get("limit"));
-    const result = await getLatestPackWithHistory({
-      accountId: String(session.accountId || ""),
-      origin,
-      limit,
-    });
+    const result = await withPacksDeadline(
+      getLatestPackWithHistory({
+        accountId: String(session.accountId || ""),
+        origin,
+        limit,
+      }),
+    );
 
     return json(
       {

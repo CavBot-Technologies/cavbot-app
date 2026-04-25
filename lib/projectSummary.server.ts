@@ -58,6 +58,25 @@ type ResolvedSummarySite = {
   origin: string;
 };
 
+const SUMMARY_SITE_RESOLUTION_TIMEOUT_MS = 1_200;
+const SUMMARY_REMOTE_FETCH_TIMEOUT_MS = 3_500;
+const SUMMARY_PACK_ENRICH_TIMEOUT_MS = 2_000;
+const SUMMARY_VITALS_ROLLUP_TIMEOUT_MS = 1_500;
+
+async function withSummaryStageDeadline<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(label)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function normalizeProjectId(input: string | number | null | undefined) {
   const raw = String(input ?? "").trim();
   if (!raw || !/^\d+$/.test(raw)) return undefined;
@@ -176,37 +195,53 @@ export async function getTenantProjectSummary(
   });
 
   const normalizedOrigin = normalizeOriginStrict(input.siteOrigin);
-  const selectedSite = await resolveSummarySite({
-    accountId: access.accountId,
-    projectId: access.project.id,
-    siteId: input.siteId,
-    siteOrigin: normalizedOrigin,
-  });
+  const selectedSite = await withSummaryStageDeadline(
+    resolveSummarySite({
+      accountId: access.accountId,
+      projectId: access.project.id,
+      siteId: input.siteId,
+      siteOrigin: normalizedOrigin,
+    }).catch(() => null),
+    SUMMARY_SITE_RESOLUTION_TIMEOUT_MS,
+    "SUMMARY_SITE_RESOLUTION_TIMEOUT",
+  ).catch(() => null);
   const effectiveSiteId = selectedSite?.id;
   const effectiveSiteOrigin = selectedSite?.origin ?? normalizedOrigin ?? undefined;
 
   const [summary, latestPackWithHistory, localWebVitalsRollup] = await Promise.all([
-    getProjectSummaryForTenant({
-      projectId: access.project.id,
-      range: input.range,
-      siteId: effectiveSiteId,
-      siteOrigin: effectiveSiteOrigin,
-      projectKey: access.summaryAuth.projectKey,
-      adminToken: access.summaryAuth.adminToken,
-      requestId: input.requestId,
-    }),
+    withSummaryStageDeadline(
+      getProjectSummaryForTenant({
+        projectId: access.project.id,
+        range: input.range,
+        siteId: effectiveSiteId,
+        siteOrigin: effectiveSiteOrigin,
+        projectKey: access.summaryAuth.projectKey,
+        adminToken: access.summaryAuth.adminToken,
+        requestId: input.requestId,
+      }),
+      SUMMARY_REMOTE_FETCH_TIMEOUT_MS,
+      "PROJECT_SUMMARY_TIMEOUT",
+    ),
     effectiveSiteOrigin
-      ? getLatestPackWithHistory({
-          accountId: access.accountId,
-          origin: effectiveSiteOrigin,
-          limit: 7,
-        }).catch(() => null)
+      ? withSummaryStageDeadline(
+          getLatestPackWithHistory({
+            accountId: access.accountId,
+            origin: effectiveSiteOrigin,
+            limit: 7,
+          }).catch(() => null),
+          SUMMARY_PACK_ENRICH_TIMEOUT_MS,
+          "SUMMARY_PACK_TIMEOUT",
+        ).catch(() => null)
       : Promise.resolve(null),
     effectiveSiteId
-      ? fetchSiteWebVitalsRollup({
-          siteId: effectiveSiteId,
-          range: input.range,
-        }).catch(() => null)
+      ? withSummaryStageDeadline(
+          fetchSiteWebVitalsRollup({
+            siteId: effectiveSiteId,
+            range: input.range,
+          }).catch(() => null),
+          SUMMARY_VITALS_ROLLUP_TIMEOUT_MS,
+          "SUMMARY_WEB_VITALS_TIMEOUT",
+        ).catch(() => null)
       : Promise.resolve(null),
   ]);
 

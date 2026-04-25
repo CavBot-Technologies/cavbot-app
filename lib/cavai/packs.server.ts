@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getAuthPool } from "@/lib/authDb";
+import { withDedicatedAuthClient } from "@/lib/authDb";
 import {
   CAVAI_INSIGHT_PACK_VERSION_V1,
   validateInsightPackV1,
@@ -40,6 +40,8 @@ export type CavAiLatestPackWithHistory = {
   pack: CavAiInsightPackV1 | null;
   history: CavAiPackHistoryEntry[];
 };
+
+const PACK_HISTORY_QUERY_TIMEOUT_MS = 2_200;
 
 function asDate(value: Date | string | null | undefined) {
   if (!value) return null;
@@ -102,32 +104,35 @@ export async function getLatestPackWithHistory(args: {
   limit?: number;
 }): Promise<CavAiLatestPackWithHistory> {
   const limit = clampLimit(args.limit);
-  const result = await getAuthPool().query<RawPackHistoryRow>(
-    `SELECT
-       r."id" AS "runId",
-       r."createdAt",
-       r."pagesScanned",
-       r."pageLimit",
-       r."engineVersion",
-       r."packVersion",
-       p."generatedAt",
-       p."packJson",
-       COALESCE(f."findingCount", 0) AS "findingCount"
-     FROM "CavAiRun" r
-     LEFT JOIN "CavAiInsightPack" p
-       ON p."runId" = r."id"
-      AND p."accountId" = r."accountId"
-     LEFT JOIN LATERAL (
-       SELECT COUNT(*)::int AS "findingCount"
-       FROM "CavAiFinding" cf
-       WHERE cf."runId" = r."id"
-     ) f ON TRUE
-     WHERE r."accountId" = $1
-       AND r."origin" = $2
-     ORDER BY r."createdAt" DESC
-     LIMIT $3`,
-    [args.accountId, args.origin, limit]
-  );
+  const result = await withDedicatedAuthClient(async (authClient) => {
+    await authClient.query(`SET statement_timeout = ${PACK_HISTORY_QUERY_TIMEOUT_MS}`);
+    return authClient.query<RawPackHistoryRow>(
+      `SELECT
+         r."id" AS "runId",
+         r."createdAt",
+         r."pagesScanned",
+         r."pageLimit",
+         r."engineVersion",
+         r."packVersion",
+         p."generatedAt",
+         p."packJson",
+         COALESCE(f."findingCount", 0) AS "findingCount"
+       FROM "CavAiRun" r
+       LEFT JOIN "CavAiInsightPack" p
+         ON p."runId" = r."id"
+        AND p."accountId" = r."accountId"
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS "findingCount"
+         FROM "CavAiFinding" cf
+         WHERE cf."runId" = r."id"
+       ) f ON TRUE
+       WHERE r."accountId" = $1
+         AND r."origin" = $2
+       ORDER BY r."createdAt" DESC
+       LIMIT $3`,
+      [args.accountId, args.origin, limit]
+    );
+  });
 
   const history: CavAiPackHistoryEntry[] = result.rows.map((row) => {
     const pack = safePack(row.packJson);

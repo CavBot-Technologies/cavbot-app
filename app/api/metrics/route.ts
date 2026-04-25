@@ -11,6 +11,8 @@ import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const METRICS_ROUTE_TIMEOUT_MS = 3_000;
+
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
   Pragma: "no-cache",
@@ -36,6 +38,20 @@ function pickClientIp(req: Request) {
   ).split(",")[0].trim();
 }
 
+async function withMetricsDeadline<T>(promise: Promise<T>, timeoutMs = METRICS_ROUTE_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("METRICS_ROUTE_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function GET(req: NextRequest) {
   const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
   try {
@@ -54,11 +70,13 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const data = await getLatestPackWithHistory({
-      accountId: String(session.accountId || ""),
-      origin,
-      limit: 6,
-    });
+    const data = await withMetricsDeadline(
+      getLatestPackWithHistory({
+        accountId: String(session.accountId || ""),
+        origin,
+        limit: 6,
+      }),
+    );
 
     if (!data.pack) {
       const knownSite = await findOwnedWorkspaceSiteByOrigin(String(session.accountId || ""), origin).catch(() => null);
@@ -116,15 +134,15 @@ export async function GET(req: NextRequest) {
     if (isApiAuthError(error)) {
       return json({ ok: false, requestId, error: error.code }, error.status);
     }
-    const message = error instanceof Error ? error.message : "Failed to load metrics";
     return json(
       {
         ok: false,
         requestId,
         error: "SERVER_ERROR",
-        ...(process.env.NODE_ENV !== "production" ? { message } : {}),
+        history: [],
+        degraded: true,
       },
-      500
+      200
     );
   }
 }

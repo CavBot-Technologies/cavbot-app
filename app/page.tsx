@@ -1083,6 +1083,7 @@ function CommandDeckPageInner() {
 
     type SummaryResponse = {
       ok?: boolean;
+      degraded?: boolean;
       summary?: {
         usedBytes?: unknown;
         limitBytes?: unknown;
@@ -1122,13 +1123,23 @@ function CommandDeckPageInner() {
         if (!res.ok || !payload?.ok || !payload.summary) throw new Error("SUMMARY_UNAVAILABLE");
 
         const nextLimitRaw = payload.summary.limitBytes;
+        const minimumPlanLimit = storageLimitBytes(planId, trialActive);
         if (nextLimitRaw == null || nextLimitRaw === "") {
-          setCavcloudLimitBytes(null);
+          setCavcloudLimitBytes(
+            Number.isFinite(minimumPlanLimit) ? Math.trunc(minimumPlanLimit) : null
+          );
           setCavcloudLimitLoaded(true);
         } else {
           const nextLimit = Number(nextLimitRaw);
           if (Number.isFinite(nextLimit) && nextLimit > 0) {
-            setCavcloudLimitBytes(Math.trunc(nextLimit));
+            const effectiveLimit =
+              Number.isFinite(minimumPlanLimit) && minimumPlanLimit > nextLimit
+                ? minimumPlanLimit
+                : nextLimit;
+            setCavcloudLimitBytes(Math.trunc(effectiveLimit));
+            setCavcloudLimitLoaded(true);
+          } else if (Number.isFinite(minimumPlanLimit) && minimumPlanLimit > 0) {
+            setCavcloudLimitBytes(Math.trunc(minimumPlanLimit));
             setCavcloudLimitLoaded(true);
           }
         }
@@ -1173,7 +1184,7 @@ function CommandDeckPageInner() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [auth.status]);
+  }, [auth.status, planId, trialActive]);
 
 
   // Notices (local now)

@@ -6,10 +6,12 @@ import {
   jsonNoStore,
   withCavCloudDeadline,
 } from "@/lib/cavcloud/http.server";
+import { resolveEffectivePlanId } from "@/lib/accountPlan.server";
 import { getEffectiveAccountPlanContext } from "@/lib/cavcloud/plan.server";
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { getPlanLimits, type PlanId } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
+import { findAccountById, withDedicatedAuthClient } from "@/lib/authDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +21,7 @@ const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "avif", "gif", "svg", "b
 const VIDEO_EXTENSIONS = ["mp4", "mov", "m4v", "webm", "ogv", "ogg", "avi", "mkv", "wmv", "flv", "3gp"] as const;
 const SUMMARY_TIMEOUT_MS = 4_000;
 const SUMMARY_FALLBACK_PLAN_TIMEOUT_MS = 750;
+const SUMMARY_FAST_ACCOUNT_PLAN_TIMEOUT_MS = 1_200;
 
 function toSafeNumber(value: bigint): number {
   if (value < BigInt(0)) return 0;
@@ -83,7 +86,32 @@ function buildStaticDegradedSummaryResponse() {
   return jsonNoStore(degradedSummaryPayload(), 200);
 }
 
+async function readFastDegradedPlanContext(accountId: string) {
+  try {
+    const account = await withCavCloudDeadline(
+      withDedicatedAuthClient((authClient) => findAccountById(authClient, accountId)),
+      {
+        timeoutMs: SUMMARY_FAST_ACCOUNT_PLAN_TIMEOUT_MS,
+        message: "Timed out loading fast CavCloud account plan.",
+      },
+    );
+    if (!account) return null;
+    const planId = resolveEffectivePlanId({ account });
+    return { planId, limitBytes: storageLimitBytesForPlan(planId) };
+  } catch {
+    return null;
+  }
+}
+
 async function buildDegradedSummaryResponseForAccount(accountId: string) {
+  const fastPlan = await readFastDegradedPlanContext(accountId);
+  if (fastPlan) {
+    return jsonNoStore(
+      degradedSummaryPayload({ planId: fastPlan.planId, limitBytes: fastPlan.limitBytes }),
+      200,
+    );
+  }
+
   try {
     const plan = await withCavCloudDeadline(
       getEffectiveAccountPlanContext(accountId).catch(() => null),

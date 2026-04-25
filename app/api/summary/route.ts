@@ -8,6 +8,8 @@ import { getTenantProjectSummary } from "@/lib/projectSummary.server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const SUMMARY_ROUTE_TIMEOUT_MS = 4_000;
+
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
   Pragma: "no-cache",
@@ -74,35 +76,93 @@ function asHttpError(e: unknown) {
   return { status: 500, payload: { ok: false, error: "SUMMARY_PROXY_FAILED" } };
 }
 
+async function withSummaryRouteDeadline<T>(promise: Promise<T>, timeoutMs = SUMMARY_ROUTE_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("SUMMARY_ROUTE_TIMEOUT")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function degradedSummaryPayload(args: {
+  projectId: number | null;
+  projectSlug: string;
+  range: SummaryRange;
+  siteOrigin?: string;
+}) {
+  return {
+    ok: true,
+    degraded: true,
+    project: {
+      id: args.projectId ?? 0,
+      slug: args.projectSlug || "",
+      name: null,
+    },
+    data: {
+      project: {
+        id: String(args.projectId ?? args.projectSlug ?? "0"),
+        projectId: args.projectId ?? undefined,
+        name: null,
+      },
+      window: {
+        range: args.range,
+      },
+      sites: args.siteOrigin
+        ? [{ id: "active", label: args.siteOrigin, origin: args.siteOrigin }]
+        : [],
+      activeSite: args.siteOrigin
+        ? { id: "active", label: args.siteOrigin, origin: args.siteOrigin }
+        : undefined,
+      metrics: {},
+    },
+  };
+}
+
 export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const pid = parseProjectId(searchParams.get("projectId"));
+  const projectSlug = String(searchParams.get("projectSlug") ?? "").trim();
+  const range = normalizeRange(searchParams.get("range"));
+  const siteOrigin = normalizeMaybeOrigin(
+    searchParams.get("origin") ?? searchParams.get("siteOrigin")
+  );
+  const siteId = String(searchParams.get("siteId") ?? "").trim() || undefined;
+
   try {
     const session = await requireSession(req);
     requireAccountContext(session);
 
-    const { searchParams } = new URL(req.url);
-
-    const pid = parseProjectId(searchParams.get("projectId"));
-    const projectSlug = String(searchParams.get("projectSlug") ?? "").trim();
-
-    const range = normalizeRange(searchParams.get("range"));
-
-    const siteOrigin = normalizeMaybeOrigin(
-      searchParams.get("origin") ?? searchParams.get("siteOrigin")
+    const { project, summary: data } = await withSummaryRouteDeadline(
+      getTenantProjectSummary({
+        accountId: session.accountId,
+        projectId: pid,
+        projectSlug,
+        range,
+        siteOrigin,
+        siteId,
+      }),
     );
-    const siteId = String(searchParams.get("siteId") ?? "").trim() || undefined;
-
-    const { project, summary: data } = await getTenantProjectSummary({
-      accountId: session.accountId,
-      projectId: pid,
-      projectSlug,
-      range,
-      siteOrigin,
-      siteId,
-    });
 
     return json({ ok: true, project, data }, 200);
   } catch (e: unknown) {
     const { status, payload } = asHttpError(e);
+    if (status >= 500) {
+      return json(
+        degradedSummaryPayload({
+          projectId: pid,
+          projectSlug,
+          range,
+          siteOrigin,
+        }),
+        200
+      );
+    }
     return json(payload, status);
   }
 }
