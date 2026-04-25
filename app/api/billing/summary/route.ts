@@ -28,6 +28,7 @@ const NO_STORE_HEADERS: Record<string, string> = {
 };
 
 const BILLING_SUMMARY_TIMEOUT_MS = 2_500;
+const BILLING_USAGE_AUX_TIMEOUT_MS = 750;
 
 function json<T>(data: T, init?: number | ResponseInit) {
   const resInit: ResponseInit = typeof init === "number" ? { status: init } : init ?? {};
@@ -309,6 +310,7 @@ export async function GET(req: NextRequest) {
             planId: currentPlanId,
             sessionId: null,
           }),
+          BILLING_USAGE_AUX_TIMEOUT_MS,
         ).catch(() => null)
       : null;
 

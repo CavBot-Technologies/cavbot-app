@@ -15,8 +15,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
-const WORKSPACES_ROUTE_TIMEOUT_MS = 3_000;
-const WORKSPACES_SESSION_TIMEOUT_MS = 1_500;
+const WORKSPACES_ROUTE_TIMEOUT_MS = 4_000;
+const WORKSPACES_SESSION_TIMEOUT_MS = 2_500;
 
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",

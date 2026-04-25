@@ -10,6 +10,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const FOOTER_METRICS_TIMEOUT_MS = 3_500;
+const FOOTER_WORKSPACE_TIMEOUT_MS = 2_200;
+const FOOTER_ACTIVITY_TIMEOUT_MS = 1_800;
 
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
@@ -201,6 +203,17 @@ async function readEventDestinationActivity(params: {
   }
 }
 
+function buildEmptyWorkspaceMetrics(projectId = 1) {
+  return {
+    projectId,
+    sites: [],
+    topSiteId: "",
+    activeSiteId: "",
+    activeSiteOrigin: "",
+    topSiteOrigin: "",
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession(req);
@@ -216,25 +229,36 @@ export async function GET(req: NextRequest) {
     }
     const accountId = String(session.accountId);
 
-    const payload = await withFooterDeadline((async () => {
-      const workspace = await readWorkspace({ accountId: session.accountId });
-      const site =
-        workspace.sites.find((row) => row.id === workspace.activeSiteId) ??
-        workspace.sites[0] ??
-        null;
+    const workspace = await withFooterDeadline(
+      readWorkspace({ accountId: session.accountId }),
+      FOOTER_WORKSPACE_TIMEOUT_MS,
+    ).catch(() => buildEmptyWorkspaceMetrics());
+    const site =
+      workspace.sites.find((row) => row.id === workspace.activeSiteId) ??
+      workspace.sites[0] ??
+      null;
 
-      const now = new Date();
-      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      const siteIds = site?.id
-        ? [site.id]
-        : workspace.sites.map((row) => String(row.id || "").trim()).filter(Boolean);
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const siteIds = site?.id
+      ? [site.id]
+      : workspace.sites.map((row) => String(row.id || "").trim()).filter(Boolean);
 
-      const [apiActivity, eventDestinationActivity] = await Promise.all([
+    const [apiActivity, eventDestinationActivity] = await Promise.all([
+      withFooterDeadline(
         readApiActivity({
           accountId,
           projectId: workspace.projectId,
           siteId: site?.id ?? null,
         }),
+        FOOTER_ACTIVITY_TIMEOUT_MS,
+      ).catch(() => ({
+        totalRequests: 0,
+        failedRequests: 0,
+        periodLabel: "Today (UTC)",
+        deniedOrigins: [],
+      })),
+      withFooterDeadline(
         readEventDestinationActivity({
           accountId,
           projectId: workspace.projectId,
@@ -242,10 +266,22 @@ export async function GET(req: NextRequest) {
           siteIds,
           twentyFourHoursAgo,
         }),
-      ]);
+        FOOTER_ACTIVITY_TIMEOUT_MS,
+      ).catch(() => ({
+        activeDestinations: 0,
+        recentDestinations: 0,
+        recentEvents: 0,
+        recentActivity: 0,
+        periodLabel: "Last 24h",
+        lastActivityAt: null,
+        activeKinds: [],
+      })),
+    ]);
 
-      return {
+    return json(
+      {
         ok: true,
+        degraded: !site,
         generatedAt: now.toISOString(),
         workspace: {
           projectId: workspace.projectId,
@@ -254,10 +290,9 @@ export async function GET(req: NextRequest) {
         },
         apiActivity,
         eventDestinationActivity,
-      };
-    })());
-
-    return json(payload, 200);
+      },
+      200,
+    );
   } catch {
     return json(
       {
