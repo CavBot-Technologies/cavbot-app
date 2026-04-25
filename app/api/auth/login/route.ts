@@ -37,6 +37,7 @@ import { sendEmail } from "@/lib/email/sendEmail"; // <-- must exist (you alread
 import { normalizeUsername } from "@/lib/username";
 import { readSanitizedJson, readSanitizedFormData } from "@/lib/security/userInput";
 import { pickClientIp, readCoarseRequestGeo } from "@/lib/requestGeo";
+import { isSoftTableAccessError } from "@/lib/dbSchemaGuard";
 
 
 export const dynamic = "force-dynamic";
@@ -113,31 +114,49 @@ function logDebugLogin(enabled: boolean, stage: string, detail?: Record<string, 
   console.log("[auth/login][trace]", stage, detail || {});
 }
 
-async function getRestrictedAccountError(accountId: string) {
-  let discipline = null;
+async function getRestrictedAccountError(
+  queryable: { query: (text: string, values?: unknown[]) => Promise<{ rows: Array<{ status?: string | null }> }> },
+  accountId: string,
+) {
   try {
-    const accountDisciplineModule = await import("@/lib/admin/accountDiscipline.server");
-    discipline = await accountDisciplineModule.getAccountDisciplineState(accountId);
+    const result = await queryable.query(
+      `SELECT "status"
+         FROM "AdminAccountDiscipline"
+        WHERE "accountId" = $1
+        LIMIT 1`,
+      [accountId],
+    );
+    const status = String(result.rows[0]?.status || "").trim().toUpperCase();
+    if (status === "REVOKED") return "ACCOUNT_REVOKED";
+    if (status === "SUSPENDED") return "ACCOUNT_SUSPENDED";
   } catch (error) {
-    console.warn("[auth/login] non-fatal account discipline lookup failure", error);
-    return "";
+    if (!isSoftTableAccessError(error, ["AdminAccountDiscipline"])) {
+      console.warn("[auth/login] non-fatal account discipline lookup failure", error);
+    }
   }
-  if (discipline?.status === "REVOKED") return "ACCOUNT_REVOKED";
-  if (discipline?.status === "SUSPENDED") return "ACCOUNT_SUSPENDED";
   return "";
 }
 
-async function getRestrictedUserError(userId: string) {
-  let discipline = null;
+async function getRestrictedUserError(
+  queryable: { query: (text: string, values?: unknown[]) => Promise<{ rows: Array<{ status?: string | null }> }> },
+  userId: string,
+) {
   try {
-    const userDisciplineModule = await import("@/lib/admin/userDiscipline.server");
-    discipline = await userDisciplineModule.getUserDisciplineState(userId);
+    const result = await queryable.query(
+      `SELECT "status"
+         FROM "AdminUserDiscipline"
+        WHERE "userId" = $1
+        LIMIT 1`,
+      [userId],
+    );
+    const status = String(result.rows[0]?.status || "").trim().toUpperCase();
+    if (status === "REVOKED") return "USER_REVOKED";
+    if (status === "SUSPENDED") return "USER_SUSPENDED";
   } catch (error) {
-    console.warn("[auth/login] non-fatal user discipline lookup failure", error);
-    return "";
+    if (!isSoftTableAccessError(error, ["AdminUserDiscipline"])) {
+      console.warn("[auth/login] non-fatal user discipline lookup failure", error);
+    }
   }
-  if (discipline?.status === "REVOKED") return "USER_REVOKED";
-  if (discipline?.status === "SUSPENDED") return "USER_SUSPENDED";
   return "";
 }
 
@@ -420,12 +439,12 @@ export async function POST(req: Request) {
 
       const active = activeCandidate ?? memberships[0];
       {
-        const restriction = await getRestrictedUserError(user.id);
+        const restriction = await getRestrictedUserError(authClient, user.id);
         logDebugLogin(debugLogin, "user_discipline_complete", { restriction });
         if (restriction) return reject({ ok: false, error: restriction }, 403);
       }
       {
-        const restriction = await getRestrictedAccountError(active.accountId);
+        const restriction = await getRestrictedAccountError(authClient, active.accountId);
         logDebugLogin(debugLogin, "account_discipline_complete", { restriction });
         if (restriction) return reject({ ok: false, error: restriction }, 403);
       }
