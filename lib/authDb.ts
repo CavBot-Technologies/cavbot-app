@@ -223,6 +223,20 @@ function createAuthPool(connectionString: string) {
   return createLoggedPgPool(connectionString, "authDb");
 }
 
+function createDedicatedAuthClient(connectionString: string) {
+  const client = new pg.Client({
+    connectionString,
+    keepAlive: true,
+    connectionTimeoutMillis: 30_000,
+    query_timeout: 30_000,
+    statement_timeout: 30_000,
+  });
+  client.on("error", (error) => {
+    console.error("[authDb] dedicated client error", error);
+  });
+  return client;
+}
+
 function databaseUrl() {
   const value = String(process.env.DATABASE_URL || "").trim();
   if (!value) throw new Error("DATABASE_URL is missing.");
@@ -390,6 +404,18 @@ export function getAuthPool() {
   global.__cavbotAuthPool = pool;
 
   return pool;
+}
+
+export async function withDedicatedAuthClient<T>(fn: (client: pg.Client) => Promise<T>) {
+  const client = createDedicatedAuthClient(databaseUrl());
+  await client.connect();
+  try {
+    return await fn(client);
+  } finally {
+    await client.end().catch((error) => {
+      console.error("[authDb] dedicated client close failed", error);
+    });
+  }
 }
 
 async function queryOne<T extends pg.QueryResultRow>(queryable: Queryable, text: string, values: unknown[] = []) {

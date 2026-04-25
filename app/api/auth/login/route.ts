@@ -17,6 +17,7 @@ import {
   findUserIdByStaffCode,
   findUserByUsername,
   getAuthPool,
+  withDedicatedAuthClient,
   pickPrimaryMembership,
   touchUserLastLogin,
 } from "@/lib/authDb";
@@ -310,12 +311,11 @@ async function createEmail2faChallenge(args: {
 
 export async function POST(req: Request) {
   try {
-    const ownerStaffCodeCandidates = new Set(getOwnerStaffCodeCandidates());
-    const debugLogin = isDebugLoginRequest(req);
-    assertWriteOrigin(req);
-    logDebugLogin(debugLogin, "origin_ok");
-    const authClient = getAuthPool();
-
+    return await withDedicatedAuthClient(async (authClient) => {
+      const ownerStaffCodeCandidates = new Set(getOwnerStaffCodeCandidates());
+      const debugLogin = isDebugLoginRequest(req);
+      assertWriteOrigin(req);
+      logDebugLogin(debugLogin, "origin_ok");
       const body = await readBody(req);
       logDebugLogin(debugLogin, "body_read", { hasEmail: Boolean(body?.email), hasUsername: Boolean(body?.username), hasIdentifier: Boolean(body?.identifier) });
       const verificationGate = ensureActionVerification(req, {
@@ -563,6 +563,7 @@ export async function POST(req: Request) {
       recordVerifyActionSuccess(req, { actionType: "login", sessionIdHint: verifySessionHint });
       logDebugLogin(debugLogin, "success_response_ready");
       return res;
+    });
   } catch (error) {
     console.error("[auth/login] unexpected failure", error);
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
