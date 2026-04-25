@@ -414,7 +414,7 @@ export async function POST(req: Request) {
       logDebugLogin(debugLogin, "password_verify_complete", { ok, iters });
       if (!ok) {
         if (activeCandidate?.accountId) {
-          await writeLoginAuditSafely({
+          void writeLoginAuditSafely({
             request: req,
             action: "AUTH_LOGIN_FAILED",
             accountId: activeCandidate.accountId,
@@ -450,7 +450,8 @@ export async function POST(req: Request) {
       }
 
 
-      await writeLoginAuditSafely({
+      // Never let audit persistence hold the interactive login response open.
+      void writeLoginAuditSafely({
         request: req,
         action: "AUTH_SIGNED_IN",
         accountId: active.accountId,
