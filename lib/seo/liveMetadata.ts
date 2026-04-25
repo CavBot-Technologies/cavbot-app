@@ -8,17 +8,22 @@ export type LiveMetadataSnapshot = {
   description: string | null;
   canonical: string | null;
   robots: string | null;
+  h1Count: number | null;
+  wordCount: number | null;
+  jsonLdCount: number | null;
+  schemaTypes: string[] | null;
+  htmlLang: string | null;
 };
 
-function normalizeOrigin(raw: string): string {
+function normalizeFetchUrl(raw: string): string {
   const value = String(raw || "").trim();
   if (!value) return "";
   try {
-    return new URL(value).origin;
+    return new URL(value).toString();
   } catch {
     const withScheme = /^https?:\/\//i.test(value) ? value : `https://${value.replace(/^\/\//, "")}`;
     try {
-      return new URL(withScheme).origin;
+      return new URL(withScheme).toString();
     } catch {
       return "";
     }
@@ -87,19 +92,38 @@ function firstMetaContent(head: string, predicates: Array<(attrs: Record<string,
   return null;
 }
 
+function collectSchemaTypes(node: unknown, sink: Set<string>) {
+  if (!node || sink.size >= 12) return;
+  if (Array.isArray(node)) {
+    for (const item of node) collectSchemaTypes(item, sink);
+    return;
+  }
+  if (typeof node !== "object") return;
+  const rec = node as Record<string, unknown>;
+  const typeValue = rec["@type"];
+  if (typeof typeValue === "string" && typeValue.trim()) sink.add(typeValue.trim());
+  if (Array.isArray(typeValue)) {
+    for (const item of typeValue) {
+      if (typeof item === "string" && item.trim()) sink.add(item.trim());
+    }
+  }
+  if (Array.isArray(rec["@graph"])) collectSchemaTypes(rec["@graph"], sink);
+}
+
 export async function fetchLiveMetadataSnapshot(input: {
-  origin: string;
+  origin?: string;
+  url?: string;
   fetchImpl?: FetchLike;
   timeoutMs?: number;
 }): Promise<LiveMetadataSnapshot | null> {
-  const origin = normalizeOrigin(input.origin);
-  if (!origin) return null;
+  const targetUrl = normalizeFetchUrl(input.url || input.origin || "");
+  if (!targetUrl) return null;
 
   const fetchImpl = input.fetchImpl || fetch;
   const timeoutMs = Number.isFinite(Number(input.timeoutMs)) ? Number(input.timeoutMs) : 4_000;
 
   try {
-    const response = await fetchImpl(origin, {
+    const response = await fetchImpl(targetUrl, {
       method: "GET",
       redirect: "follow",
       cache: "no-store",
@@ -111,7 +135,7 @@ export async function fetchLiveMetadataSnapshot(input: {
 
     if (!response.ok) return null;
 
-    const finalUrl = response.url || origin;
+    const finalUrl = response.url || targetUrl;
     const html = await response.text().catch(() => "");
     if (!html) {
       return {
@@ -120,14 +144,23 @@ export async function fetchLiveMetadataSnapshot(input: {
         description: null,
         canonical: null,
         robots: null,
+        h1Count: null,
+        wordCount: null,
+        jsonLdCount: null,
+        schemaTypes: null,
+        htmlLang: null,
       };
     }
 
     const headMatch = html.match(/<head\b[^>]*>([\s\S]*?)<\/head>/i);
     const head = headMatch ? headMatch[1] : html;
+    const bodyMatch = html.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i);
+    const body = bodyMatch ? bodyMatch[1] : html;
     const baseTagMatch = head.match(/<base\b[^>]*>/i);
     const baseAttrs = baseTagMatch ? parseTagAttributes(baseTagMatch[0]) : {};
     const baseUrl = resolveAbsoluteUrl(baseAttrs.href || "", finalUrl) || finalUrl;
+    const htmlTagMatch = html.match(/<html\b[^>]*>/i);
+    const htmlAttrs = htmlTagMatch ? parseTagAttributes(htmlTagMatch[0]) : {};
 
     const titleMatch = head.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
     const title =
@@ -160,12 +193,44 @@ export async function fetchLiveMetadataSnapshot(input: {
       canonical = resolveAbsoluteUrl(ogUrl, baseUrl) || resolveAbsoluteUrl(finalUrl, baseUrl);
     }
 
+    const h1Count = (body.match(/<h1\b[^>]*>/gi) || []).length;
+    const jsonLdScripts = Array.from(
+      html.matchAll(/<script\b[^>]*type\s*=\s*("application\/ld\+json"|'application\/ld\+json')[^>]*>([\s\S]*?)<\/script>/gi),
+    );
+    const schemaTypes = new Set<string>();
+    for (const match of jsonLdScripts) {
+      const raw = String(match[2] || "").trim();
+      if (!raw) continue;
+      try {
+        collectSchemaTypes(JSON.parse(raw), schemaTypes);
+      } catch {
+        continue;
+      }
+    }
+
+    const bodyText = decodeHtmlEntities(
+      body
+        .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+        .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, " ")
+        .replace(/<svg\b[\s\S]*?<\/svg>/gi, " ")
+        .replace(/<[^>]+>/g, " "),
+    )
+      .replace(/\s+/g, " ")
+      .trim();
+    const words = bodyText.match(/[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g) || [];
+
     return {
       pageUrl: finalUrl,
       title,
       description,
       canonical,
       robots,
+      h1Count,
+      wordCount: words.length,
+      jsonLdCount: jsonLdScripts.length,
+      schemaTypes: schemaTypes.size ? Array.from(schemaTypes).slice(0, 12) : null,
+      htmlLang: cleanText(htmlAttrs.lang),
     };
   } catch {
     return null;
