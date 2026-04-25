@@ -8,8 +8,8 @@ import {
   findMembershipsForUser,
   findSessionMembership,
   findUserAuth,
-  getAuthPool,
   pickPrimaryMembership,
+  withDedicatedAuthClient,
   userHasOAuthIdentity,
 } from "@/lib/authDb";
 import { getAccountDisciplineState } from "@/lib/admin/accountDiscipline.server";
@@ -748,27 +748,28 @@ export async function getSession(req: Request): Promise<CavbotSession | null> {
     if (!sess) return null;
     if (sess?.systemRole === "user" && sess.sub && sess.sub !== "system") {
       try {
-        const pool = getAuthPool();
         const userId = String(sess.sub);
-        let activeMembership = null;
+        await withDedicatedAuthClient(async (authClient) => {
+          let activeMembership = null;
 
-        if (sess.accountId) {
-          activeMembership = await withAuthBackendReadDeadline(
-            findSessionMembership(pool, userId, String(sess.accountId)),
-          );
-        }
-
-        if (!activeMembership || !sess.memberRole) {
-          const memberships = await withAuthBackendReadDeadline(findMembershipsForUser(pool, userId));
-          const active = pickPrimaryMembership(memberships);
-          if (active?.accountId) {
-            sess.accountId = String(active.accountId);
-            sess.memberRole = active.role;
+          if (sess.accountId) {
+            activeMembership = await withAuthBackendReadDeadline(
+              findSessionMembership(authClient, userId, String(sess.accountId)),
+            );
           }
-        } else {
-          sess.accountId = String(activeMembership.accountId);
-          sess.memberRole = activeMembership.role;
-        }
+
+          if (!activeMembership || !sess.memberRole) {
+            const memberships = await withAuthBackendReadDeadline(findMembershipsForUser(authClient, userId));
+            const active = pickPrimaryMembership(memberships);
+            if (active?.accountId) {
+              sess.accountId = String(active.accountId);
+              sess.memberRole = active.role;
+            }
+          } else {
+            sess.accountId = String(activeMembership.accountId);
+            sess.memberRole = activeMembership.role;
+          }
+        });
       } catch {}
     }
     return sess;
@@ -820,61 +821,52 @@ export async function requireSession(req: Request): Promise<CavbotSession> {
   // DB-backed session invalidation for user sessions
   if (sess.systemRole === "user" && sess.sub && sess.sub !== "system") {
     const userId = String(sess.sub);
-    const pool = getAuthPool();
-    if (!sess.accountId || !sess.memberRole) {
-      try {
-        const memberships = await withAuthBackendReadDeadline(findMembershipsForUser(pool, userId));
-        const active = pickPrimaryMembership(memberships);
-
-        if (!active?.accountId) throw new ApiAuthError("UNAUTHORIZED", 401);
-
-        sess.accountId = String(active.accountId);
-        sess.memberRole = active.role;
-      } catch (error) {
-        if (error instanceof ApiAuthError) throw error;
-        if (canFailOpenAuthenticatedRead(req)) return sess;
-        throw authBackendUnavailableError();
-      }
-    }
-
-    // Requires UserAuth.sessionVersion. In dev/bootstrap, schema may lag; don't brick the app.
-    let auth: { sessionVersion: number | null } | null = null;
     try {
-      auth = await withAuthBackendReadDeadline(findUserAuth(pool, userId));
-    } catch {
+      await withDedicatedAuthClient(async (authClient) => {
+        if (!sess.accountId || !sess.memberRole) {
+          const memberships = await withAuthBackendReadDeadline(findMembershipsForUser(authClient, userId));
+          const active = pickPrimaryMembership(memberships);
+
+          if (!active?.accountId) throw new ApiAuthError("UNAUTHORIZED", 401);
+
+          sess.accountId = String(active.accountId);
+          sess.memberRole = active.role;
+        }
+
+        // Requires UserAuth.sessionVersion. In dev/bootstrap, schema may lag; don't brick the app.
+        const auth = await withAuthBackendReadDeadline(findUserAuth(authClient, userId));
+
+        if (!auth) {
+          // OAuth-only users may not have a UserAuth row yet; allow signed session tokens
+          // for those identities so protected APIs do not hard-fail.
+          if (await withAuthBackendReadDeadline(userHasOAuthIdentity(authClient, userId))) return;
+
+          if (process.env.NODE_ENV !== "production") return;
+          throw new ApiAuthError("UNAUTHORIZED", 401);
+        }
+
+        // Backward compatibility: legacy tokens minted before sv existed are treated as sv=1.
+        const tokenSvRaw = Number(sess.sv ?? 1);
+        const tokenSv =
+          Number.isFinite(tokenSvRaw) && Number.isInteger(tokenSvRaw) && tokenSvRaw > 0
+            ? tokenSvRaw
+            : 1;
+        const dbSv = Number(auth.sessionVersion ?? 0);
+
+        // If DB hasn't been initialized yet, treat as 1
+        const dbEffective = dbSv > 0 ? dbSv : 1;
+
+        if (!tokenSv || tokenSv !== dbEffective) {
+          if (process.env.NODE_ENV !== "production") return;
+          throw new ApiAuthError("SESSION_REVOKED", 401);
+        }
+      });
+    } catch (error) {
+      if (error instanceof ApiAuthError) throw error;
       if (canFailOpenAuthenticatedRead(req)) return sess;
       throw authBackendUnavailableError();
     }
 
-    if (!auth) {
-      // OAuth-only users may not have a UserAuth row yet; allow signed session tokens
-      // for those identities so protected APIs do not hard-fail.
-      try {
-        if (await withAuthBackendReadDeadline(userHasOAuthIdentity(pool, userId))) return sess;
-      } catch {
-        if (canFailOpenAuthenticatedRead(req)) return sess;
-        throw authBackendUnavailableError();
-      }
-
-      if (process.env.NODE_ENV !== "production") return sess;
-      throw new ApiAuthError("UNAUTHORIZED", 401);
-    }
-
-    // Backward compatibility: legacy tokens minted before sv existed are treated as sv=1.
-    const tokenSvRaw = Number(sess.sv ?? 1);
-    const tokenSv =
-      Number.isFinite(tokenSvRaw) && Number.isInteger(tokenSvRaw) && tokenSvRaw > 0
-        ? tokenSvRaw
-        : 1;
-    const dbSv = Number(auth.sessionVersion ?? 0);
-
-    // If DB hasn't been initialized yet, treat as 1
-    const dbEffective = dbSv > 0 ? dbSv : 1;
-
-    if (!tokenSv || tokenSv !== dbEffective) {
-      if (process.env.NODE_ENV !== "production") return sess;
-      throw new ApiAuthError("SESSION_REVOKED", 401);
-    }
     try {
       const discipline = await withAuthBackendReadDeadline(
         getAccountDisciplineState(String(sess.accountId || "")),

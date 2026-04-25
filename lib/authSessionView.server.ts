@@ -5,9 +5,9 @@ import {
   findAccountById,
   findSessionMembership,
   findUserById,
-  getAuthPool,
   type AuthUser,
   type SessionMembershipRecord,
+  withDedicatedAuthClient,
 } from "@/lib/authDb";
 import {
   findLatestEntitledSubscription,
@@ -181,84 +181,84 @@ export async function readAuthSessionView(
   if (!userId || !accountId) return null;
 
   try {
-    const pool = getAuthPool();
     let degraded = false;
-
-    const membershipRow = await withAuthSessionViewDeadline(
-      findSessionMembership(pool, userId, accountId),
-    ).catch(() => {
-      degraded = true;
-      return null;
-    });
-
-    const userRow = await withAuthSessionViewDeadline(findUserById(pool, userId)).catch(() => {
-      degraded = true;
-      return null;
-    });
-
-    const user = fallbackUserFromSession({
-      userId,
-      session,
-      membership: membershipRow,
-      user: userRow,
-    });
-
-    let account: AuthSessionViewAccount = fallbackAccountFromSession({
-      accountId,
-      membership: membershipRow,
-      tier: membershipRow?.accountTier || "FREE",
-    });
-
-    const accountRow = await withAuthSessionViewDeadline(findAccountById(pool, accountId)).catch(() => {
-      degraded = true;
-      return null;
-    });
-
-    if (accountRow) {
-      const subscriptionRow = await withAuthSessionViewDeadline(
-        findLatestEntitledSubscription(accountId, pool),
+    return await withDedicatedAuthClient(async (authClient) => {
+      const membershipRow = await withAuthSessionViewDeadline(
+        findSessionMembership(authClient, userId, accountId),
       ).catch(() => {
         degraded = true;
         return null;
       });
-      account = {
-        id: accountRow.id,
-        name: accountRow.name ?? membershipRow?.accountName ?? null,
-        slug: accountRow.slug ?? membershipRow?.accountSlug ?? null,
-        tier: s(accountRow.tier).toUpperCase() || account.tier,
-        tierEffective: planTierTokenFromPlanId(
-          resolveEffectivePlanId({
-            account: accountRow,
-            subscription: subscriptionRow,
-          }),
-        ),
-        createdAt: accountRow.createdAt,
-        trialSeatActive: Boolean(accountRow.trialSeatActive),
-        trialStartedAt: asDate(accountRow.trialStartedAt),
-        trialEndsAt: asDate(accountRow.trialEndsAt),
-        trialEverUsed: Boolean(accountRow.trialEverUsed),
-        trialActive: isTrialSeatEntitled(accountRow),
-        trialDaysLeft: isTrialSeatEntitled(accountRow) ? computeTrialDaysLeft(accountRow) : 0,
-      };
-    }
 
-    return {
-      degraded,
-      user,
-      membership: membershipRow ?? {
-        id: "",
-        accountId,
+      const userRow = await withAuthSessionViewDeadline(findUserById(authClient, userId)).catch(() => {
+        degraded = true;
+        return null;
+      });
+
+      const user = fallbackUserFromSession({
         userId,
-        role: normalizeRole(session.memberRole),
-        createdAt: new Date(0),
-        userEmail: user.email,
-        userDisplayName: user.displayName,
-        accountName: account.name || "",
-        accountSlug: account.slug || "",
-        accountTier: account.tier,
-      },
-      account,
-    } satisfies AuthSessionView;
+        session,
+        membership: membershipRow,
+        user: userRow,
+      });
+
+      let account: AuthSessionViewAccount = fallbackAccountFromSession({
+        accountId,
+        membership: membershipRow,
+        tier: membershipRow?.accountTier || "FREE",
+      });
+
+      const accountRow = await withAuthSessionViewDeadline(findAccountById(authClient, accountId)).catch(() => {
+        degraded = true;
+        return null;
+      });
+
+      if (accountRow) {
+        const subscriptionRow = await withAuthSessionViewDeadline(
+          findLatestEntitledSubscription(accountId, authClient),
+        ).catch(() => {
+          degraded = true;
+          return null;
+        });
+        account = {
+          id: accountRow.id,
+          name: accountRow.name ?? membershipRow?.accountName ?? null,
+          slug: accountRow.slug ?? membershipRow?.accountSlug ?? null,
+          tier: s(accountRow.tier).toUpperCase() || account.tier,
+          tierEffective: planTierTokenFromPlanId(
+            resolveEffectivePlanId({
+              account: accountRow,
+              subscription: subscriptionRow,
+            }),
+          ),
+          createdAt: accountRow.createdAt,
+          trialSeatActive: Boolean(accountRow.trialSeatActive),
+          trialStartedAt: asDate(accountRow.trialStartedAt),
+          trialEndsAt: asDate(accountRow.trialEndsAt),
+          trialEverUsed: Boolean(accountRow.trialEverUsed),
+          trialActive: isTrialSeatEntitled(accountRow),
+          trialDaysLeft: isTrialSeatEntitled(accountRow) ? computeTrialDaysLeft(accountRow) : 0,
+        };
+      }
+
+      return {
+        degraded,
+        user,
+        membership: membershipRow ?? {
+          id: "",
+          accountId,
+          userId,
+          role: normalizeRole(session.memberRole),
+          createdAt: new Date(0),
+          userEmail: user.email,
+          userDisplayName: user.displayName,
+          accountName: account.name || "",
+          accountSlug: account.slug || "",
+          accountTier: account.tier,
+        },
+        account,
+      } satisfies AuthSessionView;
+    });
   } catch {
     return {
       degraded: true,
