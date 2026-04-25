@@ -59,6 +59,7 @@ const TRANSIENT_HTML_STYLES = [
 const TRACKER_NODE_SELECTOR = "[data-cavbot-head], .cavbot-dm-avatar, .cavbot-eye-pupil";
 const RUNTIME_RECOVERY_COOLDOWN_MS = 10_000;
 const RUNTIME_RECOVERY_GUARD_PREFIX = "cb_runtime_recover";
+const GENERIC_CLIENT_ERROR_GUARD_PREFIX = "cb_runtime_client_error_recover";
 const LAYOUT_DIAG_CSS_VARS = [
   "--safe-top",
   "--safe-bottom",
@@ -285,6 +286,27 @@ function triggerRuntimeRecovery(pathname: string): void {
   }
 }
 
+function isGenericClientErrorScreen(text: string): boolean {
+  const normalized = String(text || "").toLowerCase();
+  if (!normalized) return false;
+  return (
+    normalized.includes("application error: a client-side exception has occurred") ||
+    normalized.includes("application error: a server-side exception has occurred")
+  );
+}
+
+function triggerGenericClientErrorRecovery(pathname: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const key = `${GENERIC_CLIENT_ERROR_GUARD_PREFIX}:${pathname || "/"}`;
+    if (globalThis.__cbSessionStore.getItem(key) === "1") return;
+    globalThis.__cbSessionStore.setItem(key, "1");
+  } catch {
+    // ignore guard failures; still attempt recovery
+  }
+  triggerRuntimeRecovery(pathname);
+}
+
 function refreshTrackers() {
   if (typeof window === "undefined") return;
   const callHead = () => {
@@ -461,6 +483,30 @@ export default function RouteLifecycle() {
       window.removeEventListener("unhandledrejection", onRejection, true);
     };
   }, [instrumentLogging, pathname]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const check = () => {
+      const text = document.body?.innerText || "";
+      if (!isGenericClientErrorScreen(text)) return;
+      triggerGenericClientErrorRecovery(pathname);
+    };
+
+    check();
+
+    const observer = new MutationObserver(() => {
+      check();
+    });
+
+    observer.observe(document.documentElement, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    });
+
+    return () => observer.disconnect();
+  }, [pathname]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") return;
