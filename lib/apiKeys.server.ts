@@ -36,7 +36,7 @@ const KEY_PREFIXES: Record<ApiKeyType, string> = {
 };
 
 const DEFAULT_SCOPES: Record<ApiKeyType, string[]> = {
-  PUBLISHABLE: ["events:write", "analytics:write", "arcade:read"],
+  PUBLISHABLE: ["events:write", "analytics:write", "analytics:events", "arcade:read"],
   SECRET: ["events:write", "analytics:write", "arcade:read"],
   ADMIN: ["admin:all"],
 };

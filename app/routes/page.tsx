@@ -7,8 +7,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import AppShell from "@/components/AppShell";
 import DashboardToolsControls from "@/components/DashboardToolsControls";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
-import { readWorkspace } from "@/lib/workspaceStore.server";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
+import { resolveAnalyticsConsoleContext } from "@/lib/analyticsConsole.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
 
 export const runtime = "nodejs";
@@ -19,17 +18,6 @@ type PageProps = {
 };
 
 type RangeKey = "24h" | "7d" | "14d" | "30d";
-
-type WorkspaceSelectionView = { activeSiteOrigin?: string | null };
-type WorkspaceView = {
-  projectId?: number | string | null;
-  project?: { id?: number | string | null };
-  account?: { projectId?: number | string | null };
-  activeSiteOrigin?: string | null;
-  activeSite?: { id?: string | null; origin?: string | null };
-  selection?: WorkspaceSelectionView | null;
-  workspace?: WorkspaceSelectionView | null;
-};
 
 type ProjectSummaryWithTrend = ProjectSummary & {
   trend?: unknown;
@@ -87,20 +75,6 @@ function firstArray(...values: unknown[]): unknown[] | null {
     }
   }
   return null;
-}
-
-/* =========================
-  Shared helpers (match Errors/SEO)
-========================= */
-function canonicalOrigin(input: string) {
-  const s = String(input || "").trim();
-  if (!s) return "";
-  const withScheme = /^https?:\/\//i.test(s) ? s : `https://${s.replace(/^\/\//, "")}`;
-  try {
-    return new URL(withScheme).origin;
-  } catch {
-    return "";
-  }
 }
 
 function toSlug(v: string) {
@@ -191,105 +165,6 @@ function buildRoutesReportCSV(input: {
     ].join(","));
   }
   return rows.join("\n");
-}
-
-type ClientTarget = { id: string; label?: string | null; origin: string };
-
-function resolveSiteLabel(t: ClientTarget) {
-  if (t.label && String(t.label).trim()) return String(t.label).trim();
-  const s = String(t.id || "").replace(/-/g, " ").trim();
-  if (s) return s.replace(/\b\w/g, (m) => m.toUpperCase());
-  try {
-    const u = new URL(t.origin);
-    return u.hostname;
-  } catch {
-    return "Site";
-  }
-}
-
-function normalizeTargets(raw: unknown): ClientTarget[] {
-  const roots: Dict[] = [];
-  const push = (x: unknown) => {
-    const dict = asDict(x);
-    if (dict) roots.push(dict);
-  };
-
-  const rawDict = asDict(raw);
-  push(rawDict);
-  push(rawDict?.workspace);
-  push(rawDict?.commandDeck);
-  push(rawDict?.deck);
-  push(rawDict?.data);
-  push(rawDict?.state);
-  push(rawDict?.project);
-  push(rawDict?.account);
-  push(rawDict?.payload);
-
-  const keys = ["targets", "sites", "monitoredSites", "origins", "monitoredOrigins", "sitesList", "targetsList"];
-
-  for (const r of roots) {
-    for (const k of keys) {
-      const v = r?.[k];
-      if (!Array.isArray(v) || !v.length) continue;
-
-      const out: ClientTarget[] = [];
-      const seen = new Set<string>();
-
-      for (const item of v) {
-        let origin = "";
-        let id = "";
-        let label: string | null = null;
-
-        if (typeof item === "string") {
-          origin = canonicalOrigin(item);
-          id = toSlug(origin || item);
-        } else {
-          const dictItem = asDict(item);
-          if (dictItem) {
-            const rawOrigin =
-              typeof dictItem.origin === "string"
-                ? dictItem.origin
-                : typeof dictItem.url === "string"
-                ? dictItem.url
-                : typeof dictItem.siteOrigin === "string"
-                ? dictItem.siteOrigin
-                : typeof dictItem.href === "string"
-                ? dictItem.href
-                : typeof dictItem.baseUrl === "string"
-                ? dictItem.baseUrl
-                : typeof dictItem.website === "string"
-                ? dictItem.website
-                : typeof dictItem.primaryOrigin === "string"
-                ? dictItem.primaryOrigin
-                : "";
-
-            origin = canonicalOrigin(rawOrigin);
-            id = toSlug(String(dictItem.slug || dictItem.id || origin || "site"));
-            label =
-              typeof dictItem.label === "string"
-                ? dictItem.label
-                : typeof dictItem.name === "string"
-                ? dictItem.name
-                : typeof dictItem.displayName === "string"
-                ? dictItem.displayName
-                : typeof dictItem.title === "string"
-                ? dictItem.title
-                : null;
-          }
-        }
-
-        if (!origin) continue;
-        if (seen.has(origin)) continue;
-        seen.add(origin);
-
-        out.push({ id, origin, label });
-      }
-
-      return out;
-    }
-  }
-
-  return [];
 }
 
 /* =========================
@@ -575,55 +450,24 @@ export default async function RoutesPage({ searchParams }: PageProps) {
   const range = (typeof sp?.range === "string" ? sp.range : "24h") as RangeKey;
   const pathParam = typeof sp?.path === "string" ? sp.path : "";
 
-  let ws: WorkspaceView | null = null;
-  try {
-    ws = await readWorkspace();
-  } catch {
-    ws = null;
-  }
-
-  const targets = normalizeTargets(ws);
-  const sites = targets.map((t) => {
-    const siteOrigin = t.origin;
-    return { id: t.id, label: resolveSiteLabel(t), origin: siteOrigin, url: siteOrigin };
+  const analyticsContext = await resolveAnalyticsConsoleContext({
+    searchParams: sp,
+    defaultRange: range,
+    pathname: "/routes",
   });
+  const sites = analyticsContext.sites;
+  const activeSite = analyticsContext.activeSite;
+  const projectId = analyticsContext.projectId;
 
-  const siteParam = typeof sp?.site === "string" ? sp.site : "";
-
-  const wsActiveOrigin =
-    canonicalOrigin(
-      ws?.activeSiteOrigin ||
-        ws?.selection?.activeSiteOrigin ||
-        ws?.activeSite?.origin ||
-        ws?.workspace?.activeSiteOrigin ||
-        ""
-    ) || "";
-
-  const siteById = sites.find((s) => s.id === siteParam);
-  const siteByOrigin = siteParam.startsWith("http") ? sites.find((s) => s.url === canonicalOrigin(siteParam)) : null;
-  const siteByWorkspace = !siteParam && wsActiveOrigin ? sites.find((s) => s.url === wsActiveOrigin) : null;
-
-  const activeSite = siteById || siteByOrigin || siteByWorkspace || sites[0] || { id: "none", label: "No site selected", url: "" };
-
-  const projectId = String(ws?.projectId || ws?.project?.id || ws?.account?.projectId || "1");
-
-  let summary: ProjectSummaryWithTrend | null = null;
+  const summary = analyticsContext.summary as ProjectSummaryWithTrend | null;
   let routes: RoutesPayload = {};
   let trend: TrendPoint[] = [];
 
-  try {
-    summary = await getProjectSummary(projectId, {
-      range: range === "30d" ? "30d" : "7d",
-      siteOrigin: activeSite.url || undefined,
-    });
+  if (summary) {
     routes = normalizeRoutesFromSummary(summary);
 
     const rawTrend = range === "30d" ? summary?.trend30d ?? summary?.trend ?? null : summary?.trend7d ?? summary?.trend ?? null;
     trend = normalizeTrendDays(rawTrend, range === "24h" ? 7 : range === "7d" ? 7 : range === "14d" ? 14 : 30);
-  } catch {
-    summary = null;
-    routes = {};
-    trend = [];
   }
 
   const summaryDict = asDict(summary);

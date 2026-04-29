@@ -12,12 +12,12 @@ import { COUNTRY_TERRITORY_ISO } from "@/geo/countries";
 import { REGION_GROUPED } from "@/geo/regions";
 import { getSession } from "@/lib/apiAuth";
 import { findUserById, getAuthPool } from "@/lib/authDb";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
-import type { SummaryRange } from "@/lib/cavbotApi.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
 import { prisma } from "@/lib/prisma";
-import { readWorkspace } from "@/lib/workspaceStore.server";
-import type { WorkspacePayload } from "@/lib/workspaceStore.server";
+import {
+  analyticsConsoleErrorCode,
+  resolveAnalyticsConsoleContext,
+} from "@/lib/analyticsConsole.server";
 
 type TrendPoint = { day: string; sessions: number; views404: number };
 type TopRoute = { routePath: string; views: number };
@@ -562,11 +562,6 @@ function isEnvMissingError(e: unknown) {
   );
 }
 
-function errText(e: unknown) {
-  if (e instanceof Error) return e.message || String(e);
-  return String(e);
-}
-
 function Donut({ score, label, tone }: { score: number; label: string; tone: Tone }) {
   const pct = clamp(score, 0, 100) / 100;
   const r = 46;
@@ -691,22 +686,38 @@ function normalizeConsoleMetrics(raw: unknown): ConsoleMetrics {
   };
 }
 
+function hasMeasuredConsoleActivity(metrics: ConsoleMetrics | null) {
+  if (!metrics) return false;
+  const numericSignals = [
+    metrics.pageViews24h,
+    metrics.sessions30d,
+    metrics.sessions40430d,
+    metrics.badgeInteractions30d,
+    metrics.views40430d,
+    metrics.gameInteractions30d,
+    metrics.uniqueVisitors30d,
+    metrics.sessionsUnderGuard30d,
+    metrics.routesMonitored,
+    metrics.jsErrors30d,
+    metrics.apiErrors30d,
+    metrics.ctaClicks30d,
+    metrics.formSubmits30d,
+    metrics.engagementPings30d,
+    metrics.a11yAudits30d,
+    metrics.a11yIssues30d,
+  ];
+  if (numericSignals.some((value) => n(value) > 0)) return true;
+  if ((metrics.topRoutes || []).length > 0) return true;
+  if ((metrics.trend7d || []).some((point) => n(point.sessions) > 0 || n(point.views404) > 0)) return true;
+  if ((metrics.trend30d || []).some((point) => n(point.sessions) > 0 || n(point.views404) > 0)) return true;
+  return false;
+}
+
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function canonicalOrigin(input: string) {
-  const s = String(input || "").trim();
-  if (!s) return "";
-  const withScheme = /^https?:\/\//i.test(s) ? s : `https://${s.replace(/^\/\//, "")}`;
-  try {
-    return new URL(withScheme).origin;
-  } catch {
-    return "";
-  }
-}
 
 function firstInitialFromUsername(input: string): string {
   const source = String(input || "").trim().replace(/^@+/, "");
@@ -795,41 +806,22 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
 export default async function ConsolePage({ searchParams }: PageProps) {
   const sp = await searchParams;
 
-  const range = typeof sp?.range === "string" ? sp.range : "7d";
-  const rangeKey = (range === "24h" || range === "7d" || range === "14d" || range === "30d" ? range : "7d") as
-    | "24h"
-    | "7d"
-    | "14d"
-    | "30d";
-  const siteParam = typeof sp?.site === "string" ? sp.site : "";
+  const analyticsContext = await resolveAnalyticsConsoleContext({
+    searchParams: sp,
+    defaultRange: "7d",
+    pathname: "/console",
+  });
 
-  let ws: WorkspacePayload | null = null;
-  try {
-    ws = await readWorkspace();
-  } catch {
-    ws = null;
-  }
-
-  const workspaceProjectId = Number(ws?.projectId || 1) || 1;
-  const sites = Array.isArray(ws?.sites)
-    ? ws.sites
-        .map((s) => ({ id: String(s.id || ""), label: String(s.label || "Site"), url: canonicalOrigin(String(s.origin || "")) }))
-        .filter((s) => Boolean(s.id && s.url))
-    : [];
-
-  const workspaceActiveOrigin = canonicalOrigin(ws?.activeSiteOrigin || ws?.workspace?.activeSiteOrigin || "");
-  const siteById = sites.find((s) => s.id === siteParam);
-  const siteByOrigin = siteParam.startsWith("http") ? sites.find((s) => s.url === canonicalOrigin(siteParam)) : null;
-  const siteByWorkspaceId = !siteParam && ws?.activeSiteId ? sites.find((s) => s.id === String(ws.activeSiteId)) : null;
-  const siteByWorkspaceOrigin = !siteParam && workspaceActiveOrigin ? sites.find((s) => s.url === workspaceActiveOrigin) : null;
-  const activeSite =
-    siteById || siteByOrigin || siteByWorkspaceId || siteByWorkspaceOrigin || sites[0] || { id: "none", label: "No site selected", url: "" };
-  const dashboardToolSites = sites.map((s) => ({ id: s.id, label: s.label, origin: s.url }));
+  const rangeKey = analyticsContext.range;
+  const range = rangeKey;
+  const projectId = analyticsContext.projectId;
+  const activeSite = analyticsContext.activeSite;
+  const dashboardToolSites = analyticsContext.sites.map((s) => ({ id: s.id, label: s.label, origin: s.url }));
 
   const hrefWith = (next: { range?: string; site?: string }) => {
     const p = new URLSearchParams();
     p.set("module", "console");
-    p.set("projectId", String(workspaceProjectId));
+    if (projectId) p.set("projectId", projectId);
     const r = next.range ?? range;
     const s = next.site ?? activeSite.id;
     if (r) p.set("range", r);
@@ -839,42 +831,15 @@ export default async function ConsolePage({ searchParams }: PageProps) {
     return str ? `?${str}` : "";
   };
 
-  const projectId = String(workspaceProjectId);
-
-  let data: ProjectSummary | null = null;
-  let loadError: unknown = null;
-  const summaryRange: SummaryRange = rangeKey;
-  const summarySiteOrigin = activeSite.url || undefined;
-
-  try {
-    // company-grade: pass selected range + origin and let API decide aggregation
-    data = await getProjectSummary(projectId, {
-      range: summaryRange,
-      siteOrigin: summarySiteOrigin,
-    });
-  } catch (error) {
-    // Backward-safe fallback while upstream rolls out full 24h/14d support.
-    if (summaryRange === "24h" || summaryRange === "14d") {
-      try {
-        data = await getProjectSummary(projectId, {
-          range: "7d",
-          siteOrigin: summarySiteOrigin,
-        });
-      } catch (fallbackError) {
-        loadError = fallbackError;
-      }
-    } else {
-      loadError = error;
-    }
-  }
+  const data: ProjectSummary | null = analyticsContext.summary;
+  const loadError: unknown = analyticsContext.summaryError;
 
   const metrics: ConsoleMetrics | null = data?.metrics ? normalizeConsoleMetrics(data.metrics) : null;
 
-  const projectLabel =
-    data?.project?.projectId != null ? `Project #${data.project.projectId}` : `Project ${projectId}`;
+  const projectLabel = analyticsContext.projectLabel || (projectId ? `Project ${projectId}` : "Project");
 
   const envMissing = Boolean(loadError && isEnvMissingError(loadError));
-  const hasMetrics = Boolean(!loadError && metrics);
+  const hasMetrics = Boolean(!loadError && metrics && hasMeasuredConsoleActivity(metrics));
 
   const score = metrics ? n(metrics.guardianScore) : 0;
   const badge = scoreLabel(score);
@@ -1140,20 +1105,20 @@ export default async function ConsolePage({ searchParams }: PageProps) {
         {envMissing ? (
           <section className="cb-card cb-card-danger" aria-label="Missing environment variables">
             <div className="cb-card-head">
-              <h1 className="cb-h1">Console is wired — env is missing</h1>
+              <h1 className="cb-h1">Console is wired — analytics config is missing</h1>
               <p className="cb-sub">
-                Set <code>CAVBOT_API_BASE_URL</code> and <code>CAVBOT_PROJECT_KEY</code> for the server runtime.
+                The server could not reach the analytics API for this project. Verify the production API base and project key registration.
               </p>
             </div>
 
             <div className="cb-kv">
               <div className="cb-kv-row">
                 <span className="cb-k">Expected</span>
-                <span className="cb-v">https://api.cavbot.io</span>
+                <span className="cb-v">Registered analytics endpoint</span>
               </div>
               <div className="cb-kv-row">
-                <span className="cb-k">Header</span>
-                <span className="cb-v">X-Project-Key</span>
+                <span className="cb-k">Project</span>
+                <span className="cb-v">{projectLabel}</span>
               </div>
             </div>
           </section>
@@ -1949,11 +1914,35 @@ export default async function ConsolePage({ searchParams }: PageProps) {
           <section className="cb-card cb-card-danger" aria-label="Console load failed">
             <div className="cb-card-head">
               <h1 className="cb-h1">Console failed to load</h1>
-              <p className="cb-sub">Your API is reachable, but this page couldn’t pull the summary.</p>
+              <p className="cb-sub">Unable to load metrics for the selected project, site, and range.</p>
             </div>
-            <pre className="cb-pre">{errText(loadError)}</pre>
+            <pre className="cb-pre">{analyticsConsoleErrorCode(loadError)}</pre>
           </section>
-        ) : null}
+        ) : (
+          <section className="cb-card" aria-label="No analytics data yet">
+            <div className="cb-card-head">
+              <h1 className="cb-h1">No data yet</h1>
+              <p className="cb-sub">
+                CavBot is waiting for real events from {activeSite.url || "the selected site"}. Install or verify the Analytics v5 snippet,
+                then load a page on the site to create the first page view.
+              </p>
+            </div>
+            <div className="cb-kv">
+              <div className="cb-kv-row">
+                <span className="cb-k">Project</span>
+                <span className="cb-v">{projectLabel}</span>
+              </div>
+              <div className="cb-kv-row">
+                <span className="cb-k">Target</span>
+                <span className="cb-v">{activeSite.url || "No site selected"}</span>
+              </div>
+              <div className="cb-kv-row">
+                <span className="cb-k">Range</span>
+                <span className="cb-v">{rangeKey}</span>
+              </div>
+            </div>
+          </section>
+        )}
       </div>
     </AppShell>
   );

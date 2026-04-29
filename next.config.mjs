@@ -32,14 +32,6 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: "/cavai/cavai-analytics-v5.js",
-        destination: "https://cdn.cavbot.io/sdk/v5/cavai-analytics-v5.min.js",
-      },
-      {
-        source: "/cavai/cavai.js",
-        destination: "https://cdn.cavbot.io/sdk/cavai/v1/cavai.min.js",
-      },
-      {
         source: "/cavbot/widget/cavbot-widget.js",
         destination: "https://cdn.cavbot.io/sdk/widget/v1/cavbot-widget.min.js",
       },

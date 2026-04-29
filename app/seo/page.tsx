@@ -9,9 +9,7 @@ import { gateModuleAccess } from "@/lib/moduleGate.server";
 import LockedModule from "@/components/LockedModule";
 import AppShell from "@/components/AppShell";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
-import { readWorkspace } from "@/lib/workspaceStore.server";
-import type { WorkspacePayload } from "@/lib/workspaceStore.server";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
+import { resolveAnalyticsConsoleContext } from "@/lib/analyticsConsole.server";
 import {
   generateSeoActions,
   medianSeoScore,
@@ -29,6 +27,7 @@ import {
   faviconSourceLabel,
   type FaviconIntelligenceResult,
 } from "@/lib/seo/faviconIntelligence";
+import { fetchLiveMetadataSnapshot } from "@/lib/seo/liveMetadata";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -93,40 +92,6 @@ function firstArray(...values: unknown[]): unknown[] | null {
   return null;
 }
 
-type SeoWorkspace = WorkspacePayload & {
-  // Some pages/components have historically stored selection pointers here.
-  // Keep these additive without narrowing WorkspacePayload (avoid TS incompatibilities).
-  selection?: { activeSiteOrigin?: string | null } | null;
-  activeSite?: { origin?: string | null } | null;
-  project?: { id?: number | string | null } | null;
-};
-
-/* =========================
-  Shared helpers (match Errors)
-  ========================= */
-function canonicalOrigin(input: string) {
-  const s = String(input || "").trim();
-  if (!s) return "";
-  const withScheme = /^https?:\/\//i.test(s) ? s : `https://${s.replace(/^\/\//, "")}`;
-  try {
-    return new URL(withScheme).origin;
-  } catch {
-    return "";
-  }
-}
-
-function toSlug(v: string) {
-  return (
-    String(v || "")
-      .toLowerCase()
-      .trim()
-      .replace(/^https?:\/\//, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "")
-      .slice(0, 63) || "site"
-  );
-}
-
 function nOrNull(x: unknown) {
   const v = Number(x);
   return Number.isFinite(v) ? v : null;
@@ -152,6 +117,32 @@ function fmtCls(v: unknown) {
   if (x == null) return "—";
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(x);
 }
+function normalizeVitalMetric(v: unknown) {
+  const x = nOrNull(v);
+  if (x == null) return null;
+  return x > 0 ? x : null;
+}
+function fmtVitalMs(v: unknown) {
+  return fmtMs(normalizeVitalMetric(v));
+}
+function fmtVitalCls(v: unknown) {
+  return fmtCls(normalizeVitalMetric(v));
+}
+function fmtVitalDisplay(v: number | null, formatter: (value: number) => string) {
+  return v == null ? "Collecting" : formatter(v);
+}
+
+function faviconStatusLabel(value: string) {
+  if (value === "ok") return "OK";
+  if (value === "warn") return "Review";
+  return "Broken";
+}
+
+function faviconStatusTone(value: string): "good" | "warn" | "bad" {
+  if (value === "ok") return "good";
+  if (value === "warn") return "warn";
+  return "bad";
+}
 
 function toHostPath(raw: string) {
   const s = String(raw || "").trim();
@@ -165,87 +156,11 @@ function toHostPath(raw: string) {
   }
 }
 
-type ClientTarget = { id: string; label?: string | null; origin: string };
-
-function resolveSiteLabel(t: ClientTarget) {
-  if (t.label && String(t.label).trim()) return String(t.label).trim();
-  const s = String(t.id || "").replace(/-/g, " ").trim();
-  if (s) return s.replace(/\b\w/g, (m) => m.toUpperCase());
-  try {
-    const u = new URL(t.origin);
-    return u.hostname;
-  } catch {
-    return "Site";
-  }
-}
-
-function normalizeTargets(raw: unknown): ClientTarget[] {
-  const roots: UnknownRecord[] = [];
-  const push = (x: unknown) => {
-    const rec = asRecord(x);
-    if (rec) roots.push(rec);
-  };
-
-  const rawRecord = asRecord(raw);
-  push(rawRecord);
-  push(rawRecord?.workspace);
-  push(rawRecord?.commandDeck);
-  push(rawRecord?.deck);
-  push(rawRecord?.data);
-  push(rawRecord?.state);
-  push(rawRecord?.project);
-  push(rawRecord?.account);
-  push(rawRecord?.payload);
-
-  const keys = ["targets", "sites", "monitoredSites", "origins", "monitoredOrigins", "sitesList", "targetsList"];
-
-  for (const r of roots) {
-    for (const k of keys) {
-      const v = r?.[k];
-      if (!Array.isArray(v) || !v.length) continue;
-
-      const out: ClientTarget[] = [];
-      const seen = new Set<string>();
-
-      for (const item of v) {
-        let origin = "";
-        let id = "";
-        let label: string | null = null;
-
-        if (typeof item === "string") {
-          origin = canonicalOrigin(item);
-          id = toSlug(origin || item);
-        } else {
-          const entry = asRecord(item);
-          if (entry) {
-            const rawOrigin =
-              firstString(entry, "origin", "url", "siteOrigin", "href", "baseUrl", "website", "primaryOrigin") || "";
-            origin = canonicalOrigin(rawOrigin);
-            id = toSlug(
-              firstString(entry, "slug", "id") ||
-                origin ||
-                "site"
-            );
-            label =
-              firstString(entry, "label") ||
-              firstString(entry, "name") ||
-              firstString(entry, "displayName") ||
-              firstString(entry, "title");
-          }
-        }
-
-        if (!origin) continue;
-        if (seen.has(origin)) continue;
-        seen.add(origin);
-
-        out.push({ id, origin, label });
-      }
-
-      return out;
-    }
-  }
-
-  return [];
+function nonEmptyText(value: unknown): string | null {
+  const text = toStringSafe(value);
+  if (!text) return null;
+  const cleaned = text.trim();
+  return cleaned ? cleaned : null;
 }
 
 /* =========================
@@ -606,51 +521,24 @@ export default async function SeoPage({ searchParams }: PageProps) {
 
   const range = (typeof sp?.range === "string" ? sp.range : "24h") as RangeKey;
 
-  let ws: SeoWorkspace | null = null;
-  try {
-    ws = await readWorkspace();
-  } catch {
-    ws = null;
-  }
-
-  const targets = normalizeTargets(ws);
-  const sites = targets.map((t) => ({ id: t.id, label: resolveSiteLabel(t), url: t.origin }));
-
-  const siteParam = typeof sp?.site === "string" ? sp.site : "";
-
-  const wsActiveOrigin =
-    canonicalOrigin(
-      ws?.activeSiteOrigin ||
-        ws?.selection?.activeSiteOrigin ||
-        ws?.activeSite?.origin ||
-        ws?.workspace?.activeSiteOrigin ||
-        ""
-    ) || "";
-
-  const siteById = sites.find((s) => s.id === siteParam);
-  const siteByOrigin = siteParam.startsWith("http") ? sites.find((s) => s.url === canonicalOrigin(siteParam)) : null;
-  const siteByWorkspace = !siteParam && wsActiveOrigin ? sites.find((s) => s.url === wsActiveOrigin) : null;
-
-  const activeSite = siteById || siteByOrigin || siteByWorkspace || sites[0] || { id: "none", label: "No site selected", url: "" };
-
-  const projectId = String(ws?.projectId || ws?.project?.id || ws?.account?.projectId || "1");
-
+  const analyticsContext = await resolveAnalyticsConsoleContext({
+    searchParams: sp,
+    defaultRange: range,
+    pathname: "/seo",
+  });
+  const sites = analyticsContext.sites;
+  const activeSite = analyticsContext.activeSite;
+  const projectId = analyticsContext.projectId;
   let summary: unknown = null;
   let seo: SeoPayload = {};
   let vitals: VitalsPayload = {};
   let favicon: FaviconIntelligenceResult | null = null;
+  let liveMetadata: Awaited<ReturnType<typeof fetchLiveMetadataSnapshot>> = null;
 
-  try {
-    summary = await getProjectSummary(projectId, {
-      range: range === "30d" ? "30d" : "7d",
-      siteOrigin: activeSite.url || undefined,
-    });
+  if (analyticsContext.summary) {
+    summary = analyticsContext.summary;
     seo = normalizeSeoFromSummary(summary);
     vitals = normalizeVitalsFromSummary(summary);
-  } catch {
-    summary = null;
-    seo = {};
-    vitals = {};
   }
 
   try {
@@ -660,6 +548,14 @@ export default async function SeoPage({ searchParams }: PageProps) {
     });
   } catch {
     favicon = null;
+  }
+
+  try {
+    liveMetadata = await fetchLiveMetadataSnapshot({
+      origin: activeSite.url || "",
+    });
+  } catch {
+    liveMetadata = null;
   }
 
   const updatedAtISO = seo.updatedAtISO || vitals.updatedAtISO || null;
@@ -715,25 +611,50 @@ export default async function SeoPage({ searchParams }: PageProps) {
   const multiH1Tone = toneFromIssuePct(seo.multipleH1Pct ?? null);
   const thinTone = toneFromIssuePct(seo.thinContentPct ?? null);
 
-  const lcpTone = toneForLcp(vitals.lcpP75Ms ?? null);
-  const inpTone = toneForInp(vitals.inpP75Ms ?? null);
-  const clsTone = toneForCls(vitals.clsP75 ?? null);
-  const fcpTone = toneForFcp(vitals.fcpP75Ms ?? null);
-  const ttfbTone = toneForTtfb(vitals.ttfbP75Ms ?? null);
+  const lcpVital = normalizeVitalMetric(vitals.lcpP75Ms);
+  const inpVital = normalizeVitalMetric(vitals.inpP75Ms);
+  const clsVital = normalizeVitalMetric(vitals.clsP75);
+  const fcpVital = normalizeVitalMetric(vitals.fcpP75Ms);
+  const ttfbVital = normalizeVitalMetric(vitals.ttfbP75Ms);
+
+  const lcpTone = toneForLcp(lcpVital);
+  const inpTone = toneForInp(inpVital);
+  const clsTone = toneForCls(clsVital);
+  const fcpTone = toneForFcp(fcpVital);
+  const ttfbTone = toneForTtfb(ttfbVital);
+  const unresolvedVitalSub = "Field data is still being collected for this metric.";
   const metadataGapRows: Array<{ id: string; label: string; count: number }> = [
     { id: "missing_title", label: "Missing Titles", count: nOrNull(seo.missingTitleCount) ?? 0 },
     { id: "missing_description", label: "Missing Descriptions", count: nOrNull(seo.missingDescriptionCount) ?? 0 },
     { id: "missing_canonical", label: "Missing Canonicals", count: nOrNull(seo.missingCanonicalCount) ?? 0 },
   ];
   const metadataGapTotal = metadataGapRows.reduce((sum, row) => sum + row.count, 0);
-  const hasLivePreviewData = Boolean(seo.sampleTitle || seo.sampleDescription || seo.sampleCanonical);
-  const hasLivePreviewTitle = Boolean(seo.sampleTitle && seo.sampleTitle.trim().length > 0);
-  const previewTitleLabel = seo.sampleTitle || `${activeSite.label} — Page Title`;
-  const previewDescriptionLabel =
-    seo.sampleDescription ||
-    "This preview updates automatically once CavBot detects your live metadata.";
+  const representativePage =
+    (seo.pages || []).find((page) => page.title || page.metaDescription || page.canonical || page.robots) || null;
+  const representativeTitle =
+    nonEmptyText(seo.sampleTitle) || nonEmptyText(representativePage?.title) || nonEmptyText(liveMetadata?.title) || null;
+  const representativeDescription =
+    nonEmptyText(seo.sampleDescription) ||
+    nonEmptyText(representativePage?.metaDescription) ||
+    nonEmptyText(liveMetadata?.description) ||
+    null;
+  const representativeCanonical =
+    nonEmptyText(seo.sampleCanonical) ||
+    nonEmptyText(representativePage?.canonical) ||
+    nonEmptyText(liveMetadata?.canonical) ||
+    nonEmptyText(liveMetadata?.pageUrl) ||
+    null;
+  const representativeRobots =
+    nonEmptyText(seo.sampleRobots) || nonEmptyText(representativePage?.robots) || nonEmptyText(liveMetadata?.robots) || null;
+  const hasLivePreviewData = Boolean(
+    representativeTitle || representativeDescription || representativeCanonical || representativeRobots
+  );
+  const hasLivePreviewTitle = Boolean(representativeTitle);
+  const previewTitleLabel = representativeTitle || `${activeSite.label} — Page Title`;
+  const previewDescriptionLabel = representativeDescription || "No live meta description was detected for this route.";
+  const sampleRobotsLabel = representativeRobots || "—";
   const previewUrlLabel = (() => {
-    const raw = seo.sampleCanonical || activeSite.url || "";
+    const raw = representativeCanonical || activeSite.url || "";
     if (!raw) return "—";
     try {
       const parsed = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw.replace(/^\/\//, "")}`);
@@ -874,7 +795,6 @@ export default async function SeoPage({ searchParams }: PageProps) {
     rankedFaviconIcons[0]?.url ||
     "";
   const faviconPreviewUrl = faviconPreviewFromPrimary || faviconPreviewFallbackUrl || "";
-  const faviconPreviewLabel = faviconPreviewUrl ? toHostPath(faviconPreviewUrl) : "No icon detected";
 
   return (
     <AppShell title="Workspace" subtitle="Workspace command center">
@@ -972,59 +892,57 @@ export default async function SeoPage({ searchParams }: PageProps) {
 <br />
           {/* INDEXABILITY + STRUCTURE */}
           <section className="seo-split" aria-label="Indexability and structure">
-            <article className="cb-card cb-card-pad">
+            <article className="cb-card cb-card-pad seo-mini-section">
               <div className="cb-card-head">
                 <div>
                   <h2 className="cb-h2">Indexability</h2>
                   <p className="cb-sub">Robots posture across observed pages.</p>
                 </div>
               </div>
-<br />
               <div className="seo-mini-grid">
                 <div className={`seo-mini tone-${noindexTone}`}>
                   <div className="seo-mini-k">NoIndex</div>
-                  <div className="seo-mini-v">{fmtPct(seo.noindexPct)}</div><br />
+                  <div className="seo-mini-v">{fmtPct(seo.noindexPct)}</div>
                   <div className="seo-mini-sub">{fmtInt(seo.noindexCount)} pages flagged</div>
                 </div>
 
                 <div className={`seo-mini tone-${nofollowTone}`}>
                   <div className="seo-mini-k">NoFollow</div>
-                  <div className="seo-mini-v">{fmtPct(seo.nofollowPct)}</div><br />
+                  <div className="seo-mini-v">{fmtPct(seo.nofollowPct)}</div>
                   <div className="seo-mini-sub">{fmtInt(seo.nofollowCount)} pages flagged</div>
                 </div>
 
                 <div className="seo-mini">
                   <div className="seo-mini-k">Sample Robots</div>
-                  <div className="seo-mini-v mono">{seo.sampleRobots || "—"}</div><br />
+                  <div className="seo-mini-v mono">{sampleRobotsLabel}</div>
                   <div className="seo-mini-sub">Representative robots meta snapshot.</div>
                 </div>
               </div>
             </article>
 
-            <article className="cb-card cb-card-pad">
+            <article className="cb-card cb-card-pad seo-mini-section">
               <div className="cb-card-head">
                 <div>
                   <h2 className="cb-h2">Structure</h2>
                   <p className="cb-sub">Heading integrity and content density.</p>
                 </div>
               </div>
-<br />
-              <div className="seo-mini-grid">
+              <div className="seo-mini-grid seo-mini-grid-stack">
                 <div className={`seo-mini tone-${missingH1Tone}`}>
                   <div className="seo-mini-k">Missing H1</div>
-                  <div className="seo-mini-v">{fmtPct(seo.missingH1Pct)}</div><br />
+                  <div className="seo-mini-v">{fmtPct(seo.missingH1Pct)}</div>
                   <div className="seo-mini-sub">{fmtInt(seo.missingH1Count)} pages affected</div>
                 </div>
 
                 <div className={`seo-mini tone-${multiH1Tone}`}>
                   <div className="seo-mini-k">Multiple H1</div>
-                  <div className="seo-mini-v">{fmtPct(seo.multipleH1Pct)}</div><br />
+                  <div className="seo-mini-v">{fmtPct(seo.multipleH1Pct)}</div>
                   <div className="seo-mini-sub">{fmtInt(seo.multipleH1Count)} pages affected</div>
                 </div>
 
-                <div className={`seo-mini tone-${thinTone}`}>
+                <div className={`seo-mini seo-mini-wide tone-${thinTone}`}>
                   <div className="seo-mini-k">Thin Content</div>
-                  <div className="seo-mini-v">{fmtPct(seo.thinContentPct)}</div><br />
+                  <div className="seo-mini-v">{fmtPct(seo.thinContentPct)}</div>
                   <div className="seo-mini-sub">{fmtInt(seo.thinContentCount)} pages affected</div>
                 </div>
               </div>
@@ -1032,48 +950,42 @@ export default async function SeoPage({ searchParams }: PageProps) {
           </section>
 <br /><br />
           {/* WEB VITALS */}
-          <section className="cb-card cb-card-pad" aria-label="Web Vitals">
+          <section className="cb-card cb-card-pad seo-vitals-card" aria-label="Web Vitals">
             <div className="cb-card-head">
               <div>
                 <h2 className="cb-h2">Web Vitals</h2>
-                <p className="cb-sub">P75 vitals (when available) for the selected target and range.</p>
-              </div><br />
-              <div className="seo-pillrow">
-                <span className="seo-pill">
-                  Samples: <b>{fmtInt(vitals.samples)}</b>
-                </span>
+                <p className="cb-sub">P75 vitals for the selected target and range.</p>
               </div>
             </div>
-<br />
             <div className="seo-vitals">
               <div className={`seo-vital tone-${lcpTone}`}>
                 <div className="seo-vital-k">LCP (P75)</div>
-                <div className="seo-vital-v">{fmtMs(vitals.lcpP75Ms)}</div><br />
-                <div className="seo-vital-sub">Largest Contentful Paint</div>
+                <div className={`seo-vital-v${lcpVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(lcpVital, fmtVitalMs)}</div>
+                <div className="seo-vital-sub">{lcpVital == null ? unresolvedVitalSub : "Largest Contentful Paint"}</div>
               </div>
 
               <div className={`seo-vital tone-${inpTone}`}>
                 <div className="seo-vital-k">INP (P75)</div>
-                <div className="seo-vital-v">{fmtMs(vitals.inpP75Ms)}</div><br />
-                <div className="seo-vital-sub">Interaction to Next Paint</div>
+                <div className={`seo-vital-v${inpVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(inpVital, fmtVitalMs)}</div>
+                <div className="seo-vital-sub">{inpVital == null ? unresolvedVitalSub : "Interaction to Next Paint"}</div>
               </div>
 
               <div className={`seo-vital tone-${clsTone}`}>
                 <div className="seo-vital-k">CLS (P75)</div>
-                <div className="seo-vital-v">{fmtCls(vitals.clsP75)}</div><br />
-                <div className="seo-vital-sub">Cumulative Layout Shift</div>
+                <div className={`seo-vital-v${clsVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(clsVital, fmtVitalCls)}</div>
+                <div className="seo-vital-sub">{clsVital == null ? unresolvedVitalSub : "Cumulative Layout Shift"}</div>
               </div>
 
               <div className={`seo-vital tone-${fcpTone}`}>
                 <div className="seo-vital-k">FCP (P75)</div>
-                <div className="seo-vital-v">{fmtMs(vitals.fcpP75Ms)}</div><br />
-                <div className="seo-vital-sub">First Contentful Paint</div>
+                <div className={`seo-vital-v${fcpVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(fcpVital, fmtVitalMs)}</div>
+                <div className="seo-vital-sub">{fcpVital == null ? unresolvedVitalSub : "First Contentful Paint"}</div>
               </div>
 
               <div className={`seo-vital tone-${ttfbTone}`}>
                 <div className="seo-vital-k">TTFB (P75)</div>
-                <div className="seo-vital-v">{fmtMs(vitals.ttfbP75Ms)}</div><br />
-                <div className="seo-vital-sub">Time to First Byte</div>
+                <div className={`seo-vital-v${ttfbVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(ttfbVital, fmtVitalMs)}</div>
+                <div className="seo-vital-sub">{ttfbVital == null ? unresolvedVitalSub : "Time to First Byte"}</div>
               </div>
             </div>
           </section>
@@ -1092,28 +1004,28 @@ export default async function SeoPage({ searchParams }: PageProps) {
                 <section className="seo-metadata-panel" aria-label="Captured metadata">
                   <div className="seo-metadata-kicker">Captured Metadata</div>
                   <dl className="seo-metadata-list">
-                    <div className={`seo-metadata-row ${seo.sampleTitle ? "is-present" : "is-missing"}`}>
+                    <div className={`seo-metadata-row ${representativeTitle ? "is-present" : "is-missing"}`}>
                       <dt>Title</dt>
-                      <dd className="mono">{seo.sampleTitle || "—"}</dd>
+                      <dd className="mono">{representativeTitle || "—"}</dd>
                     </div>
-                    <div className={`seo-metadata-row ${seo.sampleDescription ? "is-present" : "is-missing"}`}>
+                    <div className={`seo-metadata-row ${representativeDescription ? "is-present" : "is-missing"}`}>
                       <dt>Description</dt>
-                      <dd className="mono">{seo.sampleDescription || "—"}</dd>
+                      <dd className="mono">{representativeDescription || "—"}</dd>
                     </div>
-                    <div className={`seo-metadata-row ${seo.sampleCanonical ? "is-present" : "is-missing"}`}>
+                    <div className={`seo-metadata-row ${representativeCanonical ? "is-present" : "is-missing"}`}>
                       <dt>Canonical</dt>
-                      <dd className="mono">{seo.sampleCanonical || "—"}</dd>
+                      <dd className="mono">{representativeCanonical || "—"}</dd>
                     </div>
-                    <div className={`seo-metadata-row ${seo.sampleRobots ? "is-present" : "is-missing"}`}>
+                    <div className={`seo-metadata-row ${representativeRobots ? "is-present" : "is-missing"}`}>
                       <dt>Robots</dt>
-                      <dd className="mono">{seo.sampleRobots || "—"}</dd>
+                      <dd className="mono">{sampleRobotsLabel}</dd>
                     </div>
                   </dl>
                 </section>
 
                 <section className="seo-serp-card" role="note" aria-label="Search snippet preview">
                   <div className="seo-serp-card-top">
-                    <div className="seo-serp-card-state">{hasLivePreviewData ? "Live data" : "Awaiting data"}</div>
+                    <div className="seo-serp-card-state">{hasLivePreviewData ? "Live data" : "No live metadata found"}</div>
                   </div>
                   <div className={`seo-serp-card-body${hasLivePreviewData ? "" : " is-awaiting"}`}>
                     <div className={`seo-serp-card-title${hasLivePreviewTitle ? "" : " is-placeholder"}`}>{previewTitleLabel}</div>
@@ -1122,7 +1034,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
                   </div>
                   <div className="seo-serp-card-foot mono">
                     <span>Robots</span>
-                    <strong>{seo.sampleRobots || "—"}</strong>
+                    <strong>{sampleRobotsLabel}</strong>
                   </div>
                 </section>
               </div>
@@ -1198,9 +1110,6 @@ export default async function SeoPage({ searchParams }: PageProps) {
                     —
                   </div>
                 )}
-                <div className="seo-favicon-metric-sub mono" title={faviconPreviewUrl || undefined}>
-                  {faviconPreviewLabel}
-                </div>
               </article>
               <article className="seo-favicon-metric tone-neutral" role="listitem">
                 <div className="seo-favicon-metric-k">Detected</div>
@@ -1292,13 +1201,6 @@ export default async function SeoPage({ searchParams }: PageProps) {
                         </div>
                         <div className="seo-favicon-item-source">{faviconSourceLabel(icon.source)}</div>
                       </div>
-                      <span
-                        className={`seo-favicon-item-status ${
-                          icon.status === "ok" ? "tone-good" : icon.status === "broken" ? "tone-bad" : "tone-warn"
-                        }`}
-                      >
-                        {icon.status}
-                      </span>
                     </div>
 
                     <dl className="seo-favicon-specs">
@@ -1320,36 +1222,39 @@ export default async function SeoPage({ searchParams }: PageProps) {
                       </div>
                     </dl>
 
-                    <div className="seo-favicon-tags">
-                      <div className="seo-favicon-tagblock">
-                        <div className="seo-favicon-tagk">Primary usage</div>
-                        <div className="seo-chips">
-                          {icon.primaryKinds.length ? (
-                            icon.primaryKinds.map((kind) => (
-                              <span key={kind} className="seo-chip-mini">
-                                {faviconPrimaryLabel(kind)}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="seo-chip-mini">—</span>
-                          )}
-                        </div>
+                    <details className="seo-favicon-info">
+                      <summary
+                        className="seo-favicon-infoButton"
+                        aria-label={`More favicon details for ${toHostPath(icon.url)}`}
+                      >
+                        <span className="seo-favicon-infoGlyph" aria-hidden="true" />
+                      </summary>
+                      <div className="seo-favicon-infoPanel" role="tooltip" aria-label="Favicon detail tooltip">
+                        <div className="seo-favicon-infoPanelTitle">Asset details</div>
+                        <dl className="seo-favicon-infoList">
+                          <div className="seo-favicon-infoRow">
+                            <dt>Status</dt>
+                            <dd className={`tone-${faviconStatusTone(icon.status)}`}>{faviconStatusLabel(icon.status)}</dd>
+                          </div>
+                          <div className="seo-favicon-infoRow">
+                            <dt>Primary usage</dt>
+                            <dd>
+                              {icon.primaryKinds.length
+                                ? icon.primaryKinds.map((kind) => faviconPrimaryLabel(kind)).join(" · ")
+                                : "—"}
+                            </dd>
+                          </div>
+                          <div className="seo-favicon-infoRow">
+                            <dt>Signals</dt>
+                            <dd>
+                              {icon.warningCodes.length
+                                ? icon.warningCodes.map((warningCode) => faviconIssueLabel(warningCode)).join(" · ")
+                                : "Clean"}
+                            </dd>
+                          </div>
+                        </dl>
                       </div>
-                      <div className="seo-favicon-tagblock">
-                        <div className="seo-favicon-tagk">Signals</div>
-                        <div className="seo-chips">
-                          {icon.warningCodes.length ? (
-                            icon.warningCodes.slice(0, 3).map((warningCode) => (
-                              <span key={warningCode} className="seo-chip-mini">
-                                {faviconIssueLabel(warningCode)}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="seo-chip-mini tone-good">Clean</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+                    </details>
                   </article>
                 ))}
               </div>

@@ -113,6 +113,84 @@ function buildAllowedOrigins(siteOrigin: string, rows: AllowedOriginRow[]) {
   return canonicalRows;
 }
 
+type EmbedSiteCandidate = {
+  id: string;
+  origin: string;
+  allowedOrigins: AllowedOriginRow[];
+};
+
+function originExactMatch(candidateOrigin: string, canonicalOrigin: string) {
+  try {
+    return normalizeOriginStrict(candidateOrigin) === canonicalOrigin;
+  } catch {
+    return false;
+  }
+}
+
+function scopeAllows(requiredScope: string, allowedScopes: string[]) {
+  if (allowedScopes.includes(requiredScope)) return true;
+  if (
+    requiredScope === "analytics:events" &&
+    (allowedScopes.includes("events:write") || allowedScopes.includes("analytics:write"))
+  ) {
+    return true;
+  }
+  return false;
+}
+
+async function resolveSiteForEmbed(args: {
+  projectId: number;
+  explicitSiteId: string | null;
+  boundSiteId: string | null;
+  canonicalOrigin: string;
+}): Promise<
+  | { ok: true; site: EmbedSiteCandidate }
+  | { ok: false; code: "SITE_NOT_FOUND" | "SITE_AMBIGUOUS"; status: number; siteId: string | null }
+> {
+  const select = {
+    id: true,
+    origin: true,
+    allowedOrigins: {
+      select: { origin: true, matchType: true },
+      orderBy: { createdAt: "asc" as const },
+    },
+  };
+  const directSiteId = args.explicitSiteId || args.boundSiteId || null;
+  if (directSiteId) {
+    const site = await prisma.site.findFirst({
+      where: { id: directSiteId, projectId: args.projectId, isActive: true },
+      select,
+    });
+    if (!site) {
+      return { ok: false, code: "SITE_NOT_FOUND", status: 404, siteId: directSiteId };
+    }
+    return { ok: true, site };
+  }
+
+  const candidates = await prisma.site.findMany({
+    where: { projectId: args.projectId, isActive: true },
+    select,
+    orderBy: { createdAt: "asc" },
+    take: 200,
+  });
+
+  const exact = candidates.filter((site) => originExactMatch(site.origin, args.canonicalOrigin));
+  if (exact.length === 1) return { ok: true, site: exact[0] };
+  if (exact.length > 1) {
+    return { ok: false, code: "SITE_AMBIGUOUS", status: 409, siteId: null };
+  }
+
+  const allowed = candidates.filter((site) =>
+    originAllowed(args.canonicalOrigin, buildAllowedOrigins(site.origin, site.allowedOrigins ?? []))
+  );
+  if (allowed.length === 1) return { ok: true, site: allowed[0] };
+  if (allowed.length > 1) {
+    return { ok: false, code: "SITE_AMBIGUOUS", status: 409, siteId: null };
+  }
+
+  return { ok: false, code: "SITE_NOT_FOUND", status: 404, siteId: null };
+}
+
 function failure(
   code: string,
   status: number,
@@ -129,10 +207,11 @@ type EmbedVerifierOptions = {
   body?: Record<string, unknown> | null;
   requiredScopes?: string[];
   recordMetrics?: boolean;
+  rateLimit?: boolean;
 };
 
 export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise<EmbedVerifierResult> {
-  const { req, env, body, recordMetrics = true } = options;
+  const { req, env, body, recordMetrics = true, rateLimit = true } = options;
   const url = new URL(req.url);
   const projectKey = pickFirstValue(
     req.headers.get("x-cavbot-project-key"),
@@ -158,7 +237,6 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
     body?.site_id as string | undefined,
     siteCandidate
   );
-  if (!siteId) return failure("SITE_REQUIRED", 400, "Site identifier required for embed verification.");
 
   const keyHash = hashApiKey(projectKey.trim());
   const record = await prisma.apiKey.findFirst({
@@ -184,37 +262,9 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
   if (!record.projectId) return failure("INVALID_KEY", 401, "Key missing project binding.");
 
   const projectId = record.projectId!;
-  const site = await prisma.site.findFirst({
-    where: { id: siteId, projectId: record.projectId, isActive: true },
-    include: {
-      allowedOrigins: {
-        select: { origin: true, matchType: true },
-        orderBy: { createdAt: "asc" },
-      },
-    },
-  });
-  if (!site) {
-    await slowFailMetric(record, siteId, null, false, false, req, "SITE_NOT_FOUND");
-    return failure("SITE_NOT_FOUND", 404, "Requested site missing or inactive.");
-  }
-
-  if (record.siteId && record.siteId !== site.id) {
-    await slowFailMetric(record, site.id, null, false, false, req, "SITE_MISMATCH");
-    return failure("SITE_MISMATCH", 403, "Key not bound to this site.");
-  }
-
-  if (options.requiredScopes?.length) {
-    const allowedScopes = record.scopes ?? [];
-    const missing = options.requiredScopes.filter((scope) => !allowedScopes.includes(scope));
-    if (missing.length) {
-      await slowFailMetric(record, site.id, null, false, false, req, "SCOPE_MISSING");
-      return failure("SCOPE_MISSING", 403, "Required scope missing.");
-    }
-  }
-
   const originHeader = inferRequestOrigin(req);
   if (!originHeader) {
-    await slowFailMetric(record, site.id, null, false, false, req, "ORIGIN_MISSING");
+    await slowFailMetric(record, siteId, null, false, false, req, "ORIGIN_MISSING");
     return failure("ORIGIN_MISSING", 400, "Origin header missing.");
   }
 
@@ -222,8 +272,35 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
   try {
     canonicalOrigin = normalizeOriginStrict(originHeader);
   } catch {
-    await slowFailMetric(record, site.id, originHeader, false, false, req, "ORIGIN_INVALID");
+    await slowFailMetric(record, siteId, originHeader, false, false, req, "ORIGIN_INVALID");
     return failure("DENIED_ORIGIN", 403, "Origin parsing failed.", originHeader);
+  }
+
+  const siteResult = await resolveSiteForEmbed({
+    projectId,
+    explicitSiteId: siteId,
+    boundSiteId: record.siteId ?? null,
+    canonicalOrigin,
+  });
+  if (!siteResult.ok) {
+    await slowFailMetric(record, siteResult.siteId ?? siteId, canonicalOrigin, false, false, req, siteResult.code);
+    return failure(siteResult.code, siteResult.status, "Requested site missing, inactive, or ambiguous.", canonicalOrigin);
+  }
+
+  const site = siteResult.site;
+
+  if (record.siteId && record.siteId !== site.id) {
+    await slowFailMetric(record, site.id, canonicalOrigin, false, false, req, "SITE_MISMATCH");
+    return failure("SITE_MISMATCH", 403, "Key not bound to this site.", canonicalOrigin);
+  }
+
+  if (options.requiredScopes?.length) {
+    const allowedScopes = record.scopes ?? [];
+    const missing = options.requiredScopes.filter((scope) => !scopeAllows(scope, allowedScopes));
+    if (missing.length) {
+      await slowFailMetric(record, site.id, canonicalOrigin, false, false, req, "SCOPE_MISSING");
+      return failure("SCOPE_MISSING", 403, "Required scope missing.", canonicalOrigin);
+    }
   }
 
   const allowedRows = buildAllowedOrigins(site.origin, site.allowedOrigins ?? []);
@@ -232,18 +309,20 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
     return failure("DENIED_ORIGIN", 403, "Origin not allowed.", canonicalOrigin);
   }
 
-  try {
-    await enforceRateLimit(req, env, String(record.projectId), canonicalOrigin, RATE_LIMIT_SPEC, `origin:${canonicalOrigin}`);
-    await enforceRateLimit(req, env, String(record.projectId), canonicalOrigin, RATE_LIMIT_SPEC, `site:${site.id}`);
-    await enforceRateLimit(req, env, String(record.projectId), canonicalOrigin, RATE_LIMIT_SPEC, `key:${record.id}`);
-  } catch (error) {
-    const retryAfterRaw =
-      error instanceof Response ? error.headers.get("Retry-After") : null;
-    const parsedRetryAfter = Number.parseInt(String(retryAfterRaw || ""), 10);
-    const retryAfterSec =
-      Number.isFinite(parsedRetryAfter) && parsedRetryAfter > 0 ? parsedRetryAfter : 1;
-    await slowFailMetric(record, site.id, canonicalOrigin, false, true, req, "RATE_LIMIT");
-    return failure("RATE_LIMIT", 429, "Rate limit exceeded.", canonicalOrigin, retryAfterSec);
+  if (rateLimit) {
+    try {
+      await enforceRateLimit(req, env, String(record.projectId), canonicalOrigin, RATE_LIMIT_SPEC, `origin:${canonicalOrigin}`);
+      await enforceRateLimit(req, env, String(record.projectId), canonicalOrigin, RATE_LIMIT_SPEC, `site:${site.id}`);
+      await enforceRateLimit(req, env, String(record.projectId), canonicalOrigin, RATE_LIMIT_SPEC, `key:${record.id}`);
+    } catch (error) {
+      const retryAfterRaw =
+        error instanceof Response ? error.headers.get("Retry-After") : null;
+      const parsedRetryAfter = Number.parseInt(String(retryAfterRaw || ""), 10);
+      const retryAfterSec =
+        Number.isFinite(parsedRetryAfter) && parsedRetryAfter > 0 ? parsedRetryAfter : 1;
+      await slowFailMetric(record, site.id, canonicalOrigin, false, true, req, "RATE_LIMIT");
+      return failure("RATE_LIMIT", 429, "Rate limit exceeded.", canonicalOrigin, retryAfterSec);
+    }
   }
 
   if (recordMetrics) {

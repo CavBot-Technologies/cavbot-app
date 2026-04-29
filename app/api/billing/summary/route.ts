@@ -75,6 +75,20 @@ function buildEmptyBillingSummary() {
   };
 }
 
+async function withSoftTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 type SummaryAccountRecord = {
   id: string;
   slug: string;
@@ -343,12 +357,18 @@ export async function GET(req: NextRequest) {
     const providerConnected = Boolean(subscription?.provider === "stripe" || account.stripeCustomerId);
     const portalReady = Boolean(account.stripeCustomerId);
     const qwenCoderUsage = userId
-      ? await getQwenCoderPopoverState({
-          accountId,
-          userId,
-          planId: currentPlanId,
-          sessionId: null,
-        }).catch(() => null)
+      ? await withSoftTimeout(
+          getQwenCoderPopoverState({
+            accountId,
+            userId,
+            planId: currentPlanId,
+            sessionId: null,
+          }).catch((error) => {
+            console.error("[billing/summary] qwen usage lookup failed", error);
+            return null;
+          }),
+          1500
+        )
       : null;
 
     return json(

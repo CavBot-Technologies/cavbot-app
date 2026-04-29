@@ -84,29 +84,63 @@ test("customer snippet policy remains CDN-based", () => {
   }
 });
 
-test("layout keeps deterministic analytics-before-brain order and no CDN fallback", () => {
+test("embed ingestion accepts existing publishable analytics scopes", () => {
+  const verifierSource = fs.readFileSync(path.join(ROOT, "lib", "security", "embedVerifier.ts"), "utf8");
+  const apiKeySource = fs.readFileSync(path.join(ROOT, "lib", "apiKeys.server.ts"), "utf8");
+
+  assert.equal(apiKeySource.includes('"analytics:events"'), true);
+  assert.equal(verifierSource.includes('requiredScope === "analytics:events"'), true);
+  assert.equal(verifierSource.includes('allowedScopes.includes("events:write")'), true);
+  assert.equal(verifierSource.includes('allowedScopes.includes("analytics:write")'), true);
+});
+
+test("embed ingestion proxy preserves client IP for worker rate buckets", () => {
+  const routeSource = fs.readFileSync(path.join(ROOT, "app", "api", "embed", "analytics", "route.ts"), "utf8");
+
+  assert.equal(routeSource.includes("function forwardedClientIp"), true);
+  assert.equal(routeSource.includes("rateLimit: false"), true);
+  assert.equal(routeSource.includes('req.headers.get("cf-connecting-ip")'), true);
+  assert.equal(routeSource.includes('req.headers.get("x-forwarded-for")'), true);
+  assert.equal(routeSource.includes("Origin: verification.origin"), true);
+  assert.equal(routeSource.includes('"X-Cavbot-Project-Id": String(verification.projectId)'), true);
+  assert.equal(routeSource.includes('"X-Cavbot-Verified-Site-Id": verification.siteId'), true);
+  assert.equal(routeSource.includes('headers["X-Forwarded-For"] = clientIp'), true);
+  assert.equal(routeSource.includes('headers["X-Cavbot-Forwarded-Client-IP"] = clientIp'), true);
+  assert.equal(routeSource.includes('headers["X-Admin-Token"] = adminToken'), true);
+});
+
+test("app runtime keeps deterministic analytics-before-brain order and no CDN fallback", () => {
   const layoutSource = fs.readFileSync(path.join(ROOT, "app", "layout.tsx"), "utf8");
+  const runtimeSource = fs.readFileSync(
+    path.join(ROOT, "app", "_components", "AppHostRuntimeMounts.tsx"),
+    "utf8"
+  );
   const analyticsId = "cb-runtime-analytics-script";
   const brainId = "cb-runtime-brain-script";
-  const analyticsIdx = layoutSource.indexOf(analyticsId);
-  const brainIdx = layoutSource.indexOf(brainId);
+  const analyticsIdx = runtimeSource.indexOf(analyticsId);
+  const brainIdx = runtimeSource.indexOf(brainId);
 
-  assert.equal(analyticsIdx >= 0, true, "Analytics runtime script tag id not found in layout");
-  assert.equal(brainIdx >= 0, true, "Brain runtime script tag id not found in layout");
+  assert.equal(analyticsIdx >= 0, true, "Analytics runtime script tag id not found");
+  assert.equal(brainIdx >= 0, true, "Brain runtime script tag id not found");
   assert.equal(
     analyticsIdx < brainIdx,
     true,
-    "Layout must load analytics script before brain script"
+    "App runtime must load analytics script before brain script"
   );
   assert.equal(
-    /cdn\.cavbot\.io/i.test(layoutSource),
-    false,
-    "Layout must not hardcode CDN runtime assets"
+    runtimeSource.includes('resolveCavbotAssetPolicy("internal_runtime")'),
+    true,
+    "App runtime must load same-origin internal runtime assets"
   );
   assert.equal(
-    /CAVBOT_CDN_BASE_URL/.test(layoutSource),
+    /cdn\.cavbot\.io/i.test(layoutSource + runtimeSource),
     false,
-    "Layout must not use CDN env fallbacks for internal runtime assets"
+    "App runtime must not hardcode CDN runtime assets"
+  );
+  assert.equal(
+    /CAVBOT_CDN_BASE_URL/.test(layoutSource + runtimeSource),
+    false,
+    "App runtime must not use CDN env fallbacks for internal runtime assets"
   );
 });
 

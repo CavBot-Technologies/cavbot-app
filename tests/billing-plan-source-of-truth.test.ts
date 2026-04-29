@@ -58,6 +58,8 @@ test("billing summary and billing actions share the effective plan resolver", ()
   assert.equal(summaryRoute.includes("resolveBillingPlanResolution({"), true);
   assert.equal(summaryRoute.includes("planSource: planResolution.planSource"), true);
   assert.equal(summaryRoute.includes("authoritative: planResolution.authoritative"), true);
+  assert.equal(summaryRoute.includes("withSoftTimeout("), true);
+  assert.equal(summaryRoute.includes("getQwenCoderPopoverState({"), true);
 
   assert.equal(upgradeRoute.includes("resolveBillingPlanResolution({"), true);
   assert.equal(downgradeRoute.includes("resolveBillingPlanResolution({"), true);

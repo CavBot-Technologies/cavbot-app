@@ -9,10 +9,11 @@ import RouteLifecycle from "./RouteLifecycle";
 import SystemStatusBootstrap from "@/components/status/SystemStatusBootstrap";
 import { resolveCavbotAssetPolicy } from "@/lib/cavbotAssetPolicy";
 
-const OFFICIAL_CDN_ASSETS = resolveCavbotAssetPolicy("customer_snippet");
+const INTERNAL_RUNTIME_ASSETS = resolveCavbotAssetPolicy("internal_runtime");
+const RUNTIME_PROJECT_KEY = process.env.NEXT_PUBLIC_CAVBOT_PROJECT_KEY || "";
 
 export function AppHostPreconnectLink() {
-  return <link rel="preconnect" href={OFFICIAL_CDN_ASSETS.baseUrl} crossOrigin="" />;
+  return null;
 }
 
 export default function AppHostRuntimeMounts() {
@@ -37,10 +38,16 @@ export default function AppHostRuntimeMounts() {
         <GlobalFooterMount />
       </Suspense>
       <Script
-        id="cavbot-official-brain-cdn"
-        src={OFFICIAL_CDN_ASSETS.scripts.brain}
+        id="cb-runtime-analytics-script"
+        src={INTERNAL_RUNTIME_ASSETS.scripts.analytics}
         strategy="afterInteractive"
-        crossOrigin="anonymous"
+        data-project-key={RUNTIME_PROJECT_KEY || undefined}
+      />
+      <Script
+        id="cb-runtime-brain-script"
+        src={INTERNAL_RUNTIME_ASSETS.scripts.brain}
+        strategy="afterInteractive"
+        data-project-key={RUNTIME_PROJECT_KEY || undefined}
       />
     </>
   );

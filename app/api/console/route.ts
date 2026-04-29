@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import type { SummaryRange } from "@/lib/cavbotApi.server";
 import { CavBotApiError, getProjectSummaryForTenant } from "@/lib/cavbotApi.server";
-import { decryptAesGcm } from "@/lib/cryptoAesGcm.server";
+import { resolveProjectAnalyticsAuth } from "@/lib/projectAnalyticsKey.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -174,10 +174,6 @@ export async function GET(req: NextRequest) {
 
     if (!project) return json({ error: "PROJECT_NOT_FOUND" }, 404);
 
-    if (!project.serverKeyEnc || !project.serverKeyEncIv) {
-      return json({ error: "PROJECT_KEY_MISSING" }, 409);
-    }
-
     // ===== SITE SCOPING (this is the fix) =====
     // Query params win. If absent, fall back to Command Center cookie pointers for THIS project.
     const pidStr = String(project.id);
@@ -198,20 +194,15 @@ export async function GET(req: NextRequest) {
     const siteOrigin = siteOriginFromQuery ?? siteOriginFromCookie;
     const siteId = siteIdFromQuery ?? siteIdFromCookie;
 
-    const decryptedServerKey = await decryptAesGcm({
-      enc: String(project.serverKeyEnc),
-      iv: String(project.serverKeyEncIv),
-    });
-
-    const projectKey = String(decryptedServerKey || "").trim();
-    if (!projectKey) return json({ error: "PROJECT_KEY_DECRYPT_FAILED" }, 500);
+    const analyticsAuth = await resolveProjectAnalyticsAuth(project);
 
     const out = await getProjectSummaryForTenant({
       projectId: project.id,
       range,
       siteOrigin,
       siteId,
-      projectKey,
+      projectKey: analyticsAuth.projectKey,
+      adminToken: analyticsAuth.adminToken,
       requestId: `console_${project.id}_${Date.now()}`,
     });
 

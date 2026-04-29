@@ -8,9 +8,7 @@ import { headers } from "next/headers";
 import { gateModuleAccess } from "@/lib/moduleGate.server";
 import LockedModule from "@/components/LockedModule";
 import AppShell from "@/components/AppShell";
-import { readWorkspace } from "@/lib/workspaceStore.server";
-import type { WorkspacePayload } from "@/lib/workspaceStore.server";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
+import { resolveAnalyticsConsoleContext } from "@/lib/analyticsConsole.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
 
 export const runtime = "nodejs";
@@ -21,39 +19,6 @@ type PageProps = {
 };
 
 type RangeKey = "24h" | "7d" | "14d" | "30d";
-
-type WorkspaceView = WorkspacePayload & {
-  // Some pages defensively check these alternate containers when present.
-  selection?: { activeSiteOrigin?: string | null };
-  activeSite?: { origin?: string | null };
-  project?: { id?: string | number | null };
-};
-
-/* =========================
-  Shared helpers (match SEO/Errors)
-  ========================== */
-function canonicalOrigin(input: string) {
-  const s = String(input || "").trim();
-  if (!s) return "";
-  const withScheme = /^https?:\/\//i.test(s) ? s : `https://${s.replace(/^\/\//, "")}`;
-  try {
-    return new URL(withScheme).origin;
-  } catch {
-    return "";
-  }
-}
-
-function toSlug(v: string) {
-  return (
-    String(v || "")
-      .toLowerCase()
-      .trim()
-      .replace(/^https?:\/\//, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "")
-      .slice(0, 63) || "site"
-  );
-}
 
 function nOrNull(x: unknown) {
   const v = Number(x);
@@ -88,111 +53,9 @@ function fmtCls(v: unknown) {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(x);
 }
 
-/* =========================
-  Targets (match SEO/Console)
-  ========================== */
-type ClientTarget = { id: string; label?: string | null; origin: string };
-
-function resolveSiteLabel(t: ClientTarget) {
-  if (t.label && String(t.label).trim()) return String(t.label).trim();
-  const s = String(t.id || "").replace(/-/g, " ").trim();
-  if (s) return s.replace(/\b\w/g, (m) => m.toUpperCase());
-  try {
-    const u = new URL(t.origin);
-    return u.hostname;
-  } catch {
-    return "Site";
-  }
-}
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
-}
-
-function normalizeTargets(raw: unknown): ClientTarget[] {
-  const roots: Record<string, unknown>[] = [];
-  const push = (x: unknown) => {
-    const record = asRecord(x);
-    if (record) roots.push(record);
-  };
-
-  const maybe = asRecord(raw);
-  push(maybe);
-  push(maybe?.workspace);
-  push(maybe?.commandDeck);
-  push(maybe?.deck);
-  push(maybe?.data);
-  push(maybe?.state);
-  push(maybe?.project);
-  push(maybe?.account);
-  push(maybe?.payload);
-
-  const keys = ["targets", "sites", "monitoredSites", "origins", "monitoredOrigins", "sitesList", "targetsList"];
-
-  for (const r of roots) {
-    for (const k of keys) {
-      const v = r[k];
-      if (!Array.isArray(v) || !v.length) continue;
-
-      const out: ClientTarget[] = [];
-      const seen = new Set<string>();
-
-      for (const item of v) {
-        let origin = "";
-        let id = "";
-        let label: string | null = null;
-
-        if (typeof item === "string") {
-          origin = canonicalOrigin(item);
-          id = toSlug(origin || item);
-        } else {
-          const obj = asRecord(item);
-          if (!obj) continue;
-
-          const rawOrigin =
-            typeof obj.origin === "string"
-              ? obj.origin
-              : typeof obj.url === "string"
-              ? obj.url
-              : typeof obj.siteOrigin === "string"
-              ? obj.siteOrigin
-              : typeof obj.href === "string"
-              ? obj.href
-              : typeof obj.baseUrl === "string"
-              ? obj.baseUrl
-              : typeof obj.website === "string"
-              ? obj.website
-              : typeof obj.primaryOrigin === "string"
-              ? obj.primaryOrigin
-              : "";
-
-          origin = canonicalOrigin(rawOrigin);
-          id = toSlug(String(obj.slug || obj.id || origin || "site"));
-          label =
-            typeof obj.label === "string"
-              ? obj.label
-              : typeof obj.name === "string"
-              ? obj.name
-              : typeof obj.displayName === "string"
-              ? obj.displayName
-              : typeof obj.title === "string"
-              ? obj.title
-              : null;
-        }
-
-        if (!origin) continue;
-        if (seen.has(origin)) continue;
-        seen.add(origin);
-
-        out.push({ id, origin, label });
-      }
-
-      return out;
-    }
-  }
-
-  return [];
 }
 
 /* =========================
@@ -1474,28 +1337,14 @@ export default async function InsightsPage({ searchParams }: PageProps) {
 
   const range = (typeof sp?.range === "string" ? sp.range : "24h") as RangeKey;
 
-  let ws: WorkspaceView | null = null;
-  try {
-    ws = await readWorkspace();
-  } catch {
-    ws = null;
-  }
-
-  const targets = normalizeTargets(ws);
-  const sites = targets.map((t) => ({ id: t.id, label: resolveSiteLabel(t), url: t.origin }));
-
-  const siteParam = typeof sp?.site === "string" ? sp.site : "";
-
-  const wsActiveOrigin =
-    canonicalOrigin(ws?.activeSiteOrigin || ws?.selection?.activeSiteOrigin || ws?.activeSite?.origin || ws?.workspace?.activeSiteOrigin || "") || "";
-
-  const siteById = sites.find((s) => s.id === siteParam);
-  const siteByOrigin = siteParam.startsWith("http") ? sites.find((s) => s.url === canonicalOrigin(siteParam)) : null;
-  const siteByWorkspace = !siteParam && wsActiveOrigin ? sites.find((s) => s.url === wsActiveOrigin) : null;
-
-  const activeSite = siteById || siteByOrigin || siteByWorkspace || sites[0] || { id: "none", label: "No site selected", url: "" };
-
-  const projectId = String(ws?.projectId || ws?.project?.id || ws?.account?.projectId || "1");
+  const analyticsContext = await resolveAnalyticsConsoleContext({
+    searchParams: sp,
+    defaultRange: range,
+    pathname: "/insights",
+  });
+  const sites = analyticsContext.sites;
+  const activeSite = analyticsContext.activeSite;
+  const projectId = analyticsContext.projectId;
 
   let summary: ProjectSummary | null = null;
 
@@ -1527,12 +1376,8 @@ export default async function InsightsPage({ searchParams }: PageProps) {
 
   let scoreTrendRaw: ScoreTrendPoint[] = [];
 
-  try {
-    summary = await getProjectSummary(projectId, {
-      range: range === "30d" ? "30d" : "7d",
-      siteOrigin: activeSite.url || undefined,
-    });
-
+  if (analyticsContext.summary) {
+    summary = analyticsContext.summary;
     guardianScore = pickNumber(summary, [
       "guardianScore",
       "metrics.guardianScore",
@@ -1584,8 +1429,6 @@ export default async function InsightsPage({ searchParams }: PageProps) {
     hotspots = normalizeHotspots(summary);
 
     scoreTrendRaw = normalizeScoreTrend(summary);
-  } catch {
-    summary = null;
   }
 
   function hrefWith(next: Partial<{ range: RangeKey; site: string }>) {

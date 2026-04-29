@@ -7,8 +7,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import AppShell from "@/components/AppShell";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
 import DashboardToolsControls from "@/components/DashboardToolsControls";
-import { readWorkspace } from "@/lib/workspaceStore.server";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
+import { resolveAnalyticsConsoleContext } from "@/lib/analyticsConsole.server";
 import { prisma } from "@/lib/prisma";
 import { findArcadeGame } from "@/lib/arcade/catalog";
 import { ARCADE_KIND_404 } from "@/lib/arcade/settings";
@@ -23,17 +22,6 @@ type PageProps = {
 type RangeKey = "24h" | "7d" | "14d" | "30d";
 
 type UnknownRecord = Record<string, unknown>;
-type MaybeUnknownRecord = UnknownRecord | null;
-
-type LooseWorkspace = {
-  projectId?: number | string | null;
-  project?: { id?: number | string | null };
-  account?: { projectId?: number | string | null };
-  activeSiteOrigin?: string | null;
-  selection?: { activeSiteOrigin?: string | null };
-  activeSite?: { origin?: string | null };
-  workspace?: { activeSiteOrigin?: string | null };
-} & UnknownRecord;
 
 const isRecord = (value: unknown): value is UnknownRecord => typeof value === "object" && value !== null;
 const asRecord = (value: unknown): UnknownRecord | null => (isRecord(value) ? value : null);
@@ -89,100 +77,6 @@ function fmtPct(v: unknown, digits = 1) {
   const x = nOrNull(v);
   if (x == null) return "—";
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: digits }).format(x)}%`;
-}
-
-type ClientTarget = { id: string; label?: string | null; origin: string };
-
-function resolveSiteLabel(t: ClientTarget) {
-  if (t.label && String(t.label).trim()) return String(t.label).trim();
-  const s = String(t.id || "").replace(/-/g, " ").trim();
-  if (s) return s.replace(/\b\w/g, (m) => m.toUpperCase());
-  try {
-    const u = new URL(t.origin);
-    return u.hostname;
-  } catch {
-    return "Site";
-  }
-}
-
-function normalizeTargets(raw: MaybeUnknownRecord): ClientTarget[] {
-  const roots: UnknownRecord[] = [];
-  const pushRecord = (value: unknown) => {
-    if (isRecord(value)) roots.push(value);
-  };
-
-  pushRecord(raw);
-  pushRecord(raw?.["workspace"]);
-  pushRecord(raw?.["commandDeck"]);
-  pushRecord(raw?.["deck"]);
-  pushRecord(raw?.["data"]);
-  pushRecord(raw?.["state"]);
-  pushRecord(raw?.["project"]);
-  pushRecord(raw?.["account"]);
-  pushRecord(raw?.["payload"]);
-
-  const keys = ["targets", "sites", "monitoredSites", "origins", "monitoredOrigins", "sitesList", "targetsList"];
-
-  for (const r of roots) {
-    for (const k of keys) {
-      const v = r[k];
-      if (!Array.isArray(v) || !v.length) continue;
-
-      const out: ClientTarget[] = [];
-      const seen = new Set<string>();
-
-      for (const item of v) {
-        let origin = "";
-        let id = "";
-        let label: string | null = null;
-
-        if (typeof item === "string") {
-          origin = canonicalOrigin(item);
-          id = toSlug(origin || item);
-        } else if (isRecord(item)) {
-          const rawOrigin =
-            typeof item["origin"] === "string"
-              ? item["origin"]
-              : typeof item["url"] === "string"
-              ? item["url"]
-              : typeof item["siteOrigin"] === "string"
-              ? item["siteOrigin"]
-              : typeof item["href"] === "string"
-              ? item["href"]
-              : typeof item["baseUrl"] === "string"
-              ? item["baseUrl"]
-              : typeof item["website"] === "string"
-              ? item["website"]
-              : typeof item["primaryOrigin"] === "string"
-              ? item["primaryOrigin"]
-              : "";
-
-          origin = canonicalOrigin(rawOrigin);
-          id = toSlug(String(item["slug"] || item["id"] || origin || "site"));
-          label =
-            typeof item["label"] === "string"
-              ? item["label"]
-              : typeof item["name"] === "string"
-              ? item["name"]
-              : typeof item["displayName"] === "string"
-              ? item["displayName"]
-              : typeof item["title"] === "string"
-              ? item["title"]
-              : null;
-        }
-
-        if (!origin) continue;
-        if (seen.has(origin)) continue;
-        seen.add(origin);
-
-        out.push({ id, origin, label });
-      }
-
-      return out;
-    }
-  }
-
-  return [];
 }
 
 /* =========================
@@ -658,55 +552,25 @@ export default async function ControlRoomGamesPage({ searchParams }: PageProps) 
 
   const range = (typeof sp?.range === "string" ? sp.range : "24h") as RangeKey;
 
-  let ws: LooseWorkspace | null = null;
-  try {
-    ws = await readWorkspace();
-  } catch {
-    ws = null;
-  }
-
-  const targets = normalizeTargets(ws);
-  const sites = targets.map((t) => {
-    const siteOrigin = t.origin;
-    return { id: t.id, label: resolveSiteLabel(t), origin: siteOrigin, url: siteOrigin };
+  const analyticsContext = await resolveAnalyticsConsoleContext({
+    searchParams: sp,
+    defaultRange: range,
+    pathname: "/404-control-room",
   });
-
-  const siteParam = typeof sp?.site === "string" ? sp.site : "";
-
-  const wsActiveOrigin =
-    canonicalOrigin(
-      ws?.activeSiteOrigin ||
-        ws?.selection?.activeSiteOrigin ||
-        ws?.activeSite?.origin ||
-        ws?.workspace?.activeSiteOrigin ||
-        ""
-    ) || "";
-
-  const siteById = sites.find((s) => s.id === siteParam);
-  const siteByOrigin = siteParam.startsWith("http") ? sites.find((s) => s.url === canonicalOrigin(siteParam)) : null;
-  const siteByWorkspace = !siteParam && wsActiveOrigin ? sites.find((s) => s.url === wsActiveOrigin) : null;
-
-  const activeSite = siteById || siteByOrigin || siteByWorkspace || sites[0] || { id: "none", label: "No site selected", url: "" };
-
-  const projectId = String(ws?.projectId || ws?.project?.id || ws?.account?.projectId || "1");
-
+  const sites = analyticsContext.sites;
+  const activeSite = analyticsContext.activeSite;
+  const projectId = analyticsContext.projectId;
   let summary: unknown = null;
   let cr: ControlRoomPayload = {};
 
-  try {
-    summary = await getProjectSummary(projectId, {
-      range: range === "30d" ? "30d" : "7d",
-      siteOrigin: activeSite.url || undefined,
-    });
+  if (analyticsContext.summary) {
+    summary = analyticsContext.summary;
     cr = normalizeControlRoomFromSummary(summary);
-  } catch {
-    summary = null;
-    cr = {};
   }
 
   const arcadeIdentity = await resolveArcadeIdentity({
     projectId,
-    siteOrigin: activeSite.url || wsActiveOrigin || "",
+    siteOrigin: activeSite.url || "",
   });
   cr = applyArcadeIdentity(cr, arcadeIdentity);
   const configuredArcadeGameName = arcadeIdentity?.displayName || null;

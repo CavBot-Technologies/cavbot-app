@@ -3,8 +3,9 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAccountContext, requireSession } from "@/lib/apiAuth";
-import type { SummaryRange } from "@/lib/cavbotApi.server";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
+import { getProjectSummaryForTenant, type SummaryRange } from "@/lib/cavbotApi.server";
+import { resolveProjectAnalyticsAuth } from "@/lib/projectAnalyticsKey.server";
+import { readWorkspace } from "@/lib/workspaceStore.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,6 +67,10 @@ function asHttpError(e: unknown) {
   }
   if (msg === "FORBIDDEN") return { status: 403, payload: { ok: false, error: "FORBIDDEN" } };
   if (msg === "BAD_ORIGIN") return { status: 400, payload: { ok: false, error: "BAD_ORIGIN" } };
+  if (msg === "PROJECT_KEY_MISSING") return { status: 409, payload: { ok: false, error: "PROJECT_KEY_MISSING" } };
+  if (msg === "PROJECT_KEY_DECRYPT_FAILED") {
+    return { status: 502, payload: { ok: false, error: "PROJECT_KEY_DECRYPT_FAILED" } };
+  }
 
   return { status: 500, payload: { ok: false, error: "SUMMARY_PROXY_FAILED" } };
 }
@@ -79,21 +84,24 @@ export async function GET(req: Request) {
 
     const pid = parseProjectId(searchParams.get("projectId"));
     const projectSlug = String(searchParams.get("projectSlug") ?? "").trim();
+    const workspace = await readWorkspace({ accountId: session.accountId! }).catch(() => null);
+    const workspaceProjectId = parseProjectId(String(workspace?.projectId ?? ""));
+    const selectedProjectId = pid || workspaceProjectId;
 
-    const project = pid
+    const project = selectedProjectId
       ? await prisma.project.findFirst({
-          where: { id: pid, accountId: session.accountId!, isActive: true },
-          select: { id: true, slug: true, name: true },
+          where: { id: selectedProjectId, accountId: session.accountId!, isActive: true },
+          select: { id: true, slug: true, name: true, serverKeyEnc: true, serverKeyEncIv: true },
         })
       : projectSlug
       ? await prisma.project.findFirst({
           where: { slug: projectSlug, accountId: session.accountId!, isActive: true },
-          select: { id: true, slug: true, name: true },
+          select: { id: true, slug: true, name: true, serverKeyEnc: true, serverKeyEncIv: true },
         })
       : await prisma.project.findFirst({
           where: { accountId: session.accountId!, isActive: true },
           orderBy: { createdAt: "asc" },
-          select: { id: true, slug: true, name: true },
+          select: { id: true, slug: true, name: true, serverKeyEnc: true, serverKeyEncIv: true },
         });
 
     if (!project) return json({ ok: false, error: "PROJECT_NOT_FOUND" }, 404);
@@ -101,17 +109,29 @@ export async function GET(req: Request) {
     const range = normalizeRange(searchParams.get("range"));
 
     const siteOrigin = normalizeMaybeOrigin(
-      searchParams.get("origin") ?? searchParams.get("siteOrigin")
+      searchParams.get("origin") ??
+        searchParams.get("siteOrigin") ??
+        workspace?.activeSiteOrigin ??
+        workspace?.workspace?.activeSiteOrigin ??
+        null
     );
-    const siteId = String(searchParams.get("siteId") ?? "").trim() || undefined;
+    const siteId =
+      String(searchParams.get("siteId") ?? workspace?.activeSiteId ?? "").trim() || undefined;
 
-    const data = await getProjectSummary(String(project.id), {
+    const analyticsAuth = await resolveProjectAnalyticsAuth(project);
+
+    const data = await getProjectSummaryForTenant({
+      projectId: project.id,
       range,
       siteOrigin,
       siteId,
+      projectKey: analyticsAuth.projectKey,
+      adminToken: analyticsAuth.adminToken,
+      requestId: `api_summary_${project.id}`,
     });
 
-    return json({ ok: true, project, data }, 200);
+    const publicProject = { id: project.id, slug: project.slug, name: project.name };
+    return json({ ok: true, project: publicProject, data }, 200);
   } catch (e: unknown) {
     const { status, payload } = asHttpError(e);
     return json(payload, status);

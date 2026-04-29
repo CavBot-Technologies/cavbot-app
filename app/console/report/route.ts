@@ -3,7 +3,8 @@ import "server-only";
 import { NextResponse } from "next/server";
 
 import { requireAccountContext, requireSession } from "@/lib/apiAuth";
-import { getProjectSummary, type SummaryRange } from "@/lib/cavbotApi.server";
+import { getProjectSummaryForTenant, type SummaryRange } from "@/lib/cavbotApi.server";
+import { resolveProjectAnalyticsAuth } from "@/lib/projectAnalyticsKey.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
 import { prisma } from "@/lib/prisma";
 
@@ -27,6 +28,8 @@ type ResolvedProject = {
   slug: string;
   name: string | null;
   topSiteId: string | null;
+  serverKeyEnc: string | null;
+  serverKeyEncIv: string | null;
 };
 
 type ResolvedSite = {
@@ -496,14 +499,14 @@ async function resolveProject(accountId: string, rawProjectHint: string): Promis
   if (projectId != null) {
     const project = await prisma.project.findFirst({
       where: { id: projectId, accountId, isActive: true },
-      select: { id: true, slug: true, name: true, topSiteId: true },
+      select: { id: true, slug: true, name: true, topSiteId: true, serverKeyEnc: true, serverKeyEncIv: true },
     });
     if (project) return project;
   }
   return prisma.project.findFirst({
     where: { accountId, isActive: true },
     orderBy: { createdAt: "asc" },
-    select: { id: true, slug: true, name: true, topSiteId: true },
+    select: { id: true, slug: true, name: true, topSiteId: true, serverKeyEnc: true, serverKeyEncIv: true },
   });
 }
 
@@ -552,6 +555,12 @@ function toHttpError(error: unknown): { status: number; payload: Record<string, 
   if (message === "FORBIDDEN") {
     return { status: 403, payload: { ok: false, error: "FORBIDDEN" } };
   }
+  if (message === "PROJECT_KEY_MISSING") {
+    return { status: 409, payload: { ok: false, error: "PROJECT_KEY_MISSING" } };
+  }
+  if (message === "PROJECT_KEY_DECRYPT_FAILED") {
+    return { status: 502, payload: { ok: false, error: "PROJECT_KEY_DECRYPT_FAILED" } };
+  }
   return { status: 500, payload: { ok: false, error: "REPORT_BUILD_FAILED" } };
 }
 
@@ -589,10 +598,16 @@ export async function GET(req: Request) {
       topSiteId: project.topSiteId,
     });
 
-    const summary = await getProjectSummary(String(project.id), {
+    const analyticsAuth = await resolveProjectAnalyticsAuth(project);
+
+    const summary = await getProjectSummaryForTenant({
+      projectId: project.id,
       range,
       siteId: site?.id || undefined,
       siteOrigin: site?.origin || undefined,
+      projectKey: analyticsAuth.projectKey,
+      adminToken: analyticsAuth.adminToken,
+      requestId: `console_report_${project.id}`,
     });
 
     const rows = metricRowsForModule(moduleKey, summary);

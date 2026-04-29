@@ -166,7 +166,10 @@ export default function CavbotGlobalFooter() {
   const [hoverCard, setHoverCard] = useState<FooterCardKey | null>(null);
   const [pinnedCard, setPinnedCard] = useState<FooterCardKey | null>(null);
   const [canHover, setCanHover] = useState(false);
-  const [adminHostRuntime, setAdminHostRuntime] = useState(false);
+  const [adminHostRuntime] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return isAdminHost(window.location.host);
+  });
   const systemCardId = useId();
   const apiCardId = useId();
   const destinationCardId = useId();
@@ -205,11 +208,6 @@ export default function CavbotGlobalFooter() {
     }
     query.addListener(sync);
     return () => query.removeListener(sync);
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setAdminHostRuntime(isAdminHost(window.location.host));
   }, []);
 
   useEffect(() => {

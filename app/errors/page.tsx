@@ -9,8 +9,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import { headers } from "next/headers";
 import AppShell from "@/components/AppShell";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
-import { readWorkspace } from "@/lib/workspaceStore.server";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
+import { resolveAnalyticsConsoleContext } from "@/lib/analyticsConsole.server";
 import { gateModuleAccess } from "@/lib/moduleGate.server";
 import LockedModule from "@/components/LockedModule";
 import { buildErrorInsights } from "@/lib/errors/errorInsights";
@@ -42,29 +41,6 @@ function asRecord(value: unknown): UnknownRecord | null {
   return typeof value === "object" && value !== null ? (value as UnknownRecord) : null;
 }
 
-function canonicalOrigin(input: string) {
-  const s = String(input || "").trim();
-  if (!s) return "";
-  const withScheme = /^https?:\/\//i.test(s) ? s : `https://${s.replace(/^\/\//, "")}`;
-  try {
-    return new URL(withScheme).origin;
-  } catch {
-    return "";
-  }
-}
-
-function toSlug(v: string) {
-  return (
-    String(v || "")
-      .toLowerCase()
-      .trim()
-      .replace(/^https?:\/\//, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "")
-      .slice(0, 63) || "site"
-  );
-}
-
 function n(x: unknown, fallback = 0) {
   const v = Number(x);
   return Number.isFinite(v) ? v : fallback;
@@ -88,106 +64,12 @@ function fmtPct(v: unknown, digits = 1) {
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: digits }).format(x)}%`;
 }
 
-type ClientTarget = { id: string; label?: string | null; origin: string };
-
-function resolveSiteLabel(t: ClientTarget) {
-  if (t.label && String(t.label).trim()) return String(t.label).trim();
-  const s = String(t.id || "").replace(/-/g, " ").trim();
-  if (s) return s.replace(/\b\w/g, (m) => m.toUpperCase());
-  try {
-    const u = new URL(t.origin);
-    return u.hostname;
-  } catch {
-    return "Site";
-  }
-}
-
 type MaybeRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is MaybeRecord {
   return typeof value === "object" && value !== null;
 }
 
-function normalizeTargets(raw: unknown): ClientTarget[] {
-  const roots: MaybeRecord[] = [];
-  const push = (x: unknown) => {
-    if (isRecord(x)) roots.push(x);
-  };
-
-  const rawRec = asRecord(raw);
-  push(rawRec);
-  push(rawRec?.workspace);
-  push(rawRec?.commandDeck);
-  push(rawRec?.deck);
-  push(rawRec?.data);
-  push(rawRec?.state);
-  push(rawRec?.project);
-  push(rawRec?.account);
-  push(rawRec?.payload);
-
-  const keys = ["targets", "sites", "monitoredSites", "origins", "monitoredOrigins", "sitesList", "targetsList"];
-
-  for (const r of roots) {
-    for (const k of keys) {
-      const v = r[k];
-      if (!Array.isArray(v) || !v.length) continue;
-
-      const out: ClientTarget[] = [];
-      const seen = new Set<string>();
-
-      for (const item of v) {
-        let origin = "";
-        let id = "";
-        let label: string | null = null;
-
-        if (typeof item === "string") {
-          origin = canonicalOrigin(item);
-          id = toSlug(origin || item);
-        } else if (item && typeof item === "object") {
-          const rawOrigin =
-            typeof item.origin === "string"
-              ? item.origin
-              : typeof item.url === "string"
-              ? item.url
-              : typeof item.siteOrigin === "string"
-              ? item.siteOrigin
-              : typeof item.href === "string"
-              ? item.href
-              : typeof item.baseUrl === "string"
-              ? item.baseUrl
-              : typeof item.website === "string"
-              ? item.website
-              : typeof item.primaryOrigin === "string"
-              ? item.primaryOrigin
-              : "";
-
-          origin = canonicalOrigin(rawOrigin);
-          id = toSlug(String(item.slug || item.id || origin || "site"));
-          label =
-            typeof item.label === "string"
-              ? item.label
-              : typeof item.name === "string"
-              ? item.name
-              : typeof item.displayName === "string"
-              ? item.displayName
-              : typeof item.title === "string"
-              ? item.title
-              : null;
-        }
-
-        if (!origin) continue;
-        if (seen.has(origin)) continue;
-        seen.add(origin);
-
-        out.push({ id, origin, label });
-      }
-
-      return out;
-    }
-  }
-
-  return [];
-}
 
 type ErrorGroup = {
   fingerprint: string;
@@ -453,53 +335,20 @@ export default async function ErrorsPage({ searchParams }: PageProps) {
   const range = (typeof sp?.range === "string" ? sp.range : "24h") as RangeKey;
   const fp = typeof sp?.fp === "string" ? sp.fp.slice(0, 180) : "";
 
-  type WorkspaceView = {
-    projectId?: number | string | null;
-    project?: { id?: number | string | null } | null;
-    account?: { projectId?: number | string | null } | null;
-    activeSiteOrigin?: string | null;
-    selection?: { activeSiteOrigin?: string | null } | null;
-    activeSite?: { origin?: string | null } | null;
-    workspace?: { activeSiteOrigin?: string | null } | null;
-  } & UnknownRecord;
-
-  let ws: WorkspaceView | null = null;
-  try {
-    ws = (await readWorkspace()) as WorkspaceView;
-  } catch {
-    ws = null;
-  }
-
-  const targets = normalizeTargets(ws);
-  const sites = targets.map((t) => ({ id: t.id, label: resolveSiteLabel(t), url: t.origin }));
-
-  const siteParam = typeof sp?.site === "string" ? sp.site : "";
-
-  const wsActiveOrigin =
-    canonicalOrigin(
-      ws?.activeSiteOrigin || ws?.selection?.activeSiteOrigin || ws?.activeSite?.origin || ws?.workspace?.activeSiteOrigin || ""
-    ) || "";
-
-  const siteById = sites.find((s) => s.id === siteParam);
-  const siteByOrigin = siteParam.startsWith("http") ? sites.find((s) => s.url === canonicalOrigin(siteParam)) : null;
-  const siteByWorkspace = !siteParam && wsActiveOrigin ? sites.find((s) => s.url === wsActiveOrigin) : null;
-
-  const activeSite = siteById || siteByOrigin || siteByWorkspace || sites[0] || { id: "none", label: "No site selected", url: "" };
-
-  const projectId = String(ws?.projectId || ws?.project?.id || ws?.account?.projectId || "1");
-
+  const analyticsContext = await resolveAnalyticsConsoleContext({
+    searchParams: sp,
+    defaultRange: range,
+    pathname: "/errors",
+  });
+  const sites = analyticsContext.sites;
+  const activeSite = analyticsContext.activeSite;
+  const projectId = analyticsContext.projectId;
   let summary: unknown = null;
   let errors: ErrorsPayload = { updatedAtISO: null, totals: {}, trend: [], groups: [], recent: [] };
 
-  try {
-    summary = await getProjectSummary(projectId, {
-      range: range === "30d" ? "30d" : "7d",
-      siteOrigin: activeSite.url || undefined,
-    });
+  if (analyticsContext.summary) {
+    summary = analyticsContext.summary;
     errors = normalizeErrorsFromSummary(summary);
-  } catch {
-    summary = null;
-    errors = { updatedAtISO: null, totals: {}, trend: [], groups: [], recent: [] };
   }
 
   // Logic-only enrichments (no UI changes): deterministic spikes, hints, risk scoring, and action generation.

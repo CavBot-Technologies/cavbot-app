@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { gateModuleAccess } from "@/lib/moduleGate.server";
-import { readWorkspace } from "@/lib/workspaceStore.server";
-import { getProjectSummary } from "@/lib/cavbotApi.server";
+import { resolveAnalyticsConsoleContext } from "@/lib/analyticsConsole.server";
 import { buildErrorInsights } from "@/lib/errors/errorInsights";
 
 // Keep the API stable and safe:
@@ -204,34 +203,20 @@ export async function GET(req: Request) {
   const siteId = (url.searchParams.get("site") || "").trim();
   const projectIdHint = (url.searchParams.get("projectId") || "").trim();
 
-  // Workspace-scoped projectId is the source of truth for multi-tenant safety.
-  const ws = await readWorkspace();
-  const projectId = String((ws as { projectId?: unknown } | null)?.projectId || "1");
-
-  const sites = ((ws as { sites?: unknown[] } | null)?.sites || []).map((s) => ({
-    id: String((s as { id?: unknown } | null)?.id || ""),
-    label: String((s as { label?: unknown } | null)?.label || "").trim() || "Site",
-    url: String((s as { origin?: unknown } | null)?.origin || "").trim(),
-  }));
-
-  const activeSite =
-    (siteId && sites.find((s) => s.id === siteId)) ||
-    ((ws as { activeSiteId?: unknown } | null)?.activeSiteId ? sites.find((s) => s.id === String((ws as { activeSiteId?: unknown }).activeSiteId)) : null) ||
-    sites[0] ||
-    { id: "none", label: "No site selected", url: "" };
+  const analyticsContext = await resolveAnalyticsConsoleContext({
+    searchParams: Object.fromEntries(url.searchParams),
+    defaultRange: range,
+    pathname: "/api/errors/export",
+  });
+  const projectId = analyticsContext.projectId;
+  const activeSite = analyticsContext.activeSite;
 
   let summary: unknown = null;
   let errors: ErrorsPayload = { updatedAtISO: null, totals: {}, trend: [], groups: [], recent: [] };
 
-  try {
-    summary = await getProjectSummary(projectId, {
-      range: range === "30d" ? "30d" : "7d",
-      siteOrigin: activeSite.url || undefined,
-    });
+  if (analyticsContext.summary) {
+    summary = analyticsContext.summary;
     errors = normalizeErrorsFromSummary(summary);
-  } catch {
-    summary = null;
-    errors = { updatedAtISO: null, totals: {}, trend: [], groups: [], recent: [] };
   }
 
   const insights = buildErrorInsights(errors);
@@ -240,6 +225,7 @@ export async function GET(req: Request) {
     ok: true,
     projectId,
     projectIdHint: projectIdHint || null,
+    siteIdHint: siteId || null,
     site: { id: activeSite.id, label: activeSite.label, origin: activeSite.url || null },
     range,
     updatedAtISO: errors.updatedAtISO || null,
@@ -258,4 +244,3 @@ export async function GET(req: Request) {
   res.headers.set("Cache-Control", "no-store, max-age=0");
   return res;
 }
-
