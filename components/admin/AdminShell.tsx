@@ -619,7 +619,13 @@ export default function AdminShell(props: {
                                 >
                                   <div className="hq-avatar hq-topbarMailNotifAvatar" data-size="sm" data-tone={thread.senderAvatarTone || "navy"} aria-hidden="true">
                                     {thread.senderAvatarImage ? (
-                                      <img src={thread.senderAvatarImage} alt="" />
+                                      <Image
+                                        src={thread.senderAvatarImage}
+                                        alt=""
+                                        width={28}
+                                        height={28}
+                                        unoptimized
+                                      />
                                     ) : (
                                       <span className="hq-topbarMailNotifInitials">{senderInitials}</span>
                                     )}

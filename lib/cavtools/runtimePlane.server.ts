@@ -323,21 +323,6 @@ function toSourcePath(namespaceRoot: "/cavcloud" | "/cavsafe", virtualPath: stri
   return normalizePath(normalized.slice(namespaceRoot.length) || "/");
 }
 
-function dirname(path: string): string {
-  const normalized = normalizePath(path);
-  if (normalized === "/") return "/";
-  const parts = normalized.split("/").filter(Boolean);
-  if (parts.length <= 1) return "/";
-  return `/${parts.slice(0, -1).join("/")}`;
-}
-
-function basename(path: string): string {
-  const normalized = normalizePath(path);
-  if (normalized === "/") return "";
-  const parts = normalized.split("/").filter(Boolean);
-  return parts[parts.length - 1] || "";
-}
-
 function nowISO() {
   return new Date().toISOString();
 }

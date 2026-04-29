@@ -3,10 +3,10 @@ import "server-only";
 import crypto from "node:crypto";
 import type { ChildProcess } from "node:child_process";
 import { lstat, mkdtemp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { CavCloudShareMode, PublicArtifactVisibility } from "@prisma/client";
+import * as ts from "typescript";
 import type * as tsType from "typescript";
 
 import {
@@ -70,13 +70,6 @@ const Prisma = {
   raw: prismaRaw,
   sql: prismaSql,
 } as const;
-
-function getTypeScriptModuleId(): string {
-  return ["type", "script"].join("");
-}
-
-const nodeRequire = createRequire(import.meta.url);
-const ts = nodeRequire(getTypeScriptModuleId()) as typeof import("typescript");
 
 export type CavtoolsNamespace = "cavcloud" | "cavsafe" | "cavcode" | "telemetry" | "workspace";
 
@@ -11137,7 +11130,7 @@ async function startProjectServiceSession(
     );
   }
   const workspaceDir = stage.workspaceDir;
-  const tsserverPath = path.join(process.cwd(), "node_modules", getTypeScriptModuleId(), "lib", "tsserver.js");
+  const tsserverPath = path.join(process.cwd(), "node_modules", "typescript", "lib", "tsserver.js");
   if (!await pathExists(tsserverPath)) {
     throw new CavtoolsExecError("PROJECT_SERVICE_UNAVAILABLE", "typescript/lib/tsserver.js is not available.", 500);
   }

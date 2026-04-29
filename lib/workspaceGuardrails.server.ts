@@ -4,15 +4,12 @@ import type pg from "pg";
 
 import { getAuthPool, withAuthTransaction } from "@/lib/authDb";
 
-const GUARDRAIL_KEYS = [
-  "blockUnknownOrigins",
-  "enforceAllowlist",
-  "alertOn404Spike",
-  "alertOnJsSpike",
-  "strictDeletion",
-] as const;
-
-type GuardrailKey = (typeof GUARDRAIL_KEYS)[number];
+type GuardrailKey =
+  | "blockUnknownOrigins"
+  | "enforceAllowlist"
+  | "alertOn404Spike"
+  | "alertOnJsSpike"
+  | "strictDeletion";
 
 type Queryable = {
   query: <T extends pg.QueryResultRow = pg.QueryResultRow>(

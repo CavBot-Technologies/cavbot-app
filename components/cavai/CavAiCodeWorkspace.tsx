@@ -276,7 +276,6 @@ type ApiEnvelope<T> =
 type ReasoningLevel = "low" | "medium" | "high" | "extra_high";
 type CavenInferenceSpeed = "standard" | "fast";
 type ViewMode = "chat" | "history";
-type BadgeTone = "default" | "lime" | "red";
 type ComposerMenu = "quick_actions" | "model" | "audio_model" | "reasoning" | null;
 type ComposerQuickActionId = "add_files" | "upload_from_cavcloud";
 type CavenComposerEnterBehavior = "enter" | "meta_enter";
@@ -1555,7 +1554,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
   const [qwenPopoverOpen, setQwenPopoverOpen] = useState(false);
   const [qwenPopoverPinned, setQwenPopoverPinned] = useState(false);
   const [queueEnabled, setQueueEnabled] = useState(false);
-  const [badgeTone, setBadgeTone] = useState<BadgeTone>("default");
   const [openComposerMenu, setOpenComposerMenu] = useState<ComposerMenu>(null);
   const [promptFocused, setPromptFocused] = useState(false);
   const [transcribingAudio, setTranscribingAudio] = useState(false);
@@ -2344,19 +2342,6 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     });
     setHeroLine(nextLine || CAVAI_SAFE_FALLBACK_LINE);
   }, [profileIdentity.fullName, profileIdentity.username]);
-
-  useEffect(() => {
-    const handler = (event: Event) => {
-      const tone = (event as CustomEvent).detail?.tone as BadgeTone | undefined;
-      if (!tone || (tone !== "default" && tone !== "lime" && tone !== "red")) {
-        setBadgeTone("default");
-        return;
-      }
-      setBadgeTone(tone);
-    };
-    window.addEventListener("cb:eye-tone", handler);
-    return () => window.removeEventListener("cb:eye-tone", handler);
-  }, []);
 
   useEffect(() => {
     activeSessionIdRef.current = sessionId;

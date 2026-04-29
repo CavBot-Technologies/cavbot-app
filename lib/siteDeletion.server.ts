@@ -1,8 +1,7 @@
 import "server-only";
 
-import type pg from "pg";
 import { auditLogWrite } from "@/lib/audit";
-import { getAuthPool, newDbId } from "@/lib/authDb";
+import { getAuthPool } from "@/lib/authDb";
 
 export type SiteDeletionMode = "SAFE" | "DESTRUCTIVE";
 export type SitePurgeMode = "delayed" | "immediate";

@@ -6526,6 +6526,16 @@ export default function CavCodePage() {
     return `/cavcode?${qp.toString()}`;
   }, [activeFile?.path, projectIdFromQuery]);
 
+  const openFile = useCallback((file: FileNode) => {
+    setSelectedId(file.id);
+    if (splitLayout !== "single" && activePane === "secondary") {
+      setSecondaryFileId(file.id);
+      return;
+    }
+    setActivePane("primary");
+    setActiveFileId(file.id);
+  }, [activePane, splitLayout]);
+
   const resolveWorkspaceFilePathForAi = useCallback((rawFilePath: string): string | null => {
     const raw = String(rawFilePath || "").trim();
     if (!raw) return null;
@@ -7863,16 +7873,6 @@ export default function CavCodePage() {
 
   function toggleFolder(folderId: string) {
     setOpenFolders((p) => ({ ...p, [folderId]: !p[folderId] }));
-  }
-
-  function openFile(file: FileNode) {
-    setSelectedId(file.id);
-    if (splitLayout !== "single" && activePane === "secondary") {
-      setSecondaryFileId(file.id);
-      return;
-    }
-    setActivePane("primary");
-    setActiveFileId(file.id);
   }
 
   function createIn(folderId: string, kind: "file" | "folder") {

@@ -104,10 +104,6 @@ import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib
 import type { CavenCustomAgent } from "@/lib/cavai/cavenSettings.server";
 
 type QwenCreditsModule = typeof import("@/src/lib/ai/qwen-coder-credits.server");
-type CavenSettingsModule = typeof import("@/lib/cavai/cavenSettings.server");
-type AgentRegistryModule = typeof import("@/lib/cavai/agentRegistry.server");
-type RouteManifestModule = typeof import("@/lib/cavai/routeManifest.server");
-type WebsiteKnowledgeModule = typeof import("@/lib/cavai/websiteKnowledge.server");
 type CavCloudStorageModule = typeof import("@/lib/cavcloud/storage.server");
 type ImageStudioModule = typeof import("@/lib/cavai/imageStudio.server");
 

@@ -745,7 +745,7 @@ function CavToolsPageInner() {
     lastSyncTs: undefined,
     serverReachable: true,
   });
-  const [memberRole, setMemberRole] = useState<"OWNER" | "ADMIN" | "MEMBER" | "ANON">("ANON");
+  const [, setMemberRole] = useState<"OWNER" | "ADMIN" | "MEMBER" | "ANON">("ANON");
   const [cavsafeEntitled, setCavsafeEntitled] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [profileTone, setProfileTone] = useState("lime");

@@ -94,7 +94,7 @@ function extractLifecycleChanges(entry: {
 export default async function StaffLifecyclePage(props: {
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
-  const ctx = await requireAdminAccessFromRequestContext("/staff-lifecycle", { scopes: ["staff.read"] });
+  await requireAdminAccessFromRequestContext("/staff-lifecycle", { scopes: ["staff.read"] });
   const range = parseAdminRange(Array.isArray(props.searchParams?.range) ? props.searchParams?.range[0] : props.searchParams?.range);
   const month = parseAdminMonth(Array.isArray(props.searchParams?.month) ? props.searchParams?.month[0] : props.searchParams?.month);
   const window = resolveAdminWindow(range, month);
