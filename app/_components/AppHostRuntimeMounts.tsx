@@ -9,22 +9,13 @@ import RouteLifecycle from "./RouteLifecycle";
 import SystemStatusBootstrap from "@/components/status/SystemStatusBootstrap";
 import { resolveCavbotAssetPolicy } from "@/lib/cavbotAssetPolicy";
 
-const OFFICIAL_CDN_ASSETS = resolveCavbotAssetPolicy("customer_snippet");
 const INTERNAL_RUNTIME_ASSETS = resolveCavbotAssetPolicy("internal_runtime");
-const APP_RUNTIME_PROJECT_KEY = String(process.env.NEXT_PUBLIC_CAVBOT_PROJECT_KEY || "").trim();
-const APP_RUNTIME_SITE_ID = String(
-  process.env.NEXT_PUBLIC_CAVBOT_SITE_PUBLIC_ID || process.env.NEXT_PUBLIC_CAVBOT_SITE_ID || "",
-).trim();
-const APP_RUNTIME_ANALYTICS_BOOTSTRAP = APP_RUNTIME_PROJECT_KEY && APP_RUNTIME_SITE_ID
-  ? `(function(){window.CAVBOT_API_URL=window.CAVBOT_API_URL||"/api/embed/analytics";window.CAVBOT_PROJECT_KEY=window.CAVBOT_PROJECT_KEY||${JSON.stringify(APP_RUNTIME_PROJECT_KEY)};${
-      `window.CAVBOT_SITE_PUBLIC_ID=window.CAVBOT_SITE_PUBLIC_ID||${JSON.stringify(
-        APP_RUNTIME_SITE_ID,
-      )};window.CAVBOT_SITE_ID=window.CAVBOT_SITE_ID||${JSON.stringify(APP_RUNTIME_SITE_ID)};`
-    }})();`
-  : null;
+const RUNTIME_PROJECT_KEY = process.env.NEXT_PUBLIC_CAVBOT_PROJECT_KEY || "";
+const RUNTIME_SITE_ID =
+  process.env.NEXT_PUBLIC_CAVBOT_SITE_PUBLIC_ID || process.env.NEXT_PUBLIC_CAVBOT_SITE_ID || "";
 
 export function AppHostPreconnectLink() {
-  return <link rel="preconnect" href={OFFICIAL_CDN_ASSETS.baseUrl} crossOrigin="" />;
+  return null;
 }
 
 export default function AppHostRuntimeMounts() {
@@ -48,25 +39,19 @@ export default function AppHostRuntimeMounts() {
       <Suspense fallback={null}>
         <GlobalFooterMount />
       </Suspense>
-      {APP_RUNTIME_ANALYTICS_BOOTSTRAP ? (
-        <Script
-          id="cavbot-app-analytics-bootstrap"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: APP_RUNTIME_ANALYTICS_BOOTSTRAP }}
-        />
-      ) : null}
-      {APP_RUNTIME_ANALYTICS_BOOTSTRAP ? (
-        <Script
-          id="cavbot-app-analytics-runtime"
-          src={INTERNAL_RUNTIME_ASSETS.scripts.analytics}
-          strategy="afterInteractive"
-        />
-      ) : null}
       <Script
-        id="cavbot-official-brain-cdn"
-        src={OFFICIAL_CDN_ASSETS.scripts.brain}
+        id="cb-runtime-analytics-script"
+        src={INTERNAL_RUNTIME_ASSETS.scripts.analytics}
         strategy="afterInteractive"
-        crossOrigin="anonymous"
+        data-project-key={RUNTIME_PROJECT_KEY || undefined}
+        data-site-id={RUNTIME_SITE_ID || undefined}
+      />
+      <Script
+        id="cb-runtime-brain-script"
+        src={INTERNAL_RUNTIME_ASSETS.scripts.brain}
+        strategy="afterInteractive"
+        data-project-key={RUNTIME_PROJECT_KEY || undefined}
+        data-site-id={RUNTIME_SITE_ID || undefined}
       />
     </>
   );

@@ -56,7 +56,6 @@ import type { CavGuardDecision } from "@/src/lib/cavguard/cavGuard.types";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
 import {
   readBootClientAuthBootstrap,
-  readBootClientPlanState,
   readBootClientProfileState,
 } from "@/lib/clientAuthBootstrap";
 import { resolveAccountDisplayName, resolveAccountPlanLabel } from "@/lib/profileIdentity";
@@ -213,17 +212,6 @@ function readShellPlanSnapshot(): PlanSnapshot | null {
     return legacy;
   }
   return null;
-}
-
-function snapshotFromBootPlanState(input: ReturnType<typeof readBootClientPlanState>): PlanSnapshot | null {
-  if (!input) return null;
-  return {
-    planTier: coercePlanTier(input.planTier || input.planId || input.planLabel),
-    memberRole: coerceMemberRole(input.memberRole),
-    trialActive: Boolean(input.trialActive),
-    trialDaysLeft: Boolean(input.trialActive) ? clampInt(Number(input.trialDaysLeft || 0), 0, 365) : 0,
-    ts: Date.now(),
-  };
 }
 
 function persistShellPlanSnapshot(snapshot: PlanSnapshot) {
@@ -629,11 +617,7 @@ export default function AppShell({
 
 
   // ===== Plan widget (SIDEBAR footer) =====
-  const [bootSnapshot] = useState<PlanSnapshot | null>(() => {
-    const cached = shellPlanSnapshotCache ?? readShellPlanSnapshot();
-    if (cached) return cached;
-    return snapshotFromBootPlanState(readBootClientPlanState());
-  });
+  const bootSnapshot = useMemo(() => shellPlanSnapshotCache ?? readShellPlanSnapshot(), []);
   const [planTier, setPlanTier] = useState<PlanTier>(bootSnapshot?.planTier || "FREE");
   const [memberRole, setMemberRole] = useState<MemberRole>(bootSnapshot?.memberRole || null);
   const [planResolved, setPlanResolved] = useState<boolean>(Boolean(bootSnapshot || bootAuth?.plan));

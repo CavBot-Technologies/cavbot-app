@@ -261,7 +261,7 @@ function DownloadIcon() {
 }
 
 
-function usePrettyNull(v: string | null | undefined, fallback: string) {
+function prettyNull(v: string | null | undefined, fallback: string) {
   const s = String(v || "").trim();
   return s ? s : fallback;
 }
@@ -562,12 +562,12 @@ function BillingClientInner() {
   }, [invoices, invFilter]);
 
 
-  const digitalName = usePrettyNull(pm?.billingName, "CARDHOLDER NAME");
+  const digitalName = prettyNull(pm?.billingName, "CARDHOLDER NAME");
   const digitalBrand = String(pm?.brand || "").trim();
   const digitalExp =
     pm?.expMonth && pm?.expYear ? `${String(pm.expMonth).padStart(2, "0")}/${String(pm.expYear).slice(-2)}` : "11/34";
   const paymentMethodLabel = pm?.hasPaymentMethod
-    ? `${usePrettyNull(pm.brand, "Card").toUpperCase()} ending in ${usePrettyNull(pm.last4, "0008")}`
+    ? `${prettyNull(pm.brand, "Card").toUpperCase()} ending in ${prettyNull(pm.last4, "0008")}`
     : billingProfileReady
     ? "No default payment method on file yet."
     : "Payment method is created during your first paid upgrade.";

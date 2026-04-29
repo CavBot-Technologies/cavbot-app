@@ -12,12 +12,12 @@ import { COUNTRY_TERRITORY_ISO } from "@/geo/countries";
 import { REGION_GROUPED } from "@/geo/regions";
 import { getSession } from "@/lib/apiAuth";
 import { findUserById, getAuthPool } from "@/lib/authDb";
-import type { SummaryRange } from "@/lib/cavbotApi.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
-import { normalizeCavbotFounderProfile, resolveAccountDisplayName } from "@/lib/profileIdentity";
-import { getTenantProjectSummary } from "@/lib/projectSummary.server";
-import { readWorkspace } from "@/lib/workspaceStore.server";
-import type { WorkspacePayload } from "@/lib/workspaceStore.server";
+import { prisma } from "@/lib/prisma";
+import {
+  analyticsConsoleErrorCode,
+  resolveAnalyticsConsoleContext,
+} from "@/lib/analyticsConsole.server";
 
 type TrendPoint = { day: string; sessions: number; views404: number };
 type TopRoute = { routePath: string; views: number };
@@ -56,7 +56,7 @@ type ConsoleMetrics = {
   focusInvisible30d: number;
   topA11yIssueTypes: Array<{ type: string; count: number }>;
 
-  guardianScore: number | null;
+  guardianScore: number;
 
   // Allow null so UI shows "—" instead of 0% when API hasn't populated yet
   piiRiskPercent: number | null;
@@ -369,8 +369,6 @@ function n(v: unknown, fallback = 0) {
   return Number.isFinite(x) ? x : fallback;
 }
 function nOrNull(v: unknown): number | null {
-  if (v == null) return null;
-  if (typeof v === "string" && !v.trim()) return null;
   const x = Number(v);
   return Number.isFinite(x) ? x : null;
 }
@@ -400,8 +398,7 @@ function fmtPct(v: unknown, digits = 1) {
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: digits }).format(x)}%`;
 }
 
-function scoreLabel(score: number | null) {
-  if (score == null) return { label: "Warming", hint: "Score unlocks after enough live diagnostics land." };
+function scoreLabel(score: number) {
   if (score >= 92) return { label: "Elite", hint: "Guardian posture is clean." };
   if (score >= 80) return { label: "Stable", hint: "Good coverage, watch regressions." };
   if (score >= 65) return { label: "At Risk", hint: "404 / errors are rising." };
@@ -565,14 +562,8 @@ function isEnvMissingError(e: unknown) {
   );
 }
 
-function errText(e: unknown) {
-  if (e instanceof Error) return e.message || String(e);
-  return String(e);
-}
-
-function Donut({ score, label, tone }: { score: number | null; label: string; tone: Tone }) {
-  const safeScore = score == null ? 0 : score;
-  const pct = clamp(safeScore, 0, 100) / 100;
+function Donut({ score, label, tone }: { score: number; label: string; tone: Tone }) {
+  const pct = clamp(score, 0, 100) / 100;
   const r = 46;
   const c = 2 * Math.PI * r;
   const dash = c * pct;
@@ -585,11 +576,7 @@ function Donut({ score, label, tone }: { score: number | null; label: string; to
       : "rgba(139,92,255,0.92)";
 
   return (
-    <div
-      className="cb-donut"
-      aria-label={score == null ? `Guardian Score warming (${label})` : `Guardian Score ${fmtInt(score)} (${label})`}
-      data-tone={tone}
-    >
+    <div className="cb-donut" aria-label={`Guardian Score ${fmtInt(score)} (${label})`} data-tone={tone}>
       <svg viewBox="0 0 120 120" width="120" height="120" aria-hidden="true">
         <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth="10" />
         <circle
@@ -606,7 +593,7 @@ function Donut({ score, label, tone }: { score: number | null; label: string; to
       </svg>
 
       <div className="cb-donut-center">
-        <div className="cb-donut-score">{score == null ? "Warming" : fmtInt(score)}</div>
+        <div className="cb-donut-score">{fmtInt(score)}</div>
         <div className="cb-donut-sub">{label}</div>
       </div>
     </div>
@@ -686,7 +673,7 @@ function normalizeConsoleMetrics(raw: unknown): ConsoleMetrics {
     focusInvisible30d: n(metrics.focusInvisible30d),
     topA11yIssueTypes: safeA11yTypes(metrics.topA11yIssueTypes),
 
-    guardianScore: nOrNull(metrics.guardianScore),
+    guardianScore: n(metrics.guardianScore),
 
     piiRiskPercent: nOrNull(metrics.piiRiskPercent),
     aggregationCoveragePercent: nOrNull(metrics.aggregationCoveragePercent),
@@ -699,21 +686,45 @@ function normalizeConsoleMetrics(raw: unknown): ConsoleMetrics {
   };
 }
 
+function hasMeasuredConsoleActivity(metrics: ConsoleMetrics | null) {
+  if (!metrics) return false;
+  const numericSignals = [
+    metrics.pageViews24h,
+    metrics.sessions30d,
+    metrics.sessions40430d,
+    metrics.badgeInteractions30d,
+    metrics.views40430d,
+    metrics.gameInteractions30d,
+    metrics.uniqueVisitors30d,
+    metrics.sessionsUnderGuard30d,
+    metrics.routesMonitored,
+    metrics.jsErrors30d,
+    metrics.apiErrors30d,
+    metrics.ctaClicks30d,
+    metrics.formSubmits30d,
+    metrics.engagementPings30d,
+    metrics.a11yAudits30d,
+    metrics.a11yIssues30d,
+  ];
+  if (numericSignals.some((value) => n(value) > 0)) return true;
+  if ((metrics.topRoutes || []).length > 0) return true;
+  if ((metrics.trend7d || []).some((point) => n(point.sessions) > 0 || n(point.views404) > 0)) return true;
+  if ((metrics.trend30d || []).some((point) => n(point.sessions) > 0 || n(point.views404) > 0)) return true;
+  return false;
+}
+
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function canonicalOrigin(input: string) {
-  const s = String(input || "").trim();
-  if (!s) return "";
-  const withScheme = /^https?:\/\//i.test(s) ? s : `https://${s.replace(/^\/\//, "")}`;
-  try {
-    return new URL(withScheme).origin;
-  } catch {
-    return "";
-  }
+function firstInitialFromUsername(input: string): string {
+  const source = String(input || "").trim().replace(/^@+/, "");
+  if (!source) return "";
+  const asciiMatch = source.match(/[A-Za-z0-9]/);
+  const token = asciiMatch?.[0] || source[0] || "";
+  return token.toUpperCase();
 }
 
 function profileToneToAccentColor(tone: string): string {
@@ -733,7 +744,7 @@ type DashboardHeading = {
 };
 
 async function resolveDashboardHeading(): Promise<DashboardHeading> {
-  const fallbackOwner = "Your";
+  const fallbackOwner = "U's";
   const fallback: DashboardHeading = {
     appShellTitle: `${fallbackOwner} Dashboard`,
     ownerLabel: fallbackOwner,
@@ -754,23 +765,31 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
     const userId = String(sess.sub || "").trim();
     if (!userId || userId === "system") return fallback;
 
-    const authUser = await findUserById(getAuthPool(), userId).catch(() => null);
-    const normalized = normalizeCavbotFounderProfile({
-      fullName: authUser?.fullName,
-      displayName: authUser?.displayName,
-      username: authUser?.username,
-    });
+    const [profile, authUser] = await Promise.all([
+      prisma.user
+        .findUnique({
+          where: { id: userId },
+          select: { displayName: true, fullName: true, username: true, avatarTone: true },
+        })
+        .catch(() => null),
+      findUserById(getAuthPool(), userId).catch(() => null),
+    ]);
 
-    const accentColor = profileToneToAccentColor(String(authUser?.avatarTone || ""));
-    const displayName = resolveAccountDisplayName({
-      fullName: normalized.fullName,
-      displayName: normalized.displayName,
-      username: normalized.username,
-      fallbackLabel: fallbackOwner,
-    }).trim();
+    const accentColor = profileToneToAccentColor(String(profile?.avatarTone || authUser?.avatarTone || ""));
+    const preferredName = String(profile?.fullName || profile?.displayName || authUser?.displayName || "").trim();
+    if (preferredName) {
+      const ownerLabel = `${preferredName}'s`;
+      return {
+        appShellTitle: `${ownerLabel} Dashboard`,
+        ownerLabel,
+        accentColor,
+      };
+    }
 
-    if (displayName) {
-      const ownerLabel = displayName.startsWith("@") ? displayName : `${displayName}'s`;
+    const username = String(profile?.username || authUser?.username || "").trim().replace(/^@+/, "");
+    if (username) {
+      const initial = firstInitialFromUsername(username) || "U";
+      const ownerLabel = `${initial}'s`;
       return {
         appShellTitle: `${ownerLabel} Dashboard`,
         ownerLabel,
@@ -787,41 +806,22 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
 export default async function ConsolePage({ searchParams }: PageProps) {
   const sp = await searchParams;
 
-  const range = typeof sp?.range === "string" ? sp.range : "7d";
-  const rangeKey = (range === "24h" || range === "7d" || range === "14d" || range === "30d" ? range : "7d") as
-    | "24h"
-    | "7d"
-    | "14d"
-    | "30d";
-  const siteParam = typeof sp?.site === "string" ? sp.site : "";
+  const analyticsContext = await resolveAnalyticsConsoleContext({
+    searchParams: sp,
+    defaultRange: "7d",
+    pathname: "/console",
+  });
 
-  let ws: WorkspacePayload | null = null;
-  try {
-    ws = await readWorkspace();
-  } catch {
-    ws = null;
-  }
-
-  const workspaceProjectId = Number(ws?.projectId || 1) || 1;
-  const sites = Array.isArray(ws?.sites)
-    ? ws.sites
-        .map((s) => ({ id: String(s.id || ""), label: String(s.label || "Site"), url: canonicalOrigin(String(s.origin || "")) }))
-        .filter((s) => Boolean(s.id && s.url))
-    : [];
-
-  const workspaceActiveOrigin = canonicalOrigin(ws?.activeSiteOrigin || ws?.workspace?.activeSiteOrigin || "");
-  const siteById = sites.find((s) => s.id === siteParam);
-  const siteByOrigin = siteParam.startsWith("http") ? sites.find((s) => s.url === canonicalOrigin(siteParam)) : null;
-  const siteByWorkspaceId = !siteParam && ws?.activeSiteId ? sites.find((s) => s.id === String(ws.activeSiteId)) : null;
-  const siteByWorkspaceOrigin = !siteParam && workspaceActiveOrigin ? sites.find((s) => s.url === workspaceActiveOrigin) : null;
-  const activeSite =
-    siteById || siteByOrigin || siteByWorkspaceId || siteByWorkspaceOrigin || sites[0] || { id: "none", label: "No site selected", url: "" };
-  const dashboardToolSites = sites.map((s) => ({ id: s.id, label: s.label, origin: s.url }));
+  const rangeKey = analyticsContext.range;
+  const range = rangeKey;
+  const projectId = analyticsContext.projectId;
+  const activeSite = analyticsContext.activeSite;
+  const dashboardToolSites = analyticsContext.sites.map((s) => ({ id: s.id, label: s.label, origin: s.url }));
 
   const hrefWith = (next: { range?: string; site?: string }) => {
     const p = new URLSearchParams();
     p.set("module", "console");
-    p.set("projectId", String(workspaceProjectId));
+    if (projectId) p.set("projectId", projectId);
     const r = next.range ?? range;
     const s = next.site ?? activeSite.id;
     if (r) p.set("range", r);
@@ -831,49 +831,17 @@ export default async function ConsolePage({ searchParams }: PageProps) {
     return str ? `?${str}` : "";
   };
 
-  const projectId = String(workspaceProjectId);
-
-  let data: ProjectSummary | null = null;
-  let loadError: unknown = null;
-  const summaryRange: SummaryRange = rangeKey;
-  const summarySiteOrigin = activeSite.url || undefined;
-
-  try {
-    const { summary } = await getTenantProjectSummary({
-      projectId,
-      range: summaryRange,
-      siteOrigin: summarySiteOrigin,
-      requestId: `console_page_${projectId}_${summaryRange}`,
-    });
-    data = summary;
-  } catch (error) {
-    // Backward-safe fallback while upstream rolls out full 24h/14d support.
-    if (summaryRange === "24h" || summaryRange === "14d") {
-      try {
-        const { summary } = await getTenantProjectSummary({
-          projectId,
-          range: "7d",
-          siteOrigin: summarySiteOrigin,
-          requestId: `console_page_${projectId}_7d_fallback`,
-        });
-        data = summary;
-      } catch (fallbackError) {
-        loadError = fallbackError;
-      }
-    } else {
-      loadError = error;
-    }
-  }
+  const data: ProjectSummary | null = analyticsContext.summary;
+  const loadError: unknown = analyticsContext.summaryError;
 
   const metrics: ConsoleMetrics | null = data?.metrics ? normalizeConsoleMetrics(data.metrics) : null;
 
-  const projectLabel =
-    data?.project?.projectId != null ? `Project #${data.project.projectId}` : `Project ${projectId}`;
+  const projectLabel = analyticsContext.projectLabel || (projectId ? `Project ${projectId}` : "Project");
 
   const envMissing = Boolean(loadError && isEnvMissingError(loadError));
-  const hasMetrics = Boolean(!loadError && metrics);
+  const hasMetrics = Boolean(!loadError && metrics && hasMeasuredConsoleActivity(metrics));
 
-  const score = metrics?.guardianScore ?? null;
+  const score = metrics ? n(metrics.guardianScore) : 0;
   const badge = scoreLabel(score);
   const scoreTone = toneForBadgeLabel(badge.label);
 
@@ -1029,7 +997,7 @@ export default async function ConsolePage({ searchParams }: PageProps) {
       headline: "Posture is clean — keep it that way",
       body: "No priority flags are firing. Your next win is tightening polish and preventing regressions.",
       steps: ["Lock design tokens for text + rails (no drift).", "Add guardrails for layout stability (explicit sizing).", "Run weekly audits on Top Routes to stay elite."],
-      meta: `Guardian ${score == null ? "Warming" : fmtInt(score)} · Coverage ${fmtPct(metrics?.aggregationCoveragePercent, 0)}`,
+      meta: `Guardian ${fmtInt(score)} · Coverage ${fmtPct(n(metrics?.aggregationCoveragePercent, 0), 0)}`,
     };
   })();
 
@@ -1048,22 +1016,8 @@ export default async function ConsolePage({ searchParams }: PageProps) {
     metrics && n(metrics.sessions30d) > 0 ? keyboardNav / Math.max(1, n(metrics.sessions30d)) : 0;
 
   // --- SEO snapshot (derived from real metrics; no fake numbers) ---
-  const indexHealthPct = (() => {
-    if (!metrics) return null;
-    const weighted = [
-      metrics.guardianScore == null ? null : { weight: 0.55, value: metrics.guardianScore },
-      metrics.aggregationCoveragePercent == null
-        ? null
-        : { weight: 0.45, value: metrics.aggregationCoveragePercent },
-    ].filter((item): item is { weight: number; value: number } => item != null);
-    if (!weighted.length) return null;
-    const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0);
-    return clamp(
-      weighted.reduce((sum, item) => sum + item.weight * item.value, 0) / Math.max(totalWeight, 0.0001),
-      0,
-      100,
-    );
-  })();
+  const indexHealthPct =
+    metrics ? clamp(n(metrics.guardianScore) * 0.55 + n(metrics.aggregationCoveragePercent, 0) * 0.45, 0, 100) : null;
 
   const crawlCoveragePct = metrics?.aggregationCoveragePercent ?? null;
 
@@ -1151,20 +1105,20 @@ export default async function ConsolePage({ searchParams }: PageProps) {
         {envMissing ? (
           <section className="cb-card cb-card-danger" aria-label="Missing environment variables">
             <div className="cb-card-head">
-              <h1 className="cb-h1">Console is wired — env is missing</h1>
+              <h1 className="cb-h1">Console is wired — analytics config is missing</h1>
               <p className="cb-sub">
-                Set <code>CAVBOT_API_BASE_URL</code> and <code>CAVBOT_PROJECT_KEY</code> for the server runtime.
+                The server could not reach the analytics API for this project. Verify the production API base and project key registration.
               </p>
             </div>
 
             <div className="cb-kv">
               <div className="cb-kv-row">
                 <span className="cb-k">Expected</span>
-                <span className="cb-v">https://api.cavbot.io</span>
+                <span className="cb-v">Registered analytics endpoint</span>
               </div>
               <div className="cb-kv-row">
-                <span className="cb-k">Header</span>
-                <span className="cb-v">X-Project-Key</span>
+                <span className="cb-k">Project</span>
+                <span className="cb-v">{projectLabel}</span>
               </div>
             </div>
           </section>
@@ -1960,11 +1914,35 @@ export default async function ConsolePage({ searchParams }: PageProps) {
           <section className="cb-card cb-card-danger" aria-label="Console load failed">
             <div className="cb-card-head">
               <h1 className="cb-h1">Console failed to load</h1>
-              <p className="cb-sub">Your API is reachable, but this page couldn’t pull the summary.</p>
+              <p className="cb-sub">Unable to load metrics for the selected project, site, and range.</p>
             </div>
-            <pre className="cb-pre">{errText(loadError)}</pre>
+            <pre className="cb-pre">{analyticsConsoleErrorCode(loadError)}</pre>
           </section>
-        ) : null}
+        ) : (
+          <section className="cb-card" aria-label="No analytics data yet">
+            <div className="cb-card-head">
+              <h1 className="cb-h1">No data yet</h1>
+              <p className="cb-sub">
+                CavBot is waiting for real events from {activeSite.url || "the selected site"}. Install or verify the Analytics v5 snippet,
+                then load a page on the site to create the first page view.
+              </p>
+            </div>
+            <div className="cb-kv">
+              <div className="cb-kv-row">
+                <span className="cb-k">Project</span>
+                <span className="cb-v">{projectLabel}</span>
+              </div>
+              <div className="cb-kv-row">
+                <span className="cb-k">Target</span>
+                <span className="cb-v">{activeSite.url || "No site selected"}</span>
+              </div>
+              <div className="cb-kv-row">
+                <span className="cb-k">Range</span>
+                <span className="cb-v">{rangeKey}</span>
+              </div>
+            </div>
+          </section>
+        )}
       </div>
     </AppShell>
   );

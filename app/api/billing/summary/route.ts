@@ -2,19 +2,12 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { isApiAuthError, readVerifiedSession } from "@/lib/apiAuth";
-import { withDedicatedAuthClient } from "@/lib/authDb";
-import { readAuthSessionView } from "@/lib/authSessionView.server";
-import { PLANS, resolvePlanIdFromTier } from "@/lib/plans";
+import { prisma } from "@/lib/prisma";
+import { requireSession, isApiAuthError } from "@/lib/apiAuth";
+import { PLANS } from "@/lib/plans";
 import { getQwenCoderPopoverState } from "@/src/lib/ai/qwen-coder-credits.server";
+import { resolveBillingAccountContext } from "@/lib/billingAccount.server";
 import { resolveBillingPlanResolution, type BillingPlanSource } from "@/lib/billingPlan.server";
-import {
-  normalizeBillingCycleValue,
-  isBillingRuntimeUnavailableError,
-  readBillingAccount,
-  readBillingUsageMetrics,
-  readLatestBillingSubscription,
-} from "@/lib/billingRuntime.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,29 +20,9 @@ const NO_STORE_HEADERS: Record<string, string> = {
   Vary: "Cookie",
 };
 
-const BILLING_SUMMARY_TIMEOUT_MS = 2_500;
-const BILLING_USAGE_AUX_TIMEOUT_MS = 750;
-
 function json<T>(data: T, init?: number | ResponseInit) {
   const resInit: ResponseInit = typeof init === "number" ? { status: init } : init ?? {};
   return NextResponse.json(data, { ...resInit, headers: { ...(resInit.headers || {}), ...NO_STORE_HEADERS } });
-}
-
-async function withBillingDeadline<T>(
-  promise: Promise<T>,
-  timeoutMs = BILLING_SUMMARY_TIMEOUT_MS,
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error("BILLING_SUMMARY_TIMEOUT")), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
 }
 
 function toIsoOrNull(d: Date | null | undefined) {
@@ -99,14 +72,27 @@ function buildEmptyBillingSummary() {
       portalReady: false,
     },
     qwenCoderUsage: null,
-    degraded: true,
   };
+}
+
+async function withSoftTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 type SummaryAccountRecord = {
   id: string;
   slug: string;
-  tier: string;
+  tier: "FREE" | "PREMIUM" | "ENTERPRISE";
   billingEmail: string | null;
   trialSeatActive: boolean | null;
   trialStartedAt: Date | null;
@@ -120,6 +106,18 @@ type SummaryAccountRecord = {
   lastUpgradeAt: Date | null;
   lastUpgradeProrated: boolean | null;
   stripeCustomerId: string | null;
+};
+
+type SummarySubscriptionRecord = {
+  status: string;
+  tier: string;
+  currentPeriodStart: Date | null;
+  currentPeriodEnd: Date | null;
+  provider: string | null;
+  customerId: string | null;
+  billingCycle: string | null;
+  stripePriceId: string | null;
+  stripeSubscriptionId: string | null;
 };
 
 type SummaryComputedRecord = {
@@ -136,25 +134,52 @@ type SummaryComputedRecord = {
   portalReady: boolean;
 };
 
-function buildFallbackBillingSummary(args: {
-  accountId: string;
-  accountSlug?: string | null;
-  tierEffective?: string | null;
-  tier?: string | null;
-}) {
-  const currentPlanId = resolvePlanIdFromTier(args.tierEffective || args.tier || "FREE");
-  const planDef = PLANS[currentPlanId];
-  return {
-    ok: true,
-    degraded: true,
-    account: {
-      id: args.accountId,
-      slug: String(args.accountSlug || ""),
-      tier: String(args.tierEffective || args.tier || "FREE").toUpperCase() || "FREE",
-      billingEmail: null,
-      trialSeatActive: false,
-      trialStartedAt: null,
-      trialEndsAt: null,
+async function findBillingAccount(accountId: string): Promise<SummaryAccountRecord | null> {
+  try {
+    return await prisma.account.findUnique({
+      where: { id: accountId },
+      select: {
+        id: true,
+        slug: true,
+        tier: true,
+        billingEmail: true,
+        trialSeatActive: true,
+        trialStartedAt: true,
+        trialEndsAt: true,
+        pendingDowngradePlanId: true,
+        pendingDowngradeBilling: true,
+        pendingDowngradeAt: true,
+        pendingDowngradeEffectiveAt: true,
+        lastUpgradePlanId: true,
+        lastUpgradeBilling: true,
+        lastUpgradeAt: true,
+        lastUpgradeProrated: true,
+        stripeCustomerId: true,
+      },
+    });
+  } catch (error) {
+    console.error("[billing/summary] account full select failed", error);
+  }
+
+  try {
+    const fallback = await prisma.account.findUnique({
+      where: { id: accountId },
+      select: {
+        id: true,
+        slug: true,
+        tier: true,
+        billingEmail: true,
+        trialSeatActive: true,
+        trialStartedAt: true,
+        trialEndsAt: true,
+        stripeCustomerId: true,
+      },
+    });
+
+    if (!fallback) return null;
+
+    return {
+      ...fallback,
       pendingDowngradePlanId: null,
       pendingDowngradeBilling: null,
       pendingDowngradeAt: null,
@@ -162,167 +187,196 @@ function buildFallbackBillingSummary(args: {
       lastUpgradePlanId: null,
       lastUpgradeBilling: null,
       lastUpgradeAt: null,
-      lastUpgradeProrated: null,
-      stripeCustomerId: null,
-    },
-    subscription: null,
-    computed: {
-      currentPlanId,
-      planSource: "fallback" as const,
-      authoritative: false,
-      seatLimit: limitToNullable(planDef.limits.seats),
-      websiteLimit: limitToNullable(planDef.limits.websites),
-      seatsUsed: 0,
-      websitesUsed: 0,
-      billingCycle: "monthly" as const,
-      providerConnected: false,
-      stripeConnected: false,
-      portalReady: false,
-    },
-    qwenCoderUsage: null,
-  };
+      lastUpgradeProrated: false,
+    };
+  } catch (error) {
+    console.error("[billing/summary] account fallback select failed", error);
+    return null;
+  }
 }
 
-async function readBillingSnapshot(accountId: string) {
-  return withDedicatedAuthClient(async (authClient) => {
-    const account = await readBillingAccount(accountId, authClient);
-    if (!account) {
-      return {
-        account: null,
-        subRow: null,
-        usageMetrics: { seatsUsed: 0, websitesUsed: 0 },
-      };
-    }
+async function findLatestSubscription(
+  accountId: string,
+  provider?: "stripe"
+): Promise<SummarySubscriptionRecord | null> {
+  try {
+    return await prisma.subscription.findFirst({
+      where: provider ? { accountId, provider } : { accountId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        status: true,
+        tier: true,
+        currentPeriodStart: true,
+        currentPeriodEnd: true,
+        provider: true,
+        customerId: true,
+        billingCycle: true,
+        stripePriceId: true,
+        stripeSubscriptionId: true,
+      },
+    });
+  } catch (error) {
+    console.error(
+      provider
+        ? "[billing/summary] latest stripe subscription select failed"
+        : "[billing/summary] latest subscription select failed",
+      error
+    );
+  }
 
-    const subRow = await readLatestBillingSubscription(accountId, {
-      queryable: authClient,
-    }).catch(() => null);
-    const usageMetrics = await readBillingUsageMetrics(accountId, authClient).catch(() => ({
-      seatsUsed: 0,
-      websitesUsed: 0,
-    }));
+  try {
+    const fallback = await prisma.subscription.findFirst({
+      where: { accountId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        status: true,
+        tier: true,
+        currentPeriodStart: true,
+        currentPeriodEnd: true,
+      },
+    });
+
+    if (!fallback) return null;
 
     return {
-      account,
-      subRow,
-      usageMetrics,
+      ...fallback,
+      provider: null,
+      customerId: null,
+      billingCycle: null,
+      stripePriceId: null,
+      stripeSubscriptionId: null,
     };
-  });
+  } catch (error) {
+    console.error("[billing/summary] subscription fallback select failed", error);
+    return null;
+  }
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const sess = await readVerifiedSession(req).catch(() => null);
-    if (!sess || sess.systemRole !== "user") {
-      return json({ ok: false, error: "UNAUTHORIZED", message: "UNAUTHORIZED" }, 401);
-    }
+    const sess = await requireSession(req);
+    const billingCtx = await resolveBillingAccountContext(sess);
+    const accountId = billingCtx.accountId;
+    const userId = billingCtx.userId;
 
-    const accountId = String(sess.accountId || "").trim();
-    const userId = String(sess.sub || "").trim();
-    if (!accountId) return json(buildEmptyBillingSummary(), 200);
+    const account = await findBillingAccount(accountId);
 
-    const view = await withBillingDeadline(readAuthSessionView(sess)).catch(() => null);
-    const billingSnapshot = await withBillingDeadline(readBillingSnapshot(accountId)).catch(() => null);
-    const account = (billingSnapshot?.account ?? null) as SummaryAccountRecord | null;
+    if (!account) return json(buildEmptyBillingSummary(), 200);
 
-    if (!account) {
-      if (view?.account) {
-        return json(
-          buildFallbackBillingSummary({
-            accountId,
-            accountSlug: view.account.slug,
-            tierEffective: view.account.tierEffective,
-            tier: view.account.tier,
-          }),
-          200,
-        );
-      }
-      return json(buildEmptyBillingSummary(), 200);
-    }
-
-    const planResolution = await withBillingDeadline(
-      resolveBillingPlanResolution({
-        accountId,
-        account,
-        repair: false,
-      }),
-    ).catch(() => null);
-
-    const currentPlanId =
-      planResolution?.currentPlanId
-      ?? resolvePlanIdFromTier(view?.account.tierEffective || account.tier || "FREE");
+    const planResolution = await resolveBillingPlanResolution({
+      accountId,
+      account,
+      repair: true,
+    });
+    const currentPlanId = planResolution.currentPlanId;
     const planDef = PLANS[currentPlanId];
 
-    const usageMetrics = billingSnapshot?.usageMetrics ?? {
-      seatsUsed: 0,
-      websitesUsed: 0,
-    };
+    const [membersCount, invitesCount] = await Promise.all([
+      prisma.membership.count({ where: { accountId } }).catch((error) => {
+        console.error("[billing/summary] membership count failed", error);
+        return 0;
+      }),
+      prisma.invite
+        .count({
+          where: {
+            accountId,
+            status: "PENDING",
+            expiresAt: { gt: new Date() },
+          },
+        })
+        .catch((error) => {
+          console.error("[billing/summary] invite count failed", error);
+          return 0;
+        }),
+    ]);
 
-    const subRow = billingSnapshot?.subRow ?? null;
+    const projects = await prisma.project.findMany({
+      where: { accountId, isActive: true },
+      select: { id: true },
+    }).catch((error) => {
+      console.error("[billing/summary] project lookup failed", error);
+      return [];
+    });
+    const projectIds = projects.map((p) => p.id);
+
+    const sitesUsed = projectIds.length
+      ? await prisma.site.count({ where: { projectId: { in: projectIds }, isActive: true } }).catch((error) => {
+          console.error("[billing/summary] site count failed", error);
+          return 0;
+        })
+      : 0;
+
+    const latestStripeSub = await findLatestSubscription(accountId, "stripe");
+
+    const latestAnySub = !latestStripeSub ? await findLatestSubscription(accountId) : null;
+
+    const subRow = latestStripeSub || latestAnySub;
 
     const seatLimit = limitToNullable(planDef.limits.seats);
     const websiteLimit = limitToNullable(planDef.limits.websites);
 
-    const billingCycle =
-      normalizeBillingCycleValue(subRow?.billingCycle)
-      ?? normalizeBillingCycleValue(account.pendingDowngradeBilling)
-      ?? normalizeBillingCycleValue(account.lastUpgradeBilling)
-      ?? "monthly";
+    const billingCycleRaw =
+      subRow?.billingCycle || account.pendingDowngradeBilling || account.lastUpgradeBilling || "monthly";
+    const billingCycle = billingCycleRaw === "annual" ? "annual" : "monthly";
 
-    const subscription = subRow
-      ? {
-          ...subRow,
-          currentPeriodStart: toIsoOrNull(subRow.currentPeriodStart),
-          currentPeriodEnd: toIsoOrNull(subRow.currentPeriodEnd),
-        }
-      : account.trialSeatActive
-        ? {
-            status: "TRIALING",
-            tier: account.tier,
-            currentPeriodStart: toIsoOrNull(account.trialStartedAt),
-            currentPeriodEnd: toIsoOrNull(account.trialEndsAt),
-            provider: null,
-            customerId: account.stripeCustomerId || null,
-            billingCycle,
-            stripePriceId: null,
-            stripeSubscriptionId: null,
-          }
-        : {
-            status: "ACTIVE",
-            tier: account.tier,
-            currentPeriodStart: null,
-            currentPeriodEnd: null,
-            provider: null,
-            customerId: account.stripeCustomerId || null,
-            billingCycle,
-            stripePriceId: null,
-            stripeSubscriptionId: null,
-          };
+    let subscription = null;
+
+    if (subRow) {
+      subscription = {
+        ...subRow,
+        currentPeriodStart: toIsoOrNull(subRow.currentPeriodStart),
+        currentPeriodEnd: toIsoOrNull(subRow.currentPeriodEnd),
+      };
+    } else if (account.trialSeatActive) {
+      subscription = {
+        status: "TRIALING",
+        tier: account.tier,
+        currentPeriodStart: toIsoOrNull(account.trialStartedAt),
+        currentPeriodEnd: toIsoOrNull(account.trialEndsAt),
+        provider: null,
+        customerId: account.stripeCustomerId || null,
+        billingCycle,
+        stripePriceId: null,
+        stripeSubscriptionId: null,
+      };
+    } else {
+      subscription = {
+        status: "ACTIVE",
+        tier: account.tier,
+        currentPeriodStart: null,
+        currentPeriodEnd: null,
+        provider: null,
+        customerId: account.stripeCustomerId || null,
+        billingCycle,
+        stripePriceId: null,
+        stripeSubscriptionId: null,
+      };
+    }
 
     const stripeConnected = Boolean(account.stripeCustomerId);
     const providerConnected = Boolean(subscription?.provider === "stripe" || account.stripeCustomerId);
     const portalReady = Boolean(account.stripeCustomerId);
     const qwenCoderUsage = userId
-      ? await withBillingDeadline(
+      ? await withSoftTimeout(
           getQwenCoderPopoverState({
             accountId,
             userId,
             planId: currentPlanId,
             sessionId: null,
+          }).catch((error) => {
+            console.error("[billing/summary] qwen usage lookup failed", error);
+            return null;
           }),
-          BILLING_USAGE_AUX_TIMEOUT_MS,
-        ).catch(() => null)
+          1500
+        )
       : null;
 
     return json(
       {
         ok: true,
-        degraded: Boolean(view?.degraded),
         account: {
           ...account,
-          tier:
-            planResolution?.repairedStoredTier
-            ?? String(view?.account.tierEffective || account.tier).toUpperCase(),
+          tier: planResolution.repairedStoredTier ?? account.tier,
           pendingDowngradeAt: toIsoOrNull(account.pendingDowngradeAt),
           pendingDowngradeEffectiveAt: toIsoOrNull(account.pendingDowngradeEffectiveAt),
           lastUpgradeAt: toIsoOrNull(account.lastUpgradeAt),
@@ -332,12 +386,12 @@ export async function GET(req: NextRequest) {
         subscription,
         computed: {
           currentPlanId,
-          planSource: planResolution?.planSource ?? "fallback",
-          authoritative: Boolean(planResolution?.authoritative),
+          planSource: planResolution.planSource,
+          authoritative: planResolution.authoritative,
           seatLimit,
           websiteLimit,
-          seatsUsed: usageMetrics.seatsUsed,
-          websitesUsed: usageMetrics.websitesUsed,
+          seatsUsed: membersCount + invitesCount,
+          websitesUsed: sitesUsed,
           billingCycle,
           providerConnected,
           stripeConnected,
@@ -345,19 +399,13 @@ export async function GET(req: NextRequest) {
         } satisfies SummaryComputedRecord,
         qwenCoderUsage,
       },
-      200,
+      200
     );
   } catch (error) {
     if (isApiAuthError(error) && error.code === "ACCOUNT_CONTEXT_REQUIRED") {
       return json(buildEmptyBillingSummary(), 200);
     }
     if (isApiAuthError(error)) return json({ ok: false, error: error.code, message: error.message }, error.status);
-    if (isBillingRuntimeUnavailableError(error)) {
-      return json(
-        { ok: false, error: "SERVICE_UNAVAILABLE", message: "Billing summary is temporarily unavailable." },
-        503,
-      );
-    }
     return json({ ok: false, error: "BILLING_SUMMARY_FAILED", message: "Failed to load billing summary." }, 500);
   }
 }

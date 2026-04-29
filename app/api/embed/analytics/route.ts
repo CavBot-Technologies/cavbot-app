@@ -4,15 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getEnv } from "@/lib/cavbotApi.server";
 import { verifyEmbedRequest, type EmbedVerifierResult } from "@/lib/security/embedVerifier";
 import { verifyEmbedToken } from "@/lib/security/embedToken";
-import { recordAnalyticsEmbedActivityBestEffort } from "@/lib/security/embedAnalyticsTracker.server";
 import { RateLimitEnv } from "@/rateLimit";
 import { readSanitizedJson } from "@/lib/security/userInput";
-import {
-  canonicalizeWebsiteContextHost,
-  canonicalizeWebsiteContextOrigin,
-  canonicalizeWebsiteContextUrl,
-  originsShareWebsiteContext,
-} from "@/originMatch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,33 +16,26 @@ const NO_STORE_HEADERS: Record<string, string> = {
   Expires: "0",
 };
 
-function corsHeaders(req: NextRequest, origin: string | null) {
-  const requestedHeaders = String(req.headers.get("access-control-request-headers") || "")
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean);
+const INGEST_ALLOWED_HEADERS = [
+  "content-type",
+  "authorization",
+  "x-project-key",
+  "x-cavbot-project-key",
+  "x-cavbot-site",
+  "x-cavbot-site-host",
+  "x-cavbot-site-origin",
+  "x-cavbot-site-public-id",
+  "x-cavbot-sdk-version",
+  "x-cavbot-env",
+].join(",");
 
-  const allowHeaders = Array.from(
-    new Set([
-      "authorization",
-      "content-type",
-      "x-cavbot-env",
-      "x-cavbot-project-key",
-      "x-cavbot-sdk-version",
-      "x-cavbot-site",
-      "x-cavbot-site-host",
-      "x-cavbot-site-origin",
-      "x-cavbot-site-public-id",
-      ...requestedHeaders,
-    ]),
-  ).join(",");
-
+function corsHeaders(origin: string | null) {
   const headers: Record<string, string> = {
     ...NO_STORE_HEADERS,
-    Vary: "Origin, Access-Control-Request-Headers",
+    Vary: "Origin",
     "Access-Control-Allow-Origin": origin || "",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": allowHeaders,
+    "Access-Control-Allow-Methods": "POST,OPTIONS",
+    "Access-Control-Allow-Headers": INGEST_ALLOWED_HEADERS,
     "Access-Control-Max-Age": "86400",
   };
   if (!origin) {
@@ -58,27 +44,44 @@ function corsHeaders(req: NextRequest, origin: string | null) {
   return headers;
 }
 
-export async function OPTIONS(req: NextRequest) {
+function handleOptions(req: NextRequest) {
   const origin = req.headers.get("origin");
   return new NextResponse(null, {
     status: 204,
-    headers: corsHeaders(req, origin),
+    headers: corsHeaders(origin),
   });
+}
+
+function firstClientIp(value: string | null) {
+  return String(value || "")
+    .split(",")[0]
+    .trim()
+    .slice(0, 80);
+}
+
+function forwardedClientIp(req: NextRequest) {
+  return (
+    firstClientIp(req.headers.get("cf-connecting-ip")) ||
+    firstClientIp(req.headers.get("x-forwarded-for")) ||
+    firstClientIp(req.headers.get("x-real-ip"))
+  );
 }
 
 function buildRemoteHeaders(
   req: NextRequest,
-  projectKey: string,
-  serverKey: string | null | undefined,
-  siteOrigin: string
+  payload: Record<string, unknown> | null,
+  verification: Extract<EmbedVerifierResult, { ok: true }>
 ) {
+  const projectKey = verification.projectKey;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    Origin: verification.origin,
+    "X-Cavbot-Project-Id": String(verification.projectId),
+    "X-Cavbot-Verified-Site-Id": verification.siteId,
   };
 
-  const authKey = typeof serverKey === "string" && serverKey ? serverKey : projectKey;
-  if (authKey) {
-    headers["X-Project-Key"] = authKey;
+  if (projectKey) {
+    headers["X-Project-Key"] = projectKey;
   }
   const sdkVersion = req.headers.get("x-cavbot-sdk-version");
   if (sdkVersion) {
@@ -88,9 +91,37 @@ function buildRemoteHeaders(
   if (env) {
     headers["X-Cavbot-Env"] = env;
   }
-
-  headers["X-Cavbot-Site-Host"] = new URL(siteOrigin).host;
-  headers["X-Cavbot-Site-Origin"] = siteOrigin;
+  const siteHost = req.headers.get("x-cavbot-site-host");
+  if (siteHost) {
+    headers["X-Cavbot-Site-Host"] = siteHost;
+  }
+  const siteOrigin = req.headers.get("x-cavbot-site-origin");
+  if (siteOrigin) {
+    headers["X-Cavbot-Site-Origin"] = siteOrigin;
+  }
+  const sitePublicId =
+    (payload?.site && typeof payload.site === "object" && "site_public_id" in payload.site
+      ? String((payload.site as Record<string, unknown>).site_public_id ?? "")
+      : "") || "";
+  const sitePublicIdHeader =
+    sitePublicId ||
+    req.headers.get("x-cavbot-site-public-id") ||
+    req.headers.get("x-cavbot-site") ||
+    "";
+  if (sitePublicIdHeader) {
+    headers["X-Cavbot-Site-Public-Id"] = sitePublicIdHeader;
+  }
+  const adminToken = getEnv().adminToken;
+  if (adminToken) {
+    headers["X-Admin-Token"] = adminToken;
+  }
+  const clientIp = forwardedClientIp(req);
+  if (clientIp) {
+    headers["X-Forwarded-For"] = clientIp;
+    if (adminToken) {
+      headers["X-Cavbot-Forwarded-Client-IP"] = clientIp;
+    }
+  }
 
   return headers;
 }
@@ -112,144 +143,15 @@ function getSiteIdFromPayload(payload: Record<string, unknown> | null, req: Next
   return null;
 }
 
-function rewriteCanonicalSiteContext(
-  value: unknown,
-  canonicalSiteOrigin: string,
-  canonicalSiteId: string
-): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => rewriteCanonicalSiteContext(item, canonicalSiteOrigin, canonicalSiteId));
-  }
-
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-
-  const input = value as Record<string, unknown>;
-  const output: Record<string, unknown> = {};
-
-  for (const [key, raw] of Object.entries(input)) {
-    if (raw == null) {
-      output[key] = raw;
-      continue;
-    }
-
-    if (key === "siteId" || key === "site_id" || key === "site_public_id") {
-      output[key] = canonicalSiteId;
-      continue;
-    }
-
-    if (key === "origin" || key === "siteOrigin" || key === "site_origin") {
-      if (typeof raw === "string") {
-        try {
-          output[key] = canonicalizeWebsiteContextOrigin(raw, canonicalSiteOrigin);
-        } catch {
-          output[key] = raw;
-        }
-      } else {
-        output[key] = raw;
-      }
-      continue;
-    }
-
-    if (key === "host" || key === "siteHost" || key === "site_host" || key === "referrerHost" || key === "referrer_host") {
-      if (typeof raw === "string") {
-        output[key] = canonicalizeWebsiteContextHost(raw, canonicalSiteOrigin);
-      } else {
-        output[key] = raw;
-      }
-      continue;
-    }
-
-    if (
-      key === "url" ||
-      key === "href" ||
-      key === "location" ||
-      key === "pageUrl" ||
-      key === "page_url" ||
-      key === "pageHref" ||
-      key === "page_href" ||
-      key === "canonicalUrl" ||
-      key === "canonical_url" ||
-      key === "currentUrl" ||
-      key === "current_url" ||
-      key === "baseUrl" ||
-      key === "base_url" ||
-      key === "siteUrl" ||
-      key === "site_url"
-    ) {
-      if (typeof raw === "string") {
-        output[key] = canonicalizeWebsiteContextUrl(raw, canonicalSiteOrigin);
-      } else {
-        output[key] = raw;
-      }
-      continue;
-    }
-
-    if (key === "referrer" || key === "referrerUrl" || key === "referrer_url") {
-      if (typeof raw === "string") {
-        output[key] = canonicalizeWebsiteContextUrl(raw, canonicalSiteOrigin);
-      } else {
-        output[key] = raw;
-      }
-      continue;
-    }
-
-    if (key === "site" && raw && typeof raw === "object") {
-      const nextSite = rewriteCanonicalSiteContext(raw, canonicalSiteOrigin, canonicalSiteId);
-      if (nextSite && typeof nextSite === "object" && !Array.isArray(nextSite)) {
-        const siteRecord = nextSite as Record<string, unknown>;
-        siteRecord.site_public_id = canonicalSiteId;
-        if (typeof siteRecord.origin === "string" || !("origin" in siteRecord)) {
-          siteRecord.origin = canonicalSiteOrigin;
-        }
-      }
-      output[key] = nextSite;
-      continue;
-    }
-
-    output[key] = rewriteCanonicalSiteContext(raw, canonicalSiteOrigin, canonicalSiteId);
-  }
-
-  return output;
-}
-
-function stripUpstreamSitePublicIds(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => stripUpstreamSitePublicIds(item));
-  }
-
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-
-  const input = value as Record<string, unknown>;
-  const output: Record<string, unknown> = {};
-
-  for (const [key, raw] of Object.entries(input)) {
-    if (key === "site_public_id" || key === "sitePublicId") {
-      continue;
-    }
-
-    if (key === "site" && raw && typeof raw === "object" && !Array.isArray(raw)) {
-      const nested = stripUpstreamSitePublicIds(raw);
-      if (nested && typeof nested === "object" && !Array.isArray(nested)) {
-        const siteRecord = { ...(nested as Record<string, unknown>) };
-        delete siteRecord.public_id;
-        delete siteRecord.site_public_id;
-        delete siteRecord.sitePublicId;
-        output[key] = siteRecord;
-        continue;
-      }
-    }
-
-    output[key] = stripUpstreamSitePublicIds(raw);
-  }
-
-  return output;
+export async function OPTIONS(req: NextRequest) {
+  return handleOptions(req);
 }
 
 export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
+  if (req.method === "OPTIONS") {
+    return handleOptions(req);
+  }
+
   const payload = (await readSanitizedJson(req, null)) as Record<string, unknown> | null;
 
   const tokenVerification = await verifyEmbedToken({
@@ -262,12 +164,12 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
   if (tokenVerification.ok) {
     verification = tokenVerification;
   } else {
-    verification = await verifyEmbedRequest({ req, env: ctx.env, body: payload });
+    verification = await verifyEmbedRequest({ req, env: ctx.env, body: payload, rateLimit: false });
   }
 
   if (!verification.ok) {
     const origin = verification.origin ?? req.headers.get("origin");
-    const headers = corsHeaders(req, origin);
+    const headers = corsHeaders(origin);
     if (verification.retryAfterSec && verification.retryAfterSec > 0) {
       headers["Retry-After"] = String(verification.retryAfterSec);
     }
@@ -280,25 +182,14 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
     );
   }
 
-  const { baseUrl, secretKey } = getEnv();
+  const { baseUrl } = getEnv();
   const remoteUrl = `${baseUrl}/v1/events`;
-  const responseOrigin = verification.origin ?? req.headers.get("origin");
-  const canonicalSiteOrigin = verification.siteOrigin;
-  const canonicalPayload = rewriteCanonicalSiteContext(payload, canonicalSiteOrigin, verification.siteId) as
-    | Record<string, unknown>
-    | null;
-  const upstreamPayload = stripUpstreamSitePublicIds(canonicalPayload) as Record<string, unknown> | null;
 
   try {
     const response = await fetch(remoteUrl, {
       method: "POST",
-      headers: buildRemoteHeaders(
-        req,
-        verification.projectKey,
-        secretKey,
-        canonicalSiteOrigin
-      ),
-      body: upstreamPayload ? JSON.stringify(upstreamPayload) : undefined,
+      headers: buildRemoteHeaders(req, payload, verification),
+      body: payload ? JSON.stringify(payload) : undefined,
       cache: "no-store",
       credentials: "omit",
       keepalive: true,
@@ -307,56 +198,27 @@ export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
     });
 
     const text = await response.text().catch(() => "");
+    const origin = verification.origin ?? req.headers.get("origin");
     const responseHeaders: Record<string, string> = {
       "Content-Type": response.headers.get("content-type") || "application/json",
-      ...corsHeaders(req, responseOrigin),
+      ...corsHeaders(origin),
     };
     const retryAfter = response.headers.get("Retry-After");
     if (retryAfter) {
       responseHeaders["Retry-After"] = retryAfter;
     }
 
-    const responseBody =
-      response.status === 403 && responseHeaders["Content-Type"].includes("application/json") && text
-        ? (() => {
-            try {
-              const parsed = JSON.parse(text) as Record<string, unknown>;
-              if (
-                typeof parsed.origin === "string" &&
-                originsShareWebsiteContext(parsed.origin, canonicalSiteOrigin)
-              ) {
-                parsed.origin = canonicalSiteOrigin;
-              }
-              return JSON.stringify(parsed);
-            } catch {
-              return text;
-            }
-          })()
-        : text;
-
-      if (response.ok) {
-        await recordAnalyticsEmbedActivityBestEffort({
-          req,
-          accountId: verification.accountId,
-          projectId: verification.projectId,
-          siteId: verification.siteId,
-          origin: canonicalSiteOrigin,
-          siteOrigin: verification.siteOrigin,
-          payload: canonicalPayload,
-          keyLast4: verification.keyLast4,
-        });
-      }
-
-    return new NextResponse(responseBody, {
+    return new NextResponse(text, {
       status: response.status,
       headers: responseHeaders,
     });
   } catch {
+    const origin = verification.origin ?? req.headers.get("origin");
     return NextResponse.json(
       { ok: false, error: "UPSTREAM_ERROR" },
       {
         status: 502,
-        headers: corsHeaders(req, responseOrigin),
+        headers: corsHeaders(origin),
       }
     );
   }

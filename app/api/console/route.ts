@@ -1,11 +1,11 @@
 // app/api/console/route.ts
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import type { SummaryRange } from "@/lib/cavbotApi.server";
-import { CavBotApiError } from "@/lib/cavbotApi.server";
-import { resolveEffectiveAccountIdForSession } from "@/lib/effectiveSessionAccount.server";
-import { getTenantProjectSummary, resolveTenantProjectAccess } from "@/lib/projectSummary.server";
+import { CavBotApiError, getProjectSummaryForTenant } from "@/lib/cavbotApi.server";
+import { resolveProjectAnalyticsAuth } from "@/lib/projectAnalyticsKey.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -118,7 +118,6 @@ export async function GET(req: NextRequest) {
     // MUST be NextRequest so apiAuth can reliably read cookies
     const session = await requireSession(req);
     requireAccountContext(session);
-    const accountId = (await resolveEffectiveAccountIdForSession(session).catch(() => null)) || session.accountId!;
 
     const { searchParams } = req.nextUrl;
     const range = normalizeRange(searchParams.get("range"));
@@ -138,12 +137,42 @@ export async function GET(req: NextRequest) {
     const pid = pidFromQuery ?? pidFromCookie;
 
     const projectSlug = String(searchParams.get("projectSlug") ?? "").trim();
-    const access = await resolveTenantProjectAccess({
-      accountId,
-      projectId: pid,
-      projectSlug,
-    });
-    const project = access.project;
+
+    const project = pid
+      ? await prisma.project.findFirst({
+          where: { id: pid, accountId: session.accountId!, isActive: true },
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            serverKeyEnc: true,
+            serverKeyEncIv: true,
+          },
+        })
+      : projectSlug
+      ? await prisma.project.findFirst({
+          where: { slug: projectSlug, accountId: session.accountId!, isActive: true },
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            serverKeyEnc: true,
+            serverKeyEncIv: true,
+          },
+        })
+      : await prisma.project.findFirst({
+          where: { accountId: session.accountId!, isActive: true },
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            serverKeyEnc: true,
+            serverKeyEncIv: true,
+          },
+        });
+
+    if (!project) return json({ error: "PROJECT_NOT_FOUND" }, 404);
 
     // ===== SITE SCOPING (this is the fix) =====
     // Query params win. If absent, fall back to Command Center cookie pointers for THIS project.
@@ -165,17 +194,19 @@ export async function GET(req: NextRequest) {
     const siteOrigin = siteOriginFromQuery ?? siteOriginFromCookie;
     const siteId = siteIdFromQuery ?? siteIdFromCookie;
 
-    const { summary } = await getTenantProjectSummary({
-      accountId,
+    const analyticsAuth = await resolveProjectAnalyticsAuth(project);
+
+    const out = await getProjectSummaryForTenant({
       projectId: project.id,
-      projectSlug,
       range,
       siteOrigin,
       siteId,
+      projectKey: analyticsAuth.projectKey,
+      adminToken: analyticsAuth.adminToken,
       requestId: `console_${project.id}_${Date.now()}`,
     });
 
-    return json(summary, 200);
+    return json(out, 200);
   } catch (error) {
     const { status, payload } = toPublicError(error);
     return json(payload, status);

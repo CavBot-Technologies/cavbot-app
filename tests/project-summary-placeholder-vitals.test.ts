@@ -27,7 +27,7 @@ test("placeholder vitals zeroes are cleared when no samples exist", () => {
     },
   };
 
-  const normalized = suppressPlaceholderWebVitals(summary as never) as {
+  const normalized = suppressPlaceholderWebVitals(summary as never) as unknown as {
     webVitals: { rollup: { samples: number | null; lcpP75Ms: number | null } };
     metrics: { avgLcpMs: number | null; globalCls: number | null };
   };
@@ -54,7 +54,7 @@ test("real vitals samples are preserved", () => {
     },
   };
 
-  const normalized = suppressPlaceholderWebVitals(summary as never) as {
+  const normalized = suppressPlaceholderWebVitals(summary as never) as unknown as {
     webVitals: { rollup: { samples: number | null; lcpP75Ms: number | null } };
     metrics: { avgLcpMs: number | null };
   };

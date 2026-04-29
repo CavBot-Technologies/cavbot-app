@@ -3179,7 +3179,7 @@ function isPromptLikeText(value: string): boolean {
   if (!text) return false;
   if (text.startsWith("prompt:") || text.startsWith("system prompt:")) return true;
   if (text.includes("here's a prompt") || text.includes("here is a prompt")) return true;
-  if (text.includes("paste this into codex")) return true;
+  if (text.includes("paste this into cavbot") || text.includes("paste this into cavai")) return true;
   if (text.includes("project brief") && text.includes("action steps")) return true;
   if (text.includes("key objectives") && text.includes("deliverables")) return true;
   if (/(^|\n)\s*\*\*project brief[:*]/i.test(text)) return true;

@@ -93,33 +93,6 @@ const HUMAN_RESOURCES_LINKS = [
   },
 ] as const;
 
-const DEVELOPER_LINKS = [
-  {
-    href: "/cavtools",
-    label: "CavTools",
-    sub: "Inspect signals, payloads, and operational tooling",
-    iconSrc: "/icons/app/tools-svgrepo-com.svg",
-  },
-  {
-    href: "/cavcode",
-    label: "CavCode",
-    sub: "Build, repair, and ship code with CavBot",
-    iconSrc: "/icons/app/cavcode/code-svgrepo-com.svg",
-  },
-  {
-    href: "/cavcode-viewer",
-    label: "CavCode Viewer",
-    sub: "Review generated output and implementation previews",
-    iconSrc: "/icons/app/file-blank-svgrepo-com.svg",
-  },
-  {
-    href: "/cavcloud",
-    label: "CavCloud",
-    sub: "Workspace files, assets, and deployment-ready storage",
-    iconSrc: "/icons/app/workspace-svgrepo-com.svg",
-  },
-] as const;
-
 const FOOTER_METRICS_KEY = "/api/system-footer/metrics";
 
 async function fetchFooterMetrics(url: string): Promise<FooterMetricsPayload> {
@@ -189,18 +162,14 @@ function pluralize(value: number, singular: string, plural = `${singular}s`) {
 
 export default function CavbotGlobalFooter() {
   const footerRef = useRef<HTMLElement>(null);
-  const developerButtonRef = useRef<HTMLButtonElement>(null);
-  const developerFirstLinkRef = useRef<HTMLAnchorElement>(null);
-  const lastFocusedElementRef = useRef<HTMLElement | null>(null);
-  const hadDeveloperDialogRef = useRef(false);
   const humanResourcesDetailsRef = useRef<HTMLDetailsElement>(null);
-  const [developerOpen, setDeveloperOpen] = useState(false);
   const [hoverCard, setHoverCard] = useState<FooterCardKey | null>(null);
   const [pinnedCard, setPinnedCard] = useState<FooterCardKey | null>(null);
   const [canHover, setCanHover] = useState(false);
-  const [adminHostRuntime] = useState(() =>
-    typeof window !== "undefined" ? isAdminHost(window.location.host) : false,
-  );
+  const [adminHostRuntime] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return isAdminHost(window.location.host);
+  });
   const systemCardId = useId();
   const apiCardId = useId();
   const destinationCardId = useId();
@@ -257,7 +226,6 @@ export default function CavbotGlobalFooter() {
       if (event.key !== "Escape") return;
       setHoverCard(null);
       setPinnedCard(null);
-      setDeveloperOpen(false);
       if (humanResourcesDetailsRef.current) {
         humanResourcesDetailsRef.current.open = false;
       }
@@ -269,26 +237,6 @@ export default function CavbotGlobalFooter() {
       document.removeEventListener("keydown", onKeyDown);
     };
   }, []);
-
-  useEffect(() => {
-    if (developerOpen) {
-      hadDeveloperDialogRef.current = true;
-      const activeElement =
-        document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      lastFocusedElementRef.current = activeElement;
-      window.setTimeout(() => {
-        developerFirstLinkRef.current?.focus();
-      }, 0);
-      return;
-    }
-    if (!hadDeveloperDialogRef.current) return;
-    hadDeveloperDialogRef.current = false;
-    const nextTarget = lastFocusedElementRef.current ?? developerButtonRef.current;
-    if (nextTarget && document.contains(nextTarget)) {
-      nextTarget.focus();
-    }
-    lastFocusedElementRef.current = null;
-  }, [developerOpen]);
 
   const activeCard = pinnedCard ?? hoverCard;
   const humanResourcesLinks = useMemo(
@@ -468,88 +416,10 @@ export default function CavbotGlobalFooter() {
       <footer className={styles.footer} aria-label="CavBot system footer" ref={footerRef}>
         <div className={styles.inner}>
           <div className={styles.left}>
-            {adminHostRuntime ? (
-              <details ref={humanResourcesDetailsRef} className={styles.developerDisclosure}>
-                <summary className={styles.developerButton} aria-controls="cb-footer-human-resources-panel">
-                  <Image
-                    src="/icons/app/hq/human-resources-svgrepo-com.svg"
-                    alt=""
-                    aria-hidden="true"
-                    width={14}
-                    height={14}
-                    className={styles.developerIcon}
-                    unoptimized
-                  />
-                  <span>Human Resources</span>
-                </summary>
-                <section
-                  id="cb-footer-human-resources-panel"
-                  className={styles.developerPanel}
-                  role="menu"
-                  aria-label="Human resources links"
-                >
-                  <div className={styles.developerHeader}>
-                    <div className={styles.developerTitle}>Human Resources</div>
-                    <button
-                      type="button"
-                      className={styles.developerClose}
-                      aria-label="Close human resources panel"
-                      onClick={() => {
-                        if (humanResourcesDetailsRef.current) {
-                          humanResourcesDetailsRef.current.open = false;
-                        }
-                      }}
-                    >
-                      <span className="cb-closeIcon" aria-hidden="true" />
-                    </button>
-                  </div>
-                  <div className={styles.developerLinks}>
-                    {humanResourcesLinks.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.resolvedHref}
-                        className={styles.developerLink}
-                        onClick={() => {
-                          if (humanResourcesDetailsRef.current) {
-                            humanResourcesDetailsRef.current.open = false;
-                          }
-                        }}
-                      >
-                        <span className={styles.developerLinkIcon} aria-hidden="true">
-                          <Image
-                            src={item.iconSrc}
-                            alt=""
-                            width={15}
-                            height={15}
-                            className={styles.developerLinkIconImage}
-                            unoptimized
-                          />
-                        </span>
-                        <span className={styles.developerLinkBody}>
-                          <span className={styles.developerLinkTitle}>{item.label}</span>
-                          <span className={styles.developerLinkSub}>{item.sub}</span>
-                        </span>
-                      </Link>
-                    ))}
-                  </div>
-                </section>
-              </details>
-            ) : (
-              <button
-                ref={developerButtonRef}
-                type="button"
-                className={styles.developerButton}
-                onClick={() => {
-                  setHoverCard(null);
-                  setPinnedCard(null);
-                  setDeveloperOpen(true);
-                }}
-                aria-haspopup="dialog"
-                aria-expanded={developerOpen ? "true" : "false"}
-                aria-controls="cb-footer-developer-panel"
-              >
+            <details ref={humanResourcesDetailsRef} className={styles.developerDisclosure}>
+              <summary className={styles.developerButton} aria-controls="cb-footer-human-resources-panel">
                 <Image
-                  src="/icons/app/code-svgrepo-com.svg"
+                  src="/icons/app/hq/human-resources-svgrepo-com.svg"
                   alt=""
                   aria-hidden="true"
                   width={14}
@@ -557,9 +427,60 @@ export default function CavbotGlobalFooter() {
                   className={styles.developerIcon}
                   unoptimized
                 />
-                <span>Developers</span>
-              </button>
-            )}
+                <span>Human Resources</span>
+              </summary>
+              <section
+                id="cb-footer-human-resources-panel"
+                className={styles.developerPanel}
+                role="menu"
+                aria-label="Human resources links"
+              >
+                <div className={styles.developerHeader}>
+                  <div className={styles.developerTitle}>Human Resources</div>
+                  <button
+                    type="button"
+                    className={styles.developerClose}
+                    aria-label="Close human resources panel"
+                    onClick={() => {
+                      if (humanResourcesDetailsRef.current) {
+                        humanResourcesDetailsRef.current.open = false;
+                      }
+                    }}
+                  >
+                    <span className="cb-closeIcon" aria-hidden="true" />
+                  </button>
+                </div>
+                <div className={styles.developerLinks}>
+                  {humanResourcesLinks.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.resolvedHref}
+                      className={styles.developerLink}
+                      onClick={() => {
+                        if (humanResourcesDetailsRef.current) {
+                          humanResourcesDetailsRef.current.open = false;
+                        }
+                      }}
+                    >
+                      <span className={styles.developerLinkIcon} aria-hidden="true">
+                        <Image
+                          src={item.iconSrc}
+                          alt=""
+                          width={15}
+                          height={15}
+                          className={styles.developerLinkIconImage}
+                          unoptimized
+                        />
+                      </span>
+                      <span className={styles.developerLinkBody}>
+                        <span className={styles.developerLinkTitle}>{item.label}</span>
+                        <span className={styles.developerLinkSub}>{item.sub}</span>
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            </details>
           </div>
 
           <div className={styles.center} aria-hidden="true" />
@@ -745,57 +666,6 @@ export default function CavbotGlobalFooter() {
           </div>
         </div>
       </footer>
-
-      {!adminHostRuntime && developerOpen ? (
-        <div className={styles.developerOverlay} onClick={() => setDeveloperOpen(false)}>
-          <section
-            id="cb-footer-developer-panel"
-            className={`${styles.developerPanel} ${developerOpen ? styles.developerPanelOpen : ""}`}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Developer links"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className={styles.developerHeader}>
-              <div className={styles.developerTitle}>Developers</div>
-              <button
-                type="button"
-                className={styles.developerClose}
-                aria-label="Close developers panel"
-                onClick={() => setDeveloperOpen(false)}
-              >
-                <span className="cb-closeIcon" aria-hidden="true" />
-              </button>
-            </div>
-            <div className={styles.developerLinks}>
-              {DEVELOPER_LINKS.map((item, index) => (
-                <Link
-                  key={item.href}
-                  ref={index === 0 ? developerFirstLinkRef : undefined}
-                  href={item.href}
-                  className={styles.developerLink}
-                  onClick={() => setDeveloperOpen(false)}
-                >
-                  <span className={styles.developerLinkIcon} aria-hidden="true">
-                    <Image
-                      src={item.iconSrc}
-                      alt=""
-                      width={15}
-                      height={15}
-                      className={styles.developerLinkIconImage}
-                      unoptimized
-                    />
-                  </span>
-                  <span className={styles.developerLinkBody}>
-                    <span className={styles.developerLinkTitle}>{item.label}</span>
-                    <span className={styles.developerLinkSub}>{item.sub}</span>
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </section>
-        </div>
-      ) : null}
     </>
   );
 }

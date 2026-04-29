@@ -1,9 +1,8 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { isApiAuthError } from "@/lib/apiAuth";
+import { isApiAuthError, requireAccountContext, requireSession } from "@/lib/apiAuth";
 import { getLatestPackWithHistory, normalizeOriginStrict } from "@/lib/cavai/packs.server";
-import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,7 +48,8 @@ export async function GET(req: NextRequest) {
   const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
 
   try {
-    const session = await requireWorkspaceResilientSession(req);
+    const session = await requireSession(req);
+    requireAccountContext(session);
 
     const url = new URL(req.url);
     const origin = normalizeOriginStrict(url.searchParams.get("origin"));

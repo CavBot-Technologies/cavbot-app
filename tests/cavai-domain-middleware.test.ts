@@ -15,7 +15,7 @@ function request(url: string, host: string) {
 
 test("production app host /cavai redirects to the ai.cavbot.io canonical URL", async () => {
   const previousNodeEnv = process.env.NODE_ENV;
-  process.env.NODE_ENV = "production";
+  Reflect.set(process.env, "NODE_ENV", "production");
   try {
     const response = await middleware(
       request(
@@ -27,13 +27,13 @@ test("production app host /cavai redirects to the ai.cavbot.io canonical URL", a
     assert.equal(response.status, 308);
     assert.equal(response.headers.get("location"), "https://ai.cavbot.io/");
   } finally {
-    process.env.NODE_ENV = previousNodeEnv;
+    Reflect.set(process.env, "NODE_ENV", previousNodeEnv);
   }
 });
 
 test("production ai.cavbot.io root rewrites into the CavAi workspace page", async () => {
   const previousNodeEnv = process.env.NODE_ENV;
-  process.env.NODE_ENV = "production";
+  Reflect.set(process.env, "NODE_ENV", "production");
   try {
     const response = await middleware(request("https://ai.cavbot.io/", "ai.cavbot.io"));
 
@@ -45,6 +45,6 @@ test("production ai.cavbot.io root rewrites into the CavAi workspace page", asyn
     );
     assert.equal(response.headers.get("location"), null);
   } finally {
-    process.env.NODE_ENV = previousNodeEnv;
+    Reflect.set(process.env, "NODE_ENV", previousNodeEnv);
   }
 });

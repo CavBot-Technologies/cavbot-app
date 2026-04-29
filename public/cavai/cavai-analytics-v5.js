@@ -47,11 +47,11 @@
 
   if (window.__cavbotAnalyticsV5Loaded) return;
   window.__cavbotAnalyticsV5Loaded = true;
-  
+
   if (window.__CAVBOT_EVENTS_ALLOWED__ !== true) {
   return; // do nothing
 }
-  
+
   function inferScriptOrigin() {
     try {
       var src = "";
@@ -82,12 +82,52 @@
     }
   }
 
+  function readScriptAttr(name) {
+    try {
+      var current = document && document.currentScript;
+      if (current && current.getAttribute) {
+        var currentValue = current.getAttribute(name);
+        if (currentValue) return String(currentValue);
+      }
+      if (document && typeof document.getElementsByTagName === "function") {
+        var scripts = document.getElementsByTagName("script") || [];
+        for (var i = scripts.length - 1; i >= 0; i -= 1) {
+          var candidate = scripts[i];
+          if (!candidate || !candidate.getAttribute) continue;
+          var src = candidate.src ? String(candidate.src) : "";
+          if (
+            src.indexOf("/cavai/cavai-analytics-v5.js") === -1 &&
+            src.indexOf("/sdk/v5/cavai-analytics-v5") === -1
+          ) {
+            continue;
+          }
+          var value = candidate.getAttribute(name);
+          if (value) return String(value);
+        }
+      }
+    } catch {}
+    return "";
+  }
+
   const SCRIPT_ORIGIN = inferScriptOrigin();
 const API_URL = window.CAVBOT_API_URL || (SCRIPT_ORIGIN ? SCRIPT_ORIGIN + "/api/embed/analytics" : "https://api.cavbot.io/v1/events");
-  const PROJECT_KEY = window.CAVBOT_PROJECT_KEY || "cavbot_pk_gHn737DTf4afJ2xGpBFzZQ";
+  const PROJECT_KEY =
+    window.CAVBOT_PROJECT_KEY ||
+    readScriptAttr("data-project-key") ||
+    readScriptAttr("data-cavbot-project-key") ||
+    "";
+  if (!PROJECT_KEY) {
+    window.__CAVBOT_EVENTS_ALLOWED__ = false;
+    return;
+  }
 
   // Optional (recommended): set per-site in the snippet. Server can still resolve by host/origin.
-  const SITE_PUBLIC_ID = window.CAVBOT_SITE_PUBLIC_ID || window.CAVBOT_SITE_ID || null;
+  const SITE_PUBLIC_ID =
+    window.CAVBOT_SITE_PUBLIC_ID ||
+    window.CAVBOT_SITE_ID ||
+    readScriptAttr("data-site-id") ||
+    readScriptAttr("data-cavbot-site-id") ||
+    null;
 
   const ANON_KEY = "cavbotAnonId";
   const SESSION_KEY = "cavbotSessionKey";

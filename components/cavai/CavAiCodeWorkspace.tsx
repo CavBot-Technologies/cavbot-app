@@ -20,6 +20,7 @@ import { toReasoningDisplayHelper, toReasoningDisplayLabel } from "@/src/lib/ai/
 import { emitGuardDecision, emitGuardDecisionFromPayload } from "@/src/lib/cavguard/cavGuard.client";
 import { buildCavGuardDecision } from "@/src/lib/cavguard/cavGuard.registry";
 import { track } from "@/lib/cavbotAnalytics";
+import CdnBadgeEyes from "@/components/CdnBadgeEyes";
 import CavAiVoiceOrb, { type CavAiVoiceOrbMode } from "@/components/cavai/CavAiVoiceOrb";
 import { buildCavAiRouteContextPayload, resolveCavAiRouteAwareness } from "@/lib/cavai/pageAwareness";
 import { CAVAI_UPLOAD_FILE_ICON_ASSETS, resolveUploadFileIcon } from "@/lib/cavai/uploadFileIcons";
@@ -4486,6 +4487,9 @@ export default function CavAiCodeWorkspace(props: CavAiCodeWorkspaceProps) {
     >
       <header className={styles.header}>
         <div className={styles.titleWrap}>
+          <span className={styles.titleBadge}>
+            <CdnBadgeEyes />
+          </span>
           <div className={styles.title}>
             <span>CAVEN</span>
           </div>

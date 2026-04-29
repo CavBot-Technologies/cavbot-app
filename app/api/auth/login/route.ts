@@ -585,8 +585,8 @@ export async function POST(req: Request) {
       return res;
     });
   } catch (error) {
-    console.error("[auth/login] unexpected failure", error);
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
+    console.error("[auth/login] unexpected failure", error);
     return json({ ok: false, error: "login_failed" }, 500);
   }
 }

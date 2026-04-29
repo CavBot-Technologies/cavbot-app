@@ -6,7 +6,7 @@ import {
   buildCanonicalCavAiUrl,
   buildCanonicalCavAiUrlFromSearchParams,
   buildCavAiPageSearchParamsFromRoot,
-} from "../lib/cavai/url.ts";
+} from "../lib/cavai/url";
 
 test("canonical CavAi workspace URL collapses to ai.cavbot.io root", () => {
   assert.equal(

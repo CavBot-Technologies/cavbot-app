@@ -188,8 +188,10 @@ function buildHeaders(opts?: {
   const requireAdmin = Boolean(opts?.requireAdmin);
   const requireProjectKey = Boolean(opts?.requireProjectKey);
 
-  const projectKey = (opts?.projectKey ?? envv.secretKey) || "";
-  const adminToken = (opts?.adminToken ?? envv.adminToken) || "";
+  const explicitProjectKey = typeof opts?.projectKey === "string";
+  const explicitAdminToken = typeof opts?.adminToken === "string" && opts.adminToken.length > 0;
+  const projectKey = (explicitProjectKey ? opts.projectKey : envv.secretKey) || "";
+  const adminToken = (explicitAdminToken ? opts.adminToken : requireAdmin ? envv.adminToken : "") || "";
 
   if (requireAdmin && !adminToken) {
     throw new CavBotApiConfigError(
@@ -197,9 +199,9 @@ function buildHeaders(opts?: {
     );
   }
 
-  if (requireProjectKey && !projectKey) {
+  if (requireProjectKey && !projectKey && !adminToken) {
     throw new CavBotApiConfigError(
-      "Missing project key (CAVBOT_PROJECT_KEY/CAVBOT_SECRET_KEY or per-request projectKey override)."
+      "Missing project key/admin token (CAVBOT_PROJECT_KEY/CAVBOT_SECRET_KEY, CAVBOT_ADMIN_TOKEN, or per-request auth override)."
     );
   }
 
@@ -212,7 +214,7 @@ function buildHeaders(opts?: {
   if (projectKey) headers["X-Project-Key"] = projectKey;
 
   // Admin auth (server-to-server)
-  if (requireAdmin && adminToken) headers["X-Admin-Token"] = adminToken;
+  if ((requireAdmin || explicitAdminToken) && adminToken) headers["X-Admin-Token"] = adminToken;
 
   // Telemetry / trace
   if (envv.runtimeEnv) headers["X-Cavbot-Env"] = envv.runtimeEnv;
@@ -276,7 +278,6 @@ export async function getProjectSummary(
   options?: SummaryOptions
 ): Promise<ProjectSummary> {
   const { baseUrl } = getEnv();
-  const useAdminAuth = Boolean(options?.auth?.adminToken);
 
   const url = withQuery(`${baseUrl}/v1/projects/${String(projectId)}/summary`, {
     range: options?.range,
@@ -287,8 +288,7 @@ export async function getProjectSummary(
   const res = await fetchWithTimeout(url, {
     method: "GET",
     headers: buildHeaders({
-      requireAdmin: useAdminAuth,
-      requireProjectKey: !useAdminAuth,
+      requireProjectKey: true,
       projectKey: options?.auth?.projectKey,
       adminToken: options?.auth?.adminToken,
       requestId: options?.auth?.requestId,
@@ -302,7 +302,7 @@ export async function getProjectSummary(
     throw new CavBotApiError(
       errorMessage("Failed to load summary", res.status, body),
       res.status,
-      body?.code,
+      body?.code || body?.error,
       reqId
     );
   }
@@ -327,11 +327,7 @@ export async function getProjectSummaryForTenant(input: {
     range: input.range,
     siteId: input.siteId,
     siteOrigin: input.siteOrigin,
-    auth: {
-      projectKey: input.projectKey,
-      adminToken: input.adminToken,
-      requestId: input.requestId,
-    },
+    auth: { projectKey: input.projectKey ?? "", adminToken: input.adminToken, requestId: input.requestId },
   });
 }
 

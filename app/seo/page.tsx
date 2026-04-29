@@ -9,9 +9,7 @@ import { gateModuleAccess } from "@/lib/moduleGate.server";
 import LockedModule from "@/components/LockedModule";
 import AppShell from "@/components/AppShell";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
-import { readWorkspace } from "@/lib/workspaceStore.server";
-import type { WorkspacePayload } from "@/lib/workspaceStore.server";
-import { getTenantProjectSummary } from "@/lib/projectSummary.server";
+import { resolveAnalyticsConsoleContext } from "@/lib/analyticsConsole.server";
 import {
   generateSeoActions,
   medianSeoScore,
@@ -29,8 +27,7 @@ import {
   faviconSourceLabel,
   type FaviconIntelligenceResult,
 } from "@/lib/seo/faviconIntelligence";
-import { fetchLiveMetadataSnapshot, type LiveMetadataSnapshot } from "@/lib/seo/liveMetadata";
-import { fetchSiteWebVitalsRollup } from "@/lib/webVitals.server";
+import { fetchLiveMetadataSnapshot } from "@/lib/seo/liveMetadata";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,30 +36,9 @@ type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-type SearchParamBag = Record<string, string | string[] | undefined>;
-
 type RangeKey = "24h" | "7d" | "14d" | "30d";
-const SEO_RENDER_TIMEOUT_MS = 2_500;
-const SEO_SUMMARY_TIMEOUT_MS = 8_000;
 
 type UnknownRecord = Record<string, unknown>;
-
-async function withSeoDeadline<T>(
-  promise: Promise<T>,
-  timeoutMs = SEO_RENDER_TIMEOUT_MS,
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error("SEO_RENDER_TIMEOUT")), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
 
 function asRecord(value: unknown): UnknownRecord | null {
   return value && typeof value === "object" ? (value as UnknownRecord) : null;
@@ -116,55 +92,7 @@ function firstArray(...values: unknown[]): unknown[] | null {
   return null;
 }
 
-function firstCollectionRecord(value: unknown): UnknownRecord | null {
-  const arr = asArray(value);
-  if (arr?.length) {
-    for (const item of arr) {
-      const rec = asRecord(item);
-      if (rec) return rec;
-    }
-    return null;
-  }
-  return asRecord(value);
-}
-
-type SeoWorkspace = WorkspacePayload & {
-  // Some pages/components have historically stored selection pointers here.
-  // Keep these additive without narrowing WorkspacePayload (avoid TS incompatibilities).
-  selection?: { activeSiteOrigin?: string | null } | null;
-  activeSite?: { origin?: string | null } | null;
-  project?: { id?: number | string | null } | null;
-};
-
-/* =========================
-  Shared helpers (match Errors)
-  ========================= */
-function canonicalOrigin(input: string) {
-  const s = String(input || "").trim();
-  if (!s) return "";
-  const withScheme = /^https?:\/\//i.test(s) ? s : `https://${s.replace(/^\/\//, "")}`;
-  try {
-    return new URL(withScheme).origin;
-  } catch {
-    return "";
-  }
-}
-
-function toSlug(v: string) {
-  return (
-    String(v || "")
-      .toLowerCase()
-      .trim()
-      .replace(/^https?:\/\//, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "")
-      .slice(0, 63) || "site"
-  );
-}
-
 function nOrNull(x: unknown) {
-  if (x == null) return null;
-  if (typeof x === "string" && !x.trim()) return null;
   const v = Number(x);
   return Number.isFinite(v) ? v : null;
 }
@@ -189,21 +117,31 @@ function fmtCls(v: unknown) {
   if (x == null) return "—";
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(x);
 }
-function normalizeMsVitalMetric(v: unknown) {
+function normalizeVitalMetric(v: unknown) {
   const x = nOrNull(v);
   if (x == null) return null;
   return x > 0 ? x : null;
 }
-function normalizeClsVitalMetric(v: unknown) {
-  const x = nOrNull(v);
-  if (x == null) return null;
-  return x >= 0 ? x : null;
-}
 function fmtVitalMs(v: unknown) {
-  return fmtMs(normalizeMsVitalMetric(v));
+  return fmtMs(normalizeVitalMetric(v));
 }
 function fmtVitalCls(v: unknown) {
-  return fmtCls(normalizeClsVitalMetric(v));
+  return fmtCls(normalizeVitalMetric(v));
+}
+function fmtVitalDisplay(v: number | null, formatter: (value: number) => string) {
+  return v == null ? "Collecting" : formatter(v);
+}
+
+function faviconStatusLabel(value: string) {
+  if (value === "ok") return "OK";
+  if (value === "warn") return "Review";
+  return "Broken";
+}
+
+function faviconStatusTone(value: string): "good" | "warn" | "bad" {
+  if (value === "ok") return "good";
+  if (value === "warn") return "warn";
+  return "bad";
 }
 
 function toHostPath(raw: string) {
@@ -223,113 +161,6 @@ function nonEmptyText(value: unknown): string | null {
   if (!text) return null;
   const cleaned = text.trim();
   return cleaned ? cleaned : null;
-}
-
-function firstSearchParam(params: SearchParamBag | null | undefined, ...keys: string[]): string {
-  if (!params) return "";
-  for (const key of keys) {
-    const raw = params[key];
-    if (typeof raw === "string" && raw.trim()) return raw.trim();
-    if (Array.isArray(raw)) {
-      const hit = raw.find((entry) => typeof entry === "string" && entry.trim());
-      if (typeof hit === "string" && hit.trim()) return hit.trim();
-    }
-  }
-  return "";
-}
-
-function pagePathFromUrl(raw: string | null | undefined): string | null {
-  const value = String(raw || "").trim();
-  if (!value) return null;
-  try {
-    const parsed = new URL(/^https?:\/\//i.test(value) ? value : `https://${value.replace(/^\/\//, "")}`);
-    return parsed.pathname || "/";
-  } catch {
-    return value.startsWith("/") ? value : null;
-  }
-}
-
-type ClientTarget = { id: string; label?: string | null; origin: string };
-
-function resolveSiteLabel(t: ClientTarget) {
-  if (t.label && String(t.label).trim()) return String(t.label).trim();
-  const s = String(t.id || "").replace(/-/g, " ").trim();
-  if (s) return s.replace(/\b\w/g, (m) => m.toUpperCase());
-  try {
-    const u = new URL(t.origin);
-    return u.hostname;
-  } catch {
-    return "Site";
-  }
-}
-
-function normalizeTargets(raw: unknown): ClientTarget[] {
-  const roots: UnknownRecord[] = [];
-  const push = (x: unknown) => {
-    const rec = asRecord(x);
-    if (rec) roots.push(rec);
-  };
-
-  const rawRecord = asRecord(raw);
-  push(rawRecord);
-  push(rawRecord?.workspace);
-  push(rawRecord?.commandDeck);
-  push(rawRecord?.deck);
-  push(rawRecord?.data);
-  push(rawRecord?.state);
-  push(rawRecord?.project);
-  push(rawRecord?.account);
-  push(rawRecord?.payload);
-
-  const keys = ["targets", "sites", "monitoredSites", "origins", "monitoredOrigins", "sitesList", "targetsList"];
-
-  for (const r of roots) {
-    for (const k of keys) {
-      const v = r?.[k];
-      if (!Array.isArray(v) || !v.length) continue;
-
-      const out: ClientTarget[] = [];
-      const seen = new Set<string>();
-
-      for (const item of v) {
-        let origin = "";
-        let id = "";
-        let label: string | null = null;
-
-        if (typeof item === "string") {
-          origin = canonicalOrigin(item);
-          id = toSlug(origin || item);
-        } else {
-          const entry = asRecord(item);
-          if (entry) {
-            const rawOrigin =
-              firstString(entry, "origin", "url", "siteOrigin", "href", "baseUrl", "website", "primaryOrigin") || "";
-            origin = canonicalOrigin(rawOrigin);
-            id = toSlug(
-              firstString(entry, "slug", "id") ||
-                origin ||
-                "site"
-            );
-            label =
-              firstString(entry, "label") ||
-              firstString(entry, "name") ||
-              firstString(entry, "displayName") ||
-              firstString(entry, "title");
-          }
-        }
-
-        if (!origin) continue;
-        if (seen.has(origin)) continue;
-        seen.add(origin);
-
-        out.push({ id, origin, label });
-      }
-
-      return out;
-    }
-  }
-
-  return [];
 }
 
 /* =========================
@@ -554,22 +385,17 @@ type VitalsPayload = {
 
 function normalizeVitalsFromSummary(summary: unknown): VitalsPayload {
   const summaryRecord = asRecord(summary);
-  const performanceRecord = firstCollectionRecord(summaryRecord?.performance);
-  const guardianRecord = firstCollectionRecord(summaryRecord?.guardian);
-  const diagnosticsRecord = firstCollectionRecord(summaryRecord?.diagnostics);
-  const metricsRecord = asRecord(summaryRecord?.metrics);
   const v = firstRecord(
     summaryRecord?.webVitals,
     summaryRecord?.vitals,
-    performanceRecord?.vitals,
-    performanceRecord?.webVitals,
-    guardianRecord?.vitals,
-    diagnosticsRecord?.vitals,
-    metricsRecord?.webVitals,
+    firstRecord(summaryRecord?.performance)?.vitals,
+    firstRecord(summaryRecord?.performance)?.webVitals,
+    firstRecord(summaryRecord?.guardian)?.vitals,
+    firstRecord(summaryRecord?.diagnostics)?.vitals,
     null
   );
 
-  const r = firstRecord(v?.rollup, v?.summary, v?.p75, v, metricsRecord) ?? null;
+  const r = firstRecord(v?.rollup, v?.summary, v?.p75, v) ?? null;
 
   const updatedAtISO =
     v?.updatedAtISO != null
@@ -578,136 +404,16 @@ function normalizeVitalsFromSummary(summary: unknown): VitalsPayload {
       ? String(v.updatedAt)
       : firstString(summaryRecord, "updatedAtISO");
 
-  const normalized = {
+  return {
     updatedAtISO: updatedAtISO || null,
     samples: nOrNull(r?.samples ?? r?.n ?? r?.observations ?? r?.pagesObserved),
 
-    lcpP75Ms: nOrNull(r?.lcpP75Ms ?? r?.lcp_p75_ms ?? r?.lcpP75 ?? r?.lcpMs ?? metricsRecord?.avgLcpMs),
+    lcpP75Ms: nOrNull(r?.lcpP75Ms ?? r?.lcp_p75_ms ?? r?.lcpP75 ?? r?.lcpMs),
     inpP75Ms: nOrNull(r?.inpP75Ms ?? r?.inp_p75_ms ?? r?.inpP75 ?? r?.inpMs),
-    clsP75: nOrNull(r?.clsP75 ?? r?.cls_p75 ?? r?.cls ?? metricsRecord?.globalCls),
+    clsP75: nOrNull(r?.clsP75 ?? r?.cls_p75 ?? r?.cls),
     fcpP75Ms: nOrNull(r?.fcpP75Ms ?? r?.fcp_p75_ms ?? r?.fcpP75 ?? r?.fcpMs),
-    ttfbP75Ms: nOrNull(r?.ttfbP75Ms ?? r?.ttfb_p75_ms ?? r?.ttfbP75 ?? r?.ttfbMs ?? metricsRecord?.ttfbP75Ms),
+    ttfbP75Ms: nOrNull(r?.ttfbP75Ms ?? r?.ttfb_p75_ms ?? r?.ttfbP75 ?? r?.ttfbMs),
   };
-
-  const noSamples = normalized.samples == null || normalized.samples <= 0;
-  const allPlaceholder = [
-    normalized.lcpP75Ms,
-    normalized.inpP75Ms,
-    normalized.clsP75,
-    normalized.fcpP75Ms,
-    normalized.ttfbP75Ms,
-  ].every((value) => value == null || value === 0);
-
-  if (noSamples && allPlaceholder) {
-    normalized.samples = null;
-    normalized.lcpP75Ms = null;
-    normalized.inpP75Ms = null;
-    normalized.clsP75 = null;
-    normalized.fcpP75Ms = null;
-    normalized.ttfbP75Ms = null;
-  }
-
-  return normalized;
-}
-
-function mergeVitalsPayload(base: VitalsPayload, fallback: Partial<VitalsPayload> | null | undefined): VitalsPayload {
-  if (!fallback) return base;
-  return {
-    updatedAtISO: nonEmptyText(base.updatedAtISO) || nonEmptyText(fallback.updatedAtISO) || null,
-    samples: nOrNull(base.samples) ?? nOrNull(fallback.samples),
-    lcpP75Ms: normalizeMsVitalMetric(base.lcpP75Ms) ?? normalizeMsVitalMetric(fallback.lcpP75Ms),
-    inpP75Ms: normalizeMsVitalMetric(base.inpP75Ms) ?? normalizeMsVitalMetric(fallback.inpP75Ms),
-    clsP75: normalizeClsVitalMetric(base.clsP75) ?? normalizeClsVitalMetric(fallback.clsP75),
-    fcpP75Ms: normalizeMsVitalMetric(base.fcpP75Ms) ?? normalizeMsVitalMetric(fallback.fcpP75Ms),
-    ttfbP75Ms: normalizeMsVitalMetric(base.ttfbP75Ms) ?? normalizeMsVitalMetric(fallback.ttfbP75Ms),
-  };
-}
-
-function needsLiveVitalsFallback(vitals: VitalsPayload): boolean {
-  const hasPositiveMs = [vitals.lcpP75Ms, vitals.inpP75Ms, vitals.fcpP75Ms, vitals.ttfbP75Ms].some(
-    (value) => (nOrNull(value) ?? 0) > 0,
-  );
-  const clsValue = normalizeClsVitalMetric(vitals.clsP75);
-  if (hasPositiveMs) return false;
-  if (clsValue != null && (nOrNull(vitals.samples) ?? 0) <= 0) return false;
-  return true;
-}
-
-function mergeSeoPageRowWithLiveMetadata(
-  row: SeoPageRow | null,
-  liveMetadata: LiveMetadataSnapshot | null,
-  activeSiteOrigin: string,
-): SeoPageRow | null {
-  if (!row && !liveMetadata) return null;
-
-  const livePath = pagePathFromUrl(liveMetadata?.pageUrl) || "/";
-  const liveOrigin = canonicalOrigin(liveMetadata?.pageUrl || activeSiteOrigin || "");
-  const mergedSchemaTypes = [
-    ...new Set([...(row?.schemaTypes || []), ...(liveMetadata?.schemaTypes || [])].filter((value) => value && value.trim())),
-  ];
-  const robots = nonEmptyText(row?.robots) || nonEmptyText(liveMetadata?.robots) || null;
-  const noindex = row?.noindex ?? (robots ? /\bnoindex\b/i.test(robots) : null);
-  const nofollow = row?.nofollow ?? (robots ? /\bnofollow\b/i.test(robots) : null);
-
-  return {
-    urlPath: nonEmptyText(row?.urlPath) || livePath,
-    origin: nonEmptyText(row?.origin) || liveOrigin || activeSiteOrigin || null,
-    title: nonEmptyText(row?.title) || nonEmptyText(liveMetadata?.title) || null,
-    metaDescription: nonEmptyText(row?.metaDescription) || nonEmptyText(liveMetadata?.description) || null,
-    canonical: nonEmptyText(row?.canonical) || nonEmptyText(liveMetadata?.canonical) || nonEmptyText(liveMetadata?.pageUrl) || null,
-    robots,
-    noindex,
-    nofollow,
-    h1Count: nOrNull(row?.h1Count) ?? nOrNull(liveMetadata?.h1Count),
-    wordCount: nOrNull(row?.wordCount) ?? nOrNull(liveMetadata?.wordCount),
-    updatedAtISO: nonEmptyText(row?.updatedAtISO) || null,
-    issues: row?.issues?.length ? row.issues : null,
-    ogTitle: nonEmptyText(row?.ogTitle) || null,
-    ogDescription: nonEmptyText(row?.ogDescription) || null,
-    ogImage: nonEmptyText(row?.ogImage) || null,
-    jsonLdCount: nOrNull(row?.jsonLdCount) ?? nOrNull(liveMetadata?.jsonLdCount),
-    schemaTypes: mergedSchemaTypes.length ? mergedSchemaTypes.slice(0, 12) : null,
-    htmlLang: nonEmptyText(row?.htmlLang) || nonEmptyText(liveMetadata?.htmlLang) || null,
-  };
-}
-
-function buildSeoAuditPages(
-  rows: SeoPageRow[] | null | undefined,
-  liveMetadata: LiveMetadataSnapshot | null,
-  activeSiteOrigin: string,
-): SeoPageRow[] {
-  const baseRows = Array.isArray(rows) ? rows.slice() : [];
-  if (!liveMetadata) return baseRows;
-
-  const livePath = pagePathFromUrl(liveMetadata.pageUrl) || "/";
-  const matchIndex = baseRows.findIndex((row) => {
-    const rowOrigin = canonicalOrigin(row.origin || activeSiteOrigin || "");
-    const rowPath = pagePathFromUrl(row.urlPath) || row.urlPath || "/";
-    return (!rowOrigin || !activeSiteOrigin || rowOrigin === activeSiteOrigin) && rowPath === livePath;
-  });
-
-  if (matchIndex >= 0) {
-    const merged = mergeSeoPageRowWithLiveMetadata(baseRows[matchIndex], liveMetadata, activeSiteOrigin);
-    if (merged) baseRows[matchIndex] = merged;
-    return baseRows;
-  }
-
-  const fallbackRow = mergeSeoPageRowWithLiveMetadata(null, liveMetadata, activeSiteOrigin);
-  return fallbackRow ? [fallbackRow, ...baseRows] : baseRows;
-}
-
-function hasRenderableAuditData(rows: SeoPageRow[]): boolean {
-  return rows.some(
-    (row) =>
-      Boolean(
-        nonEmptyText(row.title) ||
-          nonEmptyText(row.metaDescription) ||
-          nonEmptyText(row.canonical) ||
-          nonEmptyText(row.robots) ||
-          (nOrNull(row.h1Count) ?? 0) > 0 ||
-          (nOrNull(row.wordCount) ?? 0) > 0,
-      ),
-  );
 }
 
 /* =========================
@@ -778,44 +484,16 @@ function postureLabel(seo: SeoPayload): { label: string; tone: Tone } {
 
 function issueChips(row: SeoPageRow) {
   const chips: string[] = [];
-  const title = nonEmptyText(row.title);
-  const description = nonEmptyText(row.metaDescription);
-  const canonical = nonEmptyText(row.canonical);
-  const h1Count = nOrNull(row.h1Count) ?? 0;
-  const wordCount = nOrNull(row.wordCount) ?? 0;
-  const jsonLdCount = nOrNull(row.jsonLdCount) ?? 0;
-  const schemaTypes = new Set((row.schemaTypes || []).map((value) => value.toLowerCase()));
-
-  if (!title) chips.push("Missing title");
-  if (!description) chips.push("Missing description");
-  if (!canonical) chips.push("Missing canonical");
+  if (!row.title) chips.push("Missing title");
+  if (!row.metaDescription) chips.push("Missing description");
+  if (!row.canonical) chips.push("Missing canonical");
   if (row.noindex) chips.push("NoIndex");
   if (row.nofollow) chips.push("NoFollow");
-  if (h1Count === 0) chips.push("Missing H1");
-  if (h1Count > 1) chips.push("Multiple H1");
-  if (wordCount > 0 && wordCount < 200) chips.push("Thin content");
-
-  if (Array.isArray(row.issues)) {
-    for (const rawIssue of row.issues) {
-      const issue = String(rawIssue || "").trim();
-      const lower = issue.toLowerCase();
-      if (!issue) continue;
-      if (title && lower.includes("missing title")) continue;
-      if (description && lower.includes("missing description")) continue;
-      if (canonical && lower.includes("missing canonical")) continue;
-      if (h1Count > 0 && lower.includes("missing h1")) continue;
-      if (h1Count <= 1 && lower.includes("multiple h1")) continue;
-      if (wordCount >= 200 && (lower.includes("thin content") || lower.includes("keyword data insufficient"))) continue;
-      if (jsonLdCount > 0 && lower.includes("missing structured data")) continue;
-      if (jsonLdCount > 0 && lower.includes("missing organization schema")) continue;
-      if (jsonLdCount > 0 && lower.includes("missing website schema")) continue;
-      if (schemaTypes.has("organization") && lower.includes("missing organization schema")) continue;
-      if (schemaTypes.has("website") && lower.includes("missing website schema")) continue;
-      chips.push(issue);
-    }
-  }
-
-  return Array.from(new Set(chips)).slice(0, 8);
+  if ((row.h1Count ?? 0) === 0) chips.push("Missing H1");
+  if ((row.h1Count ?? 0) > 1) chips.push("Multiple H1");
+  if ((row.wordCount ?? 0) > 0 && (row.wordCount ?? 0) < 200) chips.push("Thin content");
+  if (Array.isArray(row.issues)) chips.push(...row.issues.slice(0, 6));
+  return chips.slice(0, 8);
 }
 
 export default async function SeoPage({ searchParams }: PageProps) {
@@ -827,9 +505,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
     headers: new Headers(requestHeaders),
   });
 
-  const gatePromise = gateModuleAccess(req, "seo");
-  const workspacePromise = withSeoDeadline(readWorkspace(), 2_500).catch(() => null);
-  const gate = await gatePromise;
+  const gate = await gateModuleAccess(req, "seo");
 
   if (!gate.ok) {
     return (
@@ -843,109 +519,44 @@ export default async function SeoPage({ searchParams }: PageProps) {
     );
   }
 
-  const range = (firstSearchParam(sp, "range") || "24h") as RangeKey;
+  const range = (typeof sp?.range === "string" ? sp.range : "24h") as RangeKey;
 
-  const ws = (await workspacePromise) as SeoWorkspace | null;
-
-  const targets = normalizeTargets(ws);
-  const sites = targets.map((t) => ({ id: t.id, label: resolveSiteLabel(t), url: t.origin }));
-  const queryProjectId = firstSearchParam(sp, "projectId", "project");
-  const querySiteId = firstSearchParam(sp, "siteId");
-  const querySiteOrigin =
-    canonicalOrigin(firstSearchParam(sp, "siteOrigin", "origin")) ||
-    canonicalOrigin(firstSearchParam(sp, "site")) ||
-    "";
-
-  const wsActiveOrigin =
-    canonicalOrigin(
-      ws?.activeSiteOrigin ||
-        ws?.selection?.activeSiteOrigin ||
-        ws?.activeSite?.origin ||
-        ws?.workspace?.activeSiteOrigin ||
-        ""
-    ) || "";
-
-  const siteById = querySiteId ? sites.find((s) => s.id === querySiteId) || null : null;
-  const siteByOrigin = querySiteOrigin ? sites.find((s) => s.url === querySiteOrigin) || null : null;
-  const siteByWorkspace = !querySiteId && !querySiteOrigin && wsActiveOrigin ? sites.find((s) => s.url === wsActiveOrigin) || null : null;
-  const fallbackQuerySite =
-    querySiteOrigin
-      ? {
-          id: querySiteId || toSlug(querySiteOrigin),
-          label: resolveSiteLabel({ id: querySiteId || toSlug(querySiteOrigin), origin: querySiteOrigin }),
-          url: querySiteOrigin,
-        }
-      : null;
-
-  const activeSite =
-    siteById ||
-    siteByOrigin ||
-    siteByWorkspace ||
-    fallbackQuerySite ||
-    sites[0] ||
-    { id: "none", label: "No site selected", url: "" };
-  const activeSiteId = siteById?.id || siteByOrigin?.id || siteByWorkspace?.id || (querySiteId || null);
-  const activeSiteOrigin = activeSite.url || querySiteOrigin || "";
-
-  const projectId = String(queryProjectId || ws?.projectId || ws?.project?.id || ws?.account?.projectId || "1");
-
+  const analyticsContext = await resolveAnalyticsConsoleContext({
+    searchParams: sp,
+    defaultRange: range,
+    pathname: "/seo",
+  });
+  const sites = analyticsContext.sites;
+  const activeSite = analyticsContext.activeSite;
+  const projectId = analyticsContext.projectId;
   let summary: unknown = null;
   let seo: SeoPayload = {};
   let vitals: VitalsPayload = {};
   let favicon: FaviconIntelligenceResult | null = null;
-  let liveMetadata: LiveMetadataSnapshot | null = null;
+  let liveMetadata: Awaited<ReturnType<typeof fetchLiveMetadataSnapshot>> = null;
 
-  const liveMetadataPromise = withSeoDeadline(
-    fetchLiveMetadataSnapshot({
-      url: activeSiteOrigin || "",
-    }),
-  ).catch(() => null);
-
-  try {
-    const summaryResult = await withSeoDeadline(
-      getTenantProjectSummary({
-        projectId,
-        range,
-        siteId: activeSiteId || undefined,
-        siteOrigin: activeSiteOrigin || undefined,
-      }),
-      SEO_SUMMARY_TIMEOUT_MS,
-    );
-    const { summary: loadedSummary } = summaryResult;
-    summary = loadedSummary;
+  if (analyticsContext.summary) {
+    summary = analyticsContext.summary;
     seo = normalizeSeoFromSummary(summary);
     vitals = normalizeVitalsFromSummary(summary);
+  }
+
+  try {
+    favicon = await buildFaviconIntelligence({
+      origin: activeSite.url || "",
+      summary,
+    });
   } catch {
-    summary = null;
-    seo = {};
-    vitals = {};
+    favicon = null;
   }
 
-  const [faviconResult, liveMetadataResult] = await Promise.all([
-    withSeoDeadline(
-      buildFaviconIntelligence({
-        origin: activeSiteOrigin || "",
-        summary,
-      }),
-    ).catch(() => null),
-    liveMetadataPromise,
-  ]);
-  favicon = faviconResult;
-  liveMetadata = liveMetadataResult;
-
-  if (needsLiveVitalsFallback(vitals) && activeSiteId) {
-    const directVitals = await withSeoDeadline(
-      fetchSiteWebVitalsRollup({
-        siteId: activeSiteId,
-        range,
-      }),
-      2_500,
-    ).catch(() => null);
-    vitals = mergeVitalsPayload(vitals, directVitals);
+  try {
+    liveMetadata = await fetchLiveMetadataSnapshot({
+      origin: activeSite.url || "",
+    });
+  } catch {
+    liveMetadata = null;
   }
-
-  const auditPages = buildSeoAuditPages(seo.pages || [], liveMetadata, activeSiteOrigin);
-  seo.pages = auditPages;
 
   const updatedAtISO = seo.updatedAtISO || vitals.updatedAtISO || null;
   const updatedAtLabel = updatedAtISO ? String(updatedAtISO).replace("T", " ").replace("Z", " UTC").slice(0, 19) : "—";
@@ -955,9 +566,8 @@ export default async function SeoPage({ searchParams }: PageProps) {
     p.set("module", "seo");
     p.set("projectId", projectId);
     p.set("range", next.range || range);
-    const siteId = next.site || activeSiteId || activeSite.id;
+    const siteId = next.site || activeSite.id;
     if (siteId && siteId !== "none") p.set("siteId", siteId);
-    if (activeSiteOrigin) p.set("origin", activeSiteOrigin);
     const s = p.toString();
     return s ? `?${s}` : "";
   }
@@ -966,14 +576,14 @@ export default async function SeoPage({ searchParams }: PageProps) {
 
   const LIVE_TZ = "America/Los_Angeles";
 
-  const pages = auditPages.slice(0, 28);
-  const scoredPages = scoreSeoPages(auditPages);
+  const pages = (seo.pages || []).slice(0, 28);
+  const scoredPages = scoreSeoPages(seo.pages || []);
   const siteSeoScore = medianSeoScore(scoredPages);
   const topBadPages = worstPages(scoredPages, 8);
 
   const actions = generateSeoActions({
     seo,
-    pages: auditPages,
+    pages: seo.pages || [],
     scoredPages,
     vitals: {
       samples: vitals.samples ?? null,
@@ -981,7 +591,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
       inpP75Ms: vitals.inpP75Ms ?? null,
       clsP75: vitals.clsP75 ?? null,
     },
-    siteOrigin: activeSiteOrigin || null,
+    siteOrigin: activeSite.url || null,
     favicon,
   });
 
@@ -1001,26 +611,26 @@ export default async function SeoPage({ searchParams }: PageProps) {
   const multiH1Tone = toneFromIssuePct(seo.multipleH1Pct ?? null);
   const thinTone = toneFromIssuePct(seo.thinContentPct ?? null);
 
-  const lcpVital = normalizeMsVitalMetric(vitals.lcpP75Ms);
-  const inpVital = normalizeMsVitalMetric(vitals.inpP75Ms);
-  const clsVital = normalizeClsVitalMetric(vitals.clsP75);
-  const fcpVital = normalizeMsVitalMetric(vitals.fcpP75Ms);
-  const ttfbVital = normalizeMsVitalMetric(vitals.ttfbP75Ms);
+  const lcpVital = normalizeVitalMetric(vitals.lcpP75Ms);
+  const inpVital = normalizeVitalMetric(vitals.inpP75Ms);
+  const clsVital = normalizeVitalMetric(vitals.clsP75);
+  const fcpVital = normalizeVitalMetric(vitals.fcpP75Ms);
+  const ttfbVital = normalizeVitalMetric(vitals.ttfbP75Ms);
 
   const lcpTone = toneForLcp(lcpVital);
   const inpTone = toneForInp(inpVital);
   const clsTone = toneForCls(clsVital);
   const fcpTone = toneForFcp(fcpVital);
   const ttfbTone = toneForTtfb(ttfbVital);
+  const unresolvedVitalSub = "Field data is still being collected for this metric.";
   const metadataGapRows: Array<{ id: string; label: string; count: number }> = [
     { id: "missing_title", label: "Missing Titles", count: nOrNull(seo.missingTitleCount) ?? 0 },
     { id: "missing_description", label: "Missing Descriptions", count: nOrNull(seo.missingDescriptionCount) ?? 0 },
     { id: "missing_canonical", label: "Missing Canonicals", count: nOrNull(seo.missingCanonicalCount) ?? 0 },
   ];
   const metadataGapTotal = metadataGapRows.reduce((sum, row) => sum + row.count, 0);
-  const pagesObserved = nOrNull(seo.pagesObserved) ?? auditPages.length;
   const representativePage =
-    auditPages.find((page) => page.title || page.metaDescription || page.canonical || page.robots) || null;
+    (seo.pages || []).find((page) => page.title || page.metaDescription || page.canonical || page.robots) || null;
   const representativeTitle =
     nonEmptyText(seo.sampleTitle) || nonEmptyText(representativePage?.title) || nonEmptyText(liveMetadata?.title) || null;
   const representativeDescription =
@@ -1044,7 +654,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
   const previewDescriptionLabel = representativeDescription || "No live meta description was detected for this route.";
   const sampleRobotsLabel = representativeRobots || "—";
   const previewUrlLabel = (() => {
-    const raw = representativeCanonical || activeSiteOrigin || "";
+    const raw = representativeCanonical || activeSite.url || "";
     if (!raw) return "—";
     try {
       const parsed = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw.replace(/^\/\//, "")}`);
@@ -1188,13 +798,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
 
   return (
     <AppShell title="Workspace" subtitle="Workspace command center">
-      <div
-        className="err-page"
-        data-seo-route-state
-        data-site-ready={activeSiteOrigin ? "1" : "0"}
-        data-vitals-ready={needsLiveVitalsFallback(vitals) ? "0" : "1"}
-        data-audit-ready={hasRenderableAuditData(auditPages) ? "1" : "0"}
-      >
+      <div className="err-page">
         <div className="cb-console">
          
           {/* HEADER */}
@@ -1205,7 +809,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
                 <p className="seo-sub">Search posture, indexability, page metadata coverage, and vitals.</p>
               </div>
               <div className="seo-meta">
-                <span className="seo-chip seo-chip-strong" title={activeSiteOrigin || ""}>
+                <span className="seo-chip seo-chip-strong" title={activeSite.url || ""}>
                   Target: <b>{activeSite.label}</b>
                 </span>
                 <span className="seo-chip">
@@ -1220,13 +824,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
             <div className="seo-head-right" aria-label="Controls">
               <label className="seo-range" aria-label="Timeline">
                 <span className="seo-range-label">Timeline</span>
-                <select
-                  className="seo-range-select"
-                  defaultValue={range}
-                  data-range-select
-                  data-default-site={activeSiteId || activeSite.id}
-                  data-default-origin={activeSiteOrigin}
-                >
+                <select className="seo-range-select" defaultValue={range} data-range-select data-default-site={activeSite.id}>
                   <option value="24h">24H</option>
                   <option value="7d">7D</option>
                   <option value="14d">14D</option>
@@ -1245,7 +843,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
                 title="Dashboard tools"
               >
                 <Image
-                  src="/icons/app/tool-svgrepo-com.svg"
+                  src="/icons/app/tools-svgrepo-com.svg"
                   alt=""
                   width={16}
                   height={16}
@@ -1262,7 +860,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
             <article className={`cb-card tone-${posture.tone}`}>
               <div className="cb-card-top">
                 <div className="cb-card-label">Pages Observed</div>
-                <div className="cb-card-metric">{fmtInt(pagesObserved)}</div>
+                <div className="cb-card-metric">{fmtInt(seo.pagesObserved)}</div>
               </div><br />
               <div className="cb-card-sub">Pages inspected for metadata, structure, and indexability signals.</div>
             </article>
@@ -1301,7 +899,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
                   <p className="cb-sub">Robots posture across observed pages.</p>
                 </div>
               </div>
-              <div className="seo-mini-grid seo-mini-grid-stack">
+              <div className="seo-mini-grid">
                 <div className={`seo-mini tone-${noindexTone}`}>
                   <div className="seo-mini-k">NoIndex</div>
                   <div className="seo-mini-v">{fmtPct(seo.noindexPct)}</div>
@@ -1314,9 +912,9 @@ export default async function SeoPage({ searchParams }: PageProps) {
                   <div className="seo-mini-sub">{fmtInt(seo.nofollowCount)} pages flagged</div>
                 </div>
 
-                <div className="seo-mini seo-mini-wide">
+                <div className="seo-mini">
                   <div className="seo-mini-k">Sample Robots</div>
-                  <div className="seo-mini-v seo-mini-v-copy mono">{sampleRobotsLabel}</div>
+                  <div className="seo-mini-v mono">{sampleRobotsLabel}</div>
                   <div className="seo-mini-sub">Representative robots meta snapshot.</div>
                 </div>
               </div>
@@ -1362,32 +960,32 @@ export default async function SeoPage({ searchParams }: PageProps) {
             <div className="seo-vitals">
               <div className={`seo-vital tone-${lcpTone}`}>
                 <div className="seo-vital-k">LCP (P75)</div>
-                <div className={`seo-vital-v${lcpVital == null ? " is-empty" : ""}`}>{fmtVitalMs(lcpVital)}</div>
-                <div className="seo-vital-sub">Largest Contentful Paint</div>
+                <div className={`seo-vital-v${lcpVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(lcpVital, fmtVitalMs)}</div>
+                <div className="seo-vital-sub">{lcpVital == null ? unresolvedVitalSub : "Largest Contentful Paint"}</div>
               </div>
 
               <div className={`seo-vital tone-${inpTone}`}>
                 <div className="seo-vital-k">INP (P75)</div>
-                <div className={`seo-vital-v${inpVital == null ? " is-empty" : ""}`}>{fmtVitalMs(inpVital)}</div>
-                <div className="seo-vital-sub">Interaction to Next Paint</div>
+                <div className={`seo-vital-v${inpVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(inpVital, fmtVitalMs)}</div>
+                <div className="seo-vital-sub">{inpVital == null ? unresolvedVitalSub : "Interaction to Next Paint"}</div>
               </div>
 
               <div className={`seo-vital tone-${clsTone}`}>
                 <div className="seo-vital-k">CLS (P75)</div>
-                <div className={`seo-vital-v${clsVital == null ? " is-empty" : ""}`}>{fmtVitalCls(clsVital)}</div>
-                <div className="seo-vital-sub">Cumulative Layout Shift</div>
+                <div className={`seo-vital-v${clsVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(clsVital, fmtVitalCls)}</div>
+                <div className="seo-vital-sub">{clsVital == null ? unresolvedVitalSub : "Cumulative Layout Shift"}</div>
               </div>
 
               <div className={`seo-vital tone-${fcpTone}`}>
                 <div className="seo-vital-k">FCP (P75)</div>
-                <div className={`seo-vital-v${fcpVital == null ? " is-empty" : ""}`}>{fmtVitalMs(fcpVital)}</div>
-                <div className="seo-vital-sub">First Contentful Paint</div>
+                <div className={`seo-vital-v${fcpVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(fcpVital, fmtVitalMs)}</div>
+                <div className="seo-vital-sub">{fcpVital == null ? unresolvedVitalSub : "First Contentful Paint"}</div>
               </div>
 
               <div className={`seo-vital tone-${ttfbTone}`}>
                 <div className="seo-vital-k">TTFB (P75)</div>
-                <div className={`seo-vital-v${ttfbVital == null ? " is-empty" : ""}`}>{fmtVitalMs(ttfbVital)}</div>
-                <div className="seo-vital-sub">Time to First Byte</div>
+                <div className={`seo-vital-v${ttfbVital == null ? " is-pending" : ""}`}>{fmtVitalDisplay(ttfbVital, fmtVitalMs)}</div>
+                <div className="seo-vital-sub">{ttfbVital == null ? unresolvedVitalSub : "Time to First Byte"}</div>
               </div>
             </div>
           </section>
@@ -1636,13 +1234,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
                         <dl className="seo-favicon-infoList">
                           <div className="seo-favicon-infoRow">
                             <dt>Status</dt>
-                            <dd
-                              className={`${
-                                icon.status === "ok" ? "tone-good" : icon.status === "broken" ? "tone-bad" : "tone-warn"
-                              }`}
-                            >
-                              {icon.status === "ok" ? "OK" : icon.status === "warn" ? "Review" : "Broken"}
-                            </dd>
+                            <dd className={`tone-${faviconStatusTone(icon.status)}`}>{faviconStatusLabel(icon.status)}</dd>
                           </div>
                           <div className="seo-favicon-infoRow">
                             <dt>Primary usage</dt>
@@ -1684,74 +1276,48 @@ export default async function SeoPage({ searchParams }: PageProps) {
             </div>
 <br /><br />
             {pages.length ? (
-              <div className="seo-audit-list" aria-label="SEO page audits list">
-                {pages.map((p, i) => {
-                  const sigs = issueChips(p);
-                  const auditFacts = [
-                    { id: "path", label: "Path", value: p.urlPath || "—", mono: true, wide: true },
-                    { id: "title", label: "Title", value: p.title ? p.title.slice(0, 72) : "—", mono: true },
-                    {
-                      id: "description",
-                      label: "Description",
-                      value: p.metaDescription ? p.metaDescription.slice(0, 72) : "—",
-                      mono: true,
-                    },
-                    { id: "canonical", label: "Canonical", value: p.canonical ? p.canonical.slice(0, 72) : "—", mono: true },
-                    { id: "h1", label: "H1", value: fmtInt(p.h1Count), mono: false },
-                    { id: "words", label: "Words", value: fmtInt(p.wordCount), mono: false },
-                  ];
-
-                  return (
-                    <article key={`${p.urlPath || "p"}-${i}`} className="seo-audit-entry">
-                      <section className="seo-audit-card" aria-label={`Page state for ${p.urlPath || "page"}`}>
-                        <div className="seo-audit-cardHead">
-                          <div>
-                            <div className="seo-audit-kicker">Page State</div>
-                            <h3 className="seo-audit-title">Page metadata snapshot</h3>
-                          </div>
-                        </div>
-                        <dl className="seo-audit-facts">
-                          {auditFacts.map((fact) => (
-                            <div
-                              key={fact.id}
-                              className={`seo-audit-fact${fact.wide ? " is-wide" : ""}`}
-                            >
-                              <dt>{fact.label}</dt>
-                              <dd className={fact.mono ? "mono" : undefined}>{fact.value}</dd>
+              <div className="seo-tablewrap">
+                <table className="seo-table" aria-label="SEO page audits table">
+                  <thead>
+                    <tr>
+                      <th>Path</th>
+                      <th>Title</th>
+                      <th>Description</th>
+                      <th>Canonical</th>
+                      <th className="t-right">H1</th>
+                      <th className="t-right">Words</th>
+                      <th>Signals</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pages.map((p, i) => {
+                      const sigs = issueChips(p);
+                      return (
+                        <tr key={`${p.urlPath || "p"}-${i}`}>
+                          <td className="mono">{p.urlPath || "—"}</td>
+                          <td className="mono">{p.title ? p.title.slice(0, 72) : "—"}</td>
+                          <td className="mono">{p.metaDescription ? p.metaDescription.slice(0, 72) : "—"}</td>
+                          <td className="mono">{p.canonical ? p.canonical.slice(0, 72) : "—"}</td>
+                          <td className="t-right">{fmtInt(p.h1Count)}</td>
+                          <td className="t-right">{fmtInt(p.wordCount)}</td>
+                          <td>
+                            <div className="seo-chips">
+                              {sigs.length ? (
+                                sigs.map((s, idx) => (
+                                  <span key={idx} className="seo-chip-mini">
+                                    {s}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="seo-chip-mini tone-good">Clean</span>
+                              )}
                             </div>
-                          ))}
-                        </dl>
-                      </section>
-
-                      <section className="seo-audit-card seo-audit-signalsCard" aria-label={`Signals for ${p.urlPath || "page"}`}>
-                        <div className="seo-audit-cardHead">
-                          <div>
-                            <div className="seo-audit-kicker">Signals</div>
-                            <h3 className="seo-audit-title">Detected issues and action items</h3>
-                          </div>
-                          <div className="seo-audit-count">{fmtInt(sigs.length)}</div>
-                        </div>
-                        {sigs.length ? (
-                          <ul className="seo-audit-signalList">
-                            {sigs.map((signal, idx) => (
-                              <li key={`${signal}-${idx}`} className="seo-audit-signalItem">
-                                <span className="seo-audit-signalDot" aria-hidden="true" />
-                                <span>{signal}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="seo-audit-clean">
-                            <div className="seo-audit-cleanTitle">No visible issues detected.</div>
-                            <div className="seo-audit-cleanSub">
-                              CavBot did not surface any active metadata or structure issues for this page.
-                            </div>
-                          </div>
-                        )}
-                      </section>
-                    </article>
-                  );
-                })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             ) : (
               <div className="seo-empty">
@@ -1768,8 +1334,8 @@ export default async function SeoPage({ searchParams }: PageProps) {
           <CavAiRouteRecommendations
             panelId="seo"
             snapshot={summary}
-            origin={activeSiteOrigin || ""}
-            pagesScanned={pagesObserved ?? scoredPages.length ?? 1}
+            origin={activeSite.url || ""}
+            pagesScanned={seo.pagesObserved ?? scoredPages.length ?? 1}
             title="CavBot SEO Priorities"
             subtitle="Deterministic schema, metadata, and trust-signal priorities for this target."
             pillars={["seo", "ux", "engagement", "reliability"]}
@@ -1789,7 +1355,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
               <div className="cb-modal-body">
                 <div className="cb-field">
                   <div className="cb-field-label">Target</div>
-                  <select className="cb-select" defaultValue={activeSiteId || activeSite.id} data-tools-site>
+                  <select className="cb-select" defaultValue={activeSite.id} data-tools-site>
                     {sites.length ? (
                       sites.map((s) => (
                         <option key={s.id} value={s.id}>
@@ -1849,24 +1415,6 @@ export default async function SeoPage({ searchParams }: PageProps) {
 })();`}
           </Script>
 
-          <Script id="cb-seo-route-self-heal" strategy="afterInteractive">
-            {`
-(function(){
-  try{
-    var root = document.querySelector("[data-seo-route-state]");
-    if(!root) return;
-    var siteReady = root.getAttribute("data-site-ready") === "1";
-    var vitalsReady = root.getAttribute("data-vitals-ready") === "1";
-    var auditReady = root.getAttribute("data-audit-ready") === "1";
-    if(!siteReady || vitalsReady || auditReady) return;
-    var key = "cb:seo:self-heal:" + window.location.pathname + window.location.search;
-    if(window.sessionStorage.getItem(key) === "1") return;
-    window.sessionStorage.setItem(key, "1");
-    window.location.replace(window.location.href);
-  }catch(e){}
-})();`}
-          </Script>
-
           {/* Tools wiring (guarded) */}
           <Script id="cb-seo-tools-wire" strategy="afterInteractive">
             {`
@@ -1894,8 +1442,7 @@ export default async function SeoPage({ searchParams }: PageProps) {
     try{
       var p = new URLSearchParams(window.location.search || "");
       var range = p.get("range") || "24h";
-      var site = (siteSel && siteSel.value) ? siteSel.value : (p.get("siteId") || p.get("site") || "none");
-      var origin = p.get("origin") || p.get("siteOrigin") || "";
+      var site = (siteSel && siteSel.value) ? siteSel.value : (p.get("site") || "none");
       var projectId = ${JSON.stringify(projectId)};
 
       var next = new URLSearchParams();
@@ -1903,7 +1450,6 @@ export default async function SeoPage({ searchParams }: PageProps) {
       if(projectId) next.set("projectId", projectId);
       next.set("range", range);
       if(site && site !== "none") next.set("siteId", site);
-      if(origin) next.set("origin", origin);
 
       reportLink.setAttribute("href", "/console/report?" + next.toString());
     }catch(e){}
@@ -1951,15 +1497,11 @@ export default async function SeoPage({ searchParams }: PageProps) {
     try{
       var p = new URLSearchParams(window.location.search || "");
       var range = p.get("range") || "24h";
-      var site = siteSel && siteSel.value ? siteSel.value : (p.get("siteId") || p.get("site") || "none");
-      var origin = p.get("origin") || p.get("siteOrigin") || "";
-      var projectId = ${JSON.stringify(projectId)};
+      var site = siteSel && siteSel.value ? siteSel.value : (p.get("site") || "none");
 
       var next = new URLSearchParams();
-      if(projectId) next.set("projectId", projectId);
       next.set("range", range);
-      if(site && site !== "none") next.set("siteId", site);
-      if(origin) next.set("origin", origin);
+      next.set("site", site);
 
       window.location.search = "?" + next.toString();
     }catch(e){}
@@ -1977,15 +1519,9 @@ export default async function SeoPage({ searchParams }: PageProps) {
       try{
         var p = new URLSearchParams(window.location.search || "");
         var nextRange = rangeSel.value || (p.get("range") || "24h");
-        var nextSite = p.get("siteId") || p.get("site") || (rangeSel.getAttribute("data-default-site") || "none");
-        var nextOrigin = p.get("origin") || p.get("siteOrigin") || (rangeSel.getAttribute("data-default-origin") || "");
-        var projectId = ${JSON.stringify(projectId)};
+        var nextSite = p.get("site") || (rangeSel.getAttribute("data-default-site") || "none");
         p.set("range", nextRange);
-        if(projectId) p.set("projectId", projectId);
-        p.delete("project");
-        if(nextSite && nextSite !== "none") p.set("siteId", nextSite); else p.delete("siteId");
-        p.delete("site");
-        if(nextOrigin) p.set("origin", nextOrigin); else p.delete("origin");
+        p.set("site", nextSite);
         window.location.search = "?" + p.toString();
       }catch(e){}
     });

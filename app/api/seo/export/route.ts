@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { gateModuleAccess } from "@/lib/moduleGate.server";
-import { readWorkspace } from "@/lib/workspaceStore.server";
-import { getTenantProjectSummary } from "@/lib/projectSummary.server";
+import { resolveAnalyticsConsoleContext } from "@/lib/analyticsConsole.server";
 import {
   generateSeoActions,
   medianSeoScore,
@@ -271,40 +270,23 @@ export async function GET(req: Request) {
   const siteId = (url.searchParams.get("site") || "").trim();
   const projectIdHint = (url.searchParams.get("projectId") || "").trim();
 
-  // Workspace-scoped projectId is the source of truth for multi-tenant safety.
-  const ws = await readWorkspace();
-  const projectId = String(ws?.projectId || "1");
-
-  const sites = (ws?.sites || []).map((s) => ({
-    id: String(s.id || ""),
-    label: String(s.label || "").trim() || "Site",
-    url: String(s.origin || "").trim(),
-  }));
-
-  const activeSite =
-    (siteId && sites.find((s) => s.id === siteId)) ||
-    (ws?.activeSiteId ? sites.find((s) => s.id === String(ws.activeSiteId)) : null) ||
-    sites[0] ||
-    { id: "none", label: "No site selected", url: "" };
+  const analyticsContext = await resolveAnalyticsConsoleContext({
+    searchParams: Object.fromEntries(url.searchParams),
+    defaultRange: range,
+    pathname: "/api/seo/export",
+  });
+  const projectId = analyticsContext.projectId;
+  const activeSite = analyticsContext.activeSite;
 
   let summary: unknown = null;
   let seo: SeoPayload = {};
   let vitals: VitalsPayload = {};
   let favicon = null as Awaited<ReturnType<typeof buildFaviconIntelligence>> | null;
 
-  try {
-    const { summary: loadedSummary } = await getTenantProjectSummary({
-      projectId,
-      range: range === "30d" ? "30d" : "7d",
-      siteOrigin: activeSite.url || undefined,
-    });
-    summary = loadedSummary;
+  if (analyticsContext.summary) {
+    summary = analyticsContext.summary;
     seo = normalizeSeoFromSummary(summary);
     vitals = normalizeVitalsFromSummary(summary);
-  } catch {
-    summary = null;
-    seo = {};
-    vitals = {};
   }
 
   try {
@@ -341,6 +323,7 @@ export async function GET(req: Request) {
     ok: true,
     projectId,
     projectIdHint: projectIdHint || null,
+    siteIdHint: siteId || null,
     site: { id: activeSite.id, label: activeSite.label, origin: activeSite.url || null },
     range,
     updatedAtISO,
