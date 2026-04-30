@@ -3,10 +3,10 @@ import "server-only";
 import crypto from "node:crypto";
 import type { ChildProcess } from "node:child_process";
 import { lstat, mkdtemp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { CavCloudShareMode, PublicArtifactVisibility } from "@prisma/client";
-import * as ts from "typescript";
 import type * as tsType from "typescript";
 
 import {
@@ -70,6 +70,28 @@ const Prisma = {
   raw: prismaRaw,
   sql: prismaSql,
 } as const;
+
+type TypeScriptRuntime = typeof import("typescript");
+
+declare const __non_webpack_require__: NodeRequire | undefined;
+
+let typescriptRuntime: TypeScriptRuntime | null = null;
+
+function getTypescriptRuntime(): TypeScriptRuntime {
+  if (typescriptRuntime) return typescriptRuntime;
+  const runtimeRequire =
+    typeof __non_webpack_require__ === "function"
+      ? __non_webpack_require__
+      : createRequire(import.meta.url);
+  typescriptRuntime = runtimeRequire("typescript") as TypeScriptRuntime;
+  return typescriptRuntime;
+}
+
+const ts = new Proxy({} as TypeScriptRuntime, {
+  get(_target, property: keyof TypeScriptRuntime) {
+    return getTypescriptRuntime()[property];
+  },
+});
 
 export type CavtoolsNamespace = "cavcloud" | "cavsafe" | "cavcode" | "telemetry" | "workspace";
 
