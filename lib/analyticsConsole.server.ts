@@ -189,6 +189,18 @@ function safeLog(event: string, payload: Record<string, unknown>) {
   }
 }
 
+function withConsoleDeadline<T>(promise: Promise<T>, label: string, timeoutMs = 4_000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return Promise.race([
+    promise,
+    new Promise<T>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label}_TIMEOUT`)), timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 export async function resolveAnalyticsConsoleContext(args?: {
   searchParams?: Record<string, string | string[] | undefined> | null;
   defaultRange?: AnalyticsRangeKey;
@@ -227,7 +239,11 @@ export async function resolveAnalyticsConsoleContext(args?: {
 
   let workspace: WorkspacePayload | null = null;
   try {
-    workspace = await readWorkspace({ accountId: session.accountId });
+    workspace = await withConsoleDeadline(
+      readWorkspace({ accountId: session.accountId }),
+      "WORKSPACE_READ",
+      2_000,
+    );
   } catch (error) {
     safeLog("workspace_read_failed", {
       requestId: rid,
@@ -244,8 +260,8 @@ export async function resolveAnalyticsConsoleContext(args?: {
 
   let project: AnalyticsConsoleProject | null = null;
   try {
-    project = requestedProjectId
-      ? await prisma.project.findFirst({
+    const projectPromise = requestedProjectId
+      ? prisma.project.findFirst({
           where: { id: requestedProjectId, accountId: session.accountId, isActive: true },
           select: {
             id: true,
@@ -256,7 +272,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
           },
         })
       : requestedProjectSlug
-        ? await prisma.project.findFirst({
+        ? prisma.project.findFirst({
             where: { slug: requestedProjectSlug, accountId: session.accountId, isActive: true },
             select: {
               id: true,
@@ -266,7 +282,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
               serverKeyEncIv: true,
             },
           })
-        : await prisma.project.findFirst({
+        : prisma.project.findFirst({
             where: { accountId: session.accountId, isActive: true },
             orderBy: { createdAt: "asc" },
             select: {
@@ -277,6 +293,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
               serverKeyEncIv: true,
             },
           });
+    project = await withConsoleDeadline(projectPromise, "PROJECT_READ");
   } catch (error) {
     safeLog("project_read_failed", {
       requestId: rid,
@@ -320,11 +337,14 @@ export async function resolveAnalyticsConsoleContext(args?: {
 
   let dbSites: Array<{ id: string; label: string; origin: string }> = [];
   try {
-    dbSites = await prisma.site.findMany({
-      where: { projectId: project.id, isActive: true },
-      orderBy: { createdAt: "asc" },
-      select: { id: true, label: true, origin: true },
-    });
+    dbSites = await withConsoleDeadline(
+      prisma.site.findMany({
+        where: { projectId: project.id, isActive: true },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, label: true, origin: true },
+      }),
+      "SITE_READ",
+    );
   } catch (error) {
     safeLog("site_read_failed", {
       requestId: rid,
@@ -355,16 +375,22 @@ export async function resolveAnalyticsConsoleContext(args?: {
 
   if (args?.loadSummary !== false) {
     try {
-      const analyticsAuth = await resolveProjectAnalyticsAuth(project);
+      summary = await withConsoleDeadline(
+        (async () => {
+          const analyticsAuth = await resolveProjectAnalyticsAuth(project);
 
-      summary = await getProjectSummaryForTenant({
-        projectId: project.id,
-        range: range as SummaryRange,
-        siteOrigin: activeSite.origin || undefined,
-        projectKey: analyticsAuth.projectKey,
-        adminToken: analyticsAuth.adminToken,
-        requestId: `summary_${project.id}_${rid}`,
-      });
+          return getProjectSummaryForTenant({
+            projectId: project.id,
+            range: range as SummaryRange,
+            siteOrigin: activeSite.origin || undefined,
+            projectKey: analyticsAuth.projectKey,
+            adminToken: analyticsAuth.adminToken,
+            requestId: `summary_${project.id}_${rid}`,
+          });
+        })(),
+        "SUMMARY_READ",
+        4_500,
+      );
     } catch (error) {
       summaryError = error;
       safeLog("summary_failed", {

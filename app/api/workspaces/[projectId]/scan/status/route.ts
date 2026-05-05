@@ -6,6 +6,7 @@ import { findAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
 import { getWorkspaceProjectScanStatus, getWorkspaceScanUsage } from "@/lib/workspaceScans.server";
 import { getPlanLimits, PLANS } from "@/lib/plans";
 import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
+import { withCavCloudDeadline } from "@/lib/cavcloud/http.server";
 
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
@@ -40,7 +41,10 @@ async function getParams(ctx: unknown): Promise<{ projectId?: string }> {
 
 export async function GET(req: NextRequest, ctx: unknown) {
   try {
-    const session = await requireWorkspaceResilientSession(req);
+    const session = await withCavCloudDeadline(requireWorkspaceResilientSession(req), {
+      timeoutMs: 1_500,
+      message: "Workspace session lookup timed out.",
+    });
     const accountId = String(session.accountId || "").trim();
     if (!accountId) return json({ error: "UNAUTHORIZED" }, 401);
 
@@ -48,11 +52,17 @@ export async function GET(req: NextRequest, ctx: unknown) {
     const projectId = parseProjectId(params.projectId);
     if (!projectId) return json({ error: "BAD_PROJECT" }, 400);
 
-    const project = await findAccountWorkspaceProject({
-      accountId,
-      projectId,
-      select: { id: true },
-    });
+    const project = await withCavCloudDeadline(
+      findAccountWorkspaceProject({
+        accountId,
+        projectId,
+        select: { id: true },
+      }),
+      {
+        timeoutMs: 1_800,
+        message: "Workspace project lookup timed out.",
+      },
+    );
     if (!project) {
       const usage = await getWorkspaceScanUsage(accountId).catch(() => {
         const planId = "free";
@@ -70,7 +80,10 @@ export async function GET(req: NextRequest, ctx: unknown) {
 
     let status;
     try {
-      status = await getWorkspaceProjectScanStatus(projectId, accountId);
+      status = await withCavCloudDeadline(getWorkspaceProjectScanStatus(projectId, accountId), {
+        timeoutMs: 2_500,
+        message: "Workspace scan status timed out.",
+      });
     } catch (error) {
       console.error("[workspace-scan-status]", {
         projectId,
@@ -92,6 +105,25 @@ export async function GET(req: NextRequest, ctx: unknown) {
     return json({ ok: true, status }, 200);
   } catch (error) {
     if (isApiAuthError(error)) return json({ error: error.code }, error.status);
+    const status = Number((error as { status?: unknown })?.status || 0);
+    if (status === 503 || status === 504) {
+      const planId = "free";
+      const limits = getPlanLimits(planId);
+      return json({
+        ok: true,
+        degraded: true,
+        status: {
+          usage: {
+            planId,
+            planLabel: PLANS[planId].tierLabel,
+            scansThisMonth: 0,
+            scansPerMonth: limits.scansPerMonth,
+            pagesPerScan: limits.pagesPerScan,
+          },
+          lastJob: null,
+        },
+      }, 200);
+    }
     const message = error instanceof Error ? error.message : "Failed to fetch scan status.";
     return json({ error: "SERVER_ERROR", message }, 500);
   }

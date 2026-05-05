@@ -1,4 +1,4 @@
-import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
+import { cavcloudErrorResponse, jsonNoStore, withCavCloudDeadline } from "@/lib/cavcloud/http.server";
 import { hasRequestIntegrityHeader } from "@/lib/security/requestIntegrity";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { requireAiRequestContext } from "@/src/lib/ai/ai.guard";
@@ -28,18 +28,30 @@ export const revalidate = 0;
 
 export async function GET(req: Request) {
   try {
-    const ctx = await requireAiRequestContext({
-      req,
-      surface: "cavcode",
-    });
+    const ctx = await withCavCloudDeadline(
+      requireAiRequestContext({
+        req,
+        surface: "cavcode",
+      }),
+      {
+        timeoutMs: 1_800,
+        message: "Caven settings auth lookup timed out.",
+      },
+    );
     let settings = { ...DEFAULT_CAVEN_SETTINGS };
     let degraded = false;
     try {
-      settings = await getCavenSettings({
-        accountId: String(ctx.accountId || ""),
-        userId: String(ctx.userId || ""),
-        planId: ctx.planId,
-      });
+      settings = await withCavCloudDeadline(
+        getCavenSettings({
+          accountId: String(ctx.accountId || ""),
+          userId: String(ctx.userId || ""),
+          planId: ctx.planId,
+        }),
+        {
+          timeoutMs: 1_500,
+          message: "Caven settings read timed out.",
+        },
+      );
     } catch (err) {
       degraded = true;
       console.error("[cavai/settings] getCavenSettings failed, using defaults", err);
@@ -52,30 +64,48 @@ export async function GET(req: Request) {
     let publishedAgents: unknown[] = [];
     let ownedPublishedSourceAgentIds: string[] = [];
     try {
-      agentRegistry = await getAgentRegistryUiSnapshot({
-        accountId: String(ctx.accountId || ""),
-        userId: String(ctx.userId || ""),
-        planId: ctx.planId,
-        legacyInstalledAgentIds: settings.installedAgentIds,
-      });
+      agentRegistry = await withCavCloudDeadline(
+        getAgentRegistryUiSnapshot({
+          accountId: String(ctx.accountId || ""),
+          userId: String(ctx.userId || ""),
+          planId: ctx.planId,
+          legacyInstalledAgentIds: settings.installedAgentIds,
+        }),
+        {
+          timeoutMs: 1_800,
+          message: "Agent registry read timed out.",
+        },
+      );
     } catch (err) {
       degraded = true;
       console.error("[cavai/settings] getAgentRegistryUiSnapshot failed, using catalog fallback", err);
     }
     try {
-      publishedAgents = await listPublishedOperatorAgents({
-        excludeUserId: String(ctx.userId || ""),
-        limit: 120,
-      });
+      publishedAgents = await withCavCloudDeadline(
+        listPublishedOperatorAgents({
+          excludeUserId: String(ctx.userId || ""),
+          limit: 120,
+        }),
+        {
+          timeoutMs: 1_500,
+          message: "Published agents read timed out.",
+        },
+      );
     } catch (err) {
       degraded = true;
       console.error("[cavai/settings] listPublishedOperatorAgents failed, using empty fallback", err);
     }
     try {
-      ownedPublishedSourceAgentIds = await listOwnedPublishedOperatorSourceAgentIds({
-        userId: String(ctx.userId || ""),
-        limit: 240,
-      });
+      ownedPublishedSourceAgentIds = await withCavCloudDeadline(
+        listOwnedPublishedOperatorSourceAgentIds({
+          userId: String(ctx.userId || ""),
+          limit: 240,
+        }),
+        {
+          timeoutMs: 1_500,
+          message: "Owned published agents read timed out.",
+        },
+      );
     } catch (err) {
       degraded = true;
       console.error("[cavai/settings] listOwnedPublishedOperatorSourceAgentIds failed, using empty fallback", err);
@@ -94,7 +124,21 @@ export async function GET(req: Request) {
     if (isPassiveAiAuthRequiredError(err)) {
       return jsonNoStore(buildPassiveAiAuthRequiredPayload(readPassiveAiAuthErrorCode(err)), 200);
     }
-    return cavcloudErrorResponse(err, "Failed to load Caven settings.");
+    return jsonNoStore(
+      {
+        ok: true,
+        degraded: true,
+        settings: DEFAULT_CAVEN_SETTINGS,
+        planId: "free",
+        agentRegistry: buildFallbackAgentRegistryUiSnapshot({
+          planId: "free",
+          installedAgentIds: DEFAULT_CAVEN_SETTINGS.installedAgentIds,
+        }),
+        publishedAgents: [],
+        ownedPublishedSourceAgentIds: [],
+      },
+      200,
+    );
   }
 }
 

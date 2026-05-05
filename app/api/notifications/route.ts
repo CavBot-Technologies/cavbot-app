@@ -7,6 +7,7 @@ import { ensureCavCloudShareExpirySoonNotifications } from "@/lib/cavcloud/notif
 import { isSchemaMismatchError } from "@/lib/dbSchemaGuard";
 import { buildGuardDecisionPayload } from "@/src/lib/cavguard/cavGuard.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { withCavCloudDeadline } from "@/lib/cavcloud/http.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,7 +83,10 @@ function passiveAuthRequiredNotifications(errorCode: string) {
 
 export async function GET(req: NextRequest) {
   try {
-    const sess = await requireSession(req);
+    const sess = await withCavCloudDeadline(requireSession(req), {
+      timeoutMs: 1_500,
+      message: "Notification session lookup timed out.",
+    });
     requireUser(sess);
 
     const userId = s(sess.sub);
@@ -90,7 +94,10 @@ export async function GET(req: NextRequest) {
 
     if (accountId) {
       try {
-        await ensureCavCloudShareExpirySoonNotifications({ accountId, userId });
+        await withCavCloudDeadline(ensureCavCloudShareExpirySoonNotifications({ accountId, userId }), {
+          timeoutMs: 800,
+          message: "Notification synthesis timed out.",
+        });
       } catch {
         // Non-blocking: notification synthesis must never block reads.
       }
@@ -129,25 +136,31 @@ export async function GET(req: NextRequest) {
         }
       : baseWhere;
 
-    const items = await prisma.notification.findMany({
-      where,
-      orderBy: [
-        { createdAt: "desc" },
-        { id: "desc" },
-      ],
-      take: limit,
-      select: {
-        id: true,
-        title: true,
-        body: true,
-        href: true,
-        kind: true,
-        metaJson: true,
-        tone: true,
-        createdAt: true,
-        readAt: true,
+    const items = await withCavCloudDeadline(
+      prisma.notification.findMany({
+        where,
+        orderBy: [
+          { createdAt: "desc" },
+          { id: "desc" },
+        ],
+        take: limit,
+        select: {
+          id: true,
+          title: true,
+          body: true,
+          href: true,
+          kind: true,
+          metaJson: true,
+          tone: true,
+          createdAt: true,
+          readAt: true,
+        },
+      }),
+      {
+        timeoutMs: 2_000,
+        message: "Notification read timed out.",
       },
-    });
+    );
 
     const nextCursor =
       items.length === limit && items[items.length - 1]

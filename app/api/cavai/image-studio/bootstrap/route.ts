@@ -1,4 +1,4 @@
-import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
+import { jsonNoStore, withCavCloudDeadline } from "@/lib/cavcloud/http.server";
 import {
   listImagePresetsForPlan,
   readImageHistory,
@@ -26,18 +26,36 @@ function imageStudioCapabilities(planId: string) {
 
 export async function GET(req: Request) {
   try {
-    const ctx = await requireAiRequestContext({
-      req,
-      surface: "console",
-    });
+    const ctx = await withCavCloudDeadline(
+      requireAiRequestContext({
+        req,
+        surface: "console",
+      }),
+      {
+        timeoutMs: 1_800,
+        message: "Image Studio auth lookup timed out.",
+      },
+    );
     const planTier = toImageStudioPlanTier(ctx.planId);
 
     try {
       const [presets, recent, saved, history] = await Promise.all([
-        listImagePresetsForPlan({ planTier, includeLocked: planTier !== "free" }),
-        readImageHistory({ accountId: ctx.accountId, userId: ctx.userId, view: "recent", limit: 24 }),
-        readImageHistory({ accountId: ctx.accountId, userId: ctx.userId, view: "saved", limit: 24 }),
-        readImageHistory({ accountId: ctx.accountId, userId: ctx.userId, view: "history", limit: 24 }),
+        withCavCloudDeadline(listImagePresetsForPlan({ planTier, includeLocked: planTier !== "free" }), {
+          timeoutMs: 1_000,
+          message: "Image presets read timed out.",
+        }),
+        withCavCloudDeadline(readImageHistory({ accountId: ctx.accountId, userId: ctx.userId, view: "recent", limit: 24 }), {
+          timeoutMs: 1_500,
+          message: "Recent image history timed out.",
+        }),
+        withCavCloudDeadline(readImageHistory({ accountId: ctx.accountId, userId: ctx.userId, view: "saved", limit: 24 }), {
+          timeoutMs: 1_500,
+          message: "Saved image history timed out.",
+        }),
+        withCavCloudDeadline(readImageHistory({ accountId: ctx.accountId, userId: ctx.userId, view: "history", limit: 24 }), {
+          timeoutMs: 1_500,
+          message: "Image history timed out.",
+        }),
       ]);
 
       return jsonNoStore(
@@ -78,6 +96,20 @@ export async function GET(req: Request) {
     if (isPassiveAiAuthRequiredError(err)) {
       return jsonNoStore(buildPassiveAiAuthRequiredPayload(readPassiveAiAuthErrorCode(err)), 200);
     }
-    return cavcloudErrorResponse(err, "Failed to load Image Studio bootstrap.");
+    const planTier = "free";
+    return jsonNoStore(
+      {
+        ok: true,
+        degraded: true,
+        planId: "free",
+        planTier,
+        capabilities: imageStudioCapabilities("free"),
+        presets: [],
+        recent: [],
+        saved: [],
+        history: [],
+      },
+      200,
+    );
   }
 }

@@ -5,7 +5,6 @@ import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireSession, requireAccountContext } from "@/lib/apiAuth";
-import { clearExpiredTrialSeat, getAuthPool } from "@/lib/authDb";
 import { resolveBillingPlanResolution } from "@/lib/billingPlan.server";
 import { resolvePlanIdFromTier, hasModule, type ModuleId } from "@/lib/plans";
 
@@ -14,6 +13,18 @@ export type GateMode = "screen" | "redirect";
 export type GateResult =
   | { ok: true; planId: ReturnType<typeof resolvePlanIdFromTier> }
   | { ok: false; planId: ReturnType<typeof resolvePlanIdFromTier>; mode: GateMode };
+
+function withGateDeadline<T>(promise: Promise<T>, timeoutMs = 1_800): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return Promise.race([
+    promise,
+    new Promise<T>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error("MODULE_GATE_TIMEOUT")), timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
 
 export async function gateModuleAccess(
   req: Request,
@@ -29,12 +40,13 @@ export async function gateModuleAccess(
   const fallbackPlanId = resolvePlanIdFromTier("free");
   let planId: ReturnType<typeof resolvePlanIdFromTier> = fallbackPlanId;
   try {
-    const pool = getAuthPool();
-    await clearExpiredTrialSeat(pool, accountId);
-    const planResolution = await resolveBillingPlanResolution({
-      accountId,
-      repair: true,
-    });
+    // Keep navigation bounded; billing reconciliation handles clearExpiredTrialSeat elsewhere.
+    const planResolution = await withGateDeadline(
+      resolveBillingPlanResolution({
+        accountId,
+        repair: false,
+      }),
+    );
     planId = planResolution.currentPlanId;
   } catch (error) {
     try {

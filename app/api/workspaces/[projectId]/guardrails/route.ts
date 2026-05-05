@@ -4,10 +4,12 @@ import { isApiAuthError } from "@/lib/apiAuth";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { findAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
 import {
+  defaultWorkspaceProjectGuardrails,
   ensureWorkspaceProjectGuardrails,
   getWorkspaceProjectGuardrails,
 } from "@/lib/workspaceGuardrails.server";
 import { requireWorkspaceSession } from "@/lib/workspaceAuth.server";
+import { withCavCloudDeadline } from "@/lib/cavcloud/http.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -62,25 +64,37 @@ async function getParams(ctx: unknown): Promise<{ projectId?: string }> {
 
 export async function GET(req: Request, ctx: unknown) {
   try {
-    const sess = await requireWorkspaceSession(req);
+    const sess = await withCavCloudDeadline(requireWorkspaceSession(req), {
+      timeoutMs: 1_500,
+      message: "Workspace session lookup timed out.",
+    });
 
     const params = await getParams(ctx);
     const projectId = parseProjectId(params?.projectId || "");
     if (!projectId) return json({ error: "BAD_PROJECT" }, 400);
 
-    const project = await findAccountWorkspaceProject({
-      accountId: sess.accountId!,
-      projectId,
-      select: { id: true },
-    });
+    const project = await withCavCloudDeadline(
+      findAccountWorkspaceProject({
+        accountId: sess.accountId!,
+        projectId,
+        select: { id: true },
+      }),
+      {
+        timeoutMs: 1_800,
+        message: "Workspace project lookup timed out.",
+      },
+    );
     if (!project) return json({ error: "NOT_FOUND" }, 404);
 
-    const guardrails = await getWorkspaceProjectGuardrails(project.id);
+    const guardrails = await withCavCloudDeadline(getWorkspaceProjectGuardrails(project.id), {
+      timeoutMs: 1_800,
+      message: "Workspace guardrails lookup timed out.",
+    });
 
     return json({ guardrails }, 200);
   } catch (e: unknown) {
     if (isApiAuthError(e)) return json({ error: e.code }, e.status);
-    return json({ error: "SERVER_ERROR" }, 500);
+    return json({ ok: true, degraded: true, guardrails: defaultWorkspaceProjectGuardrails() }, 200);
   }
 }
 
