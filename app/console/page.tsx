@@ -751,7 +751,8 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
     accentColor: profileToneToAccentColor("lime"),
   };
   try {
-    const cookie = cookies().toString().trim();
+    const cookieStore = await cookies();
+    const cookie = cookieStore.toString().trim();
     if (!cookie) return fallback;
 
     // getSession() only needs incoming cookies; use a fixed internal URL.

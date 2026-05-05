@@ -242,20 +242,11 @@ export async function resolveAnalyticsConsoleContext(args?: {
     parseProjectId(workspace?.projectId);
   const requestedProjectSlug = readSearchParam(args?.searchParams, "projectSlug");
 
-  const project = requestedProjectId
-    ? await prisma.project.findFirst({
-        where: { id: requestedProjectId, accountId: session.accountId, isActive: true },
-        select: {
-          id: true,
-          slug: true,
-          name: true,
-          serverKeyEnc: true,
-          serverKeyEncIv: true,
-        },
-      })
-    : requestedProjectSlug
+  let project: AnalyticsConsoleProject | null = null;
+  try {
+    project = requestedProjectId
       ? await prisma.project.findFirst({
-          where: { slug: requestedProjectSlug, accountId: session.accountId, isActive: true },
+          where: { id: requestedProjectId, accountId: session.accountId, isActive: true },
           select: {
             id: true,
             slug: true,
@@ -264,17 +255,51 @@ export async function resolveAnalyticsConsoleContext(args?: {
             serverKeyEncIv: true,
           },
         })
-      : await prisma.project.findFirst({
-          where: { accountId: session.accountId, isActive: true },
-          orderBy: { createdAt: "asc" },
-          select: {
-            id: true,
-            slug: true,
-            name: true,
-            serverKeyEnc: true,
-            serverKeyEncIv: true,
-          },
-        });
+      : requestedProjectSlug
+        ? await prisma.project.findFirst({
+            where: { slug: requestedProjectSlug, accountId: session.accountId, isActive: true },
+            select: {
+              id: true,
+              slug: true,
+              name: true,
+              serverKeyEnc: true,
+              serverKeyEncIv: true,
+            },
+          })
+        : await prisma.project.findFirst({
+            where: { accountId: session.accountId, isActive: true },
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              slug: true,
+              name: true,
+              serverKeyEnc: true,
+              serverKeyEncIv: true,
+            },
+          });
+  } catch (error) {
+    safeLog("project_read_failed", {
+      requestId: rid,
+      accountId: session.accountId,
+      requestedProjectId,
+      requestedProjectSlug: requestedProjectSlug || null,
+      code: publicAnalyticsError(error),
+    });
+    return {
+      requestId: rid,
+      session,
+      workspace,
+      project: null,
+      projectId: "",
+      projectLabel: "Project unavailable",
+      range,
+      sites: [],
+      activeSite: EMPTY_SITE,
+      summary: null,
+      summaryError: error,
+      authError: null,
+    };
+  }
 
   if (!project) {
     return {
@@ -293,11 +318,35 @@ export async function resolveAnalyticsConsoleContext(args?: {
     };
   }
 
-  const dbSites = await prisma.site.findMany({
-    where: { projectId: project.id, isActive: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true, label: true, origin: true },
-  });
+  let dbSites: Array<{ id: string; label: string; origin: string }> = [];
+  try {
+    dbSites = await prisma.site.findMany({
+      where: { projectId: project.id, isActive: true },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, label: true, origin: true },
+    });
+  } catch (error) {
+    safeLog("site_read_failed", {
+      requestId: rid,
+      accountId: session.accountId,
+      projectId: project.id,
+      code: publicAnalyticsError(error),
+    });
+    return {
+      requestId: rid,
+      session,
+      workspace,
+      project,
+      projectId: String(project.id),
+      projectLabel: project.name || project.slug || `Project #${project.id}`,
+      range,
+      sites: [],
+      activeSite: EMPTY_SITE,
+      summary: null,
+      summaryError: error,
+      authError: null,
+    };
+  }
   const sites = dbSites.map(toSiteRow).filter((site): site is AnalyticsConsoleSite => Boolean(site));
   const activeSite = pickActiveSite({ searchParams: args?.searchParams, sites, workspace });
 

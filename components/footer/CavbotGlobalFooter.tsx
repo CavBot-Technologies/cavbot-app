@@ -536,7 +536,7 @@ export default function CavbotGlobalFooter() {
         <div className={styles.developerOverlay} onClick={() => setDeveloperOpen(false)}>
           <section
             id="cb-footer-developer-panel"
-            className={styles.developerPanel}
+            className={`${styles.developerPanel} ${developerOpen ? styles.developerPanelOpen : ""}`}
             role="dialog"
             aria-modal="true"
             aria-label="Developer links"

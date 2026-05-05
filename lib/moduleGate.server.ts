@@ -26,13 +26,31 @@ export async function gateModuleAccess(
   requireAccountContext(sess);
 
   const accountId = sess.accountId!;
-  const pool = getAuthPool();
-  await clearExpiredTrialSeat(pool, accountId);
-  const planResolution = await resolveBillingPlanResolution({
-    accountId,
-    repair: true,
-  });
-  const planId = planResolution.currentPlanId;
+  const fallbackPlanId = resolvePlanIdFromTier("free");
+  let planId: ReturnType<typeof resolvePlanIdFromTier> = fallbackPlanId;
+  try {
+    const pool = getAuthPool();
+    await clearExpiredTrialSeat(pool, accountId);
+    const planResolution = await resolveBillingPlanResolution({
+      accountId,
+      repair: true,
+    });
+    planId = planResolution.currentPlanId;
+  } catch (error) {
+    try {
+      console.error(
+        "[module-gate]",
+        JSON.stringify({
+          event: "plan_resolution_failed",
+          accountId,
+          moduleId,
+          code: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    } catch {
+      console.error("[module-gate] plan_resolution_failed");
+    }
+  }
   const allowed = hasModule(planId, moduleId);
 
   if (allowed) return { ok: true, planId };
