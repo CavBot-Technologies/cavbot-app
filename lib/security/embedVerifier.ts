@@ -69,7 +69,7 @@ async function slowFailMetric(
 ) {
   if (!keyRecord.accountId) return;
   if (keyRecord.projectId == null) return;
-  await recordEmbedMetric({
+  await recordEmbedMetricSafe({
     accountId: keyRecord.accountId,
     projectId: keyRecord.projectId,
     siteId,
@@ -77,7 +77,7 @@ async function slowFailMetric(
     allowed,
   });
   if (!allowed && origin) {
-    await trackDeniedOrigin({
+    await trackDeniedOriginSafe({
       accountId: keyRecord.accountId,
       projectId: keyRecord.projectId,
       siteId,
@@ -87,6 +87,22 @@ async function slowFailMetric(
       denyCode,
       rateLimited,
     });
+  }
+}
+
+async function recordEmbedMetricSafe(params: Parameters<typeof recordEmbedMetric>[0]) {
+  try {
+    await recordEmbedMetric(params);
+  } catch (error) {
+    console.error("[embedVerifier] embed metric write failed; continuing request", error);
+  }
+}
+
+async function trackDeniedOriginSafe(params: Parameters<typeof trackDeniedOrigin>[0]) {
+  try {
+    await trackDeniedOrigin(params);
+  } catch (error) {
+    console.error("[embedVerifier] denied-origin metric write failed; continuing request", error);
   }
 }
 
@@ -326,7 +342,7 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
   }
 
   if (recordMetrics) {
-    await recordEmbedMetric({
+    await recordEmbedMetricSafe({
       accountId: record.accountId ?? "",
       projectId,
       siteId: site.id,

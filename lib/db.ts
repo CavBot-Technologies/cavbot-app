@@ -31,6 +31,4 @@ function makePrisma() {
 
 export const prisma = global.__cavbotPrisma || makePrisma();
 
-if (process.env.NODE_ENV !== "production") {
-  global.__cavbotPrisma = prisma;
-}
+global.__cavbotPrisma = prisma;
