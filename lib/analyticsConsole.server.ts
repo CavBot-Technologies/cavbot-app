@@ -215,7 +215,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
   let session: CavbotAccountSession | null = null;
   try {
     const req = await buildRequestFromHeaders(pathname);
-    const rawSession = await requireSession(req);
+    const rawSession = await withConsoleDeadline(requireSession(req), "SESSION_READ", 2_000);
     requireAccountContext(rawSession);
     session = rawSession;
   } catch (error) {

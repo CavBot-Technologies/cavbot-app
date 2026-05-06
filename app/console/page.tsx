@@ -743,6 +743,18 @@ type DashboardHeading = {
   accentColor: string;
 };
 
+function withDashboardDeadline<T>(promise: Promise<T>, timeoutMs = 1_800): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return Promise.race([
+    promise,
+    new Promise<T>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error("DASHBOARD_HEADING_TIMEOUT")), timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 async function resolveDashboardHeading(): Promise<DashboardHeading> {
   const fallbackOwner = "U's";
   const fallback: DashboardHeading = {
@@ -760,21 +772,23 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
       headers: { cookie },
     });
 
-    const sess = await getSession(req);
+    const sess = await withDashboardDeadline(getSession(req));
     if (!sess || sess.systemRole !== "user") return fallback;
 
     const userId = String(sess.sub || "").trim();
     if (!userId || userId === "system") return fallback;
 
-    const [profile, authUser] = await Promise.all([
-      prisma.user
-        .findUnique({
-          where: { id: userId },
-          select: { displayName: true, fullName: true, username: true, avatarTone: true },
-        })
-        .catch(() => null),
-      findUserById(getAuthPool(), userId).catch(() => null),
-    ]);
+    const [profile, authUser] = await withDashboardDeadline(
+      Promise.all([
+        prisma.user
+          .findUnique({
+            where: { id: userId },
+            select: { displayName: true, fullName: true, username: true, avatarTone: true },
+          })
+          .catch(() => null),
+        findUserById(getAuthPool(), userId).catch(() => null),
+      ]),
+    );
 
     const accentColor = profileToneToAccentColor(String(profile?.avatarTone || authUser?.avatarTone || ""));
     const preferredName = String(profile?.fullName || profile?.displayName || authUser?.displayName || "").trim();
