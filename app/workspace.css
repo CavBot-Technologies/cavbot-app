@@ -14,6 +14,10 @@
   width:100%;
 }
 
+.cb-route-workspace .cb-content{
+  padding-bottom: 16px;
+}
+
 body.cb-home-delete-open .cb-topbar{
   display:none;
 }

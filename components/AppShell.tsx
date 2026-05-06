@@ -508,6 +508,7 @@ export default function AppShell({
 
   const pathname = usePathname();
   const isCavbotPage = pathname === "/cavbot";
+  const isWorkspacePage = pathname === "/" || pathname === "/command-center";
   const router = useRouter();
   const prefetchedRoutesRef = useRef<Set<string>>(new Set());
   const [searchParamsSerialized, setSearchParamsSerialized] = useState("");
@@ -2369,7 +2370,7 @@ export default function AppShell({
   return (
     <AppShellPlanContext.Provider value={shellPlanContextValue}>
       <div
-        className={`cb-shell${isCavbotPage ? " cb-route-cavbot" : ""}`}
+        className={`cb-shell${isCavbotPage ? " cb-route-cavbot" : ""}${isWorkspacePage ? " cb-route-workspace" : ""}`}
         data-cavbot-page-type="console"
         data-shell-subtitle={subtitle || undefined}
       >
