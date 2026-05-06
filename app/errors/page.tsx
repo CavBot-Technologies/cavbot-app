@@ -11,7 +11,6 @@ import AppShell from "@/components/AppShell";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
 import { resolveAnalyticsConsoleContext } from "@/lib/analyticsConsole.server";
 import { gateModuleAccess } from "@/lib/moduleGate.server";
-import LockedModule from "@/components/LockedModule";
 import { buildErrorInsights } from "@/lib/errors/errorInsights";
 
 declare global {
@@ -314,23 +313,7 @@ export default async function ErrorsPage({ searchParams }: PageProps) {
     headers: new Headers(requestHeaders),
   });
 
-  const gate = await gateModuleAccess(req, "errors");
-
-
-
-  if (!gate.ok) {
-    return (
-      <AppShell title="Workspace" subtitle="Workspace command center">
-        <LockedModule
-          moduleName="Error Intelligence"
-          description="Track JS failures, API errors, broken routes, and stability risk across your monitored targets."
-          requiredPlanLabel="Premium"
-        />
-      </AppShell>
-    );
-  }
-
-
+  await gateModuleAccess(req, "errors");
 
   const range = (typeof sp?.range === "string" ? sp.range : "24h") as RangeKey;
   const fp = typeof sp?.fp === "string" ? sp.fp.slice(0, 180) : "";
