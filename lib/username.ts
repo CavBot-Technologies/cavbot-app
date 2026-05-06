@@ -7,6 +7,7 @@ export const USERNAME_MAX = 20;
 export const RESERVED_ROUTE_SLUGS = [
   "settings",
   "console",
+  "dashboard",
   "errors",
   "routes",
   "seo",
