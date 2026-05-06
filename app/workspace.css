@@ -12,32 +12,14 @@
 
 .cb-home{
   width:100%;
-  height:100%;
-  min-height:0;
 }
 
 .cb-route-workspace .cb-content{
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
-  padding-bottom: 16px;
+  padding-bottom: 0;
 }
 
-.cb-route-workspace{
-  height: calc(100dvh - var(--cb-footer-rail-space));
-  min-height: calc(100dvh - var(--cb-footer-rail-space));
-  overflow: hidden;
-}
-
-.cb-route-workspace .cb-main{
-  min-height: 0;
-  height: calc(100dvh - var(--cb-footer-rail-space));
-  overflow: hidden;
-}
-
-.cb-route-workspace .cb-sidebar{
-  height: calc(100dvh - var(--cb-footer-rail-space));
-  max-height: calc(100dvh - var(--cb-footer-rail-space));
+body:has(.cb-route-workspace){
+  padding-bottom: var(--safe-bottom);
 }
 
 body.cb-home-delete-open .cb-topbar{
@@ -50,8 +32,6 @@ body.cb-home-delete-open .cb-main{
 
 .cb-home .cb-workspace-console{
   max-width: 1320px;
-  height: 100%;
-  min-height: 0;
   margin: 0 auto;
   overflow-x: hidden;
 }
@@ -219,9 +199,7 @@ body.cb-home-delete-open .cb-main{
   display:grid;
   grid-template-columns: 1.1fr 0.9fr;
   gap: 16px;
-  height: 100%;
-  min-height: 0;
-  margin-bottom: 0;
+  margin-bottom: 16px;
 }
 @media (max-width: 1120px){
   .cb-home .cb-grid{ grid-template-columns: 1fr; }
@@ -231,9 +209,6 @@ body.cb-home-delete-open .cb-main{
   display:grid;
   gap: 16px;
   align-content: start;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 .cb-home .cb-card{
@@ -279,7 +254,7 @@ body.cb-home-delete-open .cb-main{
 }
 
 .cb-home .cb-cavpri-list.is-scroll {
-  max-height: clamp(220px, 34dvh, 340px);
+  max-height: min(430px, 48vh);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 6px;
