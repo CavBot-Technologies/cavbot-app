@@ -5,6 +5,8 @@ import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireSession, requireAccountContext } from "@/lib/apiAuth";
+import { findAccountById, getAuthPool } from "@/lib/authDb";
+import { resolveTierFromAccount } from "@/lib/billing/featureGates";
 import { resolveBillingPlanResolution } from "@/lib/billingPlan.server";
 import { resolvePlanIdFromTier, hasModule, type ModuleId } from "@/lib/plans";
 
@@ -23,6 +25,16 @@ function withGateDeadline<T>(promise: Promise<T>, timeoutMs = 1_800): Promise<T>
     }),
   ]).finally(() => {
     if (timer) clearTimeout(timer);
+  });
+}
+
+async function resolveStoredAccountPlan(accountId: string): Promise<ReturnType<typeof resolvePlanIdFromTier> | null> {
+  const account = await withGateDeadline(findAccountById(getAuthPool(), accountId), 900).catch(() => null);
+  if (!account) return null;
+  return resolveTierFromAccount({
+    tier: account.tier,
+    trialSeatActive: account.trialSeatActive,
+    trialEndsAt: account.trialEndsAt,
   });
 }
 
@@ -49,6 +61,10 @@ export async function gateModuleAccess(
     );
     planId = planResolution.currentPlanId;
   } catch (error) {
+    const storedPlanId = await resolveStoredAccountPlan(accountId);
+    if (storedPlanId) {
+      planId = storedPlanId;
+    }
     try {
       console.error(
         "[module-gate]",
@@ -57,6 +73,7 @@ export async function gateModuleAccess(
           accountId,
           moduleId,
           code: error instanceof Error ? error.message : String(error),
+          fallbackPlanId: storedPlanId,
         }),
       );
     } catch {

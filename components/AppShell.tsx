@@ -1755,9 +1755,14 @@ export default function AppShell({
     return pathname === href;
   };
 
-  function onNavItemClick(item: NavItem) {
+  function onNavItemClick(item: NavItem, event?: ReactMouseEvent<HTMLAnchorElement>) {
     setNavOpen(false);
     prefetchRoute(item.href);
+    if (item.href === "/dashboard" && pathname !== "/dashboard") {
+      event?.preventDefault();
+      recordNavigationStart("/dashboard", "router.push");
+      router.push("/dashboard");
+    }
     return;
   }
 
@@ -2465,7 +2470,7 @@ export default function AppShell({
                   prefetchRoute(item.href);
                   if (shouldWarmHome) warmCommandCenter();
                 }}
-                onClick={() => onNavItemClick(item)}
+                onClick={(event) => onNavItemClick(item, event)}
               >
                 <span className="cb-nav-meta">
                   <span className="cb-nav-label">{item.label}</span>

@@ -20,10 +20,23 @@ type ScannerControlCardProps = {
 
 type ScanStatusResponse = {
   ok: true;
+  degraded?: boolean;
   status: ProjectScanStatus;
 };
 
 const SCAN_METRICS_READY_EVENT = "cb:scan-metrics-ready";
+
+function isTransientScanStatusError(message: string) {
+  const normalized = message.trim().toUpperCase();
+  return (
+    normalized.includes("SERVICE_UNAVAILABLE") ||
+    normalized.includes("TX_TIMEOUT") ||
+    normalized.includes("TIMEOUT") ||
+    normalized.includes("RATE_LIMITED") ||
+    normalized.includes("503") ||
+    normalized.includes("504")
+  );
+}
 
 export default function ScannerControlCard({
   projectId,
@@ -79,6 +92,11 @@ export default function ScannerControlCard({
       }
     }
     const message = lastError instanceof Error ? lastError.message : "Unable to load scan status.";
+    if (isTransientScanStatusError(message)) {
+      setFetchError(null);
+      lastStatusErrorToastRef.current = "";
+      return;
+    }
     setFetchError(message);
     if (lastStatusErrorToastRef.current !== message) {
       lastStatusErrorToastRef.current = message;
@@ -127,7 +145,7 @@ export default function ScannerControlCard({
     report?.metrics.highPriorityCount ?? latestJob?.highPriorityCount ?? 0;
 
   const canRunScan =
-    Boolean(projectId && activeSite && liveUsage) &&
+    Boolean(projectId && activeSite) &&
     !isRunning &&
     !isSubmitting &&
     remaining > 0;
