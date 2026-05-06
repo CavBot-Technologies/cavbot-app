@@ -6,6 +6,7 @@ import { requireAccountContext, requireSession } from "@/lib/apiAuth";
 import { getProjectSummaryForTenant, type SummaryRange } from "@/lib/cavbotApi.server";
 import { resolveProjectAnalyticsAuth } from "@/lib/projectAnalyticsKey.server";
 import { readWorkspace } from "@/lib/workspaceStore.server";
+import type { ProjectSummary } from "@/lib/cavbotTypes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,6 +76,48 @@ function asHttpError(e: unknown) {
   return { status: 500, payload: { ok: false, error: "SUMMARY_PROXY_FAILED" } };
 }
 
+function emptyProjectSummary(args: {
+  project: { id: number; slug: string; name: string | null };
+  range: SummaryRange;
+  siteOrigin?: string;
+}): ProjectSummary {
+  return {
+    project: {
+      id: String(args.project.id),
+      name: args.project.name || args.project.slug || undefined,
+      projectId: args.project.id,
+    },
+    window: {
+      range: args.range,
+    },
+    activeSite: args.siteOrigin
+      ? {
+          id: "selected",
+          label: args.siteOrigin,
+          origin: args.siteOrigin,
+          isActive: true,
+        }
+      : undefined,
+    metrics: {},
+    diagnostics: {
+      degraded: true,
+      reason: "SUMMARY_UNAVAILABLE",
+    },
+  };
+}
+
+function isFatalSummaryError(e: unknown) {
+  const msg = String((e as { message?: unknown })?.message || e);
+  const code = String((e as { code?: unknown })?.code || "").trim();
+  return (
+    msg === "PROJECT_KEY_MISSING" ||
+    msg === "PROJECT_KEY_DECRYPT_FAILED" ||
+    code === "config_invalid" ||
+    code === "PROJECT_KEY_MISSING" ||
+    code === "PROJECT_KEY_DECRYPT_FAILED"
+  );
+}
+
 export async function GET(req: Request) {
   try {
     const session = await requireSession(req);
@@ -120,17 +163,28 @@ export async function GET(req: Request) {
 
     const analyticsAuth = await resolveProjectAnalyticsAuth(project);
 
-    const data = await getProjectSummaryForTenant({
-      projectId: project.id,
-      range,
-      siteOrigin,
-      siteId,
-      projectKey: analyticsAuth.projectKey,
-      adminToken: analyticsAuth.adminToken,
-      requestId: `api_summary_${project.id}`,
-    });
-
     const publicProject = { id: project.id, slug: project.slug, name: project.name };
+    let data: ProjectSummary;
+    let degraded = false;
+    try {
+      data = await getProjectSummaryForTenant({
+        projectId: project.id,
+        range,
+        siteOrigin,
+        siteId,
+        projectKey: analyticsAuth.projectKey,
+        adminToken: analyticsAuth.adminToken,
+        requestId: `api_summary_${project.id}`,
+      });
+    } catch (e: unknown) {
+      if (isFatalSummaryError(e)) throw e;
+      degraded = true;
+      data = emptyProjectSummary({ project: publicProject, range, siteOrigin });
+    }
+
+    if (degraded) {
+      return json({ ok: true, degraded: true, project: publicProject, data }, 200);
+    }
     return json({ ok: true, project: publicProject, data }, 200);
   } catch (e: unknown) {
     const { status, payload } = asHttpError(e);

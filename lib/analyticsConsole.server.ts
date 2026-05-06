@@ -189,6 +189,52 @@ function safeLog(event: string, payload: Record<string, unknown>) {
   }
 }
 
+function isFatalSummaryError(error: unknown) {
+  const code = publicAnalyticsError(error);
+  return (
+    isApiAuthError(error) ||
+    code === "PROJECT_KEY_MISSING" ||
+    code === "PROJECT_KEY_DECRYPT_FAILED" ||
+    code === "PROJECT_NOT_FOUND" ||
+    code === "config_invalid"
+  );
+}
+
+function emptyProjectSummary(args: {
+  project: AnalyticsConsoleProject;
+  range: AnalyticsRangeKey;
+  sites: AnalyticsConsoleSite[];
+  activeSite: AnalyticsConsoleSite;
+}): ProjectSummary {
+  return {
+    project: {
+      id: String(args.project.id),
+      name: args.project.name || args.project.slug || undefined,
+      projectId: args.project.id,
+    },
+    window: {
+      range: args.range,
+    },
+    sites: args.sites.map((site) => ({
+      id: site.id,
+      label: site.label,
+      origin: site.origin,
+      isActive: true,
+    })),
+    activeSite: args.activeSite.id === EMPTY_SITE.id ? undefined : {
+      id: args.activeSite.id,
+      label: args.activeSite.label,
+      origin: args.activeSite.origin,
+      isActive: true,
+    },
+    metrics: {},
+    diagnostics: {
+      degraded: true,
+      reason: "SUMMARY_UNAVAILABLE",
+    },
+  };
+}
+
 function withConsoleDeadline<T>(promise: Promise<T>, label: string, timeoutMs = 4_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null;
   return Promise.race([
@@ -400,6 +446,10 @@ export async function resolveAnalyticsConsoleContext(args?: {
         siteOrigin: activeSite.origin || null,
         code: publicAnalyticsError(error),
       });
+      if (!isFatalSummaryError(error)) {
+        summaryError = null;
+        summary = emptyProjectSummary({ project, range, sites, activeSite });
+      }
     }
   }
 
