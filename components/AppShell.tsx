@@ -1760,8 +1760,8 @@ export default function AppShell({
     prefetchRoute(item.href);
     if (item.href === "/dashboard" && pathname !== "/dashboard") {
       event?.preventDefault();
-      recordNavigationStart("/dashboard", "router.push");
-      router.push("/dashboard");
+      recordNavigationStart("/dashboard", "hard-navigation");
+      window.location.assign("/dashboard");
     }
     return;
   }
