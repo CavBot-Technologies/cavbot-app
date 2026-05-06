@@ -141,7 +141,7 @@ body.cb-home-delete-open .cb-main{
 
 .cb-home .cb-run-scan-btn,
 .cb-run-scan-btn{
-  background: rgba(78,168,255,0.85);
+  background: #4ea8ff;
   border: 1px solid #4ea8ff;
   color: #fff;
   font-weight: 750;
@@ -151,8 +151,8 @@ body.cb-home-delete-open .cb-main{
 }
 .cb-home .cb-run-scan-btn:hover,
 .cb-run-scan-btn:hover{
-  background: rgba(78,168,255,0.95);
-  border-color: rgba(78,168,255,0.95);
+  background: #4ea8ff;
+  border-color: #4ea8ff;
 }
 .cb-home .cb-run-scan-btn:disabled,
 .cb-run-scan-btn:disabled{
