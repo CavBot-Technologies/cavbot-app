@@ -190,7 +190,7 @@ export default function ArcadeLandingClient() {
             <Link className="btn btn-primary" href="/cavbot-arcade/gallery">
               Open Arcade Library
             </Link>
-            <Link className="btn btn-ghost" href="/console">
+            <Link className="btn btn-ghost" href="/dashboard">
               Back to Console
             </Link>
           </div>

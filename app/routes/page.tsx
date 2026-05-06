@@ -527,7 +527,7 @@ export default async function RoutesPage({ searchParams }: PageProps) {
   if (activeSite.id && activeSite.id !== "none") reportParams.set("siteId", activeSite.id);
   if (activeSite.url) reportParams.set("origin", activeSite.url);
   if (pathParam) reportParams.set("path", pathParam);
-  const reportHref = `/console/report?${reportParams.toString()}`;
+  const reportHref = `/dashboard/report?${reportParams.toString()}`;
   const reportFileName = `routes-report-${toSlug(activeSite.label || activeSite.id || "site")}-${range}.html`;
 
   return (

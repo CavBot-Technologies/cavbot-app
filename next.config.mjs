@@ -34,6 +34,11 @@ const nextConfig = {
         destination: "/",
         permanent: true,
       },
+      {
+        source: "/console/:path*",
+        destination: "/dashboard/:path*",
+        permanent: true,
+      },
     ];
   },
   async rewrites() {

@@ -540,7 +540,7 @@ export async function PATCH(req: Request) {
     const showCavbotProfileLink =
       typeof body.showCavbotProfileLink === "boolean" ? body.showCavbotProfileLink : null;
 
-    const publicProfileEnabled =
+    let publicProfileEnabled =
       typeof body.publicProfileEnabled === "boolean" ? body.publicProfileEnabled : null;
     const publicShowReadme =
       typeof body.publicShowReadme === "boolean" ? body.publicShowReadme : null;
@@ -565,21 +565,6 @@ export async function PATCH(req: Request) {
     const publicWorkspaceIdRaw = cleanStr(body.publicWorkspaceId, 24);
     const publicWorkspaceId =
       publicWorkspaceIdRaw == null ? null : /^[0-9]{1,10}$/.test(publicWorkspaceIdRaw) ? publicWorkspaceIdRaw : null;
-
-    // Private mode semantics (UI uses an inverted toggle). When the profile is private, force all
-    // public section toggles OFF server-side as a safety net (no client-only privacy).
-    const forcePrivateMode = publicProfileEnabled === false;
-    const publicShowReadmeEffective = forcePrivateMode ? false : publicShowReadme;
-    const publicShowWorkspaceSnapshotEffective = forcePrivateMode ? false : publicShowWorkspaceSnapshot;
-    const publicShowHealthOverviewEffective = forcePrivateMode ? false : publicShowHealthOverview;
-    const publicShowCapabilitiesEffective = forcePrivateMode ? false : publicShowCapabilities;
-    const publicShowArtifactsEffective = forcePrivateMode ? false : publicShowArtifacts;
-    const publicShowPlanTierEffective =
-      forcePrivateMode ? false : publicShowWorkspaceSnapshot === false ? false : publicShowPlanTier;
-    const publicShowBioEffective = forcePrivateMode ? false : publicShowBio;
-    const publicShowIdentityLinksEffective = forcePrivateMode ? false : publicShowIdentityLinks;
-    const publicShowIdentityLocationEffective = forcePrivateMode ? false : publicShowIdentityLocation;
-    const publicShowIdentityEmailEffective = forcePrivateMode ? false : publicShowIdentityEmail;
 
     // Username: treat empty string as "no change" to avoid accidentally clearing usernames on save.
     const usernameRawIncoming = typeof body?.username === "string" ? body.username.trim() : null;
@@ -608,12 +593,26 @@ export async function PATCH(req: Request) {
       }
     }
 
-    // Public profile cannot be enabled unless a username exists (derived URL).
     const effectiveUsername =
       hasUsernamePatch ? username : (existingProfile.username ? normalizeUsername(existingProfile.username) : null);
     if (publicProfileEnabled === true && !effectiveUsername) {
-      return jsonNoStore({ ok: false, message: "Set a username before enabling a public profile." }, { status: 400 });
+      publicProfileEnabled = false;
     }
+
+    // Private mode semantics (UI uses an inverted toggle). When the profile is private, force all
+    // public section toggles OFF server-side as a safety net (no client-only privacy).
+    const forcePrivateMode = publicProfileEnabled === false;
+    const publicShowReadmeEffective = forcePrivateMode ? false : publicShowReadme;
+    const publicShowWorkspaceSnapshotEffective = forcePrivateMode ? false : publicShowWorkspaceSnapshot;
+    const publicShowHealthOverviewEffective = forcePrivateMode ? false : publicShowHealthOverview;
+    const publicShowCapabilitiesEffective = forcePrivateMode ? false : publicShowCapabilities;
+    const publicShowArtifactsEffective = forcePrivateMode ? false : publicShowArtifacts;
+    const publicShowPlanTierEffective =
+      forcePrivateMode ? false : publicShowWorkspaceSnapshot === false ? false : publicShowPlanTier;
+    const publicShowBioEffective = forcePrivateMode ? false : publicShowBio;
+    const publicShowIdentityLinksEffective = forcePrivateMode ? false : publicShowIdentityLinks;
+    const publicShowIdentityLocationEffective = forcePrivateMode ? false : publicShowIdentityLocation;
+    const publicShowIdentityEmailEffective = forcePrivateMode ? false : publicShowIdentityEmail;
 
     const avatarToneRaw = cleanTone(body.avatarTone);
     const avatarTone = avatarToneRaw === null ? undefined : avatarToneRaw;

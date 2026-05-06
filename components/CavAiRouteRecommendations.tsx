@@ -63,7 +63,7 @@ type FixPlanState = {
   error: string | null;
 };
 
-const PACK_CACHE_TTL_MS = 30_000;
+const PACK_CACHE_TTL_MS = 5_000;
 const packCache = new Map<string, { at: number; value: PackResponseOk }>();
 const SCAN_METRICS_READY_EVENT = "cb:scan-metrics-ready";
 
@@ -100,8 +100,22 @@ function fmtScore(value: unknown): string {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(n);
 }
 
+function priorityRecencyMs(priority: CavAiPriorityV1): number {
+  const record = priority as unknown as Record<string, unknown>;
+  for (const key of ["lastSeenAtISO", "lastSeenAt", "updatedAtISO", "updatedAt", "generatedAtISO", "generatedAt", "createdAtISO", "createdAt", "firstSeenAtISO", "firstSeenAt"]) {
+    const raw = String(record[key] || "").trim();
+    if (!raw) continue;
+    const ts = Date.parse(raw);
+    if (Number.isFinite(ts)) return ts;
+  }
+  return 0;
+}
+
 function rankPriorities(rows: CavAiPriorityV1[]): CavAiPriorityV1[] {
   return rows.slice().sort((a, b) => {
+    const aRecent = priorityRecencyMs(a);
+    const bRecent = priorityRecencyMs(b);
+    if (bRecent !== aRecent) return bRecent - aRecent;
     const aScore = Number(a?.priorityScore);
     const bScore = Number(b?.priorityScore);
     if (Number.isFinite(aScore) && Number.isFinite(bScore) && bScore !== aScore) return bScore - aScore;
@@ -144,8 +158,9 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
   const visiblePriorities = useMemo(() => {
     if (!pack || !Array.isArray(pack.priorities)) return [] as CavAiPriorityV1[];
     const rows = rankPriorities(pack.priorities);
-    if (!pillarFilter) return rows.slice(0, isCommandCenter ? 3 : 4);
-    return rows.filter((row) => pillarFilter.has(String(row.pillar || ""))).slice(0, isCommandCenter ? 3 : 4);
+    const limit = isCommandCenter ? 12 : 4;
+    if (!pillarFilter) return rows.slice(0, limit);
+    return rows.filter((row) => pillarFilter.has(String(row.pillar || ""))).slice(0, limit);
   }, [isCommandCenter, pack, pillarFilter]);
 
   const topHistory = useMemo(() => history.slice(0, 4), [history]);
@@ -417,7 +432,7 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
 
         {visiblePriorities.length ? (
           <ul
-            className={isCommandCenter ? "cb-cavpri-list" : undefined}
+            className={isCommandCenter ? `cb-cavpri-list${visiblePriorities.length > 2 ? " is-scroll" : ""}` : undefined}
             style={
               isCommandCenter
                 ? undefined

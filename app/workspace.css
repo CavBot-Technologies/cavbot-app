@@ -245,6 +245,14 @@ body.cb-home-delete-open .cb-main{
   gap: 10px;
 }
 
+.cb-home .cb-cavpri-list.is-scroll {
+  max-height: min(430px, 48vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 6px;
+  scrollbar-width: thin;
+}
+
 .cb-home .cb-cavpri-item,
 .cb-home .cb-cavpri-empty,
 .cb-home .cb-cavpri-overlay,

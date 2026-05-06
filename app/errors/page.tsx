@@ -708,7 +708,7 @@ export default async function ErrorsPage({ searchParams }: PageProps) {
                     Clear
                   </a>
 
-                  <a className="cb-btn cb-btn-ghost" href={`/console/report${hrefWith({ fp })}`} target="_blank" rel="noreferrer">
+                  <a className="cb-btn cb-btn-ghost" href={`/dashboard/report${hrefWith({ fp })}`} target="_blank" rel="noreferrer">
                     Download report
                   </a>
                 </div>
@@ -762,7 +762,7 @@ export default async function ErrorsPage({ searchParams }: PageProps) {
                 </div>
 
                 <div className="cb-modal-actions">
-                  <a className="cb-btn cb-btn-ghost" data-tools-report href={`/console/report${hrefWith({ fp })}`} target="_blank" rel="noreferrer">
+                  <a className="cb-btn cb-btn-ghost" data-tools-report href={`/dashboard/report${hrefWith({ fp })}`} target="_blank" rel="noreferrer">
                     Download report
                   </a>
                   <button className="cb-btn" type="button" data-tools-apply>
@@ -870,7 +870,7 @@ export default async function ErrorsPage({ searchParams }: PageProps) {
       if(site && site !== "none") next.set("siteId", site);
       if(fp) next.set("fp", fp);
 
-      reportLink.setAttribute("href", "/console/report?" + next.toString());
+      reportLink.setAttribute("href", "/dashboard/report?" + next.toString());
     }catch(e){}
   }
 

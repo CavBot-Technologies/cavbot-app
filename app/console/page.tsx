@@ -810,7 +810,7 @@ export default async function ConsolePage({ searchParams }: PageProps) {
   const analyticsContext = await resolveAnalyticsConsoleContext({
     searchParams: sp,
     defaultRange: "7d",
-    pathname: "/console",
+    pathname: "/dashboard",
   });
 
   const rangeKey = analyticsContext.range;
@@ -1098,7 +1098,7 @@ export default async function ConsolePage({ searchParams }: PageProps) {
               range={rangeKey}
               sites={dashboardToolSites}
               selectedSiteId={activeSite.id}
-              reportHref={`/console/report${hrefWith({})}`}
+              reportHref={`/dashboard/report${hrefWith({})}`}
             />
           </div>
         </section>

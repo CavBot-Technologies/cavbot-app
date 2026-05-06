@@ -609,7 +609,7 @@ export default async function ControlRoomGamesPage({ searchParams }: PageProps) 
   reportParams.set("range", range);
   if (activeSite.id && activeSite.id !== "none") reportParams.set("siteId", activeSite.id);
   if (activeSite.url) reportParams.set("origin", activeSite.url);
-  const reportHref = `/console/report?${reportParams.toString()}`;
+  const reportHref = `/dashboard/report?${reportParams.toString()}`;
   const reportFileName = `control-room-${toSlug(activeSite.label || activeSite.id || "site")}-${range}.html`;
   const leaderboardRows = (cr.leaderboard || []).slice(0, 10);
   const leaderboardTopScore = leaderboardRows.reduce<number | null>((maxScore, row) => {

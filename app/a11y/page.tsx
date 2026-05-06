@@ -1229,7 +1229,7 @@ export default async function A11yPage({ searchParams }: PageProps) {
                 </div>
 
                 <div className="cb-modal-actions">
-                  <a className="cb-btn cb-btn-ghost" data-tools-report href={`/console/report${hrefWith({})}`} target="_blank" rel="noreferrer">
+                  <a className="cb-btn cb-btn-ghost" data-tools-report href={`/dashboard/report${hrefWith({})}`} target="_blank" rel="noreferrer">
                     Download report
                   </a>
                   <button className="cb-btn" type="button" data-tools-apply>
@@ -1310,7 +1310,7 @@ export default async function A11yPage({ searchParams }: PageProps) {
       next.set("range", range);
       if(site && site !== "none") next.set("siteId", site);
 
-      reportLink.setAttribute("href", "/console/report?" + next.toString());
+      reportLink.setAttribute("href", "/dashboard/report?" + next.toString());
     }catch(e){}
   }
 

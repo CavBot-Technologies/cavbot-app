@@ -784,7 +784,7 @@ export default function AppShell({
     commandCenterWarmRef.current = true;
 
     prefetchRoute("/");
-    prefetchRoute("/console");
+    prefetchRoute("/dashboard");
 
     void fetch("/", {
       method: "GET",
@@ -1075,7 +1075,7 @@ export default function AppShell({
   useEffect(() => {
     const warmRoutes = [
       "/",
-      "/console",
+      "/dashboard",
       "/errors",
       "/seo",
       "/routes",
@@ -1398,7 +1398,7 @@ export default function AppShell({
   const nav: NavItem[] = useMemo(
     () => [
       { href: "/", label: "Command Center", hint: "Notifications + Manage URLs", required: "FREE" },
-      { href: "/console", label: "Dashboard", hint: "Overall health + events", required: "FREE" },
+      { href: "/dashboard", label: "Dashboard", hint: "Overall health + events", required: "FREE" },
 
 
       // PREMIUM unlocks

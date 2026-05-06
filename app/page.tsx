@@ -2196,7 +2196,7 @@ function CommandDeckPageInner() {
   reportQuery.set("range", range);
   if (activeSite?.id) reportQuery.set("siteId", activeSite.id);
   if (selectedOrigin) reportQuery.set("origin", selectedOrigin);
-  const reportHref = `/console/report${reportQuery.toString() ? `?${reportQuery.toString()}` : ""}`;
+  const reportHref = `/dashboard/report${reportQuery.toString() ? `?${reportQuery.toString()}` : ""}`;
   const reportTargetSlug = slugifyForTools(activeSite?.label || activeSite?.id || "site");
   const reportFileName = `workspace-dashboard-${reportTargetSlug}-${range}.html`;
   const cavtoolsHref = `/cavtools${projectQS || siteQS ? `?${joinQS(projectQS, siteQS)}` : ""}`;

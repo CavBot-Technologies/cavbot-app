@@ -541,7 +541,7 @@ function buildInsights(input: {
     metricValue: "",
     why: "CavBot consolidates SEO, stability, vitals, and accessibility signals into one posture read.",
     next: "Use the findings below as your prioritized work queue.",
-    href: "/console",
+    href: "/dashboard",
   });
 
   if (input.rate404Pct != null || input.views404 != null) {
@@ -580,7 +580,7 @@ function buildInsights(input: {
       metricValue: fmtMs(input.lcpP75Ms),
       why: "LCP reflects perceived loading speed. Slow LCP is strongly correlated with bounce risk.",
       next: "Reduce above-the-fold payload, optimize hero media, and remove render-blocking work.",
-      href: "/console",
+      href: "/dashboard",
     });
   }
 
@@ -593,7 +593,7 @@ function buildInsights(input: {
       metricValue: fmtMs(input.inpP75Ms),
       why: "INP measures responsiveness. Poor INP often points to main-thread congestion.",
       next: "Audit long tasks, reduce heavy JS, and defer non-critical work on interaction.",
-      href: "/console",
+      href: "/dashboard",
     });
   }
 
@@ -606,7 +606,7 @@ function buildInsights(input: {
       metricValue: fmtCls(input.clsP75),
       why: "Layout shift breaks reading flow and causes mis-clicks—especially on mobile.",
       next: "Reserve space for media, avoid late-loading UI injection, and stabilize fonts.",
-      href: "/console",
+      href: "/dashboard",
     });
   }
 
@@ -658,7 +658,7 @@ function buildInsights(input: {
       metricValue: input.a11yIssues === 0 ? "0" : fmtInt(input.a11yIssues),
       why: "Accessibility issues reduce usability, increase legal risk, and degrade conversion for keyboard/screen-reader users.",
       next: "Fix missing labels/names first, then address structure, focus, and contrast.",
-      href: "/console",
+      href: "/dashboard",
     });
   }
 
@@ -671,7 +671,7 @@ function buildInsights(input: {
       metricValue: input.contrastFails === 0 ? "0" : fmtInt(input.contrastFails),
       why: "Insufficient contrast reduces readability and accessibility, especially in sunlight and low-quality displays.",
       next: "Raise text contrast on key UI surfaces and verify across themes/states.",
-      href: "/console",
+      href: "/dashboard",
     });
   }
 
@@ -684,7 +684,7 @@ function buildInsights(input: {
       metricValue: input.focusWarns === 0 ? "0" : fmtInt(input.focusWarns),
       why: "Poor focus visibility blocks keyboard navigation and prevents confident interaction.",
       next: "Ensure clear focus rings and no focus-traps on modals and menus.",
-      href: "/console",
+      href: "/dashboard",
     });
   }
 
@@ -1014,7 +1014,7 @@ function buildMissionQueue(input: {
         "CavBot sees slow first paint. Tighten critical rendering before users bounce.",
       ] as const),
       improves: `Expected outcome: reclaim about ${fmtInt(msLift)} ms on perceived load if top-route payload is reduced.`,
-      href: "/console",
+      href: "/dashboard",
       _rank: rankForTone(tone),
       _mag: Math.max(1, input.lcpP75Ms),
       effortOwner: "Console",
@@ -1037,7 +1037,7 @@ function buildMissionQueue(input: {
         "CavBot detected response lag. Tightening event handlers here gives immediate UX lift.",
       ] as const),
       improves: `Expected outcome: shave roughly ${fmtInt(msLift)} ms from interaction delay on active sessions.`,
-      href: "/console",
+      href: "/dashboard",
       _rank: rankForTone(tone),
       _mag: Math.max(1, input.inpP75Ms),
       effortOwner: "Console",
@@ -1060,7 +1060,7 @@ function buildMissionQueue(input: {
         "Visual stability is drifting. Anchor media and injected UI blocks to stop misclick churn.",
       ] as const),
       improves: `Expected outcome: remove roughly ${fmtInt(shiftLift)} basis points of layout shift across mobile-heavy sessions.`,
-      href: "/console",
+      href: "/dashboard",
       _rank: rankForTone(tone),
       _mag: Math.max(1, (input.clsP75 ?? 0) * 1000),
       effortOwner: "Console",
@@ -1111,7 +1111,7 @@ function buildMissionQueue(input: {
         "Accessibility issues are throttling confidence. Start with critical affordances users touch every session.",
       ] as const),
       improves: `Expected outcome: clear about ${fmtInt(fixes)} blockers and improve conversion reliability on assistive journeys.`,
-      href: "/console",
+      href: "/dashboard",
       _rank: rankForTone(tone),
       _mag: total,
       effortOwner: "A11y",
@@ -1199,7 +1199,7 @@ function buildMissionQueue(input: {
         "This a11y hotspot is compounding. Clearing it now prevents repeated audit failures.",
       ] as const),
       improves: `Expected outcome: clear about ${fmtInt(cut)} repeats (${fmtPct(share * 100, 1)} of observed a11y load).`,
-      href: "/console",
+      href: "/dashboard",
       _rank: rankForTone(tone),
       _mag: Math.max(1, issue.hits * 1.4),
       effortOwner: "A11y",
@@ -1234,7 +1234,7 @@ function buildMissionQueue(input: {
       metricValue: `${fmtInt(observedSignals)}/14`,
       why: "CavBot only ranks what it can observe. Add live traffic + audits for full deterministic queueing.",
       improves: "Expected outcome: once coverage fills, Mission Control will auto-rank route-level and fingerprint-level fixes.",
-      href: "/console",
+      href: "/dashboard",
       _rank: observedSignals >= 6 ? 2 : 3,
       _mag: Math.max(1, 14 - observedSignals),
       effortOwner: "Console",
@@ -2125,7 +2125,7 @@ export default async function InsightsPage({ searchParams }: PageProps) {
                 </div>
 
                 <div className="cb-modal-actions">
-                  <a className="cb-btn cb-btn-ghost" data-tools-report href={`/console/report${hrefWith({})}`} target="_blank" rel="noreferrer">
+                  <a className="cb-btn cb-btn-ghost" data-tools-report href={`/dashboard/report${hrefWith({})}`} target="_blank" rel="noreferrer">
                     Download report
                   </a>
                   <button className="cb-btn" type="button" data-tools-apply>
@@ -2202,7 +2202,7 @@ export default async function InsightsPage({ searchParams }: PageProps) {
       next.set("range", range);
       if(site && site !== "none") next.set("siteId", site);
 
-      reportLink.setAttribute("href", "/console/report?" + next.toString());
+      reportLink.setAttribute("href", "/dashboard/report?" + next.toString());
     }catch(e){}
   }
 

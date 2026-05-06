@@ -12,7 +12,7 @@ export default function LockedModule({
   description,
   requiredPlanLabel = "Premium",
   primaryCtaHref = "/plan",
-  secondaryCtaHref = "/console",
+  secondaryCtaHref = "/dashboard",
   primaryCtaLabel = "Upgrade Plan",
   secondaryCtaLabel = "Dashboard",
   bullets = [

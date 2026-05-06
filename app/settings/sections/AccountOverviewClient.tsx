@@ -425,9 +425,16 @@ const COMPANY_SUBCATEGORIES_BY_CATEGORY = Object.fromEntries(
   WORKSPACE_CATEGORIES.map(({ value, subcategories }) => [value, subcategories])
 );
 
-function clamp2MB(file: File) {
-  const max = 2 * 1024 * 1024;
-  return file.size <= max;
+const MAX_AVATAR_IMAGE_BYTES = 2 * 1024 * 1024;
+const AVATAR_CANVAS_MAX_PX = 512;
+
+function dataUrlByteLength(dataUrl: string) {
+  const marker = "base64,";
+  const idx = dataUrl.indexOf(marker);
+  if (idx === -1) return dataUrl.length;
+  const payload = dataUrl.slice(idx + marker.length);
+  const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
+  return Math.ceil((payload.length * 3) / 4) - padding;
 }
 
 function readFileAsDataURL(file: File) {
@@ -437,6 +444,44 @@ function readFileAsDataURL(file: File) {
     r.onerror = () => reject(new Error("read_failed"));
     r.readAsDataURL(file);
   });
+}
+
+function loadImageElement(dataUrl: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new window.Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("image_load_failed"));
+    img.src = dataUrl;
+  });
+}
+
+async function prepareAvatarDataUrl(file: File) {
+  if (!file.type || !file.type.startsWith("image/")) {
+    throw new Error("invalid_type");
+  }
+
+  const original = await readFileAsDataURL(file);
+  if (dataUrlByteLength(original) <= MAX_AVATAR_IMAGE_BYTES) return original;
+
+  const image = await loadImageElement(original);
+  const largestSide = Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height, 1);
+  const scale = Math.min(1, AVATAR_CANVAS_MAX_PX / largestSide);
+  const width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+  const height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas_unavailable");
+  ctx.clearRect(0, 0, width, height);
+  ctx.drawImage(image, 0, 0, width, height);
+
+  for (const quality of [0.86, 0.78, 0.7, 0.62, 0.54]) {
+    const compressed = canvas.toDataURL("image/jpeg", quality);
+    if (dataUrlByteLength(compressed) <= MAX_AVATAR_IMAGE_BYTES) return compressed;
+  }
+
+  throw new Error("too_large");
 }
 
 function toneToCss(t: ToneKey) {
@@ -930,18 +975,13 @@ export default function AccountOverviewClient() {
   const onUpload = async (file?: File | null) => {
   if (!file) return;
 
-  if (!clamp2MB(file)) {
-    alert("File too large. Max is 2MB (PNG/JPG/WEBP/AVIF).");
-    return;
-  }
-
   try {
-    const data = await readFileAsDataURL(file);
+    const data = await prepareAvatarDataUrl(file);
 
     // Preview ONLY (do NOT write LS yet)
     setAvatarImage(data);
   } catch {
-    alert("Upload failed. Please try a PNG/JPG/WEBP/AVIF under 2MB.");
+    alert("Upload failed. Please try a PNG/JPG/WEBP/AVIF image.");
   }
 };
 
