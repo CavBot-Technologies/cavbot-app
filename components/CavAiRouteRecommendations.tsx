@@ -158,7 +158,7 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
   const visiblePriorities = useMemo(() => {
     if (!pack || !Array.isArray(pack.priorities)) return [] as CavAiPriorityV1[];
     const rows = rankPriorities(pack.priorities);
-    const limit = isCommandCenter ? 12 : 4;
+    const limit = isCommandCenter ? 3 : 4;
     if (!pillarFilter) return rows.slice(0, limit);
     return rows.filter((row) => pillarFilter.has(String(row.pillar || ""))).slice(0, limit);
   }, [isCommandCenter, pack, pillarFilter]);
