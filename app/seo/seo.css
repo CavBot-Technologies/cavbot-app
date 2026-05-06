@@ -418,6 +418,14 @@
   grid-auto-rows: 1fr;
 }
 
+.seo-indexability-grid{
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.seo-indexability-sample{
+  grid-column: 1 / -1;
+}
+
 .seo-mini-grid-stack{
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
