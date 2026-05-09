@@ -795,7 +795,7 @@ function withDashboardDeadline<T>(promise: Promise<T>, timeoutMs = 1_800): Promi
 }
 
 async function resolveDashboardHeading(): Promise<DashboardHeading> {
-  const fallbackOwner = "U's";
+  const fallbackOwner = "Your";
   const fallback: DashboardHeading = {
     appShellTitle: `${fallbackOwner} Dashboard`,
     ownerLabel: fallbackOwner,
@@ -830,7 +830,7 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
     );
 
     const accentColor = profileToneToAccentColor(String(profile?.avatarTone || authUser?.avatarTone || ""));
-    const preferredName = String(profile?.fullName || profile?.displayName || authUser?.displayName || "").trim();
+    const preferredName = String(profile?.fullName || profile?.displayName || authUser?.fullName || authUser?.displayName || "").trim();
     if (preferredName) {
       const ownerLabel = `${preferredName}'s`;
       return {
