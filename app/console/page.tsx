@@ -686,6 +686,45 @@ function normalizeConsoleMetrics(raw: unknown): ConsoleMetrics {
   };
 }
 
+function emptyConsoleSummary(args: {
+  projectId: string;
+  projectLabel: string;
+  range: string;
+  activeSite: { id?: string; label?: string; origin?: string; url?: string };
+}): ProjectSummary {
+  const origin = String(args.activeSite.origin || args.activeSite.url || "").trim();
+  return {
+    project: {
+      id: args.projectId || "0",
+      name: args.projectLabel,
+      projectId: Number(args.projectId) || undefined,
+    },
+    window: {
+      range: args.range,
+    },
+    sites: origin
+      ? [{
+          id: String(args.activeSite.id || origin),
+          label: String(args.activeSite.label || origin),
+          origin,
+        }]
+      : [],
+    activeSite: origin
+      ? {
+          id: String(args.activeSite.id || origin),
+          label: String(args.activeSite.label || origin),
+          origin,
+        }
+      : undefined,
+    metrics: {},
+    geo: {
+      countries: [],
+      regions: [],
+      cities: [],
+    },
+  };
+}
+
 function hasMeasuredConsoleActivity(metrics: ConsoleMetrics | null) {
   if (!metrics) return false;
   const numericSignals = [
@@ -846,15 +885,28 @@ export default async function ConsolePage({ searchParams }: PageProps) {
     return str ? `?${str}` : "";
   };
 
-  const data: ProjectSummary | null = analyticsContext.summary;
-  const loadError: unknown = analyticsContext.summaryError;
+  const summaryError: unknown = analyticsContext.summaryError;
+  const fatalLoadError = Boolean(
+    summaryError
+      && (!analyticsContext.project || analyticsConsoleErrorCode(summaryError) === "PROJECT_NOT_FOUND")
+  );
+  const data: ProjectSummary | null = analyticsContext.summary || (!fatalLoadError && analyticsContext.project
+    ? emptyConsoleSummary({
+        projectId,
+        projectLabel: analyticsContext.projectLabel || (projectId ? `Project ${projectId}` : "Project"),
+        range,
+        activeSite,
+      })
+    : null);
+  const loadError: unknown = fatalLoadError ? summaryError : null;
+  const summaryWarning: unknown = !fatalLoadError ? summaryError : null;
 
   const metrics: ConsoleMetrics | null = data?.metrics ? normalizeConsoleMetrics(data.metrics) : null;
 
   const projectLabel = analyticsContext.projectLabel || (projectId ? `Project ${projectId}` : "Project");
 
   const envMissing = Boolean(loadError && isEnvMissingError(loadError));
-  const hasMetrics = Boolean(!loadError && metrics && hasMeasuredConsoleActivity(metrics));
+  const hasMetrics = Boolean(!loadError && metrics && (summaryWarning || hasMeasuredConsoleActivity(metrics)));
 
   const score = metrics ? n(metrics.guardianScore) : 0;
   const badge = scoreLabel(score);
