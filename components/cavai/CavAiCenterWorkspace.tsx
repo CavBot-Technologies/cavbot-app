@@ -940,21 +940,12 @@ function centerPlanModelIds(planIdRaw: unknown): string[] {
   return Array.from(new Set(ids));
 }
 
-function centerPlanModelOptions(planIdRaw: unknown): CavAiModelOption[] {
-  return centerPlanModelIds(planIdRaw).map((id) => ({
-    id,
-    label: resolveAiModelLabel(id),
-  }));
-}
-
-function mergeCenterModelOptionsWithPlan(
+function filterCenterModelOptionsForPlan(
   options: CavAiModelOption[],
   planIdRaw: unknown
 ): CavAiModelOption[] {
-  return normalizeCenterModelOptions([
-    ...centerPlanModelOptions(planIdRaw),
-    ...options,
-  ]);
+  const allowedIds = new Set(centerPlanModelIds(planIdRaw));
+  return normalizeCenterModelOptions(options).filter((option) => allowedIds.has(option.id));
 }
 
 function mergeCenterReasoningLevelsWithPlan(
@@ -4938,7 +4929,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       };
       if (!res.ok || body.ok !== true) {
         emitGuardDecisionFromPayload(body);
-        setModelOptions((prev) => mergeCenterModelOptionsWithPlan(prev, accountPlanId));
+        setModelOptions((prev) => filterCenterModelOptionsForPlan(prev, accountPlanId));
         setAvailableReasoningLevels((prev) => mergeCenterReasoningLevelsWithPlan(prev, accountPlanId));
         return false;
       }
@@ -4954,7 +4945,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         ? body.modelCatalog?.image.map((row) => toModelOption(row)).filter(Boolean) as CavAiModelOption[]
         : [];
       if (hasCatalog) {
-        setModelOptions(mergeCenterModelOptionsWithPlan([...textOptions, ...imageOptions], effectivePlanId));
+        setModelOptions(filterCenterModelOptionsForPlan([...textOptions, ...imageOptions], effectivePlanId));
       } else {
         const fallbackOptions = [s(body.models?.chat), s(body.models?.reasoning)]
           .filter(Boolean)
@@ -4962,7 +4953,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
             id,
             label: resolveAiModelLabel(id),
           }));
-        setModelOptions(mergeCenterModelOptionsWithPlan(fallbackOptions, effectivePlanId));
+        setModelOptions(filterCenterModelOptionsForPlan(fallbackOptions, effectivePlanId));
       }
 
       const audioOptions = Array.isArray(body.modelCatalog?.audio)
@@ -4981,7 +4972,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       return true;
     } catch {
       // Best effort only.
-      setModelOptions((prev) => mergeCenterModelOptionsWithPlan(prev, accountPlanId));
+      setModelOptions((prev) => filterCenterModelOptionsForPlan(prev, accountPlanId));
       setAvailableReasoningLevels((prev) => mergeCenterReasoningLevelsWithPlan(prev, accountPlanId));
       return false;
     }
@@ -5367,7 +5358,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
   useEffect(() => {
     if (isGuestPreviewMode) return;
-    setModelOptions((prev) => mergeCenterModelOptionsWithPlan(prev, accountPlanId));
+    setModelOptions((prev) => filterCenterModelOptionsForPlan(prev, accountPlanId));
     setAvailableReasoningLevels((prev) => mergeCenterReasoningLevelsWithPlan(prev, accountPlanId));
   }, [accountPlanId, isGuestPreviewMode]);
 
