@@ -886,11 +886,13 @@ export default async function ConsolePage({ searchParams }: PageProps) {
   };
 
   const summaryError: unknown = analyticsContext.summaryError;
+  const summaryErrorCode = summaryError ? analyticsConsoleErrorCode(summaryError) : "";
   const fatalLoadError = Boolean(
     summaryError
-      && (!analyticsContext.project || analyticsConsoleErrorCode(summaryError) === "PROJECT_NOT_FOUND")
+      && summaryErrorCode !== "ANALYTICS_SUMMARY_FAILED"
+      && (!analyticsContext.project || summaryErrorCode === "PROJECT_NOT_FOUND")
   );
-  const data: ProjectSummary | null = analyticsContext.summary || (!fatalLoadError && analyticsContext.project
+  const data: ProjectSummary | null = analyticsContext.summary || (!fatalLoadError
     ? emptyConsoleSummary({
         projectId,
         projectLabel: analyticsContext.projectLabel || (projectId ? `Project ${projectId}` : "Project"),
