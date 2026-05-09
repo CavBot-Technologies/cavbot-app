@@ -5016,7 +5016,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         planId?: unknown;
       };
       if (!res.ok || body.ok !== true || !body.settings || typeof body.settings !== "object") return false;
-      setAccountPlanId(normalizePlanId(body.planId));
+      setAccountPlanId((prev) => {
+        const next = normalizePlanId(body.planId);
+        return planTierRank(next) >= planTierRank(prev) ? next : prev;
+      });
       const snapshot = normalizeAgentRegistrySnapshot(body.agentRegistry);
       setAgentRegistrySnapshot(snapshot);
       agentRegistrySnapshotRef.current = snapshot;
@@ -7607,7 +7610,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       if (!res.ok || !body.ok || !body.settings || typeof body.settings !== "object") {
         throw new Error(s(body.message) || "Failed to update Agent Mode settings.");
       }
-      setAccountPlanId(normalizePlanId(body.planId));
+      setAccountPlanId((prev) => {
+        const next = normalizePlanId(body.planId);
+        return planTierRank(next) >= planTierRank(prev) ? next : prev;
+      });
       const snapshot = normalizeAgentRegistrySnapshot(body.agentRegistry);
       setAgentRegistrySnapshot(snapshot);
       agentRegistrySnapshotRef.current = snapshot;
@@ -7691,7 +7697,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       if (!res.ok || !body.ok || !body.settings || typeof body.settings !== "object") {
         throw new Error(s(body.message) || "Failed to update custom agents.");
       }
-      setAccountPlanId(normalizePlanId(body.planId));
+      setAccountPlanId((prev) => {
+        const next = normalizePlanId(body.planId);
+        return planTierRank(next) >= planTierRank(prev) ? next : prev;
+      });
       const snapshot = normalizeAgentRegistrySnapshot(body.agentRegistry);
       setAgentRegistrySnapshot(snapshot);
       agentRegistrySnapshotRef.current = snapshot;

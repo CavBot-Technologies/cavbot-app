@@ -20,6 +20,7 @@ test("CavAi Center model picker treats policy catalog as authoritative", () => {
   assert.equal(source.includes("allowed.has(level) && set.has(level)"), true);
   assert.equal(source.includes("void loadProviderModels();"), true);
   assert.equal(source.includes("setModelOptions(filterCenterModelOptionsForPlan(catalogOptions, effectivePlanId));"), true);
+  assert.equal(source.includes("return planTierRank(next) >= planTierRank(prev) ? next : prev;"), true);
   assert.equal(source.includes("setModelOptions(mergeCenterModelOptionsWithPlan"), false);
   assert.equal(source.includes("mergeCenterReasoningLevelsWithPlan"), false);
 });
