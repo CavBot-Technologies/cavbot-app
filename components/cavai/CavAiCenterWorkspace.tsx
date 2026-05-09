@@ -950,6 +950,13 @@ function filterCenterModelOptionsForPlan(
   return normalizeCenterModelOptions(options).filter((option) => allowedIds.has(option.id));
 }
 
+function centerPlanModelOptions(planIdRaw: unknown): CavAiModelOption[] {
+  return centerPlanModelIds(planIdRaw).map((id) => ({
+    id,
+    label: resolveAiModelLabel(id),
+  }));
+}
+
 function filterCenterReasoningLevelsForPlan(
   options: ReasoningLevel[],
   planIdRaw: unknown
@@ -4937,6 +4944,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       const policyPlanId = normalizePlanId(body.planId);
       const effectivePlanId =
         planTierRank(policyPlanId) >= planTierRank(accountPlanId) ? policyPlanId : accountPlanId;
+      const policyPlanLagging = planTierRank(policyPlanId) < planTierRank(accountPlanId);
       setAccountPlanId(effectivePlanId);
       const hasCatalog = Boolean(body.modelCatalog && typeof body.modelCatalog === "object");
       const textOptions = Array.isArray(body.modelCatalog?.text)
@@ -4946,7 +4954,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         ? body.modelCatalog?.image.map((row) => toModelOption(row)).filter(Boolean) as CavAiModelOption[]
         : [];
       if (hasCatalog) {
-        setModelOptions(filterCenterModelOptionsForPlan([...textOptions, ...imageOptions], effectivePlanId));
+        const catalogOptions = policyPlanLagging
+          ? [...centerPlanModelOptions(effectivePlanId), ...textOptions, ...imageOptions]
+          : [...textOptions, ...imageOptions];
+        setModelOptions(filterCenterModelOptionsForPlan(catalogOptions, effectivePlanId));
       } else {
         const fallbackOptions = [s(body.models?.chat), s(body.models?.reasoning)]
           .filter(Boolean)
@@ -4963,7 +4974,9 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       setAudioModelOptions(audioOptions);
 
       const optionsFromPolicy = normalizeReasoningOptions(body.reasoning?.options);
-      if (optionsFromPolicy.length) {
+      if (policyPlanLagging) {
+        setAvailableReasoningLevels(filterCenterReasoningLevelsForPlan(reasoningLevelsForPlan(effectivePlanId), effectivePlanId));
+      } else if (optionsFromPolicy.length) {
         setAvailableReasoningLevels(filterCenterReasoningLevelsForPlan(optionsFromPolicy, effectivePlanId));
       } else {
         const optionsFromMax = reasoningLevelsUpTo(body.reasoning?.maxLevel);

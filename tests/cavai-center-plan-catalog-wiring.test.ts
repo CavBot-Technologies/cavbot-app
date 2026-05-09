@@ -12,11 +12,14 @@ test("CavAi Center model picker treats policy catalog as authoritative", () => {
 
   assert.equal(source.includes("function filterCenterModelOptionsForPlan("), true);
   assert.equal(source.includes("function filterCenterReasoningLevelsForPlan("), true);
+  assert.equal(source.includes("function centerPlanModelOptions("), true);
   assert.equal(source.includes("ALIBABA_QWEN_CODER_MODEL_ID"), true);
+  assert.equal(source.includes("const policyPlanLagging = planTierRank(policyPlanId) < planTierRank(accountPlanId);"), true);
+  assert.equal(source.includes("policyPlanLagging"), true);
   assert.equal(source.includes("normalizeCenterModelOptions(options).filter((option) => allowedIds.has(option.id))"), true);
   assert.equal(source.includes("allowed.has(level) && set.has(level)"), true);
   assert.equal(source.includes("void loadProviderModels();"), true);
-  assert.equal(source.includes("setModelOptions(filterCenterModelOptionsForPlan([...textOptions, ...imageOptions], effectivePlanId));"), true);
+  assert.equal(source.includes("setModelOptions(filterCenterModelOptionsForPlan(catalogOptions, effectivePlanId));"), true);
   assert.equal(source.includes("setModelOptions(mergeCenterModelOptionsWithPlan"), false);
   assert.equal(source.includes("mergeCenterReasoningLevelsWithPlan"), false);
 });
