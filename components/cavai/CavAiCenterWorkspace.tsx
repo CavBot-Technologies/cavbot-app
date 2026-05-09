@@ -21,6 +21,7 @@ import { resolveAccountDisplayName, resolveAccountPlanLabel } from "@/lib/profil
 import {
   ALIBABA_QWEN_ASR_MODEL_ID,
   ALIBABA_QWEN_CHARACTER_MODEL_ID,
+  ALIBABA_QWEN_CODER_MODEL_ID,
   ALIBABA_QWEN_FLASH_MODEL_ID,
   ALIBABA_QWEN_IMAGE_EDIT_MODEL_ID,
   ALIBABA_QWEN_IMAGE_MODEL_ID,
@@ -931,6 +932,7 @@ function centerPlanModelIds(planIdRaw: unknown): string[] {
     ids.push(
       DEEPSEEK_REASONER_MODEL_ID,
       ALIBABA_QWEN_PLUS_MODEL_ID,
+      ALIBABA_QWEN_CODER_MODEL_ID,
       ALIBABA_QWEN_IMAGE_MODEL_ID
     );
   }

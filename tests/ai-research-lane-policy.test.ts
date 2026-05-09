@@ -13,6 +13,7 @@ import {
   ALIBABA_QWEN_IMAGE_MODEL_ID,
   ALIBABA_QWEN_MAX_MODEL_ID,
   ALIBABA_QWEN_PLUS_MODEL_ID,
+  ALIBABA_QWEN_TTS_REALTIME_MODEL_ID,
   DEEPSEEK_CHAT_MODEL_ID,
   DEEPSEEK_REASONER_MODEL_ID,
   type AiModelRoleHint,
@@ -101,14 +102,20 @@ function buildCatalog() {
     ],
     audio: [
       {
-        id: ALIBABA_QWEN_ASR_MODEL_ID,
-        label: "Qwen3-ASR-Flash",
+        id: ALIBABA_QWEN_ASR_REALTIME_MODEL_ID,
+        label: "Qwen3-ASR-Flash-Realtime",
         providerId: "alibaba_qwen" as const,
         capability: "transcription" as const,
       },
       {
-        id: ALIBABA_QWEN_ASR_REALTIME_MODEL_ID,
-        label: "Qwen3-ASR-Flash-Realtime",
+        id: ALIBABA_QWEN_TTS_REALTIME_MODEL_ID,
+        label: "Qwen3-TTS-Instruct-Flash-Realtime",
+        providerId: "alibaba_qwen" as const,
+        capability: "speech" as const,
+      },
+      {
+        id: ALIBABA_QWEN_ASR_MODEL_ID,
+        label: "Qwen3-ASR-Flash",
         providerId: "alibaba_qwen" as const,
         capability: "transcription" as const,
       },
@@ -182,7 +189,11 @@ test("plan visibility maps to the approved model stack", () => {
       free.text.map((row) => row.id),
       [DEEPSEEK_CHAT_MODEL_ID, ALIBABA_QWEN_FLASH_MODEL_ID, ALIBABA_QWEN_CHARACTER_MODEL_ID]
     );
-    assert.deepEqual(free.audio.map((row) => row.id), [ALIBABA_QWEN_ASR_REALTIME_MODEL_ID]);
+    assert.deepEqual(free.audio.map((row) => row.id), [
+      ALIBABA_QWEN_ASR_REALTIME_MODEL_ID,
+      ALIBABA_QWEN_TTS_REALTIME_MODEL_ID,
+      ALIBABA_QWEN_ASR_MODEL_ID,
+    ]);
     assert.deepEqual(free.image.map((row) => row.id), []);
 
     const premium = resolveVisibleModelCatalogForPlan({
@@ -195,8 +206,14 @@ test("plan visibility maps to the approved model stack", () => {
     assert.equal(premium.text.some((row) => row.id === ALIBABA_QWEN_FLASH_MODEL_ID), true);
     assert.equal(premium.text.some((row) => row.id === DEEPSEEK_REASONER_MODEL_ID), true);
     assert.equal(premium.text.some((row) => row.id === ALIBABA_QWEN_PLUS_MODEL_ID), true);
+    assert.equal(premium.text.some((row) => row.id === ALIBABA_QWEN_CODER_MODEL_ID), true);
     assert.equal(premium.text.some((row) => row.id === ALIBABA_QWEN_MAX_MODEL_ID), false);
     assert.equal(premium.text.some((row) => row.id === ALIBABA_QWEN_CHARACTER_MODEL_ID), true);
+    assert.deepEqual(premium.audio.map((row) => row.id), [
+      ALIBABA_QWEN_ASR_REALTIME_MODEL_ID,
+      ALIBABA_QWEN_TTS_REALTIME_MODEL_ID,
+      ALIBABA_QWEN_ASR_MODEL_ID,
+    ]);
     assert.deepEqual(premium.image.map((row) => row.id), [ALIBABA_QWEN_IMAGE_MODEL_ID]);
 
     const premiumPlus = resolveVisibleModelCatalogForPlan({
@@ -210,14 +227,20 @@ test("plan visibility maps to the approved model stack", () => {
     assert.equal(premiumPlus.text.some((row) => row.id === DEEPSEEK_REASONER_MODEL_ID), true);
     assert.equal(premiumPlus.text.some((row) => row.id === ALIBABA_QWEN_PLUS_MODEL_ID), true);
     assert.equal(premiumPlus.text.some((row) => row.id === ALIBABA_QWEN_MAX_MODEL_ID), true);
+    assert.equal(premiumPlus.text.some((row) => row.id === ALIBABA_QWEN_CODER_MODEL_ID), true);
     assert.equal(premiumPlus.text.some((row) => row.id === ALIBABA_QWEN_CHARACTER_MODEL_ID), true);
+    assert.deepEqual(premiumPlus.audio.map((row) => row.id), [
+      ALIBABA_QWEN_ASR_REALTIME_MODEL_ID,
+      ALIBABA_QWEN_TTS_REALTIME_MODEL_ID,
+      ALIBABA_QWEN_ASR_MODEL_ID,
+    ]);
     assert.deepEqual(premiumPlus.image.map((row) => row.id), [ALIBABA_QWEN_IMAGE_MODEL_ID, ALIBABA_QWEN_IMAGE_EDIT_MODEL_ID]);
   } finally {
     process.env.CAVAI_QWEN_MAX_ENABLED = previousQwenMaxEnabled;
   }
 });
 
-test("cavcode context exposes only Caven coding model", () => {
+test("Caven is premium-visible and cavcode context stays coder-only", () => {
   const modelCatalog = buildCatalog();
 
   const freeCavcodeCatalog = resolveVisibleModelCatalogForContext({
@@ -239,7 +262,7 @@ test("cavcode context exposes only Caven coding model", () => {
     action: "write_note",
     modelCatalog,
   });
-  assert.equal(centerCatalog.text.some((row) => row.id === ALIBABA_QWEN_CODER_MODEL_ID), false);
+  assert.equal(centerCatalog.text.some((row) => row.id === ALIBABA_QWEN_CODER_MODEL_ID), true);
   assert.deepEqual(centerCatalog.image.map((row) => row.id), [ALIBABA_QWEN_IMAGE_MODEL_ID, ALIBABA_QWEN_IMAGE_EDIT_MODEL_ID]);
 
   const cavcodeCatalog = resolveVisibleModelCatalogForContext({
