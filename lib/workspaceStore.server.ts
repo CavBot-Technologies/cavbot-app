@@ -1,6 +1,10 @@
 import "server-only";
 
 import { cookies } from "next/headers";
+import {
+  planTierTokenFromPlanId,
+  resolveEffectivePlanId,
+} from "@/lib/accountPlan.server";
 import { withDedicatedAuthClient } from "@/lib/authDb";
 import { resolveEffectiveAccountIdFromHeaders } from "@/lib/effectiveSessionAccount.server";
 import { originsShareWebsiteContext } from "@/originMatch";
@@ -61,6 +65,14 @@ type RawWorkspaceSiteRow = {
 
 type RawAccountTierRow = {
   tier: string | null;
+  trialSeatActive?: boolean | null;
+  trialEndsAt?: Date | string | null;
+};
+
+type RawSubscriptionTierRow = {
+  tier: string | null;
+  status: string | null;
+  currentPeriodEnd?: Date | string | null;
 };
 
 const KEY_ACTIVE_PROJECT_ID = "cb_active_project_id";
@@ -243,12 +255,27 @@ export async function readWorkspace(opts?: { accountId?: string }): Promise<Work
           [resolvedProject.id],
         );
         const tierResult = await authClient.query<RawAccountTierRow>(
-          `SELECT "tier"
+          `SELECT "tier", "trialSeatActive", "trialEndsAt"
            FROM "Account"
            WHERE "id" = $1
            LIMIT 1`,
           [accountId],
         );
+        const subscriptionResult = await authClient.query<RawSubscriptionTierRow>(
+          `SELECT "tier", "status", "currentPeriodEnd"
+           FROM "Subscription"
+           WHERE "accountId" = $1
+             AND "status" IN ('ACTIVE', 'TRIALING', 'PAST_DUE')
+           ORDER BY "currentPeriodEnd" DESC NULLS LAST, "updatedAt" DESC, "createdAt" DESC
+           LIMIT 1`,
+          [accountId],
+        ).catch(() => ({ rows: [] as RawSubscriptionTierRow[] }));
+        const accountPlan = tierResult.rows[0] || null;
+        const subscriptionPlan = subscriptionResult.rows[0] || null;
+        const effectivePlanId = resolveEffectivePlanId({
+          account: accountPlan,
+          subscription: subscriptionPlan,
+        });
         return {
           resolvedProject,
           sites: siteResult.rows.map((row) => ({
@@ -258,7 +285,7 @@ export async function readWorkspace(opts?: { accountId?: string }): Promise<Work
             createdAt: new Date(row.createdAt).getTime(),
             notes: row.notes ?? undefined,
           })),
-          tier: tierResult.rows[0]?.tier ? String(tierResult.rows[0].tier) : null,
+          tier: planTierTokenFromPlanId(effectivePlanId),
         };
       });
       resolvedProject = workspaceState.resolvedProject;
