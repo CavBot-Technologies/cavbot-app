@@ -720,7 +720,7 @@ export default function AccountOverviewClient() {
   const confirmAddWebsite = React.useCallback(() => {
     const raw = String(addWebsiteValue || "").trim();
     if (!raw) {
-      setAddWebsiteErr("Enter a website URL.");
+      setAddWebsiteErr("Enter a valid URL.");
       return;
     }
     if (customLinkUrls.length >= MAX_CUSTOM_LINKS) {
@@ -1841,7 +1841,7 @@ const handleCategoryChange = (value: string) => {
           <div className="sx-form sx-workspaceForm">
             <div className="sx-formRow">
               <div className="sx-field">
-                <div className="sx-label">Company or workspace</div>
+                <div className="sx-label">Company</div>
                 <input
 	                  className="sx-input"
 	                  placeholder="Example: Acme Inc."
@@ -2038,15 +2038,15 @@ const handleCategoryChange = (value: string) => {
 	                        gap: 10,
 	                      }}
 	                    >
-	                      <span>Websites</span>
+		                      <span>Links</span>
 	                      <button
 	                        className="sx-btn sx-btnGhost sx-btnSerious sx-websitesAddBtn"
 	                        type="button"
 	                        onClick={openAddWebsite}
 	                        disabled={loading || customLinkUrls.length >= MAX_CUSTOM_LINKS}
-                          aria-label="Add website"
-	                      >
-                          <span className="sx-websitesAddBtnLabel">Add website</span>
+	                          aria-label="Add link"
+		                      >
+	                          <span className="sx-websitesAddBtnLabel">Add link</span>
                           <Image
                             className="sx-websitesAddBtnIcon"
                             src="/icons/app/plus-svgrepo-com.svg"
@@ -2086,13 +2086,13 @@ const handleCategoryChange = (value: string) => {
 	                              className="sx-linkFieldInput"
 	                              value={url}
 	                              readOnly
-	                              aria-label={`Website ${idx + 1}`}
+		                              aria-label={`Link ${idx + 1}`}
 	                              disabled={loading}
 	                            />
 	                            <button
 	                              type="button"
 	                              onClick={() => removeWebsiteAt(idx)}
-	                              aria-label={`Remove website ${idx + 1}`}
+		                              aria-label={`Remove link ${idx + 1}`}
 	                              title="Remove"
 	                              style={{
 	                                border: "none",
@@ -2115,11 +2115,11 @@ const handleCategoryChange = (value: string) => {
 	                        ))}
 	                      </div>
 	                    ) : (
-	                      <div className="sx-hint sx-linkHint">No websites added yet.</div>
+		                      <div className="sx-hint sx-linkHint">No links added yet.</div>
 	                    )}
 
 	                    <div className="sx-hint sx-linkHint">
-	                      Up to {MAX_CUSTOM_LINKS} websites. Add and remove here, then Save changes.
+		                      Add up to {MAX_CUSTOM_LINKS} URLs. You can remove them anytime, then save changes.
 	                    </div>
 	                  </div>
 	            </div>
@@ -2320,7 +2320,7 @@ const handleCategoryChange = (value: string) => {
                       <label className={`sx-secToggle ${privateMode ? "is-locked" : ""}`}>
                         <div className="sx-secToggleLeft">
                           <div className="sx-secToggleTitle">Profile links</div>
-                          <div className="sx-secToggleSub">CavBot, GitHub, Instagram, LinkedIn, Websites</div>
+                          <div className="sx-secToggleSub">CavBot, GitHub, Instagram, LinkedIn, and links</div>
                         </div>
 
                         <input
@@ -2397,7 +2397,7 @@ const handleCategoryChange = (value: string) => {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Add website"
+          aria-label="Add link"
           style={{
             position: "fixed",
             inset: 0,
@@ -2467,7 +2467,7 @@ const handleCategoryChange = (value: string) => {
 	                  if (addWebsiteErr) setAddWebsiteErr("");
 	                }}
 	                placeholder="https://example.com"
-                aria-label="Website URL"
+                aria-label="URL"
                 disabled={loading}
               />
               {addWebsiteErr ? (
