@@ -42,7 +42,9 @@ type RawUserRow = {
 type RawPublicProfileUserRow = RawUserRow & {
   fullName: string | null;
   bio: string | null;
+  timeZone: string | null;
   companyName: string | null;
+  companyCategory: string | null;
   companySubcategory: string | null;
   country: string | null;
   region: string | null;
@@ -136,7 +138,9 @@ export type AuthUser = {
 export type AuthPublicProfileUser = AuthUser & {
   fullName: string | null;
   bio: string | null;
+  timeZone: string | null;
   companyName: string | null;
+  companyCategory: string | null;
   companySubcategory: string | null;
   country: string | null;
   region: string | null;
@@ -324,7 +328,9 @@ function mapPublicProfileUser(row: RawPublicProfileUserRow): AuthPublicProfileUs
     ...base,
     fullName: row.fullName,
     bio: row.bio,
+    timeZone: row.timeZone,
     companyName: row.companyName,
+    companyCategory: row.companyCategory,
     companySubcategory: row.companySubcategory,
     country: row.country,
     region: row.region,
@@ -592,7 +598,9 @@ export async function findPublicProfileUserByUsername(queryable: Queryable, user
         "emailVerifiedAt",
         "fullName",
         "bio",
+        "timeZone",
         "companyName",
+        "companyCategory",
         "companySubcategory",
         "country",
         "region",
@@ -646,7 +654,9 @@ export async function findPublicProfileUserById(queryable: Queryable, userId: st
         "emailVerifiedAt",
         "fullName",
         "bio",
+        "timeZone",
         "companyName",
+        "companyCategory",
         "companySubcategory",
         "country",
         "region",

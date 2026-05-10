@@ -14,7 +14,15 @@ type ToneKey = "lime" | "violet" | "blue" | "white" | "navy" | "transparent";
 
 const LS_TONE = "cb_settings_avatar_tone_v2";
 const LS_IMAGE = "cb_settings_avatar_image_v2";
+const LS_FULL_NAME = "cb_profile_fullName_v1";
+const LS_EMAIL = "cb_profile_email_v1";
 const LS_USERNAME = "cb_profile_username_v1";
+const LS_BIO = "cb_profile_bio_v1";
+const LS_COUNTRY = "cb_profile_country_v1";
+const LS_REGION = "cb_profile_region_v1";
+const LS_TIME_ZONE = "cb_profile_time_zone_v1";
+const LS_COMPANY_NAME = "cb_profile_company_name_v1";
+const LS_COMPANY_CATEGORY = "cb_profile_company_category_v1";
 const LS_COMPANY_SUBCATEGORY = "cb_profile_company_subcategory_v1";
 const LS_GITHUB_URL = "cb_profile_github_url_v1";
 const LS_INSTAGRAM_URL = "cb_profile_instagram_url_v1";
@@ -31,6 +39,43 @@ function persistProfileInitials(value: string) {
     } else {
       globalThis.__cbLocalStore.removeItem(LS_INITIALS);
     }
+  } catch {}
+}
+
+function writeProfileCache(profile: Record<string, unknown>) {
+  const set = (key: string, value: unknown) => {
+    globalThis.__cbLocalStore.setItem(key, String(value ?? ""));
+  };
+  try {
+    set(LS_FULL_NAME, profile.fullName);
+    set(LS_EMAIL, profile.email);
+    set(LS_USERNAME, String(profile.username || "").trim().toLowerCase());
+    set(LS_BIO, profile.bio);
+    set(LS_COUNTRY, profile.country);
+    set(LS_REGION, profile.region);
+    set(LS_TIME_ZONE, profile.timeZone);
+    set(LS_COMPANY_NAME, profile.companyName);
+    set(LS_COMPANY_CATEGORY, profile.companyCategory);
+    set(LS_COMPANY_SUBCATEGORY, profile.companySubcategory);
+    set(LS_GITHUB_URL, profile.githubUrl);
+    set(LS_INSTAGRAM_URL, profile.instagramUrl);
+    set(LS_LINKEDIN_URL, profile.linkedinUrl);
+    set(LS_CUSTOM_LINK_URL, profile.customLinkUrl);
+    set(
+      LS_PROFILE_PUBLIC_ENABLED,
+      typeof profile.publicProfileEnabled === "boolean" && profile.publicProfileEnabled ? "1" : "0"
+    );
+    set(LS_TONE, profile.avatarTone || "lime");
+    const avatar = String(profile.avatarImage || "");
+    if (avatar) globalThis.__cbLocalStore.setItem(LS_IMAGE, avatar);
+    else globalThis.__cbLocalStore.removeItem(LS_IMAGE);
+    set(LS_PROFILE_REV, Date.now());
+  } catch {}
+}
+
+function broadcastProfileSync() {
+  try {
+    window.dispatchEvent(new CustomEvent("cb:profile-sync"));
   } catch {}
 }
 
@@ -727,10 +772,46 @@ export default function AccountOverviewClient() {
 	    const ctrl = new AbortController();
 
 	    // Fast paint from globalThis.__cbLocalStore (server will override when available).
+        try {
+          const v = (globalThis.__cbLocalStore.getItem(LS_FULL_NAME) || "").trim();
+          if (v) setFullName(v);
+        } catch {}
+        try {
+          const v = (globalThis.__cbLocalStore.getItem(LS_EMAIL) || "").trim();
+          if (v) setEmail(v);
+        } catch {}
 		    try {
 		      const u = (globalThis.__cbLocalStore.getItem(LS_USERNAME) || "").trim().toLowerCase();
 		      if (u) setUsername(u);
 		    } catch {}
+        try {
+          const v = (globalThis.__cbLocalStore.getItem(LS_BIO) || "").trim();
+          if (v) setBio(v);
+        } catch {}
+        try {
+          const v = (globalThis.__cbLocalStore.getItem(LS_COUNTRY) || "").trim();
+          if (v) setCountry(v);
+        } catch {}
+        try {
+          const v = (globalThis.__cbLocalStore.getItem(LS_REGION) || "").trim();
+          if (v) setRegion(v);
+        } catch {}
+        try {
+          const v = (globalThis.__cbLocalStore.getItem(LS_TIME_ZONE) || "").trim();
+          if (v) setTimeZone(v);
+        } catch {}
+        try {
+          const v = (globalThis.__cbLocalStore.getItem(LS_COMPANY_NAME) || "").trim();
+          if (v) setCompanyName(v);
+        } catch {}
+        try {
+          const v = (globalThis.__cbLocalStore.getItem(LS_COMPANY_CATEGORY) || "").trim();
+          if (v) setCompanyCategory(v);
+        } catch {}
+        try {
+          const v = (globalThis.__cbLocalStore.getItem(LS_COMPANY_SUBCATEGORY) || "").trim();
+          if (v) setCompanySubcategory(v);
+        } catch {}
 	    try {
 	      const cachedTone = (globalThis.__cbLocalStore.getItem(LS_TONE) || "").trim() as ToneKey;
 	      if (cachedTone) setTone(cachedTone);
@@ -922,6 +1003,12 @@ export default function AccountOverviewClient() {
 
         // Keep local storage in sync (fast paint on other pages)
         try {
+          writeProfileCache({
+            ...p,
+            avatarTone: serverTone,
+            avatarImage: serverImg,
+            customLinkUrl: coerceLinkFromServer(p) ?? "",
+          });
           globalThis.__cbLocalStore.setItem(LS_TONE, serverTone);
           if (serverUsername) globalThis.__cbLocalStore.setItem(LS_USERNAME, serverUsername);
 		          globalThis.__cbLocalStore.setItem(LS_COMPANY_SUBCATEGORY, String(p.companySubcategory || ""));
@@ -937,7 +1024,7 @@ export default function AccountOverviewClient() {
                   if (typeof v === "string") globalThis.__cbLocalStore.setItem(LS_CUSTOM_LINK_URL, v);
                 }
 		          if (serverImg) globalThis.__cbLocalStore.setItem(LS_IMAGE, serverImg);
-		          else globalThis.__cbLocalStore.removeItem(LS_IMAGE);
+          else globalThis.__cbLocalStore.removeItem(LS_IMAGE);
 		        } catch {}
 
         // Publish to AppShell instantly
@@ -950,11 +1037,25 @@ export default function AccountOverviewClient() {
 	              tone: serverTone,
               avatarImage: serverImg || null,
               initials: nextInitials,
+              fullName: String(p.fullName || ""),
+              email: String(p.email || ""),
               username: String(p.username || "").trim(),
+              bio: String(p.bio || ""),
+              country: String(p.country || ""),
+              region: String(p.region || ""),
+              timeZone: String(p.timeZone || ""),
+              companyName: String(p.companyName || ""),
+              companyCategory: String(p.companyCategory || ""),
+              companySubcategory: String(p.companySubcategory || ""),
+              githubUrl: String(p.githubUrl || ""),
+              instagramUrl: String(p.instagramUrl || ""),
+              linkedinUrl: String(p.linkedinUrl || ""),
+              customLinkUrl: coerceLinkFromServer(p) ?? "",
               publicProfileEnabled: typeof p.publicProfileEnabled === "boolean" ? p.publicProfileEnabled : true,
             },
           })
         );
+        broadcastProfileSync();
 
         setLoading(false);
       } catch {
@@ -1223,6 +1324,7 @@ const handleCategoryChange = (value: string) => {
 
     // sync LS + broadcast
     try {
+      writeProfileCache(snapshot as unknown as Record<string, unknown>);
       globalThis.__cbLocalStore.setItem(LS_TONE, st);
       if (resetUsername) globalThis.__cbLocalStore.setItem(LS_USERNAME, resetUsername);
 	      globalThis.__cbLocalStore.setItem(LS_COMPANY_SUBCATEGORY, String(snapshot.companySubcategory || ""));
@@ -1252,6 +1354,7 @@ const handleCategoryChange = (value: string) => {
         },
       })
     );
+    broadcastProfileSync();
 	  };
 
   const doSave = async () => {
@@ -1388,9 +1491,16 @@ const handleCategoryChange = (value: string) => {
 		          },
 		        })
 		      );
+      broadcastProfileSync();
 
       // COMMIT ONLY AFTER SAVE (Header-safe)
         try {
+          writeProfileCache({
+            ...p,
+            avatarTone: savedTone,
+            avatarImage: String(p.avatarImage || ""),
+            customLinkUrl: serverCustomLink,
+          });
           globalThis.__cbLocalStore.setItem(LS_TONE, savedTone);
           const savedUsername = String(p.username || "").trim().toLowerCase();
           if (savedUsername) globalThis.__cbLocalStore.setItem(LS_USERNAME, savedUsername);
