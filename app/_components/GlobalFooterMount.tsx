@@ -50,6 +50,12 @@ function isCavAiRoute(pathname: string): boolean {
   return false;
 }
 
+function isCavAiHost(): boolean {
+  if (typeof window === "undefined") return false;
+  const hostname = window.location.hostname.toLowerCase();
+  return hostname === "ai.cavbot.io" || hostname === "cavai.cavbot.io";
+}
+
 function isCavcodeRoute(pathname: string): boolean {
   if (!pathname) return false;
   if (pathname === "/cavcode" || pathname.startsWith("/cavcode/")) return true;
@@ -96,16 +102,18 @@ export default function GlobalFooterMount(props: {
 }) {
   const pathname = usePathname();
   const [modalOpen, setModalOpen] = useState(false);
+  const [cavAiHost] = useState(() => isCavAiHost());
   const normalizedPathname = useMemo(() => normalizePathname(pathname), [pathname]);
   const normalizedHost = useMemo(() => normalizeHost(props.initialHost), [props.initialHost]);
   const hideFooterForRoute = useMemo(() => {
+    if (cavAiHost) return true;
     if (ROUTE_FOOTER_BLOCKLIST.some((route) => route === normalizedPathname)) return true;
     if (ARCADE_FOOTER_BLOCKLIST.some((route) => route === normalizedPathname)) return true;
     if (isCavAiRoute(normalizedPathname)) return true;
     if (isCavcodeRoute(normalizedPathname)) return true;
     if (isAuthRoute(normalizedPathname)) return true;
     return false;
-  }, [normalizedPathname]);
+  }, [cavAiHost, normalizedPathname]);
   const hideFooterForCavAiHost = useMemo(() => isCavAiCanonicalHost(normalizedHost), [normalizedHost]);
 
   useEffect(() => {
