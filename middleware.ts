@@ -16,11 +16,6 @@ import {
   sanitizeAdminNextPath,
   toAdminInternalPath,
 } from "@/lib/admin/config";
-import {
-  buildCanonicalCavAiUrlFromSearchParams,
-  buildCavAiPageSearchParamsFromRoot,
-  isCavAiCanonicalHost,
-} from "@/lib/cavai/url";
 
 /**
  * CavBot Launch Middleware (Next.js App Router)
@@ -104,21 +99,6 @@ function isLocalhostHost(host: string) {
     normalized.startsWith("0.0.0.0") ||
     normalized.startsWith("[::1]")
   );
-}
-
-function hostnameFromHostHeader(host: string) {
-  const normalized = String(host || "").trim().toLowerCase();
-  if (!normalized) return "";
-  if (normalized.startsWith("[")) {
-    const closing = normalized.indexOf("]");
-    return closing >= 0 ? normalized.slice(1, closing) : normalized;
-  }
-  return normalized.split(":")[0] || "";
-}
-
-function isCavAiHost(host: string) {
-  const hostname = hostnameFromHostHeader(host);
-  return hostname === "ai.cavbot.io" || hostname === "cavai.cavbot.io";
 }
 
 function cookieShouldBeSecure(req: NextRequest) {
@@ -395,13 +375,6 @@ export async function middleware(req: NextRequest) {
 
   const host = String(req.headers.get("x-forwarded-host") || req.headers.get("host") || "").trim();
 
-  if (isCavAiHost(host) && (pathname === "/" || pathname === "")) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/cavai";
-    url.search = search || "";
-    return NextResponse.redirect(url, 308);
-  }
-
   if (!isAdminHost(host) && isAdminInternalPath(pathname)) {
     return new NextResponse("Not Found", {
       status: 404,
@@ -488,30 +461,6 @@ export async function middleware(req: NextRequest) {
       clearUser: clearUserCookie,
       clearAdmin: clearAdminCookie,
     });
-  }
-
-  const aiHostEnabled = process.env.NODE_ENV === "production";
-  const onCavAiCanonicalHost = aiHostEnabled && isCavAiCanonicalHost(req.nextUrl.hostname);
-
-  if (aiHostEnabled && (pathname === "/cavai" || pathname === "/cavai/")) {
-    const target = onCavAiCanonicalHost
-      ? req.nextUrl.clone()
-      : new URL(buildCanonicalCavAiUrlFromSearchParams(req.nextUrl.searchParams));
-    if (onCavAiCanonicalHost) {
-      target.pathname = "/";
-      const canonicalParams = new URL(buildCanonicalCavAiUrlFromSearchParams(req.nextUrl.searchParams)).search;
-      target.search = canonicalParams;
-    }
-    return NextResponse.redirect(target, 308);
-  }
-
-  if (onCavAiCanonicalHost && pathname === "/") {
-    const rewriteUrl = req.nextUrl.clone();
-    rewriteUrl.pathname = "/cavai";
-    const params = buildCavAiPageSearchParamsFromRoot(req.nextUrl.searchParams);
-    const query = params.toString();
-    rewriteUrl.search = query ? `?${query}` : "";
-    return NextResponse.rewrite(rewriteUrl);
   }
 
   // ------------------------------------------------------------

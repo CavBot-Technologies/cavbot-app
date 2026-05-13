@@ -25,11 +25,11 @@ export default function AppHostRuntimeMounts() {
         id="cb-cavai-host-footer-guard"
         dangerouslySetInnerHTML={{
           __html:
-            'html[data-cb-cavai-host="1"] footer[aria-label="CavBot system footer"]{display:none!important;}',
+            'html[data-cb-cavai-route="1"] footer[aria-label="CavBot system footer"]{display:none!important;}',
         }}
       />
       <Script id="cb-cavai-host-footer-guard-script" strategy="beforeInteractive">
-        {`try{var h=location.hostname.toLowerCase();if(h==="ai.cavbot.io"||h==="cavai.cavbot.io"){document.documentElement.dataset.cbCavaiHost="1";}}catch(e){}`}
+        {`try{var p=location.pathname||"";if(p==="/cavai"||p.indexOf("/cavai/")===0){document.documentElement.dataset.cbCavaiRoute="1";}}catch(e){}`}
       </Script>
       <Suspense fallback={null}>
         <BrowserStoreBoot />

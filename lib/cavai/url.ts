@@ -8,7 +8,7 @@ export type CavAiRouteSurface =
   | "cavcode";
 
 export const CAVAI_CANONICAL_ORIGIN =
-  process.env.NEXT_PUBLIC_CAVAI_URL || process.env.CAVAI_URL || "https://ai.cavbot.io";
+  process.env.NEXT_PUBLIC_CAVAI_URL || process.env.CAVAI_URL || "https://app.cavbot.io/cavai";
 
 export const CAVAI_DEFAULT_SURFACE: CavAiRouteSurface = "workspace";
 export const CAVAI_DEFAULT_CONTEXT_LABEL = "Workspace context";
@@ -56,7 +56,7 @@ export function isCavAiCanonicalHost(hostname: string): boolean {
   try {
     return candidate === new URL(CAVAI_CANONICAL_ORIGIN).hostname.toLowerCase();
   } catch {
-    return candidate === "ai.cavbot.io";
+    return candidate === "app.cavbot.io";
   }
 }
 
@@ -114,7 +114,7 @@ export function buildCanonicalCavAiUrl(args: {
 
   const canonicalParams = buildCanonicalCavAiRootSearchParams(params);
   const query = canonicalParams.toString();
-  return `${normalizeOrigin(CAVAI_CANONICAL_ORIGIN)}/${query ? `?${query}` : ""}`;
+  return `${normalizeOrigin(CAVAI_CANONICAL_ORIGIN)}${query ? `?${query}` : ""}`;
 }
 
 export function buildCanonicalCavAiUrlFromSearchParams(
@@ -122,5 +122,5 @@ export function buildCanonicalCavAiUrlFromSearchParams(
 ): string {
   const canonicalParams = buildCanonicalCavAiRootSearchParams(source);
   const query = canonicalParams.toString();
-  return `${normalizeOrigin(CAVAI_CANONICAL_ORIGIN)}/${query ? `?${query}` : ""}`;
+  return `${normalizeOrigin(CAVAI_CANONICAL_ORIGIN)}${query ? `?${query}` : ""}`;
 }
