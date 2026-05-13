@@ -463,6 +463,12 @@ export async function middleware(req: NextRequest) {
     });
   }
 
+  // Keep the CavAi app surface out of the single-segment public-profile
+  // lookup below. /cavai is a real app route, not a username candidate.
+  if (pathname === "/cavai" || pathname === "/cavai/") {
+    return NextResponse.next();
+  }
+
   // ------------------------------------------------------------
   // CANONICAL PROFILE URL
   // Redirect /u/{username} -> /{username} for users.
