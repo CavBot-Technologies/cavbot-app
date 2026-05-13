@@ -106,6 +106,21 @@ function isLocalhostHost(host: string) {
   );
 }
 
+function hostnameFromHostHeader(host: string) {
+  const normalized = String(host || "").trim().toLowerCase();
+  if (!normalized) return "";
+  if (normalized.startsWith("[")) {
+    const closing = normalized.indexOf("]");
+    return closing >= 0 ? normalized.slice(1, closing) : normalized;
+  }
+  return normalized.split(":")[0] || "";
+}
+
+function isCavAiHost(host: string) {
+  const hostname = hostnameFromHostHeader(host);
+  return hostname === "ai.cavbot.io" || hostname === "cavai.cavbot.io";
+}
+
 function cookieShouldBeSecure(req: NextRequest) {
   if (process.env.NODE_ENV === "production") return true;
 
@@ -379,6 +394,13 @@ export async function middleware(req: NextRequest) {
   }
 
   const host = String(req.headers.get("x-forwarded-host") || req.headers.get("host") || "").trim();
+
+  if (isCavAiHost(host) && (pathname === "/" || pathname === "")) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/cavai";
+    url.search = search || "";
+    return NextResponse.redirect(url, 308);
+  }
 
   if (!isAdminHost(host) && isAdminInternalPath(pathname)) {
     return new NextResponse("Not Found", {
