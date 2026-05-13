@@ -1707,6 +1707,27 @@
   font-weight:600;
   color:#fff;
 }
+.hx-browserValue{
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+}
+.hx-browserIcon{
+  width: 34px;
+  height: 34px;
+  border-radius: var(--sx-r10);
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(78,168,255,0.08);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.hx-browserIcon img,
+.hx-browserIcon svg{
+  display:block;
+}
 .hx-card-value.hx-target{
   font-size:12px;
   letter-spacing:0.12em;

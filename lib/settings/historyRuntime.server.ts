@@ -184,7 +184,7 @@ export async function listHistoryRows(options: {
 
   if (options.category !== "all") {
     values.push(options.category);
-    filters.push(`l."category" = $${values.length}::"AuditCategory"`);
+    filters.push(`l."category"::text = $${values.length}`);
   }
 
   if (options.cursor) {

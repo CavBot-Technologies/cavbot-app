@@ -1,6 +1,8 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { browserDisplayName, detectBrowser, type BrowserKey } from "@/lib/browser";
 
 type HistoryCategory = "all" | "sites" | "keys" | "system" | "changes";
 
@@ -134,10 +136,123 @@ function SeverityIcon({ severity }: { severity: HistoryEntry["severity"] }) {
   );
 }
 
+function BrowserIcon({ browser }: { browser: BrowserKey }) {
+  if (browser === "safari") {
+    return (
+      <span className="hx-browserIcon" aria-hidden="true" title="Safari">
+        <Image src="/icons/app/safari-option-svgrepo-com.svg" alt="" width={18} height={18} loading="lazy" decoding="async" />
+      </span>
+    );
+  }
+
+  if (browser === "chrome") {
+    return (
+      <span className="hx-browserIcon" aria-hidden="true" title="Chrome">
+        <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+          <circle cx="12" cy="12" r="9" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.16)" />
+          <path d="M12 3a9 9 0 0 1 7.8 4.5H12Z" fill="rgba(255,90,90,0.50)" />
+          <path d="M19.8 7.5A9 9 0 0 1 12 21l4.8-8.3Z" fill="rgba(185,200,90,0.50)" />
+          <path d="M12 21A9 9 0 0 1 4.2 7.5L9.2 16Z" fill="rgba(78,168,255,0.50)" />
+          <circle cx="12" cy="12" r="3.4" fill="rgba(234,240,255,0.78)" />
+          <circle cx="12" cy="12" r="2.1" fill="rgba(78,168,255,0.18)" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (browser === "brave") {
+    return (
+      <span className="hx-browserIcon" aria-hidden="true" title="Brave">
+        <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+          <path
+            d="M12 3l4 1.2 2 2.8-.7 9.2L12 21 6.7 16.2 6 7l2-2.8L12 3Z"
+            fill="rgba(255,120,120,0.16)"
+            stroke="rgba(255,255,255,0.16)"
+          />
+          <path d="M9 9h6l-1 6h-4L9 9Z" fill="rgba(234,240,255,0.74)" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (browser === "firefox") {
+    return (
+      <span className="hx-browserIcon" aria-hidden="true" title="Firefox">
+        <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+          <circle cx="12" cy="12" r="9" fill="rgba(139,92,255,0.14)" stroke="rgba(255,255,255,0.16)" />
+          <path
+            d="M7.4 15.9c1.5 1.6 3.3 2.4 5.2 2.4 3.5 0 6.2-2.5 6.2-5.8 0-2.7-1.9-4.9-4.6-5.5 1.2 1.5.4 3-1.1 3.4-1.1.3-2.2-.2-2.8-1.2-1.3 1.1-2.1 2.7-2.1 4.2 0 .9.3 1.8 1.2 2.5Z"
+            fill="rgba(234,240,255,0.74)"
+          />
+        </svg>
+      </span>
+    );
+  }
+
+  if (browser === "edge") {
+    return (
+      <span className="hx-browserIcon" aria-hidden="true" title="Edge">
+        <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+          <circle cx="12" cy="12" r="9" fill="rgba(78,168,255,0.12)" stroke="rgba(255,255,255,0.16)" />
+          <path
+            d="M18 14.5c-.8 2.3-3 3.9-5.7 3.9-3.4 0-6.1-2.5-6.1-5.7 0-2.8 2-5.1 4.8-5.6-.9 1.1-.5 2.2.4 2.8.9.6 2.2.6 3.2.1 1.4-.7 3-.3 3.4 1.1Z"
+            fill="rgba(185,200,90,0.50)"
+          />
+        </svg>
+      </span>
+    );
+  }
+
+  return (
+    <span className="hx-browserIcon" aria-hidden="true" title="Session">
+      <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+        <circle cx="12" cy="12" r="9" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.16)" />
+        <path d="M8 12h8" stroke="rgba(255,255,255,0.58)" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    </span>
+  );
+}
+
 function metaValue(meta: Record<string, unknown> | null, key: string) {
   if (!meta) return "";
   const value = meta[key];
   return typeof value === "string" ? value.trim() : "";
+}
+
+function resolveBrowser(entry: HistoryEntry): BrowserKey {
+  const fromMeta = String(entry.meta?.browser || "").trim().toLowerCase();
+  if (["safari", "chrome", "brave", "firefox", "edge"].includes(fromMeta)) return fromMeta as BrowserKey;
+  return detectBrowser(entry.userAgent || "");
+}
+
+function resolveDevice(entry: HistoryEntry): string {
+  const fromMeta = metaValue(entry.meta, "device");
+  if (fromMeta) return fromMeta;
+  const ua = String(entry.userAgent || "");
+  if (/Macintosh|Mac OS X/i.test(ua)) return "Mac OS";
+  if (/Windows/i.test(ua)) return "Windows";
+  if (/Android/i.test(ua)) return "Android";
+  if (/iPhone|iPad|iOS/i.test(ua)) return "iOS";
+  if (/Linux/i.test(ua)) return "Linux";
+  return "";
+}
+
+function resolveRegion(entry: HistoryEntry): string {
+  return (
+    metaValue(entry.meta, "geoRegion") ||
+    metaValue(entry.meta, "region") ||
+    metaValue(entry.meta, "regionCode") ||
+    "Not captured"
+  );
+}
+
+function resolveLocation(entry: HistoryEntry): string {
+  return (
+    metaValue(entry.meta, "location") ||
+    metaValue(entry.meta, "geoLabel") ||
+    metaValue(entry.meta, "place") ||
+    "Not captured"
+  );
 }
 
 function resolveOrigin(entry: HistoryEntry): string {
@@ -385,6 +500,9 @@ export default function HistoryClient() {
         >
           {formattedEntries.map((entry) => {
           const isExpanded = expandedId === entry.id;
+          const browser = resolveBrowser(entry);
+          const device = resolveDevice(entry);
+          const region = resolveRegion(entry);
           const timeLabel = new Date(entry.createdAt).toLocaleTimeString(undefined, {
             timeStyle: "short",
           });
@@ -452,6 +570,18 @@ export default function HistoryClient() {
                   </span>
                 </div>
                 <div className="hx-card-field">
+                  <span className="hx-card-label">Browser</span>
+                  <span className="hx-card-value hx-browserValue">
+                    <BrowserIcon browser={browser} />
+                    <span>{browserDisplayName(browser)}</span>
+                  </span>
+                  {device || region !== "Not captured" ? (
+                    <span className="hx-card-sublight">
+                      {[device, region !== "Not captured" ? region : ""].filter(Boolean).join(" · ")}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="hx-card-field">
                   <span className="hx-card-label">Target</span>
                   <span className="hx-card-value hx-target">{entry.targetLabel || "—"}</span>
                   {entry.targetType ? (
@@ -472,6 +602,14 @@ export default function HistoryClient() {
                     <div className="hx-card-detailItem">
                       <strong>KEY LAST4</strong>
                       <span className="hx-card-detailValue">{resolveKeyLast4(entry)}</span>
+                    </div>
+                    <div className="hx-card-detailItem">
+                      <strong>REGION</strong>
+                      <span className="hx-card-detailValue">{region}</span>
+                    </div>
+                    <div className="hx-card-detailItem">
+                      <strong>LOCATION</strong>
+                      <span className="hx-card-detailValue">{resolveLocation(entry)}</span>
                     </div>
                     <div className="hx-card-detailItem">
                       <strong>IP</strong>

@@ -26,7 +26,7 @@ test("account settings save persists full profile cache and broadcasts site-wide
   });
 
   assert.match(source, /function writeProfileCache\(profile: Record<string, unknown>\)/);
-  assert.match(source, /writeProfileCache\(\{\s*\.\.\.p,/s);
+  assert.match(source, /writeProfileCache\(\{[\s\S]*\.\.\.p,/);
   assert.match(source, /window\.dispatchEvent\(new CustomEvent\("cb:profile-sync"\)\)/);
   assert.match(source, /fullName: String\(p\.fullName \|\| ""\)/);
   assert.match(source, /avatarImage: String\(p\.avatarImage \|\| ""\) \|\| null/);
