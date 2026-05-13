@@ -330,7 +330,7 @@ a:focus{
   SHELL LAYOUT
 ========================== */
 .cb-shell{
-  min-height:100vh;
+  min-height: calc(100dvh - var(--cb-footer-rail-space));
   display:grid;
   grid-template-columns: 280px 1fr;
   --cb-footer-rail-space: calc(var(--cb-global-footer-height) + var(--safe-bottom));

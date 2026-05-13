@@ -3,6 +3,11 @@ import { cookies } from "next/headers";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma"; // adjust if your prisma import differs
 import { getAppOrigin, getSession } from "@/lib/apiAuth";
+import {
+  findLatestEntitledSubscription,
+  planTierTokenFromPlanId,
+  resolveEffectivePlanId,
+} from "@/lib/accountPlan.server";
 
 type SiteDTO = {
   id: string;
@@ -221,11 +226,13 @@ export async function readWorkspace(opts?: { accountId?: string }): Promise<Work
     accountId
       ? await prisma.account.findUnique({
           where: { id: accountId },
-          select: { id: true, tier: true },
+          select: { id: true, tier: true, trialSeatActive: true, trialEndsAt: true },
         })
       : null;
 
-  const tierStr = acct?.tier ? String(acct.tier) : null;
+  const subscription = acct?.id ? await findLatestEntitledSubscription(acct.id).catch(() => null) : null;
+  const effectivePlanId = acct ? resolveEffectivePlanId({ account: acct, subscription }) : null;
+  const tierStr = effectivePlanId ? planTierTokenFromPlanId(effectivePlanId) : acct?.tier ? String(acct.tier) : null;
 
   return {
     projectId,

@@ -5,7 +5,7 @@ import { randomBytes } from "crypto";
 import { hasAdminScope } from "@/lib/admin/permissions";
 import { createAdminNotification } from "@/lib/admin/notifications.server";
 import { adminR2Configured, putAdminR2Object } from "@/lib/admin/r2.server";
-import { resolveAdminDepartment } from "@/lib/admin/access";
+import { resolveAdminDepartment, type AdminDepartment } from "@/lib/admin/access";
 import { getDepartmentAvatarTone } from "@/lib/admin/staffDisplay";
 import { prisma } from "@/lib/prisma";
 
@@ -33,6 +33,13 @@ type ChatThreadDetailArgs = {
   viewer: Viewer;
   threadId: string;
   mailboxUserId?: string | null;
+};
+
+type AdminChatBoxDefinition = {
+  slug: string;
+  label: string;
+  description: string;
+  allowedDepartments: readonly AdminDepartment[];
 };
 
 function safeId(value: unknown) {
@@ -100,7 +107,7 @@ function buildWelcomeToCavChatBody() {
   ].join("\n");
 }
 
-export const ADMIN_CHAT_BOX_DEFINITIONS = [
+export const ADMIN_CHAT_BOX_DEFINITIONS: readonly AdminChatBoxDefinition[] = [
   {
     slug: "command",
     label: "Command",
@@ -294,43 +301,68 @@ async function ensureOrgParticipantsForThread(threadId: string, boxSlug: string)
 }
 
 async function ensureMailboxOrgParticipants(viewer: Viewer, mailboxUserId: string) {
-  await ensureChatBoxes();
   const mailboxStaff = await getStaffProfileByUserId(mailboxUserId);
   if (!isStaffActive(mailboxStaff)) throw new Error("CHAT_STAFF_REQUIRED");
   const activeMailboxStaff = mailboxStaff;
 
   const department = resolveAdminDepartment(activeMailboxStaff);
-  const seeded = await prisma.adminChatBox.findMany({
-    include: {
-      threads: {
-        orderBy: { createdAt: "asc" },
-        take: 1,
-      },
-    },
-  });
+  const allowedBoxSlugs = ADMIN_CHAT_BOX_DEFINITIONS
+    .filter((definition) => definition.allowedDepartments.includes(department))
+    .map((definition) => definition.slug);
 
-  for (const box of seeded) {
-    const allowedDepartments = Array.isArray(box.allowedDepartments) ? box.allowedDepartments : [];
-    if (!allowedDepartments.includes(department)) continue;
-    const thread = box.threads[0];
-    if (!thread) continue;
-    await prisma.adminChatParticipant.upsert({
+  let existingOrgParticipantCount = 0;
+  if (allowedBoxSlugs.length) {
+    existingOrgParticipantCount = await prisma.adminChatParticipant.count({
       where: {
-        threadId_userId: {
-          threadId: thread.id,
-          userId: mailboxUserId,
+        userId: mailboxUserId,
+        thread: {
+          box: {
+            slug: {
+              in: allowedBoxSlugs,
+            },
+          },
         },
       },
-      update: {
-        staffId: activeMailboxStaff.id,
+    });
+  }
+
+  if (existingOrgParticipantCount < allowedBoxSlugs.length) {
+    await ensureChatBoxes();
+    const seeded = await prisma.adminChatBox.findMany({
+      where: {
+        slug: {
+          in: allowedBoxSlugs,
+        },
       },
-      create: {
-        threadId: thread.id,
-        userId: mailboxUserId,
-        staffId: activeMailboxStaff.id,
-        role: department === "COMMAND" ? "OWNER" : "MEMBER",
+      include: {
+        threads: {
+          orderBy: { createdAt: "asc" },
+          take: 1,
+        },
       },
     });
+
+    for (const box of seeded) {
+      const thread = box.threads[0];
+      if (!thread) continue;
+      await prisma.adminChatParticipant.upsert({
+        where: {
+          threadId_userId: {
+            threadId: thread.id,
+            userId: mailboxUserId,
+          },
+        },
+        update: {
+          staffId: activeMailboxStaff.id,
+        },
+        create: {
+          threadId: thread.id,
+          userId: mailboxUserId,
+          staffId: activeMailboxStaff.id,
+          role: department === "COMMAND" ? "OWNER" : "MEMBER",
+        },
+      });
+    }
   }
 
   await ensureWelcomeThreadForMailbox({

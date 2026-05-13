@@ -20,6 +20,7 @@ import {
 import {
   ALIBABA_QWEN_ASR_MODEL_ID,
   ALIBABA_QWEN_CHARACTER_MODEL_ID,
+  ALIBABA_QWEN_CODER_MODEL_ID,
   ALIBABA_QWEN_FLASH_MODEL_ID,
   ALIBABA_QWEN_IMAGE_EDIT_MODEL_ID,
   ALIBABA_QWEN_IMAGE_MODEL_ID,
@@ -937,6 +938,7 @@ function centerPlanModelIds(planIdRaw: unknown): string[] {
     ids.push(
       DEEPSEEK_REASONER_MODEL_ID,
       ALIBABA_QWEN_PLUS_MODEL_ID,
+      ALIBABA_QWEN_CODER_MODEL_ID,
       ALIBABA_QWEN_IMAGE_MODEL_ID
     );
   }
@@ -946,6 +948,14 @@ function centerPlanModelIds(planIdRaw: unknown): string[] {
   return Array.from(new Set(ids));
 }
 
+function filterCenterModelOptionsForPlan(
+  options: CavAiModelOption[],
+  planIdRaw: unknown
+): CavAiModelOption[] {
+  const allowedIds = new Set(centerPlanModelIds(planIdRaw));
+  return normalizeCenterModelOptions(options).filter((option) => allowedIds.has(option.id));
+}
+
 function centerPlanModelOptions(planIdRaw: unknown): CavAiModelOption[] {
   return centerPlanModelIds(planIdRaw).map((id) => ({
     id,
@@ -953,27 +963,16 @@ function centerPlanModelOptions(planIdRaw: unknown): CavAiModelOption[] {
   }));
 }
 
-function mergeCenterModelOptionsWithPlan(
-  options: CavAiModelOption[],
-  planIdRaw: unknown
-): CavAiModelOption[] {
-  return normalizeCenterModelOptions([
-    ...centerPlanModelOptions(planIdRaw),
-    ...options,
-  ]);
-}
-
-function mergeCenterReasoningLevelsWithPlan(
+function filterCenterReasoningLevelsForPlan(
   options: ReasoningLevel[],
   planIdRaw: unknown
 ): ReasoningLevel[] {
-  const set = new Set<ReasoningLevel>([
-    ...reasoningLevelsForPlan(planIdRaw),
-    ...options,
-  ]);
+  const allowed = new Set(reasoningLevelsForPlan(planIdRaw));
+  const source = options.length ? options : reasoningLevelsForPlan(planIdRaw);
+  const set = new Set<ReasoningLevel>(source);
   return REASONING_LEVEL_OPTIONS
     .map((option) => option.value)
-    .filter((level) => set.has(level));
+    .filter((level) => allowed.has(level) && set.has(level));
 }
 
 function isPlanLocked(args: {
@@ -4944,13 +4943,14 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       };
       if (!res.ok || body.ok !== true) {
         emitGuardDecisionFromPayload(body);
-        setModelOptions((prev) => mergeCenterModelOptionsWithPlan(prev, accountPlanId));
-        setAvailableReasoningLevels((prev) => mergeCenterReasoningLevelsWithPlan(prev, accountPlanId));
+        setModelOptions((prev) => filterCenterModelOptionsForPlan(prev, accountPlanId));
+        setAvailableReasoningLevels((prev) => filterCenterReasoningLevelsForPlan(prev, accountPlanId));
         return false;
       }
       const policyPlanId = normalizePlanId(body.planId);
       const effectivePlanId =
         planTierRank(policyPlanId) >= planTierRank(accountPlanId) ? policyPlanId : accountPlanId;
+      const policyPlanLagging = planTierRank(policyPlanId) < planTierRank(accountPlanId);
       setAccountPlanId(effectivePlanId);
       const hasCatalog = Boolean(body.modelCatalog && typeof body.modelCatalog === "object");
       const textOptions = Array.isArray(body.modelCatalog?.text)
@@ -4960,7 +4960,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         ? body.modelCatalog?.image.map((row) => toModelOption(row)).filter(Boolean) as CavAiModelOption[]
         : [];
       if (hasCatalog) {
-        setModelOptions(mergeCenterModelOptionsWithPlan([...textOptions, ...imageOptions], effectivePlanId));
+        const catalogOptions = policyPlanLagging
+          ? [...centerPlanModelOptions(effectivePlanId), ...textOptions, ...imageOptions]
+          : [...textOptions, ...imageOptions];
+        setModelOptions(filterCenterModelOptionsForPlan(catalogOptions, effectivePlanId));
       } else {
         const fallbackOptions = [s(body.models?.chat), s(body.models?.reasoning)]
           .filter(Boolean)
@@ -4968,7 +4971,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
             id,
             label: resolveAiModelLabel(id),
           }));
-        setModelOptions(mergeCenterModelOptionsWithPlan(fallbackOptions, effectivePlanId));
+        setModelOptions(filterCenterModelOptionsForPlan(fallbackOptions, effectivePlanId));
       }
 
       const audioOptions = Array.isArray(body.modelCatalog?.audio)
@@ -4977,18 +4980,20 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       setAudioModelOptions(audioOptions);
 
       const optionsFromPolicy = normalizeReasoningOptions(body.reasoning?.options);
-      if (optionsFromPolicy.length) {
-        setAvailableReasoningLevels(mergeCenterReasoningLevelsWithPlan(optionsFromPolicy, effectivePlanId));
+      if (policyPlanLagging) {
+        setAvailableReasoningLevels(filterCenterReasoningLevelsForPlan(reasoningLevelsForPlan(effectivePlanId), effectivePlanId));
+      } else if (optionsFromPolicy.length) {
+        setAvailableReasoningLevels(filterCenterReasoningLevelsForPlan(optionsFromPolicy, effectivePlanId));
       } else {
         const optionsFromMax = reasoningLevelsUpTo(body.reasoning?.maxLevel);
         const nextReasoning = optionsFromMax.length ? optionsFromMax : reasoningLevelsForPlan(effectivePlanId);
-        setAvailableReasoningLevels(mergeCenterReasoningLevelsWithPlan(nextReasoning, effectivePlanId));
+        setAvailableReasoningLevels(filterCenterReasoningLevelsForPlan(nextReasoning, effectivePlanId));
       }
       return true;
     } catch {
       // Best effort only.
-      setModelOptions((prev) => mergeCenterModelOptionsWithPlan(prev, accountPlanId));
-      setAvailableReasoningLevels((prev) => mergeCenterReasoningLevelsWithPlan(prev, accountPlanId));
+      setModelOptions((prev) => filterCenterModelOptionsForPlan(prev, accountPlanId));
+      setAvailableReasoningLevels((prev) => filterCenterReasoningLevelsForPlan(prev, accountPlanId));
       return false;
     }
   }, [accountPlanId, isGuestPreviewMode]);
@@ -5017,7 +5022,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
         planId?: unknown;
       };
       if (!res.ok || body.ok !== true || !body.settings || typeof body.settings !== "object") return false;
-      setAccountPlanId(normalizePlanId(body.planId));
+      setAccountPlanId((prev) => {
+        const next = normalizePlanId(body.planId);
+        return planTierRank(next) >= planTierRank(prev) ? next : prev;
+      });
       const snapshot = normalizeAgentRegistrySnapshot(body.agentRegistry);
       setAgentRegistrySnapshot(snapshot);
       agentRegistrySnapshotRef.current = snapshot;
@@ -5373,9 +5381,11 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
 
   useEffect(() => {
     if (isGuestPreviewMode) return;
-    setModelOptions((prev) => mergeCenterModelOptionsWithPlan(prev, accountPlanId));
-    setAvailableReasoningLevels((prev) => mergeCenterReasoningLevelsWithPlan(prev, accountPlanId));
-  }, [accountPlanId, isGuestPreviewMode]);
+    setModelOptions((prev) => filterCenterModelOptionsForPlan(prev, accountPlanId));
+    setAvailableReasoningLevels((prev) => filterCenterReasoningLevelsForPlan(prev, accountPlanId));
+    if (!shouldWarm) return;
+    void loadProviderModels();
+  }, [accountPlanId, isGuestPreviewMode, loadProviderModels, shouldWarm]);
 
   useEffect(() => {
     if (!overlay) {
@@ -7606,7 +7616,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       if (!res.ok || !body.ok || !body.settings || typeof body.settings !== "object") {
         throw new Error(s(body.message) || "Failed to update Agent Mode settings.");
       }
-      setAccountPlanId(normalizePlanId(body.planId));
+      setAccountPlanId((prev) => {
+        const next = normalizePlanId(body.planId);
+        return planTierRank(next) >= planTierRank(prev) ? next : prev;
+      });
       const snapshot = normalizeAgentRegistrySnapshot(body.agentRegistry);
       setAgentRegistrySnapshot(snapshot);
       agentRegistrySnapshotRef.current = snapshot;
@@ -7690,7 +7703,10 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
       if (!res.ok || !body.ok || !body.settings || typeof body.settings !== "object") {
         throw new Error(s(body.message) || "Failed to update custom agents.");
       }
-      setAccountPlanId(normalizePlanId(body.planId));
+      setAccountPlanId((prev) => {
+        const next = normalizePlanId(body.planId);
+        return planTierRank(next) >= planTierRank(prev) ? next : prev;
+      });
       const snapshot = normalizeAgentRegistrySnapshot(body.agentRegistry);
       setAgentRegistrySnapshot(snapshot);
       agentRegistrySnapshotRef.current = snapshot;

@@ -347,11 +347,12 @@ export function getAuthPool() {
 
   const pool = new pg.Pool({
     connectionString: databaseUrl(),
+    max: Number(process.env.CAVBOT_AUTH_PG_POOL_MAX || process.env.CAVBOT_PG_POOL_MAX || 3),
+    idleTimeoutMillis: Number(process.env.CAVBOT_PG_IDLE_TIMEOUT_MS || 10_000),
+    connectionTimeoutMillis: Number(process.env.CAVBOT_PG_CONNECT_TIMEOUT_MS || 5_000),
   });
 
-  if (process.env.NODE_ENV !== "production") {
-    global.__cavbotAuthPool = pool;
-  }
+  global.__cavbotAuthPool = pool;
 
   return pool;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
 
 import { AvatarBadge, Badge } from "@/components/admin/AdminPrimitives";
 import { formatAdminDepartmentLabel } from "@/lib/admin/access";
@@ -423,13 +423,6 @@ function isImportantDepartment(value: string | null | undefined) {
   return normalized === "COMMAND" || normalized === "HUMAN_RESOURCES";
 }
 
-function initialsFromLabel(value: string) {
-  const tokens = String(value || "").trim().split(/\s+/g).filter(Boolean);
-  if (!tokens.length) return "CQ";
-  if (tokens.length === 1) return tokens[0]!.slice(0, 2).toUpperCase();
-  return `${tokens[0]![0] || ""}${tokens[1]![0] || ""}`.toUpperCase();
-}
-
 function resolveDepartmentAvatarTone(department: DepartmentView | string | null | undefined) {
   return getDepartmentAvatarTone(String(department || "").trim().toUpperCase());
 }
@@ -618,17 +611,6 @@ function DepartmentDot(props: { department: DepartmentView }) {
   return <span className="hq-chatDepartmentDot" data-tone={tone} aria-hidden="true" />;
 }
 
-function AttachmentIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path
-        d="M10.75 3a2.75 2.75 0 0 1 2.75 2.75v4.5a4.25 4.25 0 1 1-8.5 0V5.5h1.5v4.75a2.75 2.75 0 1 0 5.5 0v-4.5a1.25 1.25 0 1 0-2.5 0V10a.75.75 0 0 1-1.5 0V5.75a2.75 2.75 0 0 1 2.75-2.75Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
 function ChatMenuIcon() {
   return <span className="hq-chatMobileMenuGlyph" aria-hidden="true" />;
 }
@@ -767,7 +749,7 @@ export function AdminCavChatWorkspace(props: {
     () => threads.filter((thread) => !purgedThreadIdSet.has(thread.id)),
     [purgedThreadIdSet, threads],
   );
-  const threadIsAutoImportant = (thread: ThreadListItem, activeMailboxUserId = mailboxUserId) => {
+  const threadIsAutoImportant = useCallback((thread: ThreadListItem, activeMailboxUserId = mailboxUserId) => {
     if (thread.boxSlug) {
       const mappedDepartment = BOX_DEPARTMENT_MAP[thread.boxSlug];
       if (mappedDepartment && isImportantDepartment(mappedDepartment)) return true;
@@ -784,10 +766,10 @@ export function AdminCavChatWorkspace(props: {
     return (thread.participantUserIds || [])
       .filter((userId) => userId !== activeMailboxUserId)
       .some((userId) => isImportantDepartment(departmentByUserId.get(userId)));
-  };
-  const threadIsImportant = (thread: ThreadListItem, activeMailboxUserId = mailboxUserId) => (
+  }, [departmentByUserId, mailboxUserId]);
+  const threadIsImportant = useCallback((thread: ThreadListItem, activeMailboxUserId = mailboxUserId) => (
     importantThreadIdSet.has(thread.id) || threadIsAutoImportant(thread, activeMailboxUserId)
-  );
+  ), [importantThreadIdSet, mailboxUserId, threadIsAutoImportant]);
   const archiveBucketCount = useMemo(
     () => mailboxThreads.filter((thread) => thread.archived && !trashedThreadIdSet.has(thread.id)).length,
     [mailboxThreads, trashedThreadIdSet],
@@ -805,9 +787,9 @@ export function AdminCavChatWorkspace(props: {
     starred: mailboxThreads.filter((thread) => Boolean(thread.starred) && !thread.archived && !trashedThreadIdSet.has(thread.id)).length,
     archive: archiveBucketCount,
     trash: trashBucketCount,
-  }), [archiveBucketCount, departmentByUserId, importantThreadIdSet, mailboxThreads, mailboxUserId, trashBucketCount, trashedThreadIdSet]);
+  }), [archiveBucketCount, mailboxThreads, mailboxUserId, threadIsImportant, trashBucketCount, trashedThreadIdSet]);
 
-  function threadMatchesMailboxView(thread: ThreadListItem, view: MailboxView) {
+  const threadMatchesMailboxView = useCallback((thread: ThreadListItem, view: MailboxView) => {
     const trashed = trashedThreadIdSet.has(thread.id);
     if (view === "trash") return trashed;
     if (trashed) return false;
@@ -818,9 +800,9 @@ export function AdminCavChatWorkspace(props: {
     if (view === "starred") return Boolean(thread.starred) && !thread.archived;
     if (view === "archive") return thread.archived;
     return true;
-  }
+  }, [mailboxUserId, threadIsImportant, trashedThreadIdSet]);
 
-  function threadMatchesDepartmentView(thread: ThreadListItem, view: DepartmentView, activeMailboxUserId = mailboxUserId) {
+  const threadMatchesDepartmentView = useCallback((thread: ThreadListItem, view: DepartmentView, activeMailboxUserId = mailboxUserId) => {
     if (view === "all") return true;
 
     if (thread.boxSlug && BOX_DEPARTMENT_MAP[thread.boxSlug] === view) return true;
@@ -833,11 +815,11 @@ export function AdminCavChatWorkspace(props: {
       .filter(Boolean);
 
     return participantDepartments.includes(view);
-  }
+  }, [departmentByUserId, mailboxUserId]);
 
   const mailboxScopedThreads = useMemo(
     () => mailboxThreads.filter((thread) => threadMatchesMailboxView(thread, mailboxView)),
-    [mailboxThreads, mailboxView, trashedThreadIdSet],
+    [mailboxThreads, mailboxView, threadMatchesMailboxView],
   );
 
   const departmentCounts = useMemo(() => {
@@ -857,7 +839,7 @@ export function AdminCavChatWorkspace(props: {
     }
 
     return counts;
-  }, [mailboxScopedThreads, mailboxUserId, departmentByUserId]);
+  }, [mailboxScopedThreads, mailboxUserId, threadMatchesDepartmentView]);
 
   const filteredThreads = useMemo(() => {
     const token = deferredSearch.trim().toLowerCase();
@@ -873,7 +855,7 @@ export function AdminCavChatWorkspace(props: {
         thread.counterpartLabel,
       ].some((value) => String(value || "").toLowerCase().includes(token));
     });
-  }, [deferredSearch, departmentView, mailboxScopedThreads, mailboxUserId, departmentByUserId]);
+  }, [deferredSearch, departmentView, mailboxScopedThreads, mailboxUserId, threadMatchesDepartmentView]);
 
   const activeMailboxMeta = MAILBOX_META[mailboxView];
 
@@ -919,15 +901,15 @@ export function AdminCavChatWorkspace(props: {
     setComposeTextColor(nextColor);
   }
 
-  function syncEditorFromState(target: RichComposerTarget, nextHtml: string, nextFont: string) {
-    const editor = editorRefForTarget(target).current;
+  const syncEditorFromState = useCallback((target: RichComposerTarget, nextHtml: string, nextFont: string) => {
+    const editor = (target === "reply" ? replyEditorRef : composeEditorRef).current;
     if (!editor) return;
     const normalized = normalizeRichBody(nextHtml);
     if (editor.innerHTML !== normalized) {
       editor.innerHTML = normalized;
     }
     editor.style.fontFamily = nextFont || DEFAULT_CAVCHAT_FONT_FAMILY;
-  }
+  }, []);
 
   function updateBodyFromEditor(target: RichComposerTarget) {
     const editor = editorRefForTarget(target).current;
@@ -1080,7 +1062,7 @@ export function AdminCavChatWorkspace(props: {
     if (html) insertHtmlAtCursor(target, html);
   }
 
-  async function loadCavCloudFiles(query = cavCloudQuery) {
+  const loadCavCloudFiles = useCallback(async (query = cavCloudQuery) => {
     if (!cavCloudModalTarget) return;
     setCavCloudLoading(true);
     setCavCloudError("");
@@ -1127,7 +1109,7 @@ export function AdminCavChatWorkspace(props: {
     } finally {
       setCavCloudLoading(false);
     }
-  }
+  }, [cavCloudModalTarget, cavCloudQuery]);
 
   function insertCavCloudFile(file: CavCloudPickerFile) {
     if (!cavCloudModalTarget) return;
@@ -1387,16 +1369,16 @@ export function AdminCavChatWorkspace(props: {
 
   useEffect(() => {
     syncEditorFromState("reply", composerBody, composerFontFamily);
-  }, [composerBody, composerFontFamily]);
+  }, [composerBody, composerFontFamily, syncEditorFromState]);
 
   useEffect(() => {
     syncEditorFromState("compose", composeMessage, composeFontFamily);
-  }, [composeFontFamily, composeMessage, composeLauncherOpen]);
+  }, [composeFontFamily, composeMessage, composeLauncherOpen, syncEditorFromState]);
 
   useEffect(() => {
     if (!cavCloudModalTarget) return;
     void loadCavCloudFiles(cavCloudQuery);
-  }, [cavCloudModalTarget, cavCloudQuery]);
+  }, [cavCloudModalTarget, cavCloudQuery, loadCavCloudFiles]);
 
   useEffect(() => {
     if (!mobileSidebarOpen) return;
@@ -1417,7 +1399,7 @@ export function AdminCavChatWorkspace(props: {
     };
   }, [mobileSidebarOpen]);
 
-  function buildThreadsQuery(nextSearch = search, nextMailboxUserId = mailboxUserId) {
+  const buildThreadsQuery = useCallback((nextSearch = search, nextMailboxUserId = mailboxUserId) => {
     const params = new URLSearchParams();
     const searchToken = String(nextSearch || "").trim();
     if (searchToken) params.set("search", searchToken);
@@ -1425,16 +1407,16 @@ export function AdminCavChatWorkspace(props: {
     if (isOversight) params.set("includeOrgBoxes", "1");
     const query = params.toString();
     return query ? `?${query}` : "";
-  }
+  }, [isOversight, mailboxUserId, search]);
 
-  function buildThreadDetailQuery(nextMailboxUserId = mailboxUserId) {
+  const buildThreadDetailQuery = useCallback((nextMailboxUserId = mailboxUserId) => {
     const params = new URLSearchParams();
     if (isOversight && nextMailboxUserId) params.set("mailboxUserId", nextMailboxUserId);
     const query = params.toString();
     return query ? `?${query}` : "";
-  }
+  }, [isOversight, mailboxUserId]);
 
-  async function loadThreads(nextSearch = search, nextMailboxUserId = mailboxUserId) {
+  const loadThreads = useCallback(async (nextSearch = search, nextMailboxUserId = mailboxUserId) => {
     const response = await fetch(`/api/admin/chat/threads${buildThreadsQuery(nextSearch, nextMailboxUserId)}`, {
       method: "GET",
       credentials: "include",
@@ -1446,9 +1428,9 @@ export function AdminCavChatWorkspace(props: {
     }
     setThreads(payload.threads || []);
     return payload.threads as ThreadListItem[];
-  }
+  }, [buildThreadsQuery, mailboxUserId, search]);
 
-  async function fetchThreadDetail(threadId: string, nextMailboxUserId = mailboxUserId) {
+  const fetchThreadDetail = useCallback(async (threadId: string, nextMailboxUserId = mailboxUserId) => {
     const response = await fetch(`/api/admin/chat/threads/${threadId}${buildThreadDetailQuery(nextMailboxUserId)}`, {
       method: "GET",
       credentials: "include",
@@ -1459,7 +1441,7 @@ export function AdminCavChatWorkspace(props: {
       throw new Error(String(payload?.error || "Unable to open thread."));
     }
     return payload.thread as ThreadDetail;
-  }
+  }, [buildThreadDetailQuery, mailboxUserId]);
 
   async function openThread(threadId: string, nextMailboxUserId = mailboxUserId) {
     if (Date.now() < suppressOpenUntilRef.current) return;
@@ -1502,7 +1484,7 @@ export function AdminCavChatWorkspace(props: {
     }
   }
 
-  async function saveDraft(nextBody: string) {
+  const saveDraft = useCallback(async (nextBody: string) => {
     if (isOversight || !activeThreadId) return;
     const response = await fetch("/api/admin/chat/drafts", {
       method: "POST",
@@ -1537,7 +1519,7 @@ export function AdminCavChatWorkspace(props: {
           }
         : current
     ));
-  }
+  }, [activeThreadId, composerFontFamily, isOversight]);
 
   useEffect(() => {
     if (isOversight || !activeThreadId) return;
@@ -1547,7 +1529,7 @@ export function AdminCavChatWorkspace(props: {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [activeThreadId, composerBody, composerFontFamily, isOversight]);
+  }, [activeThreadId, composerBody, composerFontFamily, isOversight, saveDraft]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -1556,7 +1538,7 @@ export function AdminCavChatWorkspace(props: {
     return () => {
       window.clearInterval(timer);
     };
-  }, [mailboxUserId, search]);
+  }, [loadThreads, mailboxUserId, search]);
 
   useEffect(() => {
     if (isOversight) return;
@@ -1611,7 +1593,7 @@ export function AdminCavChatWorkspace(props: {
     return () => {
       cancelled = true;
     };
-  }, [isOversight, mailboxUserId]);
+  }, [activeThreadId, fetchThreadDetail, isOversight, loadThreads, mailboxUserId, search]);
 
   async function sendMessage() {
     if (isOversight || !activeThreadId) return;
@@ -1896,14 +1878,6 @@ export function AdminCavChatWorkspace(props: {
     }
     setSelectAllVisibleActive(true);
     setSelectedThreadIds((current) => Array.from(new Set([...current, ...visibleThreadIds])));
-  }
-
-  function setThreadImportant(threadId: string, important: boolean) {
-    setImportantThreadIds((current) => (
-      important
-        ? Array.from(new Set([...current, threadId]))
-        : current.filter((value) => value !== threadId)
-    ));
   }
 
   async function moveSelectedThreadsTo(target: MailboxView) {
@@ -2728,69 +2702,6 @@ export function AdminCavChatWorkspace(props: {
             )}
           </div>
         </div>
-      </div>
-    );
-  }
-
-  function renderOversightThreadList() {
-    return (
-      <div className="hq-chatThreadList">
-        {filteredThreads.length ? filteredThreads.map((thread) => {
-          const label = threadLabel(thread);
-          const isUnread = thread.unread && !thread.archived;
-          const isActive = thread.id === activeThreadId;
-          const hasSubjectLead = Boolean(thread.subject && thread.subject !== label);
-          const snippet = getThreadSnippet(thread.subject, thread.preview);
-          return (
-            <button
-              key={thread.id}
-              type="button"
-              className="hq-chatThreadButton"
-              data-active={isActive}
-              data-unread={isUnread}
-              onClick={() => { void openThread(thread.id, mailboxUserId); }}
-            >
-              <div className="hq-chatThreadRowLead">
-                <div className="hq-chatThreadAvatar" data-variant={thread.boxSlug ? "box" : "direct"}>
-                  {initialsFromLabel(label)}
-                </div>
-                <div className="hq-chatThreadContent">
-                  <div className="hq-chatThreadHead">
-                    <div className="hq-chatThreadPrimary">{label}</div>
-                    {thread.boxLabel ? (
-                      <span className="hq-chatThreadTag">{thread.boxLabel}</span>
-                    ) : thread.isDirect ? (
-                      <span className="hq-chatThreadTag">Direct</span>
-                    ) : null}
-                  </div>
-                  <div className="hq-chatThreadPreviewRow">
-                    {hasSubjectLead ? <span className="hq-chatThreadSubject">{thread.subject}</span> : null}
-                    <span className="hq-chatThreadPreview">{snippet || "No messages yet."}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="hq-chatThreadAside">
-                <div className="hq-chatThreadTime">{formatDateLabel(thread.lastMessageAt)}</div>
-                <div className="hq-chatThreadStatus">
-                  {thread.draftBody && !isOversight ? <span className="hq-chatThreadStatusPill">Draft</span> : null}
-                  {isUnread ? <span className="hq-chatThreadUnreadMark" aria-hidden="true" /> : null}
-                </div>
-              </div>
-            </button>
-          );
-        }) : (
-          <div className="hq-chatEmptyState">
-            <div className="hq-chatEmptyTitle">{search.trim() ? "No conversations match this search." : "No threads in this mailbox."}</div>
-            <div className="hq-chatEmptySub">
-              {search.trim()
-                ? "Try another department, name, subject, or preview term."
-                : isOversight
-                  ? "Switch the reviewed mailbox or change the inbox filter."
-                  : "Use Compose to start a new direct thread or switch mailboxes."}
-            </div>
-          </div>
-        )}
       </div>
     );
   }

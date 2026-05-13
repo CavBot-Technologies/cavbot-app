@@ -42,7 +42,7 @@ export type AiAudioModelCatalogEntry = {
   id: string;
   label: string;
   providerId: "alibaba_qwen";
-  capability: "transcription";
+  capability: "transcription" | "speech";
 };
 
 export type AiImageModelCatalogEntry = {
@@ -160,6 +160,9 @@ const DEFAULT_UI_MODEL_ORDER: string[] = [
   ALIBABA_QWEN_MAX_MODEL_ID,
   ALIBABA_QWEN_CODER_MODEL_ID,
   ALIBABA_QWEN_CHARACTER_MODEL_ID,
+  ALIBABA_QWEN_ASR_REALTIME_MODEL_ID,
+  ALIBABA_QWEN_TTS_REALTIME_MODEL_ID,
+  ALIBABA_QWEN_ASR_MODEL_ID,
   ALIBABA_QWEN_IMAGE_MODEL_ID,
   ALIBABA_QWEN_IMAGE_EDIT_MODEL_ID,
 ];

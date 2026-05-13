@@ -16,6 +16,9 @@ function makePrisma() {
     global.__cavbotPgPool ||
     new pg.Pool({
       connectionString: url,
+      max: Number(process.env.CAVBOT_PG_POOL_MAX || 3),
+      idleTimeoutMillis: Number(process.env.CAVBOT_PG_IDLE_TIMEOUT_MS || 10_000),
+      connectionTimeoutMillis: Number(process.env.CAVBOT_PG_CONNECT_TIMEOUT_MS || 5_000),
     });
 
   global.__cavbotPgPool = pool;
@@ -30,6 +33,4 @@ function makePrisma() {
 
 export const prisma = global.__cavbotPrisma || makePrisma();
 
-if (process.env.NODE_ENV !== "production") {
-  global.__cavbotPrisma = prisma;
-}
+global.__cavbotPrisma = prisma;

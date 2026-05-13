@@ -360,6 +360,14 @@ export function getAiModelCatalog(): AiModelCatalog {
         capability: "transcription",
       });
     }
+    if (s(qwen.ttsRealtimeModel)) {
+      audio.push({
+        id: s(qwen.ttsRealtimeModel),
+        label: resolveAiModelLabel(s(qwen.ttsRealtimeModel)),
+        providerId: "alibaba_qwen",
+        capability: "speech",
+      });
+    }
     if (s(qwen.imageModel)) {
       image.push({
         id: s(qwen.imageModel),

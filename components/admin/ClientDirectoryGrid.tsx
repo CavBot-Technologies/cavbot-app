@@ -84,20 +84,6 @@ export function ClientDirectoryGrid(props: {
     return () => window.clearTimeout(timeout);
   }, [pendingHref]);
 
-  useEffect(() => {
-    for (const client of props.clients) {
-      if (!client.detailHref) continue;
-      router.prefetch(client.detailHref);
-      router.prefetch(`${client.detailHref}/manage`);
-    }
-  }, [props.clients, router]);
-
-  useEffect(() => {
-    if (!activeClient?.detailHref) return;
-    router.prefetch(activeClient.detailHref);
-    router.prefetch(`${activeClient.detailHref}/manage`);
-  }, [activeClient, router]);
-
   if (!props.clients.length) {
     return <EmptyState title="No clients match the current filters." subtitle="Adjust the query, plan, activity, or region filters and try again." />;
   }
@@ -118,7 +104,6 @@ export function ClientDirectoryGrid(props: {
 
   const openRoute = (href: string) => {
     setPendingHref(href);
-    router.prefetch(href);
     router.push(href);
   };
 
@@ -138,18 +123,6 @@ export function ClientDirectoryGrid(props: {
             type="button"
             className="hq-clientDirectoryCard"
             onClick={() => openCard(client.id)}
-            onMouseEnter={() => {
-              if (client.detailHref) {
-                router.prefetch(client.detailHref);
-                router.prefetch(`${client.detailHref}/manage`);
-              }
-            }}
-            onFocus={() => {
-              if (client.detailHref) {
-                router.prefetch(client.detailHref);
-                router.prefetch(`${client.detailHref}/manage`);
-              }
-            }}
             aria-haspopup="dialog"
             aria-label={`Open client card for ${client.name}${client.hasCavBotAdminIdentity ? ", CavBot admin identity" : ""}`}
           >

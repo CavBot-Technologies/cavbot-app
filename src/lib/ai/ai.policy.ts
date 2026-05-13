@@ -540,18 +540,17 @@ function allowedModelsForPlan(args: {
   surface: AiSurface | "center" | "audio";
 }): string[] {
   const deepseek = deepSeekModels();
-  const ids = new Set<string>([deepseek.chat || DEEPSEEK_CHAT_MODEL_ID]);
+  const ids = new Set<string>([DEEPSEEK_CHAT_MODEL_ID, deepseek.chat || DEEPSEEK_CHAT_MODEL_ID]);
   ids.add(ALIBABA_QWEN_FLASH_MODEL_ID);
   if (args.surface !== "cavcode") {
     ids.add(ALIBABA_QWEN_CHARACTER_MODEL_ID);
   }
   if (args.planId === "premium" || args.planId === "premium_plus") {
+    ids.add(DEEPSEEK_REASONER_MODEL_ID);
     ids.add(deepseek.reasoning);
     ids.add(ALIBABA_QWEN_PLUS_MODEL_ID);
-    ids.add(ALIBABA_QWEN_IMAGE_MODEL_ID);
-  }
-  if ((args.planId === "premium" || args.planId === "premium_plus") && args.surface === "cavcode") {
     ids.add(ALIBABA_QWEN_CODER_MODEL_ID);
+    ids.add(ALIBABA_QWEN_IMAGE_MODEL_ID);
   }
   if (args.planId === "premium_plus") {
     if (isQwenMaxEnabled()) ids.add(ALIBABA_QWEN_MAX_MODEL_ID);
@@ -1683,13 +1682,23 @@ export function resolveVisibleModelCatalogForPlan(args: {
 
   const source = args.modelCatalog || getAiModelCatalog();
   const deepseek = deepSeekModels();
-  const allowedText = new Set<string>([deepseek.chat || DEEPSEEK_CHAT_MODEL_ID, ALIBABA_QWEN_FLASH_MODEL_ID]);
-  const allowedAudio = new Set<string>([ALIBABA_QWEN_ASR_REALTIME_MODEL_ID]);
+  const allowedText = new Set<string>([
+    DEEPSEEK_CHAT_MODEL_ID,
+    deepseek.chat || DEEPSEEK_CHAT_MODEL_ID,
+    ALIBABA_QWEN_FLASH_MODEL_ID,
+  ]);
+  const allowedAudio = new Set<string>([
+    ALIBABA_QWEN_ASR_REALTIME_MODEL_ID,
+    ALIBABA_QWEN_TTS_REALTIME_MODEL_ID,
+    ALIBABA_QWEN_ASR_MODEL_ID,
+  ]);
   const allowedImage = new Set<string>();
   allowedText.add(ALIBABA_QWEN_CHARACTER_MODEL_ID);
   if (args.planId === "premium" || args.planId === "premium_plus") {
+    allowedText.add(DEEPSEEK_REASONER_MODEL_ID);
     allowedText.add(deepseek.reasoning);
     allowedText.add(ALIBABA_QWEN_PLUS_MODEL_ID);
+    allowedText.add(ALIBABA_QWEN_CODER_MODEL_ID);
     allowedImage.add(ALIBABA_QWEN_IMAGE_MODEL_ID);
   }
   if (args.planId === "premium_plus") {

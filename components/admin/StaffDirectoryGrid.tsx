@@ -85,20 +85,6 @@ export function StaffDirectoryGrid(props: {
     return () => window.clearTimeout(timeout);
   }, [pendingHref]);
 
-  useEffect(() => {
-    for (const member of props.staff) {
-      if (!member.detailHref) continue;
-      router.prefetch(member.detailHref);
-      router.prefetch(`${member.detailHref}/manage`);
-    }
-  }, [props.staff, router]);
-
-  useEffect(() => {
-    if (!activeStaff?.detailHref) return;
-    router.prefetch(activeStaff.detailHref);
-    router.prefetch(`${activeStaff.detailHref}/manage`);
-  }, [activeStaff, router]);
-
   if (!props.staff.length) {
     return <EmptyState title="No operators match these filters." subtitle="Adjust the search, department, status, or onboarding filters to widen the team directory." />;
   }
@@ -112,7 +98,6 @@ export function StaffDirectoryGrid(props: {
 
   const openRoute = (href: string) => {
     setPendingHref(href);
-    router.prefetch(href);
     router.push(href);
   };
 
@@ -171,18 +156,6 @@ export function StaffDirectoryGrid(props: {
             type="button"
             className="hq-clientDirectoryCard hq-staffDirectoryCard"
             onClick={() => openCard(member.id)}
-            onMouseEnter={() => {
-              if (member.detailHref) {
-                router.prefetch(member.detailHref);
-                router.prefetch(`${member.detailHref}/manage`);
-              }
-            }}
-            onFocus={() => {
-              if (member.detailHref) {
-                router.prefetch(member.detailHref);
-                router.prefetch(`${member.detailHref}/manage`);
-              }
-            }}
             aria-haspopup="dialog"
             aria-label={`Open team card for ${member.name}`}
           >

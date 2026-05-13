@@ -11,7 +11,6 @@ import {
   type FocusEvent as ReactFocusEvent,
 } from "react";
 import useSWR from "swr";
-import { isAdminHost, toAdminInternalPath } from "@/lib/admin/config";
 import { useSystemStatus } from "@/lib/hooks/useSystemStatus";
 import styles from "./CavbotGlobalFooter.module.css";
 
@@ -50,49 +49,6 @@ type FooterMetricsPayload = FooterMetricsSuccess | FooterMetricsUnavailable;
 
 type FooterCardKey = "system" | "api" | "destination";
 
-type FooterAdminSessionPayload = {
-  ok: boolean;
-  authenticated?: boolean;
-  adminAuthenticated?: boolean;
-  staff?: {
-    department?: string | null;
-    systemRole?: string | null;
-  } | null;
-};
-
-const HUMAN_RESOURCES_LINKS = [
-  {
-    href: "/staff",
-    label: "Team",
-    sub: "Lifecycle, roles, and placement",
-    iconSrc: "/icons/app/hq/staff-symbol-svgrepo-com.svg",
-  },
-  {
-    href: "/staff-lifecycle",
-    label: "Team Lifecycle",
-    sub: "Onboarding, moves, leave, and offboarding",
-    iconSrc: "/icons/app/hq/staff-lifecycle-analytics-svgrepo-com.svg",
-  },
-  {
-    href: "/broadcasts",
-    label: "Team Broadcasts",
-    sub: "Internal notices and mail fanout",
-    iconSrc: "/icons/app/hq/walkie-talkie-svgrepo-com.svg",
-  },
-  {
-    href: "/message-oversight",
-    label: "Message Oversight",
-    sub: "Team inbox review, safety checks, and archives",
-    iconSrc: "/icons/app/hq/secure-mail-svgrepo-com.svg",
-  },
-  {
-    href: "/audit",
-    label: "Audit",
-    sub: "Sensitive action trail and evidence",
-    iconSrc: "/icons/app/hq/audit-report-svgrepo-com.svg",
-  },
-] as const;
-
 const FOOTER_METRICS_KEY = "/api/system-footer/metrics";
 
 async function fetchFooterMetrics(url: string): Promise<FooterMetricsPayload> {
@@ -108,21 +64,6 @@ async function fetchFooterMetrics(url: string): Promise<FooterMetricsPayload> {
     throw new Error(`Footer metrics request failed (${response.status})`);
   }
   return (await response.json()) as FooterMetricsPayload;
-}
-
-async function fetchFooterAdminSession(url: string): Promise<FooterAdminSessionPayload> {
-  const response = await fetch(url, {
-    method: "GET",
-    cache: "no-store",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`Footer admin session request failed (${response.status})`);
-  }
-  return (await response.json()) as FooterAdminSessionPayload;
 }
 
 function formatCount(value: number | null | undefined) {
@@ -162,14 +103,14 @@ function pluralize(value: number, singular: string, plural = `${singular}s`) {
 
 export default function CavbotGlobalFooter() {
   const footerRef = useRef<HTMLElement>(null);
-  const humanResourcesDetailsRef = useRef<HTMLDetailsElement>(null);
+  const developerButtonRef = useRef<HTMLButtonElement>(null);
+  const developerFirstLinkRef = useRef<HTMLAnchorElement>(null);
+  const lastFocusedElementRef = useRef<HTMLElement | null>(null);
+  const hadDeveloperDialogRef = useRef(false);
+  const [developerOpen, setDeveloperOpen] = useState(false);
   const [hoverCard, setHoverCard] = useState<FooterCardKey | null>(null);
   const [pinnedCard, setPinnedCard] = useState<FooterCardKey | null>(null);
   const [canHover, setCanHover] = useState(false);
-  const [adminHostRuntime] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return isAdminHost(window.location.host);
-  });
   const systemCardId = useId();
   const apiCardId = useId();
   const destinationCardId = useId();
@@ -186,18 +127,6 @@ export default function CavbotGlobalFooter() {
       keepPreviousData: true,
     }
   );
-  const { data: adminSessionPayload } = useSWR<FooterAdminSessionPayload>(
-    adminHostRuntime ? "/api/admin/session" : null,
-    fetchFooterAdminSession,
-    {
-      refreshInterval: 45_000,
-      dedupingInterval: 15_000,
-      revalidateOnFocus: true,
-      revalidateOnReconnect: true,
-      keepPreviousData: true,
-    },
-  );
-
   useEffect(() => {
     const query = window.matchMedia("(hover: hover) and (pointer: fine)");
     const sync = () => setCanHover(Boolean(query.matches));
@@ -217,18 +146,13 @@ export default function CavbotGlobalFooter() {
       if (!footerRef.current?.contains(target)) {
         setHoverCard(null);
         setPinnedCard(null);
-        if (humanResourcesDetailsRef.current) {
-          humanResourcesDetailsRef.current.open = false;
-        }
       }
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setHoverCard(null);
       setPinnedCard(null);
-      if (humanResourcesDetailsRef.current) {
-        humanResourcesDetailsRef.current.open = false;
-      }
+      setDeveloperOpen(false);
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -238,23 +162,27 @@ export default function CavbotGlobalFooter() {
     };
   }, []);
 
+  useEffect(() => {
+    if (developerOpen) {
+      hadDeveloperDialogRef.current = true;
+      const activeElement =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      lastFocusedElementRef.current = activeElement;
+      window.setTimeout(() => {
+        developerFirstLinkRef.current?.focus();
+      }, 0);
+      return;
+    }
+    if (!hadDeveloperDialogRef.current) return;
+    hadDeveloperDialogRef.current = false;
+    const nextTarget = lastFocusedElementRef.current ?? developerButtonRef.current;
+    if (nextTarget && document.contains(nextTarget)) {
+      nextTarget.focus();
+    }
+    lastFocusedElementRef.current = null;
+  }, [developerOpen]);
+
   const activeCard = pinnedCard ?? hoverCard;
-  const humanResourcesLinks = useMemo(
-    () => HUMAN_RESOURCES_LINKS.map((item) => ({
-      ...item,
-      resolvedHref: adminHostRuntime ? item.href : toAdminInternalPath(item.href),
-    })),
-    [adminHostRuntime],
-  );
-  const settingsHref = useMemo(
-    () => (adminHostRuntime ? "/settings" : toAdminInternalPath("/settings")),
-    [adminHostRuntime],
-  );
-  const canOpenSettings = useMemo(() => {
-    if (!adminHostRuntime) return false;
-    if (!adminSessionPayload?.adminAuthenticated) return false;
-    return String(adminSessionPayload.staff?.department || "").trim().toUpperCase() === "COMMAND";
-  }, [adminHostRuntime, adminSessionPayload]);
 
   const systemTone: "live" | "at_risk" | "down" | "unknown" = useMemo(() => {
     if (summary.downCount > 0) return "down";
@@ -416,71 +344,30 @@ export default function CavbotGlobalFooter() {
       <footer className={styles.footer} aria-label="CavBot system footer" ref={footerRef}>
         <div className={styles.inner}>
           <div className={styles.left}>
-            <details ref={humanResourcesDetailsRef} className={styles.developerDisclosure}>
-              <summary className={styles.developerButton} aria-controls="cb-footer-human-resources-panel">
-                <Image
-                  src="/icons/app/hq/human-resources-svgrepo-com.svg"
-                  alt=""
-                  aria-hidden="true"
-                  width={14}
-                  height={14}
-                  className={styles.developerIcon}
-                  unoptimized
-                />
-                <span>Human Resources</span>
-              </summary>
-              <section
-                id="cb-footer-human-resources-panel"
-                className={styles.developerPanel}
-                role="menu"
-                aria-label="Human resources links"
-              >
-                <div className={styles.developerHeader}>
-                  <div className={styles.developerTitle}>Human Resources</div>
-                  <button
-                    type="button"
-                    className={styles.developerClose}
-                    aria-label="Close human resources panel"
-                    onClick={() => {
-                      if (humanResourcesDetailsRef.current) {
-                        humanResourcesDetailsRef.current.open = false;
-                      }
-                    }}
-                  >
-                    <span className="cb-closeIcon" aria-hidden="true" />
-                  </button>
-                </div>
-                <div className={styles.developerLinks}>
-                  {humanResourcesLinks.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.resolvedHref}
-                      className={styles.developerLink}
-                      onClick={() => {
-                        if (humanResourcesDetailsRef.current) {
-                          humanResourcesDetailsRef.current.open = false;
-                        }
-                      }}
-                    >
-                      <span className={styles.developerLinkIcon} aria-hidden="true">
-                        <Image
-                          src={item.iconSrc}
-                          alt=""
-                          width={15}
-                          height={15}
-                          className={styles.developerLinkIconImage}
-                          unoptimized
-                        />
-                      </span>
-                      <span className={styles.developerLinkBody}>
-                        <span className={styles.developerLinkTitle}>{item.label}</span>
-                        <span className={styles.developerLinkSub}>{item.sub}</span>
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            </details>
+            <button
+              ref={developerButtonRef}
+              type="button"
+              className={styles.developerButton}
+              onClick={() => {
+                setHoverCard(null);
+                setPinnedCard(null);
+                setDeveloperOpen(true);
+              }}
+              aria-haspopup="dialog"
+              aria-expanded={developerOpen ? "true" : "false"}
+              aria-controls="cb-footer-developer-panel"
+            >
+              <Image
+                src="/icons/app/code-svgrepo-com.svg"
+                alt=""
+                aria-hidden="true"
+                width={14}
+                height={14}
+                className={styles.developerIcon}
+                unoptimized
+              />
+              <span>Developers</span>
+            </button>
           </div>
 
           <div className={styles.center} aria-hidden="true" />
@@ -641,31 +528,42 @@ export default function CavbotGlobalFooter() {
               </div>
             </div>
 
-            {canOpenSettings ? (
-              <div className={styles.metric}>
-                <Link
-                  href={settingsHref}
-                  className={styles.metricButton}
-                  aria-label="HQ settings"
-                  title="HQ settings"
-                >
-                  <span className={styles.metricIcon}>
-                    <Image
-                      src="/icons/app/settings-svgrepo-com.svg"
-                      alt=""
-                      aria-hidden="true"
-                      width={14}
-                      height={14}
-                      className={`${styles.metricIconImage} ${styles.metricIconImageSettings}`}
-                      unoptimized
-                    />
-                  </span>
-                </Link>
-              </div>
-            ) : null}
           </div>
         </div>
       </footer>
+
+      {developerOpen ? (
+        <div className={styles.developerOverlay} onClick={() => setDeveloperOpen(false)}>
+          <section
+            id="cb-footer-developer-panel"
+            className={styles.developerPanel}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Developer links"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.developerLinks}>
+              <Link
+                ref={developerFirstLinkRef}
+                href="/cavtools"
+                className={styles.developerLink}
+                onClick={() => setDeveloperOpen(false)}
+              >
+                <span className={styles.developerLinkTitle}>CavTools</span>
+              </Link>
+              <Link href="/cavcode" className={styles.developerLink} onClick={() => setDeveloperOpen(false)}>
+                <span className={styles.developerLinkTitle}>CavCode</span>
+              </Link>
+              <Link href="/cavcode-viewer" className={styles.developerLink} onClick={() => setDeveloperOpen(false)}>
+                <span className={styles.developerLinkTitle}>CavCode Viewer</span>
+              </Link>
+              <Link href="/cavcloud" className={styles.developerLink} onClick={() => setDeveloperOpen(false)}>
+                <span className={styles.developerLinkTitle}>CavCloud</span>
+              </Link>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </>
   );
 }
