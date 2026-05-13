@@ -7,19 +7,18 @@ function read(rel: string): string {
   return fs.readFileSync(path.resolve(rel), "utf8");
 }
 
-test("root layout passes request host into the global footer mount", () => {
+test("root layout keeps shared runtime host handling server-side", () => {
   const source = read("app/layout.tsx");
 
   assert.equal(source.includes('import { headers } from "next/headers";'), true);
-  assert.equal(source.includes('const requestHost = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "";'), true);
-  assert.equal(source.includes("<GlobalFooterMount initialHost={requestHost} />"), true);
+  assert.equal(source.includes('const host = headerStore.get("host");'), true);
+  assert.equal(source.includes("shouldRenderSharedRootRuntime(host)"), true);
 });
 
-test("global footer stays hidden on the canonical CavAi host", () => {
+test("global footer stays hidden on the CavAi app route", () => {
   const source = read("app/_components/GlobalFooterMount.tsx");
 
-  assert.equal(source.includes('import { isCavAiCanonicalHost } from "@/lib/cavai/url";'), true);
-  assert.equal(source.includes("function normalizeHost(host: string | null | undefined): string {"), true);
-  assert.equal(source.includes("const hideFooterForCavAiHost = useMemo(() => isCavAiCanonicalHost(normalizedHost), [normalizedHost]);"), true);
-  assert.equal(source.includes("const hideFooter = hideFooterForRoute || hideFooterForCavAiHost || modalOpen;"), true);
+  assert.equal(source.includes("function isCavAiRoute(pathname: string): boolean {"), true);
+  assert.equal(source.includes('if (pathname === "/cavai" || pathname.startsWith("/cavai/")) return true;'), true);
+  assert.equal(source.includes("const hideFooter = hideFooterForRoute || modalOpen;"), true);
 });

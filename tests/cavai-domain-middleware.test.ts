@@ -13,7 +13,7 @@ function request(url: string, host: string) {
   });
 }
 
-test("production app host /cavai redirects to the ai.cavbot.io canonical URL", async () => {
+test("production app host /cavai renders as an app route without external redirect", async () => {
   const previousNodeEnv = process.env.NODE_ENV;
   Reflect.set(process.env, "NODE_ENV", "production");
   try {
@@ -24,25 +24,23 @@ test("production app host /cavai redirects to the ai.cavbot.io canonical URL", a
       )
     );
 
-    assert.equal(response.status, 308);
-    assert.equal(response.headers.get("location"), "https://ai.cavbot.io/");
+    assert.notEqual(response.status, 301);
+    assert.notEqual(response.status, 302);
+    assert.notEqual(response.status, 307);
+    assert.notEqual(response.status, 308);
+    assert.equal(response.headers.get("location"), null);
   } finally {
     Reflect.set(process.env, "NODE_ENV", previousNodeEnv);
   }
 });
 
-test("production ai.cavbot.io root rewrites into the CavAi workspace page", async () => {
+test("production app host /cavai remains public middleware pass-through", async () => {
   const previousNodeEnv = process.env.NODE_ENV;
   Reflect.set(process.env, "NODE_ENV", "production");
   try {
-    const response = await middleware(request("https://ai.cavbot.io/", "ai.cavbot.io"));
+    const response = await middleware(request("https://app.cavbot.io/cavai", "app.cavbot.io"));
 
-    assert.equal(
-      response.headers.get("x-middleware-rewrite")?.endsWith(
-        "/cavai?surface=workspace&context=Workspace+context"
-      ),
-      true
-    );
+    assert.equal(response.headers.get("x-middleware-rewrite"), null);
     assert.equal(response.headers.get("location"), null);
   } finally {
     Reflect.set(process.env, "NODE_ENV", previousNodeEnv);

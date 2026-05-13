@@ -7,8 +7,8 @@ export type CavAiRouteSurface =
   | "cavpad"
   | "cavcode";
 
-export const CAVAI_CANONICAL_ORIGIN =
-  process.env.NEXT_PUBLIC_CAVAI_URL || process.env.CAVAI_URL || "https://app.cavbot.io/cavai";
+export const CAVAI_APP_PATH = "/cavai";
+export const CAVAI_CANONICAL_ORIGIN = `https://app.cavbot.io${CAVAI_APP_PATH}`;
 
 export const CAVAI_DEFAULT_SURFACE: CavAiRouteSurface = "workspace";
 export const CAVAI_DEFAULT_CONTEXT_LABEL = "Workspace context";
@@ -50,14 +50,9 @@ function hasScopedContext(params: URLSearchParams): boolean {
   return Number.isFinite(projectId) && projectId > 0;
 }
 
-export function isCavAiCanonicalHost(hostname: string): boolean {
-  const candidate = s(hostname).toLowerCase();
-  if (!candidate) return false;
-  try {
-    return candidate === new URL(CAVAI_CANONICAL_ORIGIN).hostname.toLowerCase();
-  } catch {
-    return candidate === "app.cavbot.io";
-  }
+export function isCavAiCanonicalHost(_hostname: string): boolean {
+  void _hostname;
+  return false;
 }
 
 export function buildCanonicalCavAiRootSearchParams(
