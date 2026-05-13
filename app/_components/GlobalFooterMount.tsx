@@ -7,7 +7,6 @@ import { isAdminPublicPath } from "@/lib/admin/config";
 
 const ROUTE_FOOTER_BLOCKLIST = ["/status", "/status/history"] as const;
 const ARCADE_FOOTER_BLOCKLIST = ["/cavbot-arcade", "/cavbot-arcade/gallery"] as const;
-const ROUTE_FOOTER_BLOCK_PREFIXES = ["/cavai"] as const;
 const AUTH_ROUTE_PREFIXES = ["/auth", "/users/recovery", "/users/reset", "/accept-invite", "/request-access"] as const;
 const MODAL_LOCK_CLASSES = [
   "cb-modal-open",
@@ -28,6 +27,14 @@ function normalizePathname(pathname: string | null): string {
 
 function isAuthRoute(pathname: string): boolean {
   return AUTH_ROUTE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function isCavAiRoute(pathname: string): boolean {
+  if (!pathname) return false;
+  if (pathname === "/cavai" || pathname.startsWith("/cavai/")) return true;
+  // Locale-prefixed paths (for example: /en/cavai).
+  if (pathname.endsWith("/cavai") || pathname.includes("/cavai/")) return true;
+  return false;
 }
 
 function isCavcodeRoute(pathname: string): boolean {
@@ -78,7 +85,7 @@ export default function GlobalFooterMount() {
   const hideFooterForRoute = useMemo(() => {
     if (ROUTE_FOOTER_BLOCKLIST.some((route) => route === normalizedPathname)) return true;
     if (ARCADE_FOOTER_BLOCKLIST.some((route) => route === normalizedPathname)) return true;
-    if (ROUTE_FOOTER_BLOCK_PREFIXES.some((prefix) => normalizedPathname === prefix || normalizedPathname.startsWith(`${prefix}/`))) return true;
+    if (isCavAiRoute(normalizedPathname)) return true;
     if (isCavcodeRoute(normalizedPathname)) return true;
     if (isAuthRoute(normalizedPathname)) return true;
     if (isAdminPublicPath(normalizedPathname)) return true;
