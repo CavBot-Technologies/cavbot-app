@@ -34,6 +34,7 @@ const OWNER_USERNAME = normalizeUsername(process.env.CAVBOT_OWNER_USERNAME || ""
 
 const PUBLIC_FILE = /\.(.*)$/;
 const STATUS_PROBE_HEADER = "x-cavbot-status-probe";
+const PROFILE_EXISTS_TIMEOUT_MS = 1_200;
 
 const ALWAYS_PUBLIC_STATUS_PATHS = ["/status", "/status/history", "/status/incidents"];
 const UTF8_ENCODER = new TextEncoder();
@@ -239,15 +240,27 @@ async function profileExists(req: NextRequest, candidate: string) {
   checkUrl.pathname = "/api/public/profile-exists";
   checkUrl.search = `username=${encodeURIComponent(candidate)}`;
 
-  const res = await fetch(checkUrl, {
-    method: "GET",
-    headers: {
-      "Cache-Control": "no-store",
-    },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PROFILE_EXISTS_TIMEOUT_MS);
 
-  const data = (await res.json().catch(() => null)) as null | { ok?: boolean; exists?: boolean };
-  return Boolean(data?.ok && data.exists === true);
+  try {
+    const res = await fetch(checkUrl, {
+      method: "GET",
+      headers: {
+        "Cache-Control": "no-store",
+      },
+      signal: controller.signal,
+    });
+
+    if (!res.ok) return false;
+    const data = (await res.json().catch(() => null)) as null | { ok?: boolean; exists?: boolean };
+    return Boolean(data?.ok && data.exists === true);
+  } catch {
+    // Fail closed: never let username probing block real app routes or auth redirects.
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function base64UrlToBytes(value: string): Uint8Array {

@@ -18,6 +18,15 @@ test("cavcloud HTTP helpers preserve service-unavailable responses", () => {
   assert.match(source, /status === 502 \|\| status === 503 \|\| status === 504/);
 });
 
+test("embed analytics forwarding has an upstream deadline", () => {
+  const source = read("app/api/embed/analytics/route.ts");
+
+  assert.match(source, /UPSTREAM_TIMEOUT_MS/);
+  assert.match(source, /controller\.abort\(\)/);
+  assert.match(source, /signal: controller\.signal/);
+  assert.match(source, /UPSTREAM_TIMEOUT/);
+});
+
 test("tree, summary, and dashboard degraded helpers do not fail when plan lookups fail", () => {
   const root = read("app/api/cavcloud/root/route.ts");
   const tree = read("app/api/cavcloud/tree/route.ts");
@@ -35,7 +44,7 @@ test("tree, summary, and dashboard degraded helpers do not fail when plan lookup
   assert.match(summary, /getEffectiveAccountPlanContext\(accountId\)\.catch\(\(\) => null\)/);
   assert.match(summary, /withCavCloudDeadline\(/);
   assert.match(summary, /buildStaticDegradedSummaryResponse/);
-  assert.match(summary, /sessionValidated && isCavCloudServiceUnavailableError\(err\)/);
+  assert.match(summary, /sessionValidated && validatedAccountId/);
   assert.match(dashboard, /getEffectiveAccountPlanContext\(accountId\)\.catch\(\(\) => null\)/);
   assert.match(plan, /function isSubscriptionLookupSoftFailure/);
   assert.match(plan, /if \(isSubscriptionLookupSoftFailure\(error\)\) return null;/);

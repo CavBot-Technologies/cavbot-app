@@ -15,6 +15,7 @@ const NO_STORE_HEADERS: Record<string, string> = {
   Pragma: "no-cache",
   Expires: "0",
 };
+const UPSTREAM_TIMEOUT_MS = 8_000;
 
 const INGEST_ALLOWED_HEADERS = [
   "content-type",
@@ -185,29 +186,46 @@ async function proxyToRemote(args: {
   corsOrigin: string | null;
 }) {
   const { baseUrl } = getEnv();
-  const response = await fetch(`${baseUrl}/v1/events`, {
-    method: "POST",
-    headers: args.headers,
-    body: args.payload ? JSON.stringify(args.payload) : undefined,
-    cache: "no-store",
-    credentials: "omit",
-    keepalive: true,
-    mode: "cors",
-    referrerPolicy: "no-referrer",
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
 
-  const text = await response.text().catch(() => "");
-  const responseHeaders: Record<string, string> = {
-    "Content-Type": response.headers.get("content-type") || "application/json",
-    ...corsHeaders(args.corsOrigin),
-  };
-  const retryAfter = response.headers.get("Retry-After");
-  if (retryAfter) responseHeaders["Retry-After"] = retryAfter;
+  try {
+    const response = await fetch(`${baseUrl}/v1/events`, {
+      method: "POST",
+      headers: args.headers,
+      body: args.payload ? JSON.stringify(args.payload) : undefined,
+      cache: "no-store",
+      credentials: "omit",
+      keepalive: true,
+      mode: "cors",
+      referrerPolicy: "no-referrer",
+      signal: controller.signal,
+    });
 
-  return new NextResponse(text, {
-    status: response.status,
-    headers: responseHeaders,
-  });
+    const text = await response.text().catch(() => "");
+    const responseHeaders: Record<string, string> = {
+      "Content-Type": response.headers.get("content-type") || "application/json",
+      ...corsHeaders(args.corsOrigin),
+    };
+    const retryAfter = response.headers.get("Retry-After");
+    if (retryAfter) responseHeaders["Retry-After"] = retryAfter;
+
+    return new NextResponse(text, {
+      status: response.status,
+      headers: responseHeaders,
+    });
+  } catch (error) {
+    const isTimeout = (error as { name?: string } | null)?.name === "AbortError";
+    return NextResponse.json(
+      { ok: false, error: isTimeout ? "UPSTREAM_TIMEOUT" : "UPSTREAM_ERROR" },
+      {
+        status: isTimeout ? 504 : 502,
+        headers: corsHeaders(args.corsOrigin),
+      },
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function getSiteIdFromPayload(payload: Record<string, unknown> | null, req: NextRequest) {

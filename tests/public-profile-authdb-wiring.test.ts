@@ -25,3 +25,14 @@ test("public profile gateway and page use authDb-backed lookups", () => {
   assert.equal(teamState.includes("findPublicProfileUserByUsername"), true, "public profile team state should resolve users from authDb");
   assert.equal(teamState.includes("findMembershipsForUser"), true, "public profile team state should resolve memberships from authDb");
 });
+
+test("public profile middleware lookup fails closed instead of timing out app routes", () => {
+  const middleware = read("middleware.ts");
+  const pgPool = read("lib/pgPool.server.ts");
+
+  assert.equal(middleware.includes("PROFILE_EXISTS_TIMEOUT_MS"), true);
+  assert.equal(middleware.includes("controller.abort()"), true);
+  assert.equal(middleware.includes("return false;"), true);
+  assert.equal(pgPool.includes("query_timeout"), true);
+  assert.equal(pgPool.includes("statement_timeout"), true);
+});
