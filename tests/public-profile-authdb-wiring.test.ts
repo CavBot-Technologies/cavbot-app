@@ -29,10 +29,14 @@ test("public profile gateway and page use authDb-backed lookups", () => {
 test("public profile middleware lookup fails closed instead of timing out app routes", () => {
   const middleware = read("middleware.ts");
   const pgPool = read("lib/pgPool.server.ts");
+  const profileExistsRoute = read("app/api/public/profile-exists/route.ts");
 
   assert.equal(middleware.includes("PROFILE_EXISTS_TIMEOUT_MS"), true);
   assert.equal(middleware.includes("controller.abort()"), true);
   assert.equal(middleware.includes("return false;"), true);
+  assert.equal(profileExistsRoute.includes("PROFILE_EXISTS_DB_TIMEOUT_MS"), true);
+  assert.equal(profileExistsRoute.includes("withProfileLookupDeadline"), true);
+  assert.equal(profileExistsRoute.includes("PROFILE_LOOKUP_TIMEOUT"), true);
   assert.equal(pgPool.includes("query_timeout"), true);
   assert.equal(pgPool.includes("statement_timeout"), true);
 });

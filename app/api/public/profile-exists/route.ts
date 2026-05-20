@@ -17,6 +17,8 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const OWNER_USERNAME = normalizeUsername(process.env.CAVBOT_OWNER_USERNAME || "");
+const PROFILE_EXISTS_DB_TIMEOUT_MS = 1_200;
+const PROFILE_LOOKUP_TIMEOUT = Symbol("PROFILE_LOOKUP_TIMEOUT");
 
 function jsonNoStore<T>(body: T, init?: { status?: number }) {
   return NextResponse.json(body, {
@@ -33,6 +35,18 @@ function isUnsafeSlug(raw: string) {
   if (!v) return true;
   if (v.includes(".") || v.includes("/") || v.includes("\\")) return true;
   return false;
+}
+
+async function withProfileLookupDeadline<T>(promise: Promise<T>) {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const deadline = new Promise<typeof PROFILE_LOOKUP_TIMEOUT>((resolve) => {
+      timeout = setTimeout(() => resolve(PROFILE_LOOKUP_TIMEOUT), PROFILE_EXISTS_DB_TIMEOUT_MS);
+    });
+    return await Promise.race([promise, deadline]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 export async function GET(req: Request) {
@@ -55,27 +69,38 @@ export async function GET(req: Request) {
     }
 
     try {
-      const authUser = await findUserByUsername(getAuthPool(), username).catch(() => null);
+      const authUser = await withProfileLookupDeadline(findUserByUsername(getAuthPool(), username).catch(() => null));
+      if (authUser === PROFILE_LOOKUP_TIMEOUT) {
+        return jsonNoStore({ ok: true, exists: false }, { status: 200 });
+      }
       if (authUser?.id) {
         return jsonNoStore({ ok: true, exists: true }, { status: 200 });
       }
 
-      const user = await prisma.user.findUnique({
-        where: { username },
-        select: { id: true },
-      });
+      const user = await withProfileLookupDeadline(
+        prisma.user.findUnique({
+          where: { username },
+          select: { id: true },
+        })
+      );
+      if (user === PROFILE_LOOKUP_TIMEOUT) {
+        return jsonNoStore({ ok: true, exists: false }, { status: 200 });
+      }
 
       // Rewrite /{username} when the username exists. Visibility is handled inside the public profile page
       // (public vs locked) and must never rely on 404 for privacy.
       return jsonNoStore({ ok: true, exists: Boolean(user?.id) }, { status: 200 });
     } catch {
-      const basic = await prisma.user
-        .findUnique({
-          where: { username },
-          select: { id: true },
-        })
-        .catch(() => null);
+      const basic = await withProfileLookupDeadline(
+        prisma.user
+          .findUnique({
+            where: { username },
+            select: { id: true },
+          })
+          .catch(() => null)
+      );
 
+	      if (basic === PROFILE_LOOKUP_TIMEOUT) return jsonNoStore({ ok: true, exists: false }, { status: 200 });
 	      if (!basic?.id) return jsonNoStore({ ok: true, exists: false }, { status: 200 });
 	      return jsonNoStore({ ok: true, exists: true }, { status: 200 });
 	    }
