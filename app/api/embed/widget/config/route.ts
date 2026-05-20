@@ -130,6 +130,8 @@ function handleOptions(req: NextRequest) {
 const DEDUPE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const REACTIVATION_WINDOW_MS = 30 * DEDUPE_WINDOW_MS;
 const TOKEN_TTL_SECONDS = 600;
+const WIDGET_CONFIG_TIMEOUT_MS = 12_000;
+const WIDGET_CONFIG_DEADLINE = Symbol("WIDGET_CONFIG_DEADLINE");
 
 const ACTION_LABELS: Record<string, string> = {
   "badge:inline": "Connection detected — Badge (Inline)",
@@ -190,6 +192,35 @@ function buildSummaryLabel(widgetType: WidgetType, style: WidgetStyle) {
 }
 
 export async function GET(req: NextRequest, ctx: { env?: RateLimitEnv }) {
+  try {
+    return await withWidgetConfigDeadline(() => handleGet(req, ctx));
+  } catch (error) {
+    if (error === WIDGET_CONFIG_DEADLINE) {
+      return NextResponse.json(
+        { ok: false, allowed: false, code: "WIDGET_CONFIG_TIMEOUT" },
+        {
+          status: 504,
+          headers: corsHeaders(req.headers.get("origin")),
+        }
+      );
+    }
+    throw error;
+  }
+}
+
+function withWidgetConfigDeadline<T>(work: () => Promise<T>): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  return Promise.race([
+    work(),
+    new Promise<T>((_, reject) => {
+      timeout = setTimeout(() => reject(WIDGET_CONFIG_DEADLINE), WIDGET_CONFIG_TIMEOUT_MS);
+    }),
+  ]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
+}
+
+async function handleGet(req: NextRequest, ctx: { env?: RateLimitEnv }) {
   if (req.method === "OPTIONS") {
     return handleOptions(req);
   }

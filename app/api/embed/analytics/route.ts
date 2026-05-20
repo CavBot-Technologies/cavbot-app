@@ -16,6 +16,8 @@ const NO_STORE_HEADERS: Record<string, string> = {
   Expires: "0",
 };
 const UPSTREAM_TIMEOUT_MS = 8_000;
+const EMBED_ANALYTICS_TIMEOUT_MS = 12_000;
+const EMBED_ANALYTICS_DEADLINE = Symbol("EMBED_ANALYTICS_DEADLINE");
 
 const INGEST_ALLOWED_HEADERS = [
   "content-type",
@@ -250,6 +252,35 @@ export async function OPTIONS(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest, ctx: { env?: RateLimitEnv }) {
+  try {
+    return await withEmbedAnalyticsDeadline(() => handlePost(req, ctx));
+  } catch (error) {
+    if (error === EMBED_ANALYTICS_DEADLINE) {
+      return NextResponse.json(
+        { ok: false, error: "EMBED_ANALYTICS_TIMEOUT" },
+        {
+          status: 504,
+          headers: corsHeaders(req.headers.get("origin")),
+        }
+      );
+    }
+    throw error;
+  }
+}
+
+function withEmbedAnalyticsDeadline<T>(work: () => Promise<T>): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  return Promise.race([
+    work(),
+    new Promise<T>((_, reject) => {
+      timeout = setTimeout(() => reject(EMBED_ANALYTICS_DEADLINE), EMBED_ANALYTICS_TIMEOUT_MS);
+    }),
+  ]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
+}
+
+async function handlePost(req: NextRequest, ctx: { env?: RateLimitEnv }) {
   if (req.method === "OPTIONS") {
     return handleOptions(req);
   }

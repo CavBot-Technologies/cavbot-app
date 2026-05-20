@@ -22,9 +22,26 @@ test("embed analytics forwarding has an upstream deadline", () => {
   const source = read("app/api/embed/analytics/route.ts");
 
   assert.match(source, /UPSTREAM_TIMEOUT_MS/);
+  assert.match(source, /EMBED_ANALYTICS_TIMEOUT_MS/);
   assert.match(source, /controller\.abort\(\)/);
   assert.match(source, /signal: controller\.signal/);
   assert.match(source, /UPSTREAM_TIMEOUT/);
+  assert.match(source, /EMBED_ANALYTICS_TIMEOUT/);
+});
+
+test("embed widget config has a request deadline", () => {
+  const source = read("app/api/embed/widget/config/route.ts");
+
+  assert.match(source, /WIDGET_CONFIG_TIMEOUT_MS/);
+  assert.match(source, /withWidgetConfigDeadline/);
+  assert.match(source, /WIDGET_CONFIG_TIMEOUT/);
+});
+
+test("production wrangler config keeps CavBot events enabled", () => {
+  const source = read("wrangler.toml");
+
+  assert.match(source, /NEXT_PUBLIC_CAVBOT_LIVE_MODE = "1"/);
+  assert.match(source, /NEXT_PUBLIC_CAVBOT_DISABLE_EVENTS = "0"/);
 });
 
 test("tree, summary, and dashboard degraded helpers do not fail when plan lookups fail", () => {
