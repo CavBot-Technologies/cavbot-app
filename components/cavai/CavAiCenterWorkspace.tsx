@@ -3518,6 +3518,7 @@ export type CavAiCenterWorkspaceProps = {
   expandHref?: string;
   initialSessionId?: string | null;
   initialQuickMode?: "create_image" | "edit_image" | null;
+  initialPrompt?: string | null;
 };
 
 export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
@@ -3547,7 +3548,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const initialMessages = initialSessionCacheMessageMap.get(initialSessionId)
     || buildSyntheticThreadFromSessionSummary(initialSessionSummary);
 
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(() => s(props.initialPrompt));
   const [sessions, setSessions] = useState<CavAiSessionSummary[]>(initialSessionCacheSnapshot?.sessions || []);
   const [sessionId, setSessionId] = useState(initialSessionId);
   const [messages, setMessages] = useState<CavAiMessage[]>(initialMessages);
@@ -3690,6 +3691,7 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
   const preloadedIconSrcRef = useRef<Set<string>>(new Set());
   const warmSessionsKeyRef = useRef("");
   const appliedInitialSessionIdRef = useRef<string | null>(null);
+  const appliedInitialPromptRef = useRef<string | null>(null);
   const warmedModelsRef = useRef(false);
   const warmedAuthProfileRef = useRef(false);
   const reasoningTickerRef = useRef<number | null>(null);
@@ -5852,6 +5854,18 @@ export default function CavAiCenterWorkspace(props: CavAiCenterWorkspaceProps) {
     if (!isOpen) return;
     syncComposerInputHeight();
   }, [isOpen, prompt, syncComposerInputHeight]);
+
+  useEffect(() => {
+    const nextPrompt = s(props.initialPrompt);
+    if (!nextPrompt) return;
+    if (appliedInitialPromptRef.current === nextPrompt) return;
+
+    appliedInitialPromptRef.current = nextPrompt;
+    setPrompt((currentPrompt) => {
+      if (s(currentPrompt)) return currentPrompt;
+      return nextPrompt;
+    });
+  }, [props.initialPrompt]);
 
   useEffect(() => {
     if (!isOpen) return;
