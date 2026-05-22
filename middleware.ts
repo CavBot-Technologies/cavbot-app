@@ -34,7 +34,7 @@ const OWNER_USERNAME = normalizeUsername(process.env.CAVBOT_OWNER_USERNAME || ""
 
 const PUBLIC_FILE = /\.(.*)$/;
 const STATUS_PROBE_HEADER = "x-cavbot-status-probe";
-const PROFILE_EXISTS_TIMEOUT_MS = 1_200;
+const PROFILE_EXISTS_TIMEOUT_MS = 3_000;
 
 const ALWAYS_PUBLIC_STATUS_PATHS = ["/status", "/status/history", "/status/incidents"];
 const UTF8_ENCODER = new TextEncoder();
@@ -167,6 +167,11 @@ function isPublicPath(pathname: string) {
 
   // Public profile backing route (canonical is /{username} via rewrite)
   if (pathname === "/u" || pathname.startsWith("/u/")) return true;
+
+  // First-class CavBot profile route. This must stay public even if the
+  // username existence probe is slow, because the page itself renders the
+  // canonical public/private profile state.
+  if (pathname === "/cavbot" || pathname === "/cavbot/") return true;
 
   // CavBot Arcade surfaces are public so in-game links can return to the gallery
   // even when the user enters via a static game page under /public.

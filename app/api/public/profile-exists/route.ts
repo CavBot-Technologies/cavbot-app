@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const OWNER_USERNAME = normalizeUsername(process.env.CAVBOT_OWNER_USERNAME || "");
-const PROFILE_EXISTS_DB_TIMEOUT_MS = 1_200;
+const PROFILE_EXISTS_DB_TIMEOUT_MS = 3_000;
 const PROFILE_LOOKUP_TIMEOUT = Symbol("PROFILE_LOOKUP_TIMEOUT");
 
 function jsonNoStore<T>(body: T, init?: { status?: number }) {
