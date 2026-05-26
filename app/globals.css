@@ -39,10 +39,10 @@
   --border-soft: rgba(255,255,255,0.12);
 
   /* Geometry: grounded rounded-rects across the entire product */
-  --cb-r: 8px;
-  --r-lg: 14px;
-  --r-md: 10px;
-  --r-sm: 8px;
+  --cb-r: 4px;
+  --r-lg: 4px;
+  --r-md: 4px;
+  --r-sm: 4px;
 
   --pad-lg: 18px;
   --pad-md: 14px;
@@ -813,6 +813,13 @@ a:focus{
   filter: brightness(0) invert(1);
 }
 
+.cb-staff-chat-icon{
+  width: 22px;
+  height: 22px;
+  display: block;
+  filter: brightness(0) invert(1);
+}
+
 .cb-tools-icon{
   width: 16px;
   height: 16px;
@@ -1431,9 +1438,9 @@ html body :is(
 .cb-notif-toast{
   position: fixed;
   left: 50%;
-  bottom: calc(18px + var(--safe-bottom));
+  bottom: calc(var(--cb-global-footer-height) + 18px + var(--safe-bottom));
   transform: translateX(-50%);
-  z-index: 10020;
+  z-index: 130020;
   pointer-events: none;
 
   width: min(520px, calc(100vw - 24px));
@@ -1491,7 +1498,7 @@ html body :is(
   background: rgba(3, 6, 22, 0.92);
   backdrop-filter: blur(10px);
 
-  z-index: 999;
+  z-index: 130020;
 }
 
 .cb-menu-right{

@@ -462,13 +462,15 @@
 }
 
 .ins-finding{
-  border: 1px solid var(--stroke);
-  background: rgba(2,6,18,0.92);
-  border-radius: var(--r-md);
-  padding: 18px;
+  border: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  background: transparent;
+  border-radius: 0;
+  padding: 18px 2px 22px;
   overflow: hidden;
   min-width:0;
 }
+.ins-finding:last-child{ border-bottom: 0; }
 
 .ins-finding-top{
   display:flex;

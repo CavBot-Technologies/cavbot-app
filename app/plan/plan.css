@@ -416,8 +416,8 @@
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.85);
   font-size: 11px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-transform: none;
 }
 
 .plan-badge-premium {

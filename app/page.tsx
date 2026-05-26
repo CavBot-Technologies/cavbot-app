@@ -176,9 +176,9 @@ type InitialScanPayload = {
 };
 
 function workspacePlanLabelForId(planId: PlanId) {
-  if (planId === "premium_plus") return "PREMIUM+";
-  if (planId === "premium") return "PREMIUM";
-  return "FREE";
+  if (planId === "premium_plus") return "Premium+";
+  if (planId === "premium") return "Premium";
+  return "Free";
 }
 
 function resolveWorkspacePlanId(detail?: WorkspacePlanDetail | null) {
@@ -1021,9 +1021,7 @@ function CommandDeckPageInner() {
   const [guardrails, setGuardrails] = useState<Guardrails>(DEFAULT_GUARDRAILS);
   const [workspacePlanLabel, setWorkspacePlanLabel] = useState<string>(() => {
     const detail = readBootWorkspacePlanDetail();
-    return typeof detail?.planLabel === "string" && detail.planLabel.trim()
-      ? detail.planLabel.trim()
-      : workspacePlanLabelForId(resolveWorkspacePlanId(detail));
+    return workspacePlanLabelForId(resolveWorkspacePlanId(detail));
   });
   const [planId, setPlanId] = useState<PlanId>(() => {
     const detail = readBootWorkspacePlanDetail();
@@ -1039,10 +1037,7 @@ function CommandDeckPageInner() {
     function applyPlan(detail: WorkspacePlanDetail | null) {
       if (!detail) return;
       const nextPlanId = resolveWorkspacePlanId(detail);
-      const nextPlanLabel =
-        typeof detail.planLabel === "string" && detail.planLabel.trim()
-          ? detail.planLabel.trim()
-          : workspacePlanLabelForId(nextPlanId);
+      const nextPlanLabel = workspacePlanLabelForId(nextPlanId);
       setWorkspacePlanLabel(nextPlanLabel);
       setPlanId(nextPlanId);
       if (typeof detail.trialActive !== "undefined") setTrialActive(Boolean(detail.trialActive));
@@ -2763,10 +2758,10 @@ type AccountContext = {
 
 function planTierLabelFromAccount(account?: AccountContext | null) {
   const raw = String(account?.tierEffective || account?.tier || "").toLowerCase();
-  if (raw.includes("premium_plus") || raw.includes("premium+") || raw.includes("plus")) return "PREMIUM+";
-  if (raw.includes("enterprise")) return "PREMIUM+";
-  if (raw.includes("premium") || raw.includes("pro") || raw.includes("paid")) return "PREMIUM";
-  return "FREE";
+  if (raw.includes("premium_plus") || raw.includes("premium+") || raw.includes("plus")) return "Premium+";
+  if (raw.includes("enterprise")) return "Premium+";
+  if (raw.includes("premium") || raw.includes("pro") || raw.includes("paid")) return "Premium";
+  return "Free";
 }
 
 function WorkspaceWelcomeHeader(props: {
@@ -2917,7 +2912,7 @@ function ProfileCard() {
   const [email, setEmail] = useState<string>("—");
   const [username, setUsername] = useState<string>("—");
   const [bio, setBio] = useState<string>("No bio yet.");
-  const [plan, setPlan] = useState<string>("FREE");
+  const [plan, setPlan] = useState<string>("Free");
 
 
   const [teamCount, setTeamCount] = useState<number>(0);
@@ -3107,8 +3102,7 @@ function ProfileCard() {
             : null;
 
         if (billingPlanId) {
-          const billingPlanLabel =
-            billingPlanId === "premium_plus" ? "PREMIUM+" : billingPlanId === "premium" ? "PREMIUM" : "FREE";
+          const billingPlanLabel = workspacePlanLabelForId(billingPlanId);
           const billingPlanDetail = {
             planKey: billingPlanId,
             planLabel: billingPlanLabel,

@@ -63,12 +63,12 @@ export async function readClientAuthBootstrapServerState(): Promise<CavbotClient
               : view.account.tierEffective === "PREMIUM"
                 ? "premium"
                 : "free";
-          const planLabel: "FREE" | "PREMIUM" | "PREMIUM+" =
+          const planLabel: "Free" | "Premium" | "Premium+" =
             view.account.tierEffective === "PREMIUM_PLUS"
-              ? "PREMIUM+"
+              ? "Premium+"
               : view.account.tierEffective === "PREMIUM"
-                ? "PREMIUM"
-                : "FREE";
+                ? "Premium"
+                : "Free";
           return {
             planId,
           planTier: view.account.tierEffective,

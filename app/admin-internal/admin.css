@@ -3332,8 +3332,8 @@ body {
 .hq-chatComposeDock {
   position: fixed;
   right: 26px;
-  bottom: calc(var(--cb-global-footer-height, 56px) + var(--safe-bottom, 0px) - 1px);
-  z-index: 60;
+  bottom: calc(var(--cb-global-footer-height, 56px) + var(--safe-bottom, 0px) + 18px);
+  z-index: 130010;
   width: min(560px, calc(100vw - 40px));
   pointer-events: none;
   opacity: 0;
@@ -4239,7 +4239,7 @@ body {
 .hq-chatAssistModal {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: 130000;
   display: grid;
   place-items: center;
   padding:
@@ -7457,7 +7457,7 @@ body {
 .hq-staffConfirmRoot {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: 130000;
   display: flex;
   align-items: center;
   justify-content: center;

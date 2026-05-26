@@ -725,33 +725,6 @@ function emptyConsoleSummary(args: {
   };
 }
 
-function hasMeasuredConsoleActivity(metrics: ConsoleMetrics | null) {
-  if (!metrics) return false;
-  const numericSignals = [
-    metrics.pageViews24h,
-    metrics.sessions30d,
-    metrics.sessions40430d,
-    metrics.badgeInteractions30d,
-    metrics.views40430d,
-    metrics.gameInteractions30d,
-    metrics.uniqueVisitors30d,
-    metrics.sessionsUnderGuard30d,
-    metrics.routesMonitored,
-    metrics.jsErrors30d,
-    metrics.apiErrors30d,
-    metrics.ctaClicks30d,
-    metrics.formSubmits30d,
-    metrics.engagementPings30d,
-    metrics.a11yAudits30d,
-    metrics.a11yIssues30d,
-  ];
-  if (numericSignals.some((value) => n(value) > 0)) return true;
-  if ((metrics.topRoutes || []).length > 0) return true;
-  if ((metrics.trend7d || []).some((point) => n(point.sessions) > 0 || n(point.views404) > 0)) return true;
-  if ((metrics.trend30d || []).some((point) => n(point.sessions) > 0 || n(point.views404) > 0)) return true;
-  return false;
-}
-
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
@@ -901,14 +874,13 @@ export default async function ConsolePage({ searchParams }: PageProps) {
       })
     : null);
   const loadError: unknown = fatalLoadError ? summaryError : null;
-  const summaryWarning: unknown = !fatalLoadError ? summaryError : null;
 
   const metrics: ConsoleMetrics | null = data?.metrics ? normalizeConsoleMetrics(data.metrics) : null;
 
   const projectLabel = analyticsContext.projectLabel || (projectId ? `Project ${projectId}` : "Project");
 
   const envMissing = Boolean(loadError && isEnvMissingError(loadError));
-  const hasMetrics = Boolean(!loadError && metrics && (summaryWarning || hasMeasuredConsoleActivity(metrics)));
+  const hasMetrics = Boolean(!loadError && metrics);
 
   const score = metrics ? n(metrics.guardianScore) : 0;
   const badge = scoreLabel(score);

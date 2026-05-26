@@ -27,7 +27,7 @@ export type PlanModules = Record<ModuleId, boolean>;
 export type PlanDefinition = {
   id: PlanId;
   displayName: string; // CavTower, CavControl, CavElite
-  tierLabel: string; // FREE TIER, PREMIUM, PREMIUM+
+  tierLabel: string; // Free, Premium, Premium+
   description: string;
   recommended?: boolean;
 
@@ -48,7 +48,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
   free: {
     id: "free",
     displayName: "CavTower",
-    tierLabel: "FREE TIER",
+    tierLabel: "Free",
     description:
       "A clean entry into CavBot — command access, routing control, and one arcade experience enabled.",
     recommended: false,
@@ -89,7 +89,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
   premium: {
     id: "premium",
     displayName: "CavControl",
-    tierLabel: "PREMIUM",
+    tierLabel: "Premium",
     description:
       "Built for serious teams — deeper visibility, stronger monitoring, and limited Caven capacity for monthly coding work.",
     recommended: true,
@@ -138,7 +138,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
   premium_plus: {
     id: "premium_plus",
     displayName: "CavElite",
-    tierLabel: "PREMIUM+",
+    tierLabel: "Premium+",
     description:
       "Maximum CavBot access — every intelligence module, high-capacity scale, and a high monthly Caven allowance with rollover.",
     recommended: true,

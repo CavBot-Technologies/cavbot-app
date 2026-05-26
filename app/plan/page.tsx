@@ -388,7 +388,7 @@ export default async function PlanPage({ searchParams }: PageProps) {
           <section className="plan-grid plan-grid-3" aria-label="Plans">
             <article className={`plan-card ${currentPlanId === "free" ? "is-current" : ""}`} aria-label="Free plan">
               <div className="plan-card-top">
-                <div className="plan-badge">FREE TIER</div>
+                <div className="plan-badge">Free</div>
                 <div className="plan-card-middle">
                   <div className="plan-title">{PLANS.free?.displayName ?? "CavTower"}</div>
                   <div className="plan-desc">
@@ -422,7 +422,7 @@ export default async function PlanPage({ searchParams }: PageProps) {
               aria-label="Premium plan"
             >
               <div className="plan-card-top">
-                <div className="plan-badge plan-badge-premium">PREMIUM</div>
+                <div className="plan-badge plan-badge-premium">Premium</div>
                 <div className="plan-card-middle">
                   <div className="plan-title">{PLANS.premium?.displayName ?? "CavControl"}</div>
                   <div className="plan-desc">
@@ -464,7 +464,7 @@ export default async function PlanPage({ searchParams }: PageProps) {
                 ★
               </span>
               <div className="plan-card-top">
-                <div className="plan-badge plan-badge-plus">PREMIUM+</div>
+                <div className="plan-badge plan-badge-plus">Premium+</div>
                 <div className="plan-card-middle">
                   <div className="plan-title">{PLANS.premium_plus?.displayName ?? "CavElite"}</div>
                   <div className="plan-desc">

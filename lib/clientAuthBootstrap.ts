@@ -5,7 +5,7 @@ const PLAN_CONTEXT_KEY = "cb_plan_context_v1";
 
 export type ClientBootMemberRole = "OWNER" | "ADMIN" | "MEMBER" | null;
 export type ClientBootPlanTier = "FREE" | "PREMIUM" | "PREMIUM_PLUS";
-export type ClientBootPlanLabel = "FREE" | "PREMIUM" | "PREMIUM+";
+export type ClientBootPlanLabel = "Free" | "Premium" | "Premium+";
 
 export type ClientBootPlanState = {
   planId: PlanId;
@@ -92,9 +92,9 @@ function normalizePlanTier(value: unknown): ClientBootPlanTier {
 }
 
 function planLabelForTier(planTier: ClientBootPlanTier): ClientBootPlanLabel {
-  if (planTier === "PREMIUM_PLUS") return "PREMIUM+";
-  if (planTier === "PREMIUM") return "PREMIUM";
-  return "FREE";
+  if (planTier === "PREMIUM_PLUS") return "Premium+";
+  if (planTier === "PREMIUM") return "Premium";
+  return "Free";
 }
 
 function planIdForTier(planTier: ClientBootPlanTier): PlanId {

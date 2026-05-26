@@ -856,7 +856,7 @@ function persistCavsafePlanState(ePlanTier, aTrialState) {
     },
     t = {
       planKey: "PREMIUM_PLUS" === r ? "premium_plus" : "PREMIUM" === r ? "premium" : "free",
-      planLabel: "PREMIUM_PLUS" === r ? "PREMIUM+" : "PREMIUM" === r ? "PREMIUM" : "FREE",
+      planLabel: "PREMIUM_PLUS" === r ? "Premium+" : "PREMIUM" === r ? "Premium" : "Free",
       trialActive: i
     };
   try {

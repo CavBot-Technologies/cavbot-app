@@ -3084,13 +3084,16 @@ function IconBell() {
 
 function IconStaffChat() {
   return (
-    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
-      <path
-        d="M4.75 5.25A2.75 2.75 0 0 1 7.5 2.5h7a2.75 2.75 0 0 1 2.75 2.75v5.5a2.75 2.75 0 0 1-2.75 2.75H10.2L6.6 17.1a.85.85 0 0 1-1.45-.6V13.5h-.4A2.75 2.75 0 0 1 2 10.75v-5.5a2.75 2.75 0 0 1 2.75-2.75Zm2.75 3.1a.9.9 0 1 0 0 1.8h7a.9.9 0 1 0 0-1.8Zm0-2.75a.9.9 0 1 0 0 1.8h4.5a.9.9 0 1 0 0-1.8Zm0 5.5a.9.9 0 1 0 0 1.8h4a.9.9 0 1 0 0-1.8Z"
-        fill="currentColor"
-        opacity="0.94"
-      />
-    </svg>
+    <Image
+      src="/icons/app/chat-square-svgrepo-com.svg"
+      alt=""
+      width={22}
+      height={22}
+      className="cb-staff-chat-icon"
+      aria-hidden="true"
+      priority
+      unoptimized
+    />
   );
 }
 

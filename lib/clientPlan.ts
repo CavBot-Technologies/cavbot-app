@@ -116,10 +116,10 @@ function toPlanTier(planId: ClientPlanId): "FREE" | "PREMIUM" | "PREMIUM_PLUS" {
   return "FREE";
 }
 
-function toPlanLabel(planId: ClientPlanId): "FREE" | "PREMIUM" | "PREMIUM+" {
-  if (planId === "premium_plus") return "PREMIUM+";
-  if (planId === "premium") return "PREMIUM";
-  return "FREE";
+function toPlanLabel(planId: ClientPlanId): "Free" | "Premium" | "Premium+" {
+  if (planId === "premium_plus") return "Premium+";
+  if (planId === "premium") return "Premium";
+  return "Free";
 }
 
 export function publishClientPlan(args: {

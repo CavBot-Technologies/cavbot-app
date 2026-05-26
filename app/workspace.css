@@ -846,7 +846,7 @@ body.cb-home-delete-open .cb-main{
   padding: 14px 20px 20px;
   display:grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 0;
 }
 @media (max-width: 1180px){
   .cb-home .cb-insights{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -856,12 +856,17 @@ body.cb-home-delete-open .cb-main{
 }
 
 .cb-home .cb-insight{
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.10);
-  background: rgba(0,0,0,0.10);
-  padding: 12px 12px;
+  border-radius: 0;
+  border: 0;
+  border-right: 1px solid rgba(255,255,255,0.08);
+  background: transparent;
+  padding: 12px 16px;
   min-width:0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
+.cb-home .cb-insight:last-child{ border-right: 0; }
 .cb-home .cb-insight-k{
   font-size: 10px;
   letter-spacing: 0.14em;
@@ -870,7 +875,7 @@ body.cb-home-delete-open .cb-main{
   color: rgba(136,144,170,0.96);
 }
 .cb-home .cb-insight-v{
-  margin-top: 8px;
+  margin-top: 0;
   font-size: 12px;
   font-weight: 750;
   letter-spacing: -0.02em;
@@ -878,7 +883,7 @@ body.cb-home-delete-open .cb-main{
   overflow-wrap:anywhere;
 }
 .cb-home .cb-insight-s{
-  margin-top: 8px;
+  margin-top: 0;
   font-size: 11px;
   color: rgba(197,206,231,0.80);
   line-height: 1.55;
@@ -1979,7 +1984,7 @@ html{
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1100;
+  z-index: 130000;
   padding: 16px;
 }
 
@@ -2358,7 +2363,7 @@ html{
 .cb-home .cb-scan-modal {
   position: fixed;
   inset: 0;
-  z-index: 1200;
+  z-index: 130000;
   display: flex;
   align-items: center;
   justify-content: center;

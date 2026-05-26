@@ -166,9 +166,9 @@ function fmtLimit(n: number | null) {
 
 
 function planLabel(planId: PlanId) {
-  if (planId === "premium_plus") return "PREMIUM+";
-  if (planId === "premium") return "PREMIUM";
-  return "FREE";
+  if (planId === "premium_plus") return "Premium+";
+  if (planId === "premium") return "Premium";
+  return "Free";
 }
 
 
