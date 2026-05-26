@@ -69,6 +69,7 @@ await cp(path.join(openNextDir, "server-functions"), path.join(deployDir, "serve
 
 const typescriptSourceDir = path.join(rootDir, "node_modules", "typescript");
 const typescriptDeployDir = path.join(deployDir, "server-functions", "default", "node_modules", "typescript");
+await rm(typescriptDeployDir, { recursive: true, force: true });
 await cp(typescriptSourceDir, typescriptDeployDir, { recursive: true });
 
 // Keep the default OpenNext worker entrypoint so runtime bootstrapping remains compatible
