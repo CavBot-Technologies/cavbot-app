@@ -5,7 +5,7 @@
 import AppShell, { useAppShellPlan } from "@/components/AppShell";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import CavBotLoadingScreen from "@/components/CavBotLoadingScreen";
@@ -277,6 +277,17 @@ function originToLabel(origin: string) {
     return u.hostname.replace(/^www\./, "");
   } catch {
     return origin;
+  }
+}
+
+function safeInternalPath(input: string | null | undefined) {
+  const raw = String(input || "").trim();
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "";
+  try {
+    const parsed = new URL(raw, "https://app.cavbot.local");
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return "";
   }
 }
 
@@ -952,6 +963,8 @@ export default function CommandDeckPage() {
 function CommandDeckPageInner() {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchParamString = searchParams?.toString() || "";
 
 
   // AUTH gate (this page is the logged-in welcome page)
@@ -1190,6 +1203,7 @@ function CommandDeckPageInner() {
 
   // UI
   const [addOpen, setAddOpen] = useState(false);
+  const [addSiteInitialOrigin, setAddSiteInitialOrigin] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Site | null>(null);
   const [toast, setToast] = useState<{ msg: string; tone: "good" | "watch" | "bad" } | null>(null);
@@ -1202,6 +1216,7 @@ function CommandDeckPageInner() {
 
 
   const toastTimer = useRef<number | null>(null);
+  const addSitePrefillHandled = useRef<string>("");
   const mergedNotices = useMemo(
     () => [...serverNotices, ...localNotices].sort((a, b) => b.ts - a.ts),
     [serverNotices, localNotices]
@@ -1257,6 +1272,45 @@ function CommandDeckPageInner() {
     if (toastTimer.current) window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(null), 2600);
   }
+
+  const addSiteNextPath = useMemo(() => {
+    const qs = new URLSearchParams(searchParamString);
+    return safeInternalPath(qs.get("next"));
+  }, [searchParamString]);
+
+  useEffect(() => {
+    if (auth.status !== "authed") return;
+    if (!searchParamString) return;
+
+    const qs = new URLSearchParams(searchParamString);
+    const shouldOpen = qs.get("addSite") === "1" || qs.get("addWebsite") === "1";
+    if (!shouldOpen) return;
+
+    const origin = String(qs.get("origin") || "").trim();
+    const marker = `${origin}|${qs.get("next") || ""}|${qs.get("projectId") || ""}`;
+    if (addSitePrefillHandled.current === marker) return;
+
+    addSitePrefillHandled.current = marker;
+    setAddSiteInitialOrigin(origin);
+    setAddOpen(true);
+
+    if (origin && qs.get("source") === "seo") {
+      pushToast("Verify this site to finish the SEO audit.", "watch");
+    }
+  }, [auth.status, searchParamString]);
+
+  useEffect(() => {
+    if (auth.status !== "authed") return;
+    if (!projects.length || !searchParamString) return;
+
+    const qs = new URLSearchParams(searchParamString);
+    const projectIdRaw = qs.get("projectId") || "";
+    if (!/^\d+$/.test(projectIdRaw)) return;
+
+    const projectId = Number(projectIdRaw);
+    if (!Number.isFinite(projectId) || projectId <= 0 || projectId === activeProjectId) return;
+    if (projects.some((project) => project.id === projectId)) setActiveProjectId(projectId);
+  }, [auth.status, projects, searchParamString, activeProjectId]);
 
 
   // Welcome header (must never clear once known)
@@ -2698,10 +2752,12 @@ function CommandDeckPageInner() {
             {/* Add site modal */}
             {addOpen ? (
               <AddSiteModal
+                initialOrigin={addSiteInitialOrigin}
                 onClose={() => setAddOpen(false)}
                 onAddRequested={async (payload) => {
                   await onAddSiteRequested(payload);
                   setAddOpen(false);
+                  if (addSiteNextPath) router.replace(addSiteNextPath);
                 }}
               />
             ) : null}
@@ -3725,14 +3781,23 @@ function CavCloudPromo({
 
 
 function AddSiteModal({
+  initialOrigin = "",
   onClose,
   onAddRequested,
 }: {
+  initialOrigin?: string;
   onClose: () => void;
   onAddRequested: (payload: { origin: string; label: string; notes?: string }) => Promise<void> | void;
 }) {
-  const [originInput, setOriginInput] = useState("");
-  const [labelInput, setLabelInput] = useState("");
+  const [originInput, setOriginInput] = useState(initialOrigin);
+  const [labelInput, setLabelInput] = useState(() => {
+    if (!initialOrigin) return "";
+    try {
+      return clampStr(originToLabel(normalizeOrigin(initialOrigin)), 18);
+    } catch {
+      return "";
+    }
+  });
   const [notes, setNotes] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -3756,6 +3821,20 @@ function AddSiteModal({
       el?.focus();
     } catch {}
   }, []);
+
+  useEffect(() => {
+    const nextOrigin = String(initialOrigin || "").trim();
+    if (!nextOrigin) return;
+    setOriginInput(nextOrigin);
+    setLabelInput((current) => {
+      if (current.trim()) return current;
+      try {
+        return clampStr(originToLabel(normalizeOrigin(nextOrigin)), 18);
+      } catch {
+        return current;
+      }
+    });
+  }, [initialOrigin]);
 
 
   async function submit() {
