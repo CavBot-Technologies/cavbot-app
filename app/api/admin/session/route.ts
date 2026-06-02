@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { assertWriteOrigin, readVerifiedSession, requireUser } from "@/lib/apiAuth";
 import { resolveAdminDepartment } from "@/lib/admin/access";
 import { clearAdminSessionCookie, getAdminSession } from "@/lib/admin/session";
-import { getAuthPool } from "@/lib/authDb";
+import { getAuthPool, findUserById } from "@/lib/authDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -88,6 +88,12 @@ export async function GET(req: NextRequest) {
         return null;
       }),
     ]);
+    const user = staff
+      ? await findUserById(getAuthPool(), staff.userId).catch((error) => {
+          console.error("[admin/session] findUserById failed", error);
+          return null;
+        })
+      : null;
 
     return json({
       ok: true,
@@ -98,9 +104,9 @@ export async function GET(req: NextRequest) {
           ? {
             id: staff.id,
             userId: staff.userId,
-            email: staff.userEmail,
-            displayName: staff.userDisplayName || staff.userFullName || staff.userEmail || maskStaffCode(staff.staffCode),
-            avatarImage: staff.userAvatarImage || null,
+            email: user?.email || staff.userEmail,
+            displayName: user?.displayName || user?.fullName || staff.userDisplayName || staff.userFullName || user?.email || staff.userEmail || maskStaffCode(staff.staffCode),
+            avatarImage: user?.avatarImage || staff.userAvatarImage || null,
             staffCode: maskStaffCode(staff.staffCode),
             department: resolveAdminDepartment(staff),
             systemRole: staff.systemRole,

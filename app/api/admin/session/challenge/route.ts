@@ -6,7 +6,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { assertWriteOrigin, readVerifiedSession, requireUser } from "@/lib/apiAuth";
 import { resolveAdminNextPath } from "@/lib/admin/access";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
-import { getAuthPool, createAuthTokenRecord } from "@/lib/authDb";
+import { getAuthPool, createAuthTokenRecord, findUserById } from "@/lib/authDb";
+import { sendEmail } from "@/lib/email/sendEmail";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
 export const runtime = "nodejs";
@@ -113,6 +114,12 @@ export async function POST(req: NextRequest) {
         return json({ ok: false, error: "STAFF_NOT_ACTIVE" }, 403);
       }
 
+      const user = await findUserById(authClient, staff.userId);
+      const recipientEmail = String(user?.email || staff.userEmail || "").trim().toLowerCase();
+      if (!recipientEmail) {
+        return json({ ok: false, error: "STAFF_EMAIL_MISSING" }, 500);
+      }
+
       const ip = pickClientIp(req);
       const limitKey = `admin:challenge:${staff.userId}:${ip}`;
       const limit = consumeInMemoryRateLimit({
@@ -147,31 +154,35 @@ export async function POST(req: NextRequest) {
       });
       console.log("[admin/session/challenge] token-create:done");
 
-      const { sendEmail } = await import("@/lib/email/sendEmail");
       console.log("[admin/session/challenge] email:start");
-      await sendEmail({
-        to: staff.userEmail,
-        subject: "Your Caverify access code",
-        html: `
-          <div style="font-family: ui-sans-serif, system-ui; line-height:1.6;">
-            <h2 style="margin:0 0 10px;">Caverify access</h2>
-            <p style="margin:0 0 14px;">
-              Use this code to finish your protected admin sign-in.
-            </p>
-            <div style="margin:16px 0; padding:14px 16px; border-radius:14px; background:#0b1020; border:1px solid rgba(255,255,255,0.14); display:inline-block;">
-              <div style="font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:rgba(234,240,255,0.62); margin-bottom:8px;">
-                Caverify access code
+      try {
+        await sendEmail({
+          to: recipientEmail,
+          subject: "Your Caverify access code",
+          html: `
+            <div style="font-family: ui-sans-serif, system-ui; line-height:1.6;">
+              <h2 style="margin:0 0 10px;">Caverify access</h2>
+              <p style="margin:0 0 14px;">
+                Use this code to finish your protected admin sign-in.
+              </p>
+              <div style="margin:16px 0; padding:14px 16px; border-radius:14px; background:#0b1020; border:1px solid rgba(255,255,255,0.14); display:inline-block;">
+                <div style="font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:rgba(234,240,255,0.62); margin-bottom:8px;">
+                  Caverify access code
+                </div>
+                <div style="font-size:26px; font-weight:900; letter-spacing:.16em; color:#eaf0ff;">
+                  ${code}
+                </div>
               </div>
-              <div style="font-size:26px; font-weight:900; letter-spacing:.16em; color:#eaf0ff;">
-                ${code}
-              </div>
+              <p style="margin:14px 0 0; font-size:12px; color:rgba(234,240,255,0.65);">
+                This code expires in 10 minutes.
+              </p>
             </div>
-            <p style="margin:14px 0 0; font-size:12px; color:rgba(234,240,255,0.65);">
-              This code expires in 10 minutes.
-            </p>
-          </div>
-        `,
-      });
+          `,
+        });
+      } catch (emailError) {
+        console.error("[admin/session/challenge] email failed", emailError);
+        return json({ ok: false, error: "ADMIN_CHALLENGE_EMAIL_FAILED" }, 502);
+      }
       console.log("[admin/session/challenge] email:done");
 
       await import("@/lib/admin/audit")
@@ -187,7 +198,7 @@ export async function POST(req: NextRequest) {
             request: req,
             metaJson: {
               nextPath,
-              email: staff.userEmail,
+              email: recipientEmail,
             },
           }),
         )
@@ -200,7 +211,7 @@ export async function POST(req: NextRequest) {
         ok: true,
         challengeId,
         expiresAt: expiresAt.toISOString(),
-        maskedEmail: staff.userEmail.replace(/(^.).*(@.*$)/, "$1•••$2"),
+        maskedEmail: recipientEmail.replace(/(^.).*(@.*$)/, "$1•••$2"),
       });
     } finally {
       authClient.release();

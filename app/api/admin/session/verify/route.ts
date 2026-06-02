@@ -4,7 +4,7 @@ import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { assertWriteOrigin, readVerifiedSession, requireUser } from "@/lib/apiAuth";
-import { getAuthPool, findAuthTokenByHash, markAuthTokenUsed } from "@/lib/authDb";
+import { getAuthPool, findAuthTokenByHash, findUserById, markAuthTokenUsed } from "@/lib/authDb";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
 import { readSanitizedJson } from "@/lib/security/userInput";
 
@@ -102,6 +102,10 @@ export async function POST(req: NextRequest) {
       const staff = await readAdminVerifyStaffFromDb(authClient, session.sub);
       if (!staff || staff.status !== "ACTIVE") {
         return json({ ok: false, error: "STAFF_NOT_ACTIVE" }, 403);
+      }
+      const user = await findUserById(authClient, staff.userId);
+      if (!user) {
+        return json({ ok: false, error: "USER_NOT_FOUND" }, 404);
       }
 
       const ip = pickClientIp(req);
