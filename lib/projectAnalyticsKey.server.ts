@@ -9,7 +9,7 @@ type ProjectKeyRecord = {
 };
 
 type ProjectAnalyticsAuth =
-  | { projectKey: string; adminToken?: undefined; source: "project_encrypted" | "legacy_env" }
+  | { projectKey: string; adminToken?: string; source: "project_encrypted" | "legacy_env" }
   | { projectKey?: undefined; adminToken: string; source: "admin_token" };
 
 function env(name: string) {
@@ -28,6 +28,8 @@ function legacyServerKeyForProject(projectId: number) {
 }
 
 export async function resolveProjectAnalyticsAuth(project: ProjectKeyRecord): Promise<ProjectAnalyticsAuth> {
+  const adminToken = env("CAVBOT_ADMIN_TOKEN");
+
   if (project.serverKeyEnc && project.serverKeyEncIv) {
     const projectKey = String(
       await decryptAesGcm({
@@ -36,14 +38,19 @@ export async function resolveProjectAnalyticsAuth(project: ProjectKeyRecord): Pr
       }),
     ).trim();
     if (!projectKey) throw new Error("PROJECT_KEY_DECRYPT_FAILED");
-    return { projectKey, source: "project_encrypted" as const };
+    return adminToken
+      ? { projectKey, adminToken, source: "project_encrypted" as const }
+      : { projectKey, source: "project_encrypted" as const };
   }
 
-  const adminToken = env("CAVBOT_ADMIN_TOKEN");
   if (adminToken) return { adminToken, source: "admin_token" };
 
   const fallback = legacyServerKeyForProject(project.id);
-  if (fallback) return { projectKey: fallback, source: "legacy_env" as const };
+  if (fallback) {
+    return adminToken
+      ? { projectKey: fallback, adminToken, source: "legacy_env" as const }
+      : { projectKey: fallback, source: "legacy_env" as const };
+  }
 
   throw new Error("PROJECT_KEY_MISSING");
 }

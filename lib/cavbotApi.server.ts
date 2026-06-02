@@ -254,6 +254,7 @@ export async function getProjectSites(
     headers: buildHeaders({
       requireProjectKey: true,
       projectKey: auth?.projectKey,
+      adminToken: auth?.adminToken,
       requestId: auth?.requestId,
     }),
     cache: "no-store",

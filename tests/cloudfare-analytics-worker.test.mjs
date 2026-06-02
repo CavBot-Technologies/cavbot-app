@@ -710,6 +710,24 @@ test("GET /v1/projects/:id/sites blocks publishable key", async () => {
   assert.equal(json.error, "insufficient_key_scope");
 });
 
+test("GET /v1/projects/:id/summary allows trusted app admin token with publishable key", async () => {
+  const env = createEnv({ env: { CAVBOT_ADMIN_TOKEN: "admin_test_token" } });
+  const req = new Request("https://worker.test/v1/projects/1/summary?range=7d&origin=https://example.com", {
+    method: "GET",
+    headers: {
+      "X-Project-Key": "cavbot_pk_test",
+      "X-Admin-Token": "admin_test_token",
+    },
+  });
+
+  const res = await worker.fetch(req, env, createCtx());
+  const json = await res.json();
+
+  assert.equal(res.status, 200);
+  assert.equal(json.project.id, "1");
+  assert.equal(json.filter.origin, "https://example.com");
+});
+
 test("GET /v1/projects/:id/sites allows secret key with dashboard scope", async () => {
   const env = createEnv({ env: { CAVBOT_SECRET_KEY: "cavbot_sk_dashboard" } });
   const req = new Request("https://worker.test/v1/projects/1/sites", {

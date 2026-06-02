@@ -22,12 +22,14 @@ test("dashboard surfaces use tenant-scoped summary reads", () => {
   for (const relPath of tenantScopedFiles) {
     const source = fs.readFileSync(new URL(`../${relPath}`, import.meta.url), "utf8");
     assert.equal(
-      source.includes("getTenantProjectSummary"),
+      source.includes("getTenantProjectSummary") ||
+        source.includes("resolveAnalyticsConsoleContext") ||
+        source.includes("resolveProjectAnalyticsAuth"),
       true,
       `${relPath} should use tenant-scoped summary reads`,
     );
     assert.equal(
-      source.includes('from "@/lib/cavbotApi.server"') && source.includes("getProjectSummary"),
+      source.includes('from "@/lib/cavbotApi.server"') && source.includes("getProjectSummary("),
       false,
       `${relPath} should not import raw getProjectSummary`,
     );
@@ -36,7 +38,7 @@ test("dashboard surfaces use tenant-scoped summary reads", () => {
 
 test("tenant summary helper resolves per-project auth", () => {
   const source = fs.readFileSync(new URL("../lib/projectSummary.server.ts", import.meta.url), "utf8");
-  assert.equal(source.includes("getAuthPool"), true);
+  assert.equal(source.includes("withDedicatedAuthClient"), true);
   assert.equal(source.includes("decryptAesGcm"), true);
   assert.equal(source.includes("getEnv"), true);
   assert.equal(source.includes("summaryAuth"), true);
@@ -49,14 +51,24 @@ test("tenant summary helper resolves per-project auth", () => {
   assert.equal(source.includes("lib/prisma"), false);
 });
 
+test("dashboard summary reads include server admin token when available", () => {
+  const projectAuthSource = fs.readFileSync(new URL("../lib/projectAnalyticsKey.server.ts", import.meta.url), "utf8");
+  const tenantSummarySource = fs.readFileSync(new URL("../lib/projectSummary.server.ts", import.meta.url), "utf8");
+  const apiSource = fs.readFileSync(new URL("../lib/cavbotApi.server.ts", import.meta.url), "utf8");
+
+  assert.equal(projectAuthSource.includes("{ projectKey, adminToken, source:"), true);
+  assert.equal(tenantSummarySource.includes("summaryAuth = adminToken ? { projectKey, adminToken } : { projectKey };"), true);
+  assert.equal(apiSource.includes("adminToken: auth?.adminToken"), true);
+});
+
 test("workspace and module gating use effective session account resolution", () => {
   const workspace = fs.readFileSync(new URL("../lib/workspaceStore.server.ts", import.meta.url), "utf8");
   const gate = fs.readFileSync(new URL("../lib/moduleGate.server.ts", import.meta.url), "utf8");
   const apiConsole = fs.readFileSync(new URL("../app/api/console/route.ts", import.meta.url), "utf8");
 
   assert.equal(workspace.includes("resolveEffectiveAccountIdFromHeaders"), true);
-  assert.equal(gate.includes("resolveEffectiveAccountIdForSession"), true);
-  assert.equal(apiConsole.includes("resolveEffectiveAccountIdForSession"), true);
+  assert.equal(gate.includes("requireAccountContext"), true);
+  assert.equal(apiConsole.includes("requireAccountContext"), true);
 });
 
 test("project creation paths persist encrypted server keys", () => {

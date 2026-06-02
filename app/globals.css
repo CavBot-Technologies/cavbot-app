@@ -88,6 +88,18 @@
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
+
+body *,
+body *::before,
+body *::after{
+  border-radius: 4px !important;
+}
+
+body svg,
+body svg *{
+  border-radius: initial !important;
+}
+
 *::-webkit-scrollbar{
   width: 0;
   height: 0;

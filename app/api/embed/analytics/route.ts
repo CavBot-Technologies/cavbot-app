@@ -1,11 +1,12 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getEnv } from "@/lib/cavbotApi.server";
+import { getEnv, registerWorkerSite } from "@/lib/cavbotApi.server";
 import { verifyEmbedRequest, type EmbedVerifierResult } from "@/lib/security/embedVerifier";
 import { verifyEmbedToken } from "@/lib/security/embedToken";
 import { RateLimitEnv } from "@/rateLimit";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { canonicalizeWebsiteContextUrl } from "@/originMatch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,18 +71,112 @@ function forwardedClientIp(req: NextRequest) {
   );
 }
 
-function buildRemoteHeaders(
-  req: NextRequest,
+function hostFromOrigin(origin: string) {
+  try {
+    return new URL(origin).host;
+  } catch {
+    return "";
+  }
+}
+
+function canonicalizePayloadUrl(value: unknown, siteOrigin: string) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return value;
+  return canonicalizeWebsiteContextUrl(raw, siteOrigin);
+}
+
+function canonicalizeVerifiedPayload(
   payload: Record<string, unknown> | null,
   verification: Extract<EmbedVerifierResult, { ok: true }>
 ) {
+  if (!payload) return payload;
+
+  const siteOrigin = verification.siteOrigin;
+  const siteHost = hostFromOrigin(siteOrigin);
+  const canonicalPayload: Record<string, unknown> = {
+    ...payload,
+    origin: siteOrigin,
+    siteOrigin,
+  };
+
+  if (siteHost) canonicalPayload.siteHost = siteHost;
+  if (typeof payload.pageUrl === "string") {
+    canonicalPayload.pageUrl = canonicalizePayloadUrl(payload.pageUrl, siteOrigin);
+  }
+
+  if (payload.site && typeof payload.site === "object" && !Array.isArray(payload.site)) {
+    canonicalPayload.site = {
+      ...(payload.site as Record<string, unknown>),
+      origin: siteOrigin,
+      host: siteHost,
+      base_url: siteOrigin,
+    };
+  }
+
+  if (Array.isArray(payload.records)) {
+    canonicalPayload.records = payload.records.map((record) => {
+      if (!record || typeof record !== "object" || Array.isArray(record)) return record;
+      const next = { ...(record as Record<string, unknown>) };
+      next.site_origin = siteOrigin;
+      if (siteHost) next.site_host = siteHost;
+      if (typeof next.page_url === "string") {
+        next.page_url = canonicalizePayloadUrl(next.page_url, siteOrigin);
+      }
+      if (typeof next.referrer_url === "string") {
+        next.referrer_url = canonicalizePayloadUrl(next.referrer_url, siteOrigin);
+      }
+      return next;
+    });
+  }
+
+  return canonicalPayload;
+}
+
+function stripUpstreamSitePublicIds(payload: Record<string, unknown> | null) {
+  if (!payload) return payload;
+
+  const stripRecord = (value: unknown): unknown => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+    const record = { ...(value as Record<string, unknown>) };
+    for (const key of Object.keys(record)) {
+      if (key === "site_public_id" || key === "sitePublicId") {
+        delete record[key];
+      }
+    }
+    return record;
+  };
+
+  const stripped: Record<string, unknown> = stripRecord(payload) as Record<string, unknown>;
+  if (stripped.site && typeof stripped.site === "object" && !Array.isArray(stripped.site)) {
+    const siteRecord = { ...(stripped.site as Record<string, unknown>) };
+    delete siteRecord.site_public_id;
+    delete siteRecord.sitePublicId;
+    delete siteRecord.public_id;
+    stripped.site = siteRecord;
+  }
+  if (Array.isArray(stripped.records)) {
+    stripped.records = stripped.records.map(stripRecord);
+  }
+  if (Array.isArray(stripped.events)) {
+    stripped.events = stripped.events.map(stripRecord);
+  }
+  return stripped;
+}
+
+function buildRemoteHeaders(
+  req: NextRequest,
+  verification: Extract<EmbedVerifierResult, { ok: true }>
+) {
   const projectKey = verification.projectKey;
+  const siteHost = hostFromOrigin(verification.siteOrigin);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Origin: verification.origin,
+    Origin: verification.siteOrigin,
     "X-Cavbot-Project-Id": String(verification.projectId),
     "X-Cavbot-Verified-Site-Id": verification.siteId,
+    "X-Cavbot-Site-Origin": verification.siteOrigin,
   };
+  if (siteHost) headers["X-Cavbot-Site-Host"] = siteHost;
 
   if (projectKey) {
     headers["X-Project-Key"] = projectKey;
@@ -93,26 +188,6 @@ function buildRemoteHeaders(
   const env = req.headers.get("x-cavbot-env");
   if (env) {
     headers["X-Cavbot-Env"] = env;
-  }
-  const siteHost = req.headers.get("x-cavbot-site-host");
-  if (siteHost) {
-    headers["X-Cavbot-Site-Host"] = siteHost;
-  }
-  const siteOrigin = req.headers.get("x-cavbot-site-origin");
-  if (siteOrigin) {
-    headers["X-Cavbot-Site-Origin"] = siteOrigin;
-  }
-  const sitePublicId =
-    (payload?.site && typeof payload.site === "object" && "site_public_id" in payload.site
-      ? String((payload.site as Record<string, unknown>).site_public_id ?? "")
-      : "") || "";
-  const sitePublicIdHeader =
-    sitePublicId ||
-    req.headers.get("x-cavbot-site-public-id") ||
-    req.headers.get("x-cavbot-site") ||
-    "";
-  if (sitePublicIdHeader) {
-    headers["X-Cavbot-Site-Public-Id"] = sitePublicIdHeader;
   }
   const adminToken = getEnv().adminToken;
   if (adminToken) {
@@ -168,17 +243,34 @@ function buildUnverifiedRemoteHeaders(req: NextRequest, payload: Record<string, 
   if (siteHost) headers["X-Cavbot-Site-Host"] = siteHost;
   const siteOrigin = req.headers.get("x-cavbot-site-origin");
   if (siteOrigin) headers["X-Cavbot-Site-Origin"] = siteOrigin;
-  const sitePublicId =
-    (payload?.site && typeof payload.site === "object" && "site_public_id" in payload.site
-      ? String((payload.site as Record<string, unknown>).site_public_id ?? "")
-      : "") ||
-    req.headers.get("x-cavbot-site-public-id") ||
-    req.headers.get("x-cavbot-site") ||
-    "";
-  if (sitePublicId) headers["X-Cavbot-Site-Public-Id"] = sitePublicId;
   const clientIp = forwardedClientIp(req);
   if (clientIp) headers["X-Cavbot-Forwarded-Client-IP"] = clientIp;
   return headers;
+}
+
+function isWorkerUnregisteredOriginResponse(status: number, text: string) {
+  if (status !== 403) return false;
+  try {
+    const body = JSON.parse(text);
+    return body?.error === "unregistered_origin";
+  } catch {
+    return text.includes("unregistered_origin");
+  }
+}
+
+async function registerVerifiedSiteForWorkerBestEffort(
+  verification: Extract<EmbedVerifierResult, { ok: true }>
+) {
+  const label = hostFromOrigin(verification.siteOrigin) || verification.siteOrigin;
+  try {
+    await registerWorkerSite(verification.projectId, verification.siteOrigin, label);
+    return true;
+  } catch (error) {
+    const status = Number((error as { status?: unknown })?.status || 0);
+    if (status === 409) return true;
+    console.error("[embed/analytics] worker site auto-sync failed", error);
+    return false;
+  }
 }
 
 async function proxyToRemote(args: {
@@ -186,25 +278,37 @@ async function proxyToRemote(args: {
   payload: Record<string, unknown> | null;
   headers: Record<string, string>;
   corsOrigin: string | null;
+  verification?: Extract<EmbedVerifierResult, { ok: true }>;
 }) {
   const { baseUrl } = getEnv();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+  const upstreamPayload = args.payload;
 
   try {
-    const response = await fetch(`${baseUrl}/v1/events`, {
-      method: "POST",
-      headers: args.headers,
-      body: args.payload ? JSON.stringify(args.payload) : undefined,
-      cache: "no-store",
-      credentials: "omit",
-      keepalive: true,
-      mode: "cors",
-      referrerPolicy: "no-referrer",
-      signal: controller.signal,
-    });
+    const send = () =>
+      fetch(`${baseUrl}/v1/events`, {
+        method: "POST",
+        headers: args.headers,
+        body: upstreamPayload ? JSON.stringify(upstreamPayload) : undefined,
+        cache: "no-store",
+        credentials: "omit",
+        keepalive: true,
+        mode: "cors",
+        referrerPolicy: "no-referrer",
+        signal: controller.signal,
+      });
 
-    const text = await response.text().catch(() => "");
+    let response = await send();
+    let text = await response.text().catch(() => "");
+    if (
+      args.verification &&
+      isWorkerUnregisteredOriginResponse(response.status, text) &&
+      (await registerVerifiedSiteForWorkerBestEffort(args.verification))
+    ) {
+      response = await send();
+      text = await response.text().catch(() => "");
+    }
     const responseHeaders: Record<string, string> = {
       "Content-Type": response.headers.get("content-type") || "application/json",
       ...corsHeaders(args.corsOrigin),
@@ -311,9 +415,10 @@ async function handlePost(req: NextRequest, ctx: { env?: RateLimitEnv }) {
       );
     }
     try {
+      const upstreamPayload = stripUpstreamSitePublicIds(payload);
       return await proxyToRemote({
         req,
-        payload,
+        payload: upstreamPayload,
         headers: fallbackHeaders,
         corsOrigin: origin,
       });
@@ -341,11 +446,14 @@ async function handlePost(req: NextRequest, ctx: { env?: RateLimitEnv }) {
   }
 
   try {
+    const canonicalPayload = canonicalizeVerifiedPayload(payload, verification);
+    const upstreamPayload = stripUpstreamSitePublicIds(canonicalPayload);
     return await proxyToRemote({
       req,
-      payload,
-      headers: buildRemoteHeaders(req, payload, verification),
+      payload: upstreamPayload,
+      headers: buildRemoteHeaders(req, verification),
       corsOrigin: verification.origin ?? req.headers.get("origin"),
+      verification,
     });
   } catch {
     const origin = verification.origin ?? req.headers.get("origin");

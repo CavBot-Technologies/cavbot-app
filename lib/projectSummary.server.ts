@@ -206,7 +206,8 @@ export async function resolveTenantProjectAccess(input: {
     ).trim();
 
     if (!projectKey) throw new Error("PROJECT_KEY_DECRYPT_FAILED");
-    summaryAuth = { projectKey };
+    const adminToken = String(getEnv().adminToken || "").trim();
+    summaryAuth = adminToken ? { projectKey, adminToken } : { projectKey };
   } else {
     const adminToken = String(getEnv().adminToken || "").trim();
     if (!adminToken) throw new Error("PROJECT_SUMMARY_AUTH_UNAVAILABLE");
