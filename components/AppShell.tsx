@@ -2349,6 +2349,111 @@ export default function AppShell({
     trialActive,
   }), [planTier, planResolved, memberRole, trialActive]);
 
+  useEffect(() => {
+    let cancelled = false;
+    let observer: MutationObserver | null = null;
+    let cachedSites: Array<{ id: string; label: string; origin: string }> | null = null;
+    let cachedActiveSiteId = "";
+
+    function selectNeedsSites(select: HTMLSelectElement) {
+      if (!select.matches("[data-tools-site]")) return false;
+      const options = Array.from(select.options);
+      if (!options.length) return true;
+      if (options.length > 1) return false;
+      const only = options[0];
+      return String(only?.value || "").trim() === "none" || String(only?.value || "").trim() === "";
+    }
+
+    function applySitesToSelect(select: HTMLSelectElement) {
+      if (!cachedSites?.length || !selectNeedsSites(select)) return;
+      const params = new URLSearchParams(window.location.search || "");
+      const requestedSite = String(params.get("site") || params.get("siteId") || "").trim();
+      const defaultSite = String(select.getAttribute("data-default-site") || "").trim();
+      const selectedSiteId =
+        [requestedSite, defaultSite, cachedActiveSiteId]
+          .find((id) => id && cachedSites?.some((site) => site.id === id)) ||
+        cachedSites[0]?.id ||
+        "";
+
+      select.textContent = "";
+      for (const site of cachedSites) {
+        const option = document.createElement("option");
+        option.value = site.id;
+        option.textContent = site.label || site.origin;
+        select.appendChild(option);
+      }
+      if (selectedSiteId) select.value = selectedSiteId;
+      select.dataset.cbWorkspaceSitesHydrated = "1";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    function hydrateVisibleSelects() {
+      const selects = Array.from(document.querySelectorAll<HTMLSelectElement>("[data-tools-site]"));
+      for (const select of selects) applySitesToSelect(select);
+    }
+
+    async function loadWorkspaceSites() {
+      try {
+        const res = await fetch("/api/workspace", {
+          credentials: "include",
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        });
+        if (!res.ok) return;
+        const payload = (await res.json().catch(() => null)) as
+          | {
+              sites?: Array<{ id?: unknown; label?: unknown; origin?: unknown }>;
+              activeSiteId?: unknown;
+              topSiteId?: unknown;
+            }
+          | null;
+        if (cancelled) return;
+        const rows = Array.isArray(payload?.sites) ? payload.sites : [];
+        const nextSites = rows
+          .map((row) => {
+            const id = String(row.id || "").trim();
+            const origin = String(row.origin || "").trim();
+            if (!id || !origin) return null;
+            return {
+              id,
+              origin,
+              label: String(row.label || "").trim() || origin,
+            };
+          })
+          .filter((site): site is { id: string; label: string; origin: string } => Boolean(site));
+        if (!nextSites.length) return;
+        cachedSites = nextSites;
+        cachedActiveSiteId = String(payload?.activeSiteId || payload?.topSiteId || "").trim();
+        hydrateVisibleSelects();
+      } catch {
+        // Leave the server-rendered target list untouched if workspace hydration fails.
+      }
+    }
+
+    function maybeLoadWorkspaceSites() {
+      const needsHydration = Array.from(document.querySelectorAll<HTMLSelectElement>("[data-tools-site]")).some(selectNeedsSites);
+      if (!needsHydration) return;
+      if (cachedSites?.length) {
+        hydrateVisibleSelects();
+        return;
+      }
+      void loadWorkspaceSites();
+    }
+
+    maybeLoadWorkspaceSites();
+    observer = new MutationObserver(() => maybeLoadWorkspaceSites());
+    observer.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("cb:workspace", maybeLoadWorkspaceSites);
+    window.addEventListener("cb:selection", maybeLoadWorkspaceSites);
+
+    return () => {
+      cancelled = true;
+      observer?.disconnect();
+      window.removeEventListener("cb:workspace", maybeLoadWorkspaceSites);
+      window.removeEventListener("cb:selection", maybeLoadWorkspaceSites);
+    };
+  }, [pathname]);
+
   // Hydration safety valve: keep shell purely client-rendered after mount.
   if (!clientMounted) {
     return null;

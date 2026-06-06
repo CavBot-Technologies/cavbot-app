@@ -25,6 +25,17 @@ type DashboardToolsControlsProps = {
   onApplied?: (siteId: string) => void;
 };
 
+type WorkspaceSitesPayload = {
+  ok?: boolean;
+  sites?: Array<{
+    id?: unknown;
+    label?: unknown;
+    origin?: unknown;
+  }>;
+  activeSiteId?: unknown;
+  topSiteId?: unknown;
+};
+
 const defaultRangeOptions: { value: RangeKey; label: string }[] = [
   { value: "24h", label: "24 Hours" },
   { value: "7d", label: "7 Days" },
@@ -54,14 +65,64 @@ export default function DashboardToolsControls({
   const [open, setOpen] = useState(false);
   const [rangeValue, setRangeValue] = useState(range);
   const [pendingSiteId, setPendingSiteId] = useState(selectedSiteId || "");
+  const [runtimeSites, setRuntimeSites] = useState<DashboardToolsSite[]>([]);
+  const [runtimeSelectedSiteId, setRuntimeSelectedSiteId] = useState("");
+
+  const effectiveSites = sites.length ? sites : runtimeSites;
+  const effectiveSelectedSiteId = selectedSiteId || runtimeSelectedSiteId || effectiveSites[0]?.id || "";
 
   useEffect(() => {
     setRangeValue(range);
   }, [range]);
 
   useEffect(() => {
-    setPendingSiteId(selectedSiteId || "");
-  }, [selectedSiteId, sites]);
+    setPendingSiteId(effectiveSelectedSiteId || "");
+  }, [effectiveSelectedSiteId, effectiveSites]);
+
+  useEffect(() => {
+    if (sites.length) return;
+    let cancelled = false;
+    async function loadWorkspaceSites() {
+      try {
+        const res = await fetch("/api/workspace", {
+          credentials: "include",
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        });
+        if (!res.ok) return;
+        const payload = (await res.json().catch(() => null)) as WorkspaceSitesPayload | null;
+        const rows = Array.isArray(payload?.sites) ? payload.sites : [];
+        const nextSites = rows
+          .map((row) => {
+            const id = String(row.id || "").trim();
+            const origin = String(row.origin || "").trim();
+            if (!id || !origin) return null;
+            return {
+              id,
+              origin,
+              label: String(row.label || "").trim() || origin,
+            };
+          })
+          .filter((site): site is DashboardToolsSite => Boolean(site));
+
+        if (cancelled || !nextSites.length) return;
+        const activeSiteId = String(payload?.activeSiteId || payload?.topSiteId || "").trim();
+        setRuntimeSites(nextSites);
+        setRuntimeSelectedSiteId(
+          activeSiteId && nextSites.some((site) => site.id === activeSiteId)
+            ? activeSiteId
+            : nextSites[0]?.id || "",
+        );
+      } catch {
+        // Keep the server-rendered empty state if workspace bootstrap is unavailable.
+      }
+    }
+
+    void loadWorkspaceSites();
+    return () => {
+      cancelled = true;
+    };
+  }, [sites.length]);
 
   const buildHref = useCallback(
     (nextRange: RangeKey, nextSiteId: string) => {
@@ -88,14 +149,14 @@ export default function DashboardToolsControls({
     (event: ChangeEvent<HTMLSelectElement>) => {
       const nextRange = event.target.value as RangeKey;
       setRangeValue(nextRange);
-      const currentSiteId = pendingSiteId || selectedSiteId || "none";
+      const currentSiteId = pendingSiteId || effectiveSelectedSiteId || "none";
       navigate(nextRange, currentSiteId);
     },
-    [navigate, pendingSiteId, selectedSiteId]
+    [effectiveSelectedSiteId, navigate, pendingSiteId]
   );
 
   const handleApply = useCallback(() => {
-    const nextSiteId = pendingSiteId || selectedSiteId || "";
+    const nextSiteId = pendingSiteId || effectiveSelectedSiteId || "";
     if (!nextSiteId) {
       setOpen(false);
       return;
@@ -103,7 +164,7 @@ export default function DashboardToolsControls({
     navigate(rangeValue, nextSiteId);
     onApplied?.(nextSiteId);
     setOpen(false);
-  }, [navigate, onApplied, pendingSiteId, rangeValue, selectedSiteId]);
+  }, [effectiveSelectedSiteId, navigate, onApplied, pendingSiteId, rangeValue]);
 
   const openModal = useCallback(() => setOpen(true), []);
   const closeModal = useCallback(() => setOpen(false), []);
@@ -148,8 +209,8 @@ export default function DashboardToolsControls({
       </button>
       <DashboardToolsModal
         open={open}
-        sites={sites}
-        selectedSiteId={pendingSiteId || selectedSiteId}
+        sites={effectiveSites}
+        selectedSiteId={pendingSiteId || effectiveSelectedSiteId}
         reportHref={reportHref}
         reportFileName={reportFileName}
         onClose={closeModal}

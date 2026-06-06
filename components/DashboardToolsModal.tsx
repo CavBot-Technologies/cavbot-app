@@ -79,6 +79,7 @@ export default function DashboardToolsModal({
             <div className="cb-field-label">Target</div>
             <select
               className="cb-select"
+              data-tools-site
               value={resolvedSiteId}
               onChange={(event) => onChangeSite(event.target.value)}
               ref={selectRef}
