@@ -11,6 +11,12 @@ test("analytics console carries Command Center workspace sites into dashboard to
   assert.equal(source.includes("const sites = mergeSiteRows(dbSiteRows, workspaceSites);"), true);
 });
 
+test("analytics console uses the same effective workspace session as Command Center", () => {
+  assert.equal(source.includes('from "@/lib/workspaceAuth.server"'), true);
+  assert.equal(source.includes("requireWorkspaceResilientSession(req)"), true);
+  assert.equal(source.includes("requireSession(req)"), false);
+});
+
 test("analytics console keeps workspace sites when project or site reads fail", () => {
   const emptySiteReturns = source.match(/sites:\s*\[\]/g) ?? [];
   assert.equal(emptySiteReturns.length, 1, "only unauthenticated context should return no dashboard sites");

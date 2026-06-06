@@ -6,7 +6,6 @@ import {
   getAppOrigin,
   isApiAuthError,
   requireAccountContext,
-  requireSession,
   type CavbotAccountSession,
 } from "@/lib/apiAuth";
 import {
@@ -16,6 +15,7 @@ import {
 } from "@/lib/cavbotApi.server";
 import { resolveProjectAnalyticsAuth } from "@/lib/projectAnalyticsKey.server";
 import { readWorkspace, type WorkspacePayload } from "@/lib/workspaceStore.server";
+import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
 
 export type AnalyticsRangeKey = "24h" | "7d" | "14d" | "30d";
@@ -292,7 +292,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
   let session: CavbotAccountSession | null = null;
   try {
     const req = await buildRequestFromHeaders(pathname);
-    const rawSession = await withConsoleDeadline(requireSession(req), "SESSION_READ", 2_000);
+    const rawSession = await withConsoleDeadline(requireWorkspaceResilientSession(req), "SESSION_READ", 2_000);
     requireAccountContext(rawSession);
     session = rawSession;
   } catch (error) {
