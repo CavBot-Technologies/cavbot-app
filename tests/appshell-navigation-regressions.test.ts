@@ -105,3 +105,12 @@ test("AppShell scroll indicator keeps explicit up/down SVG assets", () => {
   assert.equal(source.includes('src="/icons/app/scroll-up-1381-svgrepo-com.svg"'), true);
   assert.equal(source.includes("data-scroll-indicator={navScrollIndicator}"), true);
 });
+
+test("AppShell arcade quick tool routes to the public website arcade page", () => {
+  const source = read("components/AppShell.tsx");
+
+  assert.equal(source.includes('href="https://cavbot.io/cavbot-arcade"'), true);
+  assert.equal(source.includes('data-cb-route-intent="https://cavbot.io/cavbot-arcade"'), true);
+  assert.equal(source.includes('href={"/cavbot-arcade"}'), false);
+  assert.equal(source.includes('prefetchRoute("/cavbot-arcade")'), false);
+});

@@ -28,35 +28,6 @@ const GREETINGS = [
   "Καλή διασκέδαση!!!",
 ];
 
-const HERO_VIDEO_SRC = "";
-const HERO_BG_DESKTOP_SRC = "/cavbot-arcade/cavbot-arcade-logo-bg.png";
-const HERO_BG_TABLET_SRC = "/cavbot-arcade/cavbot-arcade-logo-bg.png";
-
-const CATEGORY_DEFINITIONS = [
-  {
-    slug: "action",
-    label: "Action",
-    description: "Fast reactions, movement, timing.",
-    keys: ["catch-cavbot", "futbol-cavbot", "tennis-cavbot"],
-  },
-  {
-    slug: "signals",
-    label: "Signals",
-    description: "Detection, tracking, system cleanup.",
-    keys: ["signal-chase", "cache-sweep"],
-  },
-  {
-    slug: "puzzles",
-    label: "Puzzles",
-    description: "Single-decision logic, pattern recognition.",
-    keys: ["pick-the-imposter"],
-  },
-];
-
-type CategorySlug = (typeof CATEGORY_DEFINITIONS)[number]["slug"];
-
-type FilterSlug = CategorySlug | "all";
-
 const GAMES = [
   {
     key: "catch-cavbot",
@@ -759,122 +730,6 @@ const useMediaQuery = (query: string) => {
   return matches;
 };
 
-
-const GamePreview = ({
-  gameKey,
-  thumbnail,
-  videoSrc,
-  label,
-  prefersReduced,
-  isCoarse,
-}: {
-  gameKey: string;
-  thumbnail: string;
-  videoSrc: string;
-  label: string;
-  prefersReduced: boolean;
-  isCoarse: boolean;
-}) => {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [videoReady, setVideoReady] = useState(false);
-  const [armed, setArmed] = useState(false);
-
-  const disarmVideo = useCallback(() => {
-    if (!armed) return;
-    setArmed(false);
-  }, [armed]);
-
-  const armVideo = () => {
-    if (prefersReduced || isCoarse) return;
-    if (armed) return;
-    setArmed(true);
-  };
-
-  useEffect(() => {
-    if ((prefersReduced || isCoarse) && armed) {
-      const timer = window.setTimeout(() => disarmVideo(), 0);
-      return () => window.clearTimeout(timer);
-    }
-    return undefined;
-  }, [prefersReduced, isCoarse, armed, disarmVideo]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) {
-      setVideoReady(false);
-      return undefined;
-    }
-    setVideoReady(false);
-    video.preload = "auto";
-    const handleCanPlay = () => setVideoReady(true);
-    video.addEventListener("canplay", handleCanPlay, { once: true });
-    video.src = videoSrc;
-    video.load();
-    return () => {
-      video.removeEventListener("canplay", handleCanPlay);
-    };
-  }, [videoSrc]);
-
-  useEffect(() => {
-    if (!armed) return undefined;
-    const video = videoRef.current;
-    if (!video) return undefined;
-    video.currentTime = 0;
-    const playPromise = video.play();
-    if (playPromise && typeof playPromise.then === "function") {
-      playPromise.catch(() => {});
-    }
-    return () => {
-      video.pause();
-      video.currentTime = 0;
-    };
-  }, [armed, videoSrc]);
-
-  const shouldShowVideo = videoReady && armed;
-
-  return (
-    <div className="preview-tablet">
-      <div className="preview-tablet-header" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </div>
-      <figure
-        className={`preview ${shouldShowVideo ? "is-video-ready" : ""}`}
-        data-preview-game={gameKey}
-        onMouseEnter={armVideo}
-        onMouseLeave={disarmVideo}
-        onPointerEnter={armVideo}
-        onPointerLeave={disarmVideo}
-        onTouchStart={armVideo}
-        onFocus={armVideo}
-        onBlur={disarmVideo}
-        tabIndex={0}
-        aria-label={`${label} preview`}
-      >
-        <div
-          className="preview-frame"
-          style={
-            {
-              "--preview-bg": `url("${thumbnail}")`,
-            } as React.CSSProperties
-          }
-        >
-          <Image
-            src={thumbnail}
-            alt={`${label} thumbnail`}
-            width={360}
-            height={220}
-            className="preview-img"
-            priority={false}
-          />
-          <video ref={videoRef} muted playsInline loop preload="none" />
-        </div>
-      </figure>
-    </div>
-  );
-};
-
 const escapeId = (id: string) => {
   if (typeof CSS !== "undefined" && CSS.escape) {
     return CSS.escape(id);
@@ -891,19 +746,13 @@ const computeScrollProgress = (body: HTMLDivElement | null) => {
 
 const ArcadePage = () => {
   const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
-  const isCoarsePointer = useMediaQuery("(hover: none), (pointer: coarse)");
-  const isTabletScreen = useMediaQuery("(min-width: 721px) and (max-width: 1024px)");
   const [loaderVisible, setLoaderVisible] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [activeGame, setActiveGame] = useState<string | null>(null);
   const [activeChapterIndex, setActiveChapterIndex] = useState(0);
   const [tutorialProgress, setTutorialProgress] = useState(0);
-  const [heroReady, setHeroReady] = useState(false);
-  const [heroTriggered, setHeroTriggered] = useState(false);
   const [rotateHintVisible, setRotateHintVisible] = useState(false);
   const [rotateDismissed, setRotateDismissed] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [activeCategoryFilter, setActiveCategoryFilter] = useState<FilterSlug>("all");
   const [profileAvatar, setProfileAvatar] = useState("");
   const [profileInitials, setProfileInitials] = useState("");
   const [profileTone, setProfileTone] = useState("lime");
@@ -912,7 +761,6 @@ const ArcadePage = () => {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const readerBodyRef = useRef<HTMLDivElement | null>(null);
   const readerContentRef = useRef<HTMLDivElement | null>(null);
-  const heroVideoRef = useRef<HTMLVideoElement | null>(null);
   const profileButtonRef = useRef<HTMLButtonElement | null>(null);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const lastTriggerRef = useRef<HTMLElement | null>(null);
@@ -920,9 +768,7 @@ const ArcadePage = () => {
   const rotateTimerRef = useRef<number | null>(null);
   const chapterObserverRef = useRef<IntersectionObserver | null>(null);
   const [entGame, setEntGame] = useState<(typeof GAMES)[number] | null>(null);
-  const heroArmed = heroTriggered && !prefersReducedMotion && !isCoarsePointer;
   const gallerySectionRef = useRef<HTMLElement | null>(null);
-  const heroBackgroundSrc = isTabletScreen ? HERO_BG_TABLET_SRC : HERO_BG_DESKTOP_SRC;
 
   const openEntGame = (game: (typeof GAMES)[number]) => {
     setEntGame(game);
@@ -1099,24 +945,6 @@ const ArcadePage = () => {
     return profilePublicEnabled ? "Public Profile" : "Private Profile";
   }, [profilePublicEnabled]);
 
-  const openTutorial = useCallback((gameKey: string, opener?: HTMLElement | null) => {
-    lastTriggerRef.current = opener ?? null;
-    setActiveGame(gameKey);
-    setActiveChapterIndex(0);
-    setTutorialProgress(0);
-    setModalOpen(true);
-    readerBodyRef.current?.scrollTo({ top: 0 });
-    setHeroReady(false);
-    if (typeof window !== "undefined") {
-      initialHashRef.current = window.location.hash || null;
-      const base = window.location.pathname + window.location.search;
-      window.history.replaceState(null, "", `${base}#tutorial=${encodeURIComponent(gameKey)}`);
-      setTimeout(() => {
-        readerBodyRef.current?.focus({ preventScroll: true });
-      }, 30);
-    }
-  }, []);
-
   const closeTutorial = useCallback(() => {
     setModalOpen(false);
     setActiveGame(null);
@@ -1197,42 +1025,6 @@ const ArcadePage = () => {
     };
   }, [modalOpen, activeGame]);
 
-  useEffect(() => {
-    if (!heroArmed || prefersReducedMotion || isCoarsePointer) {
-      return undefined;
-    }
-    const video = heroVideoRef.current;
-    if (!video) return undefined;
-    video.src = HERO_VIDEO_SRC;
-    const canPlay = () => {
-      setHeroReady(true);
-      try {
-        video.currentTime = 0;
-        video.play();
-      } catch {}
-    };
-    const handleError = () => setHeroReady(false);
-    video.addEventListener("canplay", canPlay, { once: true });
-    video.addEventListener("error", handleError, { once: true });
-    return () => {
-      video.pause();
-      video.removeAttribute("src");
-      video.load();
-      setHeroReady(false);
-    };
-  }, [heroArmed, prefersReducedMotion, isCoarsePointer]);
-
-  useEffect(() => {
-    if (prefersReducedMotion || isCoarsePointer) return undefined;
-    const arm = () => setHeroTriggered(true);
-    window.addEventListener("pointerdown", arm, { once: true, passive: true });
-    window.addEventListener("keydown", arm, { once: true });
-    return () => {
-      window.removeEventListener("pointerdown", arm);
-      window.removeEventListener("keydown", arm);
-    };
-  }, [prefersReducedMotion, isCoarsePointer]);
-
   const showRotateHint = useCallback(() => {
     if (rotateDismissed || !shouldSuggestRotate()) return;
     setRotateHintVisible(true);
@@ -1268,28 +1060,7 @@ const ArcadePage = () => {
 
   const currentTutorial = activeGame ? tutorialDefinitions[activeGame] : null;
   const chapterList = useMemo(() => currentTutorial?.chapters ?? [], [currentTutorial]);
-  const filteredGames = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
-    if (!query) return GAMES;
-    return GAMES.filter((game) => {
-      return (
-        game.title.toLowerCase().includes(query) ||
-        game.description.toLowerCase().includes(query)
-      );
-    });
-  }, [searchTerm]);
-  const visibleGames = useMemo(() => {
-    const base = filteredGames;
-    if (activeCategoryFilter === "all") return base;
-    const category = CATEGORY_DEFINITIONS.find((definition) => definition.slug === activeCategoryFilter);
-    if (!category) return base;
-    return base.filter((game) => category.keys.includes(game.key));
-  }, [filteredGames, activeCategoryFilter]);
-
-  const scrollToCategory = (slug: FilterSlug) => {
-    setActiveCategoryFilter(slug);
-    gallerySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
+  const visibleGames = GAMES;
 
   const goToChapter = useCallback(
     (index: number) => {
@@ -1453,139 +1224,62 @@ const ArcadePage = () => {
               <span key={`${beacon.color}-${beacon.left}-${beacon.top}`} className={`beacon ${beacon.color}`} style={{ left: beacon.left, top: beacon.top }} />
             ))}
           </div>
-<br /><br /><br /><br />
-          <div className="hero-card">
-            <div className="hero-card-shell">
-              <div className="hero-card-top">
-                <span />
-                <span />
-                <span />
-              </div>
-              <div className={`hero-card-screen ${heroReady ? "is-video-ready" : ""}`}>
-                <Image
-                  src={heroBackgroundSrc}
-                  alt="CavBot Arcade logo background"
-                  width={980}
-                  height={560}
-                  className="hero-card-image"
-                  priority
-                />
-                <video
-                  ref={heroVideoRef}
-                  muted
-                  playsInline
-                  loop
-                  preload="none"
-                  onCanPlay={() => setHeroReady(true)}
-                />
-                <Image
-                  src="/logo/cavbot-arcade-logo-type.png"
-                  alt="CavBot Arcade type logo"
-                  width={420}
-                  height={240}
-                  className="hero-card-overlay-logo"
-                  priority
-                />
-              </div>
-            </div>
-          </div>
-
-          <section className="gallery" ref={gallerySectionRef}>
-            <header>
-              <div className="gallery-title-block">
-                <h2 className="arcade-title gallery-arcade-title">
-                  LIB<span className="gallery-title-highlighted-r">R</span>ARY
-                </h2>
-              </div>
-            </header>
-            <div className="gallery-controls">
-              <div className="gallery-filter">
+          <section className="arcade-site-gallery" ref={gallerySectionRef} aria-label="CavBot Arcade Library">
+            <figure className="arcade-site-gallery-frame">
+              <Image
+                src="/cavbot-arcade/cavbot-arcade-logo-bg.png"
+                alt="CavBot Arcade Library preview"
+                width={1920}
+                height={880}
+                className="arcade-site-gallery-image"
+                priority
+              />
+              <figcaption className="arcade-site-gallery-overlay">
+                <h1>Arcade<br />Library</h1>
                 <button
                   type="button"
-                  className={`gallery-filter-button ${activeCategoryFilter === "all" ? "is-active" : ""}`}
-                  onClick={() => scrollToCategory("all")}
+                  className="arcade-site-gallery-button"
+                  onClick={() => {
+                    const firstGame = visibleGames[0] || GAMES[0];
+                    if (firstGame) handlePlayClick(firstGame);
+                  }}
                 >
-                  All
+                  Get started
                 </button>
-                {CATEGORY_DEFINITIONS.map((category) => (
-                  <button
-                    key={category.slug}
-                    type="button"
-                    className={`gallery-filter-button ${activeCategoryFilter === category.slug ? "is-active" : ""}`}
-                    onClick={() => scrollToCategory(category.slug)}
-                  >
-                    {category.label}
-                  </button>
+              </figcaption>
+            </figure>
+          </section>
+
+          <section className="arcade-site-marquee" aria-label="CavBot Arcade game gallery">
+            <div className="arcade-site-marquee-viewport">
+              <div className="arcade-site-marquee-track">
+                {[...GAMES, ...GAMES].map((game, index) => (
+                  <article className="arcade-site-marquee-card" key={`${game.key}-${index}`}>
+                    <Image
+                      src={game.thumbnail}
+                      alt={game.title}
+                      width={720}
+                      height={420}
+                      className="arcade-site-marquee-image"
+                    />
+                    <div className="arcade-site-marquee-shade" aria-hidden="true" />
+                    <button
+                      type="button"
+                      className="arcade-site-marquee-play"
+                      onClick={() => handlePlayClick(game)}
+                    >
+                      Play
+                    </button>
+                  </article>
                 ))}
               </div>
-              <form
-                className="gallery-search gallery-search-condensed"
-                onSubmit={(event) => event.preventDefault()}
-                role="search"
-              >
-                <label className="sr-only" htmlFor="arcade-gallery-search">
-                  Search Arcade games
-                </label>
-                <input
-                  id="arcade-gallery-search"
-                  className="gallery-search-input"
-                  type="search"
-                  placeholder="Search games..."
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-                <button type="submit" className="gallery-search-button" aria-label="Filter games">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M10 3a7 7 0 0 1 5.93 10.98l4.54 4.54-1.41 1.41-4.54-4.54A7 7 0 1 1 10 3zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10z" />
-                  </svg>
-                </button>
-              </form>
-            </div>
-            <br /><br />
-            <div className="gallery-grid">
-              {visibleGames.length === 0 ? (
-                <div className="gallery-empty">
-                  <p>No games match that search—try another signal.</p>
-                </div>
-              ) : (
-                visibleGames.map((game) => (
-                  <article className={`game-card accent-${game.accent}`} key={game.key}>
-                    <div className="game-top" aria-hidden="true" />
-                    <GamePreview
-                      gameKey={game.key}
-                      thumbnail={game.thumbnail}
-                      videoSrc={game.video}
-                      label={game.title}
-                      prefersReduced={prefersReducedMotion}
-                      isCoarse={isCoarsePointer}
-                    />
-                    <div className="game-body">
-                      <div className="game-actions">
-                        <br />
-                        <button type="button" className="btn btn-primary" onClick={() => handlePlayClick(game)}>
-                        Play Now
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          onClick={(event) => openTutorial(game.key, event.currentTarget)}
-                        >
-                          How to Play
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                ))
-              )}
             </div>
           </section>
       </main>
       <footer className="powered" aria-label="Footer">
         <Link
           className="gallery-footer-return"
-          href="/cavbot-arcade"
+          href="https://cavbot.io/cavbot-arcade"
           aria-label="Return to CavBot Arcade"
         >
           <div className="gallery-footer-icon">

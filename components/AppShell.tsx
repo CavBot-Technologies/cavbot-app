@@ -762,7 +762,6 @@ export default function AppShell({
     route: string;
     reason: string;
   } | null>(null);
-  const [arcadeCollaboratorAccessEnabled, setArcadeCollaboratorAccessEnabled] = useState(false);
   const commandCenterWarmRef = useRef(false);
 
   const prefetchRoute = useCallback(
@@ -1095,7 +1094,6 @@ export default function AppShell({
       "/settings?tab=history",
       "/settings/integrations",
       "/notifications",
-      "/cavbot-arcade",
       "/auth?mode=login",
     ];
     const queue = [...warmRoutes];
@@ -1531,13 +1529,6 @@ export default function AppShell({
           ? rawMemberRole
           : null;
       setMemberRole(nextMemberRole);
-      setArcadeCollaboratorAccessEnabled(
-        Boolean(
-          data?.policy?.allowArcadeCollaboratorAccess
-          || data?.policy?.enableContributorLinks
-          || data?.arcadeAccess?.collaboratorAccessEnabled
-        ),
-      );
 
       // ===== TRIAL DETECTION (supports multiple API shapes) =====
       const directDays =
@@ -1856,12 +1847,8 @@ export default function AppShell({
     openCavGuardByAction("AUTH_REQUIRED");
   }
 
-  function onArcadeClick(event: ReactMouseEvent<HTMLAnchorElement>) {
+  function onArcadeClick() {
     setNavOpen(false);
-    if (!memberRole || memberRole === "OWNER") return;
-    if (arcadeCollaboratorAccessEnabled) return;
-    event.preventDefault();
-    openCavGuardByAction("ARCADE_ACCESS_BLOCKED");
   }
 
 
@@ -2526,13 +2513,10 @@ export default function AppShell({
           <div className="cb-side-icons" aria-label="Quick tools">
             <Link
               className="cb-icon-btn cb-icon-btn-arcade"
-              href={"/cavbot-arcade"}
-              data-cb-route-intent="/cavbot-arcade"
+              href="https://cavbot.io/cavbot-arcade"
+              data-cb-route-intent="https://cavbot.io/cavbot-arcade"
               data-cb-perf-source="sidebar-quicktool"
               aria-label="CavBot Arcade"
-              onMouseEnter={() => prefetchRoute("/cavbot-arcade")}
-              onFocus={() => prefetchRoute("/cavbot-arcade")}
-              onPointerDown={() => prefetchRoute("/cavbot-arcade")}
               onClick={onArcadeClick}
             >
               <IconArcadeCabinet />

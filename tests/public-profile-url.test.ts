@@ -9,9 +9,9 @@ function read(file: string) {
   return fs.readFileSync(path.resolve(file), "utf8");
 }
 
-test("buildCanonicalPublicProfileHref returns the canonical root profile path", () => {
-  assert.equal(buildCanonicalPublicProfileHref("@Daryna"), "/daryna");
-  assert.equal(buildCanonicalPublicProfileHref(" CavBot "), "/cavbot");
+test("buildCanonicalPublicProfileHref returns the canonical app profile URL", () => {
+  assert.equal(buildCanonicalPublicProfileHref("@Daryna"), "https://app.cavbot.io/daryna");
+  assert.equal(buildCanonicalPublicProfileHref(" CavBot "), "https://app.cavbot.io/cavbot");
   assert.equal(buildCanonicalPublicProfileHref(""), "");
 });
 
@@ -24,7 +24,6 @@ test("logged-in avatar shells use the canonical public profile helper", () => {
     "app/cavtools/page.tsx",
     "app/cavcloud/CavCloudClient.tsx",
     "app/cavsafe/CavSafeClient.tsx",
-    "app/cavbot-arcade/page.tsx",
     "app/cavbot-arcade/gallery/page.tsx",
   ];
 
