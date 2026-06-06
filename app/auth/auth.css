@@ -440,6 +440,7 @@ button{touch-action:manipulation}
   position:absolute;
   left:5px; top:2px;
   width:6px; height:10px;
+  border-radius: 0;
   border-right:2px solid rgba(185,200,90,.95);
   border-bottom:2px solid rgba(185,200,90,.95);
   transform: rotate(40deg);

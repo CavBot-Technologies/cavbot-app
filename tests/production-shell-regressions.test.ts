@@ -71,7 +71,10 @@ test("global geometry keeps card radii without flattening badges, icons, or pseu
   assert.match(globals, /\[class\*="card"\], \[class\*="Card"\],[\s\S]*border-radius: var\(--cb-r\) !important;/);
   assert.doesNotMatch(globals, /body \*,\s*body \*::before,\s*body \*::after\{\s*border-radius: 4px !important;/);
   assert.match(globals, /:not\(\.cb-badge\):not\(\.auth-badge\):not\(\[class\*="cavbot-badge"\]\)/);
+  assert.match(globals, /:not\(\[class\*="icon"\]\):not\(\[class\*="Icon"\]\):not\(\[class\*="glyph"\]\):not\(\[class\*="Glyph"\]\):not\(\[class\*="chevron"\]\):not\(\[class\*="Chevron"\]\):not\(\[class\*="check"\]\):not\(\[class\*="Check"\]\)/);
+  assert.match(globals, /:not\(\[class\*="icon"\]\):not\(\[class\*="Icon"\]\):not\(\[class\*="glyph"\]\):not\(\[class\*="Glyph"\]\):not\(\[class\*="chevron"\]\):not\(\[class\*="Chevron"\]\):not\(\[class\*="check"\]\):not\(\[class\*="Check"\]\):not\(\[class\*="mark"\]\):not\(\[class\*="Mark"\]\):not\(\.auth-show\)/);
   assert.match(authCss, /\.auth-sso-icon\{[\s\S]*border-radius: 999px;/);
+  assert.match(authCss, /\.auth-human-box input:checked ~ \.auth-check::after\{[\s\S]*border-radius: 0;/);
 });
 
 test("cavcloud compact screens restore document scrolling through tablets and keep quick tools visible", () => {

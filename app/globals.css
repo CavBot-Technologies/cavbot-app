@@ -1198,7 +1198,7 @@ html body :is(
   [class*="Btn"],
   [class*="button"],
   [class*="Button"]
-):not([class*="avatar"]):not([class*="Avatar"]):not([class*="dot"]):not([class*="Dot"]){
+):not([class*="avatar"]):not([class*="Avatar"]):not([class*="dot"]):not([class*="Dot"]):not([class*="icon"]):not([class*="Icon"]):not([class*="glyph"]):not([class*="Glyph"]):not([class*="chevron"]):not([class*="Chevron"]):not([class*="check"]):not([class*="Check"]):not([class*="mark"]):not([class*="Mark"]):not(.auth-show){
   border-radius: var(--cb-r) !important;
 }
 
@@ -1219,7 +1219,7 @@ html body :is(
   [class*="badge"], [class*="Badge"],
   [class*="chip"], [class*="Chip"],
   [class*="tag"], [class*="Tag"]
-):not([class*="dot"]):not([class*="Dot"]):not(.cb-badge):not(.auth-badge):not([class*="cavbot-badge"]):not([class*="CavbotBadge"]){
+):not([class*="dot"]):not([class*="Dot"]):not([class*="icon"]):not([class*="Icon"]):not([class*="glyph"]):not([class*="Glyph"]):not([class*="chevron"]):not([class*="Chevron"]):not([class*="check"]):not([class*="Check"]):not([class*="mark"]):not([class*="Mark"]):not(.cb-badge):not(.auth-badge):not([class*="cavbot-badge"]):not([class*="CavbotBadge"]){
   border-radius: 6px !important;
 }
 
@@ -1228,7 +1228,7 @@ html body :is(
   [class*="panel"], [class*="Panel"],
   [class*="modal"], [class*="Modal"],
   [class*="box"], [class*="Box"]
-):not([class*="avatar"]):not([class*="Avatar"]):not([class*="orb"]):not([class*="Orb"]){
+):not([class*="avatar"]):not([class*="Avatar"]):not([class*="orb"]):not([class*="Orb"]):not([class*="icon"]):not([class*="Icon"]):not([class*="glyph"]):not([class*="Glyph"]):not([class*="chevron"]):not([class*="Chevron"]):not([class*="check"]):not([class*="Check"]):not([class*="mark"]):not([class*="Mark"]){
   border-radius: var(--cb-r) !important;
 }
 
@@ -1240,7 +1240,7 @@ html body :is(
   .cb-notes-toggle,
   .cb-notes-toggle-ctrl,
   .cb-notes-toggle-track
-){
+):not([class*="icon"]):not([class*="Icon"]):not([class*="glyph"]):not([class*="Glyph"]):not([class*="chevron"]):not([class*="Chevron"]):not([class*="check"]):not([class*="Check"]):not([class*="mark"]):not([class*="Mark"]){
   border-radius: 8px !important;
 }
 
@@ -1249,7 +1249,7 @@ html body :is(
   [class*="switch-thumb"], [class*="SwitchThumb"],
   [class*="toggleThumb"], [class*="switchThumb"],
   .cb-notes-toggle-thumb
-){
+):not([class*="icon"]):not([class*="Icon"]):not([class*="glyph"]):not([class*="Glyph"]):not([class*="chevron"]):not([class*="Chevron"]):not([class*="check"]):not([class*="Check"]):not([class*="mark"]):not([class*="Mark"]){
   border-radius: 4px !important;
 }
 
