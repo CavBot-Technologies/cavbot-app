@@ -13,7 +13,8 @@ test("embed analytics proxy strips local site public ids before forwarding upstr
   assert.equal(source.includes("function stripUpstreamSitePublicIds"), true);
   assert.equal(source.includes('key === "site_public_id" || key === "sitePublicId"'), true);
   assert.equal(source.includes("delete siteRecord.public_id;"), true);
-  assert.equal(source.includes("const upstreamPayload = stripUpstreamSitePublicIds(canonicalPayload)"), true);
+  assert.equal(source.includes("const upstreamPayload = args.verification ? stripUpstreamSitePublicIds(args.payload) : args.payload;"), true);
+  assert.equal(source.includes("const upstreamPayload = stripUpstreamSitePublicIds(payload);"), true);
   assert.equal(source.includes("body: upstreamPayload ? JSON.stringify(upstreamPayload) : undefined"), true);
   assert.equal(source.includes('headers["X-Cavbot-Site-Public-Id"] = siteId;'), false);
 });

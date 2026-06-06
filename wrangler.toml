@@ -19,7 +19,7 @@ AUTH_REDIRECT_BASE_URL = "https://app.cavbot.io"
 ALLOWED_ORIGINS = "https://app.cavbot.io,https://ai.cavbot.io,https://www.cavbot.io,https://cavbot.io"
 CAVBOT_SESSION_COOKIE_DOMAIN = "cavbot.io"
 
-CAVBOT_PROJECT_ID = "cavbot"
+CAVBOT_PROJECT_ID = "1"
 CAVBOT_API_BASE_URL = "https://api.cavbot.io"
 NEXT_PUBLIC_CAVBOT_PROJECT_KEY = "cavbot_pk_gHn737DTf4afJ2xGpBFzZQ"
 CAVBOT_PUBLIC_SIGNUP = "1"

@@ -498,7 +498,7 @@ body {
 
 .hq-topbarMailIcon {
   background-color: transparent;
-  background-image: url("/icons/app/hq/cavmail-svgrepo-com.svg");
+  background-image: url("/icons/chat-square-svgrepo-com.svg");
   background-position: center;
   background-repeat: no-repeat;
   background-size: contain;
@@ -3351,9 +3351,8 @@ body {
   position: relative;
   display: grid;
   overflow: hidden;
-  border-radius: 18px 18px 0 0;
+  border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-bottom: 0;
   background:
     radial-gradient(420px 220px at 0% 0%, rgba(78, 168, 255, 0.08), transparent 60%),
     linear-gradient(180deg, rgba(4, 10, 26, 0.98), rgba(2, 6, 20, 0.99));
@@ -5748,7 +5747,7 @@ body {
 
   .hq-chatComposeDock {
     right: 16px;
-    bottom: calc(var(--cb-global-footer-height, 56px) + var(--safe-bottom, 0px) - 1px);
+    bottom: calc(var(--cb-global-footer-height, 56px) + var(--safe-bottom, 0px) + 12px);
     width: min(560px, calc(100vw - 24px));
   }
 }
@@ -5762,12 +5761,12 @@ body {
   .hq-chatComposeDock {
     right: 8px;
     left: 8px;
-    bottom: calc(var(--cb-global-footer-height, 56px) + var(--safe-bottom, 0px) - 1px);
+    bottom: calc(var(--cb-global-footer-height, 56px) + var(--safe-bottom, 0px) + 12px);
     width: auto;
   }
 
   .hq-chatComposeModal {
-    border-radius: 18px 18px 0 0;
+    border-radius: 18px;
   }
 
   .hq-chatComposeRow {
@@ -7092,7 +7091,7 @@ body {
 .hq-clientModalRoot {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 120400;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -8816,7 +8815,7 @@ body {
     position: fixed;
     right: 16px;
     bottom: calc(var(--cb-global-footer-height, 56px) + var(--safe-bottom, 0px) + 16px);
-    z-index: 68;
+    z-index: 120250;
     width: auto;
     min-height: 48px;
     padding: 0 18px;

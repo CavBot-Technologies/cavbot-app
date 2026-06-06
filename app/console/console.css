@@ -1438,7 +1438,8 @@
   font-weight: 800;
   letter-spacing: -0.02em;
   color: rgba(247,251,255,0.94);
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .cb-console .cb-insight-s{
   margin-top: 0;
@@ -1447,6 +1448,19 @@
   line-height: 1.4;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px){
+  .cb-console .cb-insight{
+    border-left: 0;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    padding: 14px 0 0;
+  }
+  .cb-console .cb-insight:nth-child(-n+2){ border-top: 0; padding-top: 0; }
+}
+
+@media (max-width: 520px){
+  .cb-console .cb-insight:nth-child(2){ border-top: 1px solid rgba(255,255,255,0.08); padding-top: 14px; }
 }
 
 /* ---------- A11y Snapshot ---------- */
@@ -1760,7 +1774,7 @@
 }
 
 .cb-feed-title{
-  margin-top: 10px;
+  margin-top: 14px;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: -0.01em;
@@ -1768,7 +1782,7 @@
 }
 
 .cb-feed-body{
-  margin-top: 6px;
+  margin-top: 12px;
   font-size: 11px;
   color: rgba(197,206,231,0.82);
   line-height: 1.45;

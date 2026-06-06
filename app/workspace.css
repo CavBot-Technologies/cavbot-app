@@ -843,7 +843,7 @@ body.cb-home-delete-open .cb-main{
 
 /* ===== Insights tiles ===== */
 .cb-home .cb-insights{
-  padding: 14px 20px 20px;
+  padding: 16px 20px 22px;
   display:grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
@@ -888,6 +888,19 @@ body.cb-home-delete-open .cb-main{
   color: rgba(197,206,231,0.80);
   line-height: 1.55;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px){
+  .cb-home .cb-insight{
+    border-left: 0;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    padding: 14px 0 0;
+  }
+  .cb-home .cb-insight:nth-child(-n+2){ border-top: 0; padding-top: 0; }
+}
+
+@media (max-width: 520px){
+  .cb-home .cb-insight:nth-child(2){ border-top: 1px solid rgba(255,255,255,0.08); padding-top: 14px; }
 }
 
 /* ===== Actions row under hero ===== */
@@ -1608,7 +1621,7 @@ html{
 .cb-home-modal{
   position: fixed;
   inset: 0;
-  z-index: 99999;
+  z-index: 120400;
   display:flex;
   align-items:center;
   justify-content:center;

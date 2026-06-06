@@ -322,7 +322,7 @@ function usePopoverDismiss(
 }
 
 function resolvePlanStatusLabel(planTier: SurfacePlanTier, trialActive: boolean, trialDaysLeft: number) {
-  if (trialActive && trialDaysLeft > 0) return "Free Trial";
+  if (trialActive && trialDaysLeft > 0) return "Free trial";
   if (planTier === "PREMIUM_PLUS") return "Premium+";
   if (planTier === "PREMIUM") return "Premium";
   return "Free";

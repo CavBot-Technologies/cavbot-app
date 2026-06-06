@@ -267,16 +267,10 @@
   border-radius: 12px;
   box-shadow: none;
   padding: 12px;
-  opacity: 0;
-  transform: translateY(6px);
-  pointer-events: none;
-  transition: opacity 140ms ease, transform 140ms ease;
-}
-
-.developerDisclosure[open] .developerPanel {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
+  transition: opacity 140ms ease, transform 140ms ease;
 }
 
 .developerPanelOpen,

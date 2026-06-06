@@ -814,7 +814,8 @@ a:focus{
   filter: brightness(0) invert(1);
 }
 
-.cb-staff-chat-icon{
+.cb-staff-chat-icon,
+.cb-chat-icon{
   width: 22px;
   height: 22px;
   display: block;
@@ -1607,7 +1608,7 @@ html body :is(
   background: rgba(3, 6, 22, 0.96);
   backdrop-filter: blur(24px);
 
-  z-index: 9999;
+  z-index: 120400;
 
   display:flex;
   flex-direction:column;
@@ -1623,7 +1624,7 @@ html body :is(
   backdrop-filter: blur(8px);
   border: 0;
   cursor: pointer;
-  z-index: 9998;
+  z-index: 120399;
 }
 
 .cb-notif-menu.is-modal,
@@ -1633,7 +1634,7 @@ html body :is(
   left: 50%;
   right: auto;
   transform: translate(-50%, -50%);
-  z-index: 9999;
+  z-index: 120400;
 }
 
 .cb-notif-menu.is-modal{

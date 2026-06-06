@@ -115,7 +115,7 @@ test("app runtime keeps deterministic analytics-before-brain order and no CDN fa
     path.join(ROOT, "app", "_components", "AppHostRuntimeMounts.tsx"),
     "utf8"
   );
-  const analyticsId = "cb-runtime-analytics-script";
+  const analyticsId = "cavbot-app-analytics-runtime";
   const brainId = "cb-runtime-brain-script";
   const analyticsIdx = runtimeSource.indexOf(analyticsId);
   const brainIdx = runtimeSource.indexOf(brainId);
