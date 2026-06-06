@@ -1403,19 +1403,19 @@ export default function AppShell({
 
 
       // PREMIUM unlocks
-      { href: "/errors", label: "Error Intelligence", hint: "JS + API stability", required: "PREMIUM" },
-      { href: "/seo", label: "Seo Performance", hint: "Indexing posture + structure", required: "PREMIUM" },
+      { href: "/errors", label: "Error Tracking", hint: "JS + API stability", required: "PREMIUM" },
+      { href: "/seo", label: "Seo Audit", hint: "Indexing posture + structure", required: "PREMIUM" },
 
 
-      { href: "/routes", label: "Routing", hint: "Discovery + crawl paths", required: "FREE" },
+      { href: "/routes", label: "Route Analytics", hint: "Discovery + crawl paths", required: "FREE" },
 
 
       // PREMIUM PLUS unlocks
-      { href: "/a11y", label: "A11y Snapshot", hint: "Audits + Contrast", required: "PREMIUM_PLUS" },
-      { href: "/insights", label: "CavBot Insights", hint: "Trends + diagnostics", required: "PREMIUM_PLUS" },
+      { href: "/a11y", label: "Accessibility Check", hint: "Audits + Contrast", required: "PREMIUM_PLUS" },
+      { href: "/insights", label: "Insights", hint: "Trends + diagnostics", required: "PREMIUM_PLUS" },
 
 
-      { href: "/404-control-room", label: "Control Room", hint: "Gameplay + leaderboard", required: "FREE" },
+      { href: "/404-control-room", label: "404 Recovery", hint: "Gameplay + leaderboard", required: "FREE" },
     ],
     []
   );
