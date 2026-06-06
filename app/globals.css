@@ -89,17 +89,6 @@
   -ms-overflow-style: none;
 }
 
-body *,
-body *::before,
-body *::after{
-  border-radius: 4px !important;
-}
-
-body svg,
-body svg *{
-  border-radius: initial !important;
-}
-
 *::-webkit-scrollbar{
   width: 0;
   height: 0;
@@ -1230,7 +1219,7 @@ html body :is(
   [class*="badge"], [class*="Badge"],
   [class*="chip"], [class*="Chip"],
   [class*="tag"], [class*="Tag"]
-):not([class*="dot"]):not([class*="Dot"]){
+):not([class*="dot"]):not([class*="Dot"]):not(.cb-badge):not(.auth-badge):not([class*="cavbot-badge"]):not([class*="CavbotBadge"]){
   border-radius: 6px !important;
 }
 

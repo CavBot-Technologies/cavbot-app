@@ -63,6 +63,17 @@ test("app shell compact badge stays on eye-only tracking", () => {
   assert.match(appShell, /<CdnBadgeEyes trackingMode="eyeOnly" \/>/);
 });
 
+test("global geometry keeps card radii without flattening badges, icons, or pseudo chevrons", () => {
+  const globals = read("app/globals.css");
+  const authCss = read("app/auth/auth.css");
+
+  assert.match(globals, /--r-lg: 4px;/);
+  assert.match(globals, /\[class\*="card"\], \[class\*="Card"\],[\s\S]*border-radius: var\(--cb-r\) !important;/);
+  assert.doesNotMatch(globals, /body \*,\s*body \*::before,\s*body \*::after\{\s*border-radius: 4px !important;/);
+  assert.match(globals, /:not\(\.cb-badge\):not\(\.auth-badge\):not\(\[class\*="cavbot-badge"\]\)/);
+  assert.match(authCss, /\.auth-sso-icon\{[\s\S]*border-radius: 999px;/);
+});
+
 test("cavcloud compact screens restore document scrolling through tablets and keep quick tools visible", () => {
   const css = read("app/cavcloud/cavcloud.css");
 
