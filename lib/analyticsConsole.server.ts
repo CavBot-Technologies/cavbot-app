@@ -136,6 +136,37 @@ function toSiteRow(row: { id: string; label: string; origin: string }): Analytic
   };
 }
 
+function workspaceSiteRows(workspace: WorkspacePayload | null): AnalyticsConsoleSite[] {
+  const rows = Array.isArray(workspace?.sites) ? workspace.sites : [];
+  return rows
+    .map((row) => toSiteRow({
+      id: row.id,
+      label: row.label,
+      origin: row.origin,
+    }))
+    .filter((site): site is AnalyticsConsoleSite => Boolean(site));
+}
+
+function mergeSiteRows(
+  primary: AnalyticsConsoleSite[],
+  fallback: AnalyticsConsoleSite[],
+): AnalyticsConsoleSite[] {
+  const merged: AnalyticsConsoleSite[] = [];
+  const seenIds = new Set<string>();
+  const seenOrigins = new Set<string>();
+
+  for (const site of [...primary, ...fallback]) {
+    const id = String(site.id || "").trim();
+    const origin = canonicalOrigin(site.origin || site.url);
+    if (!id || !origin || seenIds.has(id) || seenOrigins.has(origin)) continue;
+    seenIds.add(id);
+    seenOrigins.add(origin);
+    merged.push({ ...site, id, origin, url: origin });
+  }
+
+  return merged;
+}
+
 function pickActiveSite(args: {
   searchParams?: Record<string, string | string[] | undefined> | null;
   sites: AnalyticsConsoleSite[];
@@ -297,6 +328,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
       code: publicAnalyticsError(error),
     });
   }
+  const workspaceSites = workspaceSiteRows(workspace);
 
   const requestedProjectId =
     parseProjectId(readSearchParam(args?.searchParams, "projectId")) ||
@@ -356,8 +388,8 @@ export async function resolveAnalyticsConsoleContext(args?: {
       projectId: "",
       projectLabel: "Project unavailable",
       range,
-      sites: [],
-      activeSite: EMPTY_SITE,
+      sites: workspaceSites,
+      activeSite: pickActiveSite({ searchParams: args?.searchParams, sites: workspaceSites, workspace }),
       summary: null,
       summaryError: error,
       authError: null,
@@ -373,8 +405,8 @@ export async function resolveAnalyticsConsoleContext(args?: {
       projectId: "",
       projectLabel: "No project selected",
       range,
-      sites: [],
-      activeSite: EMPTY_SITE,
+      sites: workspaceSites,
+      activeSite: pickActiveSite({ searchParams: args?.searchParams, sites: workspaceSites, workspace }),
       summary: null,
       summaryError: new Error("PROJECT_NOT_FOUND"),
       authError: null,
@@ -406,14 +438,15 @@ export async function resolveAnalyticsConsoleContext(args?: {
       projectId: String(project.id),
       projectLabel: project.name || project.slug || `Project #${project.id}`,
       range,
-      sites: [],
-      activeSite: EMPTY_SITE,
+      sites: workspaceSites,
+      activeSite: pickActiveSite({ searchParams: args?.searchParams, sites: workspaceSites, workspace }),
       summary: null,
       summaryError: error,
       authError: null,
     };
   }
-  const sites = dbSites.map(toSiteRow).filter((site): site is AnalyticsConsoleSite => Boolean(site));
+  const dbSiteRows = dbSites.map(toSiteRow).filter((site): site is AnalyticsConsoleSite => Boolean(site));
+  const sites = mergeSiteRows(dbSiteRows, workspaceSites);
   const activeSite = pickActiveSite({ searchParams: args?.searchParams, sites, workspace });
 
   let summary: ProjectSummary | null = null;
