@@ -49,8 +49,11 @@ export default function AppHostRuntimeMounts() {
       <Suspense fallback={null}>
         <GlobalFooterMount />
       </Suspense>
+      <Script id="cavbot-app-analytics-bootstrap" strategy="beforeInteractive">
+        {`window.CAVBOT_API_URL=window.CAVBOT_API_URL||"/api/embed/analytics";`}
+      </Script>
       <Script
-        id="cb-runtime-analytics-script"
+        id="cavbot-app-analytics-runtime"
         src={INTERNAL_RUNTIME_ASSETS.scripts.analytics}
         strategy="afterInteractive"
         data-project-key={RUNTIME_PROJECT_KEY || undefined}

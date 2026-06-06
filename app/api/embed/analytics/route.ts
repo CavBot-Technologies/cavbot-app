@@ -7,6 +7,7 @@ import { verifyEmbedToken } from "@/lib/security/embedToken";
 import { RateLimitEnv } from "@/rateLimit";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import { canonicalizeWebsiteContextUrl } from "@/originMatch";
+import { recordAnalyticsEmbedActivityBestEffort } from "@/lib/security/embedAnalyticsTracker.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -276,6 +277,7 @@ async function registerVerifiedSiteForWorkerBestEffort(
 async function proxyToRemote(args: {
   req: NextRequest;
   payload: Record<string, unknown> | null;
+  activityPayload?: Record<string, unknown> | null;
   headers: Record<string, string>;
   corsOrigin: string | null;
   verification?: Extract<EmbedVerifierResult, { ok: true }>;
@@ -283,7 +285,7 @@ async function proxyToRemote(args: {
   const { baseUrl } = getEnv();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
-  const upstreamPayload = args.payload;
+  const upstreamPayload = args.verification ? stripUpstreamSitePublicIds(args.payload) : args.payload;
 
   try {
     const send = () =>
@@ -308,6 +310,20 @@ async function proxyToRemote(args: {
     ) {
       response = await send();
       text = await response.text().catch(() => "");
+    }
+    if (response.ok) {
+      if (args.verification) {
+        await recordAnalyticsEmbedActivityBestEffort({
+          req: args.req,
+          accountId: args.verification.accountId,
+          projectId: args.verification.projectId,
+          siteId: args.verification.siteId,
+          origin: args.verification.origin || args.verification.siteOrigin,
+          siteOrigin: args.verification.siteOrigin,
+          payload: args.activityPayload || args.payload,
+          keyLast4: args.verification.keyLast4,
+        });
+      }
     }
     const responseHeaders: Record<string, string> = {
       "Content-Type": response.headers.get("content-type") || "application/json",
@@ -447,10 +463,10 @@ async function handlePost(req: NextRequest, ctx: { env?: RateLimitEnv }) {
 
   try {
     const canonicalPayload = canonicalizeVerifiedPayload(payload, verification);
-    const upstreamPayload = stripUpstreamSitePublicIds(canonicalPayload);
     return await proxyToRemote({
       req,
-      payload: upstreamPayload,
+      payload: canonicalPayload,
+      activityPayload: canonicalPayload,
       headers: buildRemoteHeaders(req, verification),
       corsOrigin: verification.origin ?? req.headers.get("origin"),
       verification,
