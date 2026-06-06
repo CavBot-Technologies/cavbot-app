@@ -1,7 +1,7 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getAllowedOrigins, isApiAuthError, requireSession, requireUser } from "@/lib/apiAuth";
+import { getAllowedOrigins, isApiAuthError, requireLowRiskWriteSession, requireUser } from "@/lib/apiAuth";
 import { mintEntertainmentAssetToken } from "@/lib/arcade/entTokens";
 import { normalizeOriginStrict } from "@/originMatch";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -43,7 +43,7 @@ function allowedOriginsSet(): Set<string> {
 
 export async function POST(req: NextRequest) {
   try {
-    const sess = await requireSession(req);
+    const sess = await requireLowRiskWriteSession(req);
     requireUser(sess);
 
     const originHeader = req.headers.get("origin");
