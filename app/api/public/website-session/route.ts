@@ -11,6 +11,7 @@ export const runtime = "nodejs";
 const ALLOWED_ORIGINS = new Set([
   "https://cavbot.io",
   "https://www.cavbot.io",
+  "https://brand.cavbot.io",
 ]);
 
 const NO_STORE_HEADERS: Record<string, string> = {
@@ -86,6 +87,8 @@ export async function GET(req: Request) {
   const username = cleanString(user.username, 80);
   const avatarImage = cleanString(user.avatarImage, 2000);
   const avatarTone = cleanString(user.avatarTone, 32).toLowerCase() || "lime";
+  const publicProfileEnabled =
+    typeof user.publicProfileEnabled === "boolean" ? user.publicProfileEnabled : false;
 
   return json(
     req,
@@ -98,6 +101,7 @@ export async function GET(req: Request) {
         initials: initialsFor(user),
         avatarImage: avatarImage || null,
         avatarTone,
+        publicProfileEnabled,
       },
     },
     200,

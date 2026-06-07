@@ -193,7 +193,12 @@ export async function GET(req: Request) {
     const username = normalizeUsername(raw);
     if (!username) return json({ ok: true, markdown: null, updatedAt: null, revision: 0 }, { status: 200 });
     if (!isBasicUsername(username)) return json({ ok: true, markdown: null, updatedAt: null, revision: 0 }, { status: 200 });
-    if ((RESERVED_ROUTE_SLUGS as readonly string[]).includes(username)) return json({ ok: true, markdown: null, updatedAt: null, revision: 0 }, { status: 200 });
+    if (
+      (RESERVED_ROUTE_SLUGS as readonly string[]).includes(username) &&
+      !isAllowedReservedPublicUsername(username, OWNER_USERNAME)
+    ) {
+      return json({ ok: true, markdown: null, updatedAt: null, revision: 0 }, { status: 200 });
+    }
     if (isReservedUsername(username) && !isAllowedReservedPublicUsername(username, OWNER_USERNAME)) {
       return json({ ok: true, markdown: null, updatedAt: null, revision: 0 }, { status: 200 });
     }

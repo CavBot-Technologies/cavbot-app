@@ -471,7 +471,12 @@ export default async function PublicCavbotProfilePage({
   const username = normalizeUsername(raw);
   if (!username) notFound();
 
-  if ((RESERVED_ROUTE_SLUGS as readonly string[]).includes(username)) notFound();
+  if (
+    (RESERVED_ROUTE_SLUGS as readonly string[]).includes(username) &&
+    !isAllowedReservedPublicUsername(username, OWNER_USERNAME)
+  ) {
+    notFound();
+  }
   if (isReservedUsername(username) && !isAllowedReservedPublicUsername(username, OWNER_USERNAME)) notFound();
   if (!isBasicUsername(username)) notFound();
 

@@ -232,7 +232,8 @@ function isRoutablePublicUsernameCandidate(raw: string, candidate: string) {
   return (
     Boolean(candidate) &&
     isBasicUsername(candidate) &&
-    !((RESERVED_ROUTE_SLUGS as readonly string[]).includes(candidate)) &&
+    (!((RESERVED_ROUTE_SLUGS as readonly string[]).includes(candidate)) ||
+      isAllowedReservedPublicUsername(candidate, OWNER_USERNAME)) &&
     (!isReservedUsername(candidate) || isAllowedReservedPublicUsername(candidate, OWNER_USERNAME)) &&
     !raw.includes(".") &&
     !raw.includes("/") &&
@@ -487,6 +488,15 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // The CavBot owner profile is a first-class public profile. Route it directly
+  // instead of waiting on the generic username-existence probe.
+  if (pathname === "/cavbot" || pathname === "/cavbot/") {
+    const url = req.nextUrl.clone();
+    url.pathname = "/u/cavbot";
+    url.search = search || "";
+    return NextResponse.rewrite(url);
+  }
+
   // ------------------------------------------------------------
   // CANONICAL PROFILE URL
   // Redirect /u/{username} -> /{username} for users.
@@ -496,6 +506,13 @@ export async function middleware(req: NextRequest) {
     if (parts.length === 2 && String(parts[0] || "").toLowerCase() === "u") {
       const raw = String(parts[1] || "");
       const candidate = normalizeUsername(raw);
+
+      if (candidate === "cavbot" && isAllowedReservedPublicUsername(candidate, OWNER_USERNAME)) {
+        const url = req.nextUrl.clone();
+        url.pathname = "/cavbot";
+        url.search = search || "";
+        return NextResponse.redirect(url, 308);
+      }
 
       if (isRoutablePublicUsernameCandidate(raw, candidate) && await profileExists(req, candidate)) {
         const url = req.nextUrl.clone();

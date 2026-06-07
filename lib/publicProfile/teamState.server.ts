@@ -66,7 +66,12 @@ function canUseUsername(raw: string) {
   if (isUnsafeProfileSlug(raw)) return false;
   const username = normalizeUsername(raw);
   if (!username || !isBasicUsername(username)) return false;
-  if ((RESERVED_ROUTE_SLUGS as readonly string[]).includes(username)) return false;
+  if (
+    (RESERVED_ROUTE_SLUGS as readonly string[]).includes(username) &&
+    !isAllowedReservedPublicUsername(username, OWNER_USERNAME)
+  ) {
+    return false;
+  }
   if (isReservedUsername(username) && !isAllowedReservedPublicUsername(username, OWNER_USERNAME)) return false;
   return true;
 }

@@ -29,6 +29,21 @@ type RawDb = {
   $queryRaw: <T = unknown>(query: TemplateStringsArray, ...params: unknown[]) => Promise<T>;
 };
 
+const PUBLIC_PROFILE_AUTH_LOOKUP_TIMEOUT_MS = 1_500;
+const PUBLIC_PROFILE_ACCOUNT_LOOKUP_TIMEOUT_MS = 1_500;
+
+async function withPublicProfileDeadline<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timeout = setTimeout(() => reject(new Error("PUBLIC_PROFILE_LOOKUP_TIMEOUT")), timeoutMs);
+    });
+    return await Promise.race([promise, deadline]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 function tierDisplayNameFromTier(rawTier: unknown): string | null {
   const s = String(rawTier ?? "").trim();
   if (!s) return null;
@@ -782,15 +797,21 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
     if (opts.includeLinkedin) select.linkedinUrl = true;
     if (opts.includeCustomLink) select.customLinkUrl = true;
 
-    const row = (await prisma.user.findUnique({
-      where: { username },
-      select,
-    })) as unknown as PublicUserRow | null;
+    const row = (await withPublicProfileDeadline(
+      prisma.user.findUnique({
+        where: { username },
+        select,
+      }),
+      PUBLIC_PROFILE_AUTH_LOOKUP_TIMEOUT_MS,
+    )) as unknown as PublicUserRow | null;
     return { row, settings: publicProfileSettingsFromUserRow(row) };
   };
 
   if (authPool) {
-    const authUser = await findPublicProfileUserByUsername(authPool, username).catch(() => null);
+    const authUser = await withPublicProfileDeadline(
+      findPublicProfileUserByUsername(authPool, username),
+      PUBLIC_PROFILE_AUTH_LOOKUP_TIMEOUT_MS,
+    ).catch(() => null);
     if (authUser?.id && authUser.username) {
       user = authUser as unknown as PublicUserRow;
       settings = publicProfileSettingsFromUserRow(user);
@@ -839,20 +860,22 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
 
             const basicSelectWithLinkedin: Record<string, boolean> = { ...basicSelect, linkedinUrl: true };
 
-            const basicWithLinkedin = await prisma.user
-              .findUnique({
+            const basicWithLinkedin = await withPublicProfileDeadline(
+              prisma.user.findUnique({
                 where: { username },
                 select: basicSelectWithLinkedin,
-              })
-              .catch(() => null);
+              }),
+              PUBLIC_PROFILE_AUTH_LOOKUP_TIMEOUT_MS,
+            ).catch(() => null);
 
             const basic = (basicWithLinkedin ??
-              (await prisma.user
-                .findUnique({
+              (await withPublicProfileDeadline(
+                prisma.user.findUnique({
                   where: { username },
                   select: basicSelect,
-                })
-                .catch(() => null))) as unknown as PublicUserRow | null;
+                }),
+                PUBLIC_PROFILE_AUTH_LOOKUP_TIMEOUT_MS,
+              ).catch(() => null))) as unknown as PublicUserRow | null;
 
             if (!basic?.id || !basic.username) return null;
 
@@ -905,11 +928,17 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
   }
 
   if (!accountId && authPool) {
-    const memberships = await findMembershipsForUser(authPool, user.id).catch(() => []);
+    const memberships = await withPublicProfileDeadline(
+      findMembershipsForUser(authPool, user.id),
+      PUBLIC_PROFILE_ACCOUNT_LOOKUP_TIMEOUT_MS,
+    ).catch(() => []);
 
     if (preferredProjectId != null) {
       for (const membership of memberships) {
-        const project = await findActiveProjectByIdForAccount(authPool, membership.accountId, preferredProjectId).catch(() => null);
+        const project = await withPublicProfileDeadline(
+          findActiveProjectByIdForAccount(authPool, membership.accountId, preferredProjectId),
+          PUBLIC_PROFILE_ACCOUNT_LOOKUP_TIMEOUT_MS,
+        ).catch(() => null);
         if (project?.id) {
           accountId = membership.accountId;
           break;
@@ -952,7 +981,10 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
         .catch(() => null)) || null;
   }
   if (!account && accountId && authPool) {
-    const authAccount = await findAccountById(authPool, accountId).catch(() => null);
+    const authAccount = await withPublicProfileDeadline(
+      findAccountById(authPool, accountId),
+      PUBLIC_PROFILE_ACCOUNT_LOOKUP_TIMEOUT_MS,
+    ).catch(() => null);
     if (authAccount) {
       account = {
         name: authAccount.name,

@@ -61,8 +61,13 @@ export async function GET(req: Request) {
     const username = normalizeUsername(raw);
     if (!username) return jsonNoStore({ ok: true, exists: false }, { status: 200 });
     if (!isBasicUsername(username)) return jsonNoStore({ ok: true, exists: false }, { status: 200 });
-    // Never allow route slugs to be claimed by the public profile rewrite.
-    if ((RESERVED_ROUTE_SLUGS as readonly string[]).includes(username)) return jsonNoStore({ ok: true, exists: false }, { status: 200 });
+    // Never allow route slugs to be claimed by the public profile rewrite, except the configured owner profile.
+    if (
+      (RESERVED_ROUTE_SLUGS as readonly string[]).includes(username) &&
+      !isAllowedReservedPublicUsername(username, OWNER_USERNAME)
+    ) {
+      return jsonNoStore({ ok: true, exists: false }, { status: 200 });
+    }
     // Allow the configured owner username even if reserved by brand rules.
     if (isReservedUsername(username) && !isAllowedReservedPublicUsername(username, OWNER_USERNAME)) {
       return jsonNoStore({ ok: true, exists: false }, { status: 200 });

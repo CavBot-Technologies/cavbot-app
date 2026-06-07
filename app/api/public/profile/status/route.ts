@@ -59,7 +59,12 @@ export async function GET(req: Request) {
     const username = normalizeUsername(raw);
     if (!username) return jsonNoStore({ ok: true, enabled: false, mode: null, note: null, updatedAtISO: null }, { status: 200 });
     if (!isBasicUsername(username)) return jsonNoStore({ ok: true, enabled: false, mode: null, note: null, updatedAtISO: null }, { status: 200 });
-    if ((RESERVED_ROUTE_SLUGS as readonly string[]).includes(username)) return jsonNoStore({ ok: true, enabled: false, mode: null, note: null, updatedAtISO: null }, { status: 200 });
+    if (
+      (RESERVED_ROUTE_SLUGS as readonly string[]).includes(username) &&
+      !isAllowedReservedPublicUsername(username, OWNER_USERNAME)
+    ) {
+      return jsonNoStore({ ok: true, enabled: false, mode: null, note: null, updatedAtISO: null }, { status: 200 });
+    }
     if (isReservedUsername(username) && !isAllowedReservedPublicUsername(username, OWNER_USERNAME)) {
       return jsonNoStore({ ok: true, enabled: false, mode: null, note: null, updatedAtISO: null }, { status: 200 });
     }

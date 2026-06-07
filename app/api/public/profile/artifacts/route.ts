@@ -76,7 +76,12 @@ export async function GET(req: NextRequest) {
     const username = normalizeUsername(usernameRaw);
     if (!username) return json({ ok: true, items: [] }, 200);
     if (!isBasicUsername(username)) return json({ ok: true, items: [] }, 200);
-    if ((RESERVED_ROUTE_SLUGS as readonly string[]).includes(username)) return json({ ok: true, items: [] }, 200);
+    if (
+      (RESERVED_ROUTE_SLUGS as readonly string[]).includes(username) &&
+      !isAllowedReservedPublicUsername(username, OWNER_USERNAME)
+    ) {
+      return json({ ok: true, items: [] }, 200);
+    }
     if (isReservedUsername(username) && !isAllowedReservedPublicUsername(username, OWNER_USERNAME)) {
       return json({ ok: true, items: [] }, 200);
     }
