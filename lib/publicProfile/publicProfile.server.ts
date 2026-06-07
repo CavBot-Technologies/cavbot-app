@@ -5,6 +5,7 @@ import {
   findAccountById,
   findActiveProjectByIdForAccount,
   findMembershipsForUser,
+  findPublicProfileUserByEmail,
   findPublicProfileUserByUsername,
   getAuthPool,
   pickPrimaryMembership,
@@ -31,6 +32,10 @@ type RawDb = {
 
 const PUBLIC_PROFILE_AUTH_LOOKUP_TIMEOUT_MS = 1_500;
 const PUBLIC_PROFILE_ACCOUNT_LOOKUP_TIMEOUT_MS = 1_500;
+const OWNER_PUBLIC_PROFILE_USERNAME = "cavbot";
+const OWNER_PUBLIC_PROFILE_EMAIL = String(process.env.CAVBOT_OWNER_EMAIL || process.env.CAVBOT_ADMIN_ACCOUNT_EMAIL || "")
+  .trim()
+  .toLowerCase();
 
 async function withPublicProfileDeadline<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -355,6 +360,115 @@ function posture(label: string, tone: Tone): PublicProfilePosture {
 }
 
 const DEFAULT_PROFILE_README_MAX_BYTES = 64 * 1024;
+
+export function buildOwnerBootstrapPublicProfile(username: string): PublicProfileViewModel {
+  const displayName = "CavBot Owner";
+  const config: PublicProfileConfig = {
+    showReadme: true,
+    showWorkspaceSnapshot: true,
+    showHealthOverview: true,
+    showCapabilities: true,
+    showArtifacts: true,
+    showPlanTier: true,
+    showBio: true,
+    showIdentityLinks: true,
+    showIdentityLocation: false,
+    showIdentityEmail: false,
+  };
+  const waiting = posture("Waiting for telemetry", "neutral");
+  const modules: PublicCapabilityItem[] = [
+    {
+      id: "routes",
+      label: "Routes Intelligence",
+      description: "Route topology, crawl reliability, and 404 pressure across monitored paths.",
+      stateLabel: "Waiting for telemetry",
+      tone: "neutral",
+    },
+    {
+      id: "reliability",
+      label: "Reliability Monitoring",
+      description: "Crash-free session posture and live stability rollups for monitored surfaces.",
+      stateLabel: "Waiting for telemetry",
+      tone: "neutral",
+    },
+    {
+      id: "telemetry-stream",
+      label: "Telemetry Stream",
+      description: "Live ingest stream that powers capability posture and public health rollups.",
+      stateLabel: "Waiting for telemetry",
+      tone: "neutral",
+    },
+  ];
+
+  return {
+    visibility: "public",
+    config,
+    username,
+    displayName,
+    isPremiumPlus: false,
+    bio: "CavBot owner profile.",
+    avatar: { tone: "lime", image: null, initials: "CB" },
+    status: null,
+    readme: {
+      markdown: buildDefaultPublicProfileReadme({
+        displayName,
+        monitoredSitesCount: null,
+        updatedRelative: null,
+      }),
+      updatedAtISO: null,
+      isDefault: true,
+      revision: 0,
+    },
+    cta: null,
+    identity: {
+      details: [
+        {
+          kind: "cavbot",
+          label: "CavBot",
+          value: `app.cavbot.io/${username}`,
+          href: `https://app.cavbot.io/${username}`,
+        },
+      ],
+      descriptor: "Owner profile",
+    },
+    sections: {
+      workspaceSnapshot: {
+        workspaceName: "CavBot",
+        monitoredSitesCount: null,
+        planTierLabel: null,
+        status: posture("Profile online", "good"),
+      },
+      healthOverview: {
+        entitlements: {
+          insights: false,
+          errors: false,
+          seo: false,
+          a11y: false,
+        },
+        guardian: waiting,
+        guardianScore: null,
+        coverage: waiting,
+        performance: waiting,
+        accessibility: posture("Locked by tier", "neutral"),
+        routing: waiting,
+        reliability: waiting,
+        errors: posture("Locked by tier", "neutral"),
+        seo: posture("Locked by tier", "neutral"),
+        updatedRelative: "Waiting for telemetry",
+      },
+      operationalHistory: null,
+      capabilities: {
+        activeCount: 0,
+        totalCount: modules.length,
+        modules,
+      },
+      artifacts: { items: [] },
+    },
+    trust: {
+      lastVerifiedRelative: "Waiting for telemetry",
+    },
+  };
+}
 
 function clampUtf8Bytes(input: string, maxBytes: number) {
   const s = String(input ?? "");
@@ -746,6 +860,7 @@ function routingPosture(summary: unknown): PublicProfilePosture {
 async function buildPublicProfileUncached(username: string): Promise<PublicProfileViewModel | null> {
   let user: PublicUserRow | null = null;
   let settings: PublicProfileSettings = { ...DEFAULT_PUBLIC_PROFILE_SETTINGS };
+  const isOwnerPublicProfile = username === OWNER_PUBLIC_PROFILE_USERNAME;
   const authPool = (() => {
     try {
       return getAuthPool();
@@ -797,13 +912,23 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
     if (opts.includeLinkedin) select.linkedinUrl = true;
     if (opts.includeCustomLink) select.customLinkUrl = true;
 
-    const row = (await withPublicProfileDeadline(
+    let row = (await withPublicProfileDeadline(
       prisma.user.findUnique({
         where: { username },
         select,
       }),
       PUBLIC_PROFILE_AUTH_LOOKUP_TIMEOUT_MS,
     )) as unknown as PublicUserRow | null;
+    if (!row?.id && isOwnerPublicProfile && OWNER_PUBLIC_PROFILE_EMAIL) {
+      row = (await withPublicProfileDeadline(
+        prisma.user.findUnique({
+          where: { email: OWNER_PUBLIC_PROFILE_EMAIL },
+          select,
+        }),
+        PUBLIC_PROFILE_AUTH_LOOKUP_TIMEOUT_MS,
+      )) as unknown as PublicUserRow | null;
+      if (row?.id) row = { ...row, username };
+    }
     return { row, settings: publicProfileSettingsFromUserRow(row) };
   };
 
@@ -815,6 +940,15 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
     if (authUser?.id && authUser.username) {
       user = authUser as unknown as PublicUserRow;
       settings = publicProfileSettingsFromUserRow(user);
+    } else if (isOwnerPublicProfile && OWNER_PUBLIC_PROFILE_EMAIL) {
+      const ownerUser = await withPublicProfileDeadline(
+        findPublicProfileUserByEmail(authPool, OWNER_PUBLIC_PROFILE_EMAIL),
+        PUBLIC_PROFILE_AUTH_LOOKUP_TIMEOUT_MS,
+      ).catch(() => null);
+      if (ownerUser?.id) {
+        user = { ...(ownerUser as unknown as PublicUserRow), username };
+        settings = publicProfileSettingsFromUserRow(user);
+      }
     }
   }
 
@@ -860,15 +994,24 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
 
             const basicSelectWithLinkedin: Record<string, boolean> = { ...basicSelect, linkedinUrl: true };
 
-            const basicWithLinkedin = await withPublicProfileDeadline(
+            let basicWithLinkedin = await withPublicProfileDeadline(
               prisma.user.findUnique({
                 where: { username },
                 select: basicSelectWithLinkedin,
               }),
               PUBLIC_PROFILE_AUTH_LOOKUP_TIMEOUT_MS,
             ).catch(() => null);
+            if (!basicWithLinkedin && isOwnerPublicProfile && OWNER_PUBLIC_PROFILE_EMAIL) {
+              basicWithLinkedin = await withPublicProfileDeadline(
+                prisma.user.findUnique({
+                  where: { email: OWNER_PUBLIC_PROFILE_EMAIL },
+                  select: basicSelectWithLinkedin,
+                }),
+                PUBLIC_PROFILE_AUTH_LOOKUP_TIMEOUT_MS,
+              ).catch(() => null);
+            }
 
-            const basic = (basicWithLinkedin ??
+            const basicRaw = (basicWithLinkedin ??
               (await withPublicProfileDeadline(
                 prisma.user.findUnique({
                   where: { username },
@@ -876,8 +1019,12 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
                 }),
                 PUBLIC_PROFILE_AUTH_LOOKUP_TIMEOUT_MS,
               ).catch(() => null))) as unknown as PublicUserRow | null;
+            const basic = basicRaw?.id && isOwnerPublicProfile ? { ...basicRaw, username } : basicRaw;
 
-            if (!basic?.id || !basic.username) return null;
+            if (!basic?.id || !basic.username) {
+              if (isOwnerPublicProfile) return buildOwnerBootstrapPublicProfile(username);
+              return null;
+            }
 
             settings = await readPublicProfileSettingsFallback(prisma as unknown as RawDb, String(basic.id));
             user = basic as unknown as PublicUserRow;
@@ -887,7 +1034,10 @@ async function buildPublicProfileUncached(username: string): Promise<PublicProfi
     }
   }
 
-  if (!user?.id || !user.username) return null;
+  if (!user?.id || !user.username) {
+    if (isOwnerPublicProfile) return buildOwnerBootstrapPublicProfile(username);
+    return null;
+  }
 
   const displayNameRaw = String(user.displayName || user.fullName || "").trim();
   const displayName = displayNameRaw || "CavBot Operator";

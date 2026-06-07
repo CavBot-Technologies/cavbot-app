@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { unstable_noStore as noStore } from "next/cache";
 
-import { findUserByUsername, getAuthPool } from "@/lib/authDb";
+import { findUserByEmail, findUserByUsername, getAuthPool } from "@/lib/authDb";
 import { prisma } from "@/lib/prisma";
 import {
   isAllowedReservedPublicUsername,
@@ -17,6 +17,9 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const OWNER_USERNAME = normalizeUsername(process.env.CAVBOT_OWNER_USERNAME || "");
+const OWNER_EMAIL = String(process.env.CAVBOT_OWNER_EMAIL || process.env.CAVBOT_ADMIN_ACCOUNT_EMAIL || "")
+  .trim()
+  .toLowerCase();
 const PROFILE_EXISTS_DB_TIMEOUT_MS = 3_000;
 const PROFILE_LOOKUP_TIMEOUT = Symbol("PROFILE_LOOKUP_TIMEOUT");
 
@@ -72,6 +75,9 @@ export async function GET(req: Request) {
     if (isReservedUsername(username) && !isAllowedReservedPublicUsername(username, OWNER_USERNAME)) {
       return jsonNoStore({ ok: true, exists: false }, { status: 200 });
     }
+    if (username === "cavbot") {
+      return jsonNoStore({ ok: true, exists: true }, { status: 200 });
+    }
 
     try {
       const authUser = await withProfileLookupDeadline(findUserByUsername(getAuthPool(), username).catch(() => null));
@@ -81,6 +87,15 @@ export async function GET(req: Request) {
       if (authUser?.id) {
         return jsonNoStore({ ok: true, exists: true }, { status: 200 });
       }
+      if (username === "cavbot" && OWNER_EMAIL) {
+        const ownerUser = await withProfileLookupDeadline(findUserByEmail(getAuthPool(), OWNER_EMAIL).catch(() => null));
+        if (ownerUser === PROFILE_LOOKUP_TIMEOUT) {
+          return jsonNoStore({ ok: true, exists: true }, { status: 200 });
+        }
+        if (ownerUser?.id) {
+          return jsonNoStore({ ok: true, exists: true }, { status: 200 });
+        }
+      }
 
       const user = await withProfileLookupDeadline(
         prisma.user.findUnique({
@@ -89,7 +104,21 @@ export async function GET(req: Request) {
         })
       );
       if (user === PROFILE_LOOKUP_TIMEOUT) {
-        return jsonNoStore({ ok: true, exists: false }, { status: 200 });
+        return jsonNoStore({ ok: true, exists: username === "cavbot" }, { status: 200 });
+      }
+      if (!user?.id && username === "cavbot" && OWNER_EMAIL) {
+        const ownerUser = await withProfileLookupDeadline(
+          prisma.user.findUnique({
+            where: { email: OWNER_EMAIL },
+            select: { id: true },
+          })
+        );
+        if (ownerUser === PROFILE_LOOKUP_TIMEOUT) {
+          return jsonNoStore({ ok: true, exists: true }, { status: 200 });
+        }
+        if (ownerUser?.id) {
+          return jsonNoStore({ ok: true, exists: true }, { status: 200 });
+        }
       }
 
       // Rewrite /{username} when the username exists. Visibility is handled inside the public profile page
@@ -105,7 +134,7 @@ export async function GET(req: Request) {
           .catch(() => null)
       );
 
-	      if (basic === PROFILE_LOOKUP_TIMEOUT) return jsonNoStore({ ok: true, exists: false }, { status: 200 });
+	      if (basic === PROFILE_LOOKUP_TIMEOUT) return jsonNoStore({ ok: true, exists: username === "cavbot" }, { status: 200 });
 	      if (!basic?.id) return jsonNoStore({ ok: true, exists: false }, { status: 200 });
 	      return jsonNoStore({ ok: true, exists: true }, { status: 200 });
 	    }
