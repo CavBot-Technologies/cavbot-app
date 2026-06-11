@@ -13,6 +13,7 @@ import CavBotLoadingScreen from "../../components/CavBotLoadingScreen";
 
 type DeviceMode = "desktop" | "tablet" | "phone";
 type SourceMode = "cavcloud" | "cavsafe";
+type AuthStatus = "checking" | "signed-in" | "signed-out";
 
 type FileNode = {
   id: string;
@@ -52,6 +53,7 @@ type WorkspaceFile = {
 
 type AuthMeResponse = {
   ok?: boolean;
+  authenticated?: boolean;
   user?: {
     displayName?: unknown;
     username?: unknown;
@@ -513,6 +515,7 @@ export default function LivePage() {
   const [sourceAssetMode, setSourceAssetMode] = useState<SourceMode | null>(null);
   const [disableJs, setDisableJs] = useState<boolean>(false);
   const [blockExternal, setBlockExternal] = useState<boolean>(false);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
   const [accountOpen, setAccountOpen] = useState(false);
   const [profileFullName, setProfileFullName] = useState<string>("");
   const [profileUsername, setProfileUsername] = useState<string>("");
@@ -570,6 +573,7 @@ export default function LivePage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const hasManualPreview = Boolean(html.trim() || css.trim() || js.trim());
   const isPreviewLive = mountMode ? mountBootstrapped : hasManualPreview;
+  const isAuthenticated = authStatus === "signed-in";
   const accountInitials = useMemo(
     () => deriveAccountInitials(profileFullName, profileUsername, initials),
     [initials, profileFullName, profileUsername]
@@ -578,6 +582,15 @@ export default function LivePage() {
     () => String(profileTone || "lime").trim().toLowerCase() || "lime",
     [profileTone]
   );
+
+  const goToLogin = useCallback(() => {
+    setAccountOpen(false);
+    const next =
+      typeof window !== "undefined"
+        ? `${window.location.pathname}${window.location.search || ""}`
+        : "/cavcode-viewer";
+    router.push(`/auth?mode=login&next=${encodeURIComponent(next)}`);
+  }, [router]);
 
   const toast = useCallback((msg: string, tone: "good" | "watch" | "bad" = "good") => {
     setStatus({ msg, tone });
@@ -621,7 +634,12 @@ export default function LivePage() {
         headers: { Accept: "application/json" },
       });
       const data = (await res.json().catch(() => null)) as AuthMeResponse | null;
-      if (!res.ok || !data?.ok) return;
+      if (!res.ok || !data?.ok || data.authenticated === false || !data.user) {
+        setAuthStatus("signed-out");
+        setProfileAvatar("");
+        setProfilePublicEnabled(null);
+        return;
+      }
 
       const nextFullName = String(data?.user?.displayName || "").trim();
       const nextUsername = String(data?.user?.username || "").trim().toLowerCase();
@@ -630,6 +648,7 @@ export default function LivePage() {
       setProfileFullName(nextFullName);
       setProfileUsername(nextUsername);
       setInitials(nextInitials);
+      setAuthStatus("signed-in");
 
       if (typeof data?.user?.avatarTone === "string") {
         setProfileTone(data.user.avatarTone.trim().toLowerCase() || "lime");
@@ -642,7 +661,11 @@ export default function LivePage() {
       if (typeof data?.user?.publicProfileEnabled === "boolean") {
         setProfilePublicEnabled(data.user.publicProfileEnabled);
       }
-    } catch {}
+    } catch {
+      setAuthStatus("signed-out");
+      setProfileAvatar("");
+      setProfilePublicEnabled(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -706,21 +729,27 @@ export default function LivePage() {
   }, []);
 
   const publicProfileHref = useMemo(() => {
+    if (!isAuthenticated) return "";
     return buildCanonicalPublicProfileHref(profileUsername);
-  }, [profileUsername]);
+  }, [isAuthenticated, profileUsername]);
   const profileMenuLabel = useMemo(() => {
+    if (!isAuthenticated) return "Log in";
     if (profilePublicEnabled === null) return "Profile";
     return profilePublicEnabled ? "Public Profile" : "Private Profile";
-  }, [profilePublicEnabled]);
+  }, [isAuthenticated, profilePublicEnabled]);
 
   const onOpenAccountSettings = useCallback(() => {
+    if (!isAuthenticated) {
+      goToLogin();
+      return;
+    }
     setAccountOpen(false);
     if (publicProfileHref) {
       openCanonicalPublicProfileWindow({ href: publicProfileHref, fallbackHref: "/settings?tab=account" });
       return;
     }
     router.push("/settings?tab=account");
-  }, [publicProfileHref, router]);
+  }, [goToLogin, isAuthenticated, publicProfileHref, router]);
 
   const onLogout = useCallback(async () => {
     setAccountOpen(false);
@@ -1009,6 +1038,10 @@ export default function LivePage() {
   }, []);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      window.setTimeout(() => setCavsafeOwnerStatus("unknown"), 0);
+      return;
+    }
     if (sourceMode !== "cavsafe") return;
     let cancelled = false;
     window.setTimeout(() => {
@@ -1032,9 +1065,10 @@ export default function LivePage() {
     return () => {
       cancelled = true;
     };
-  }, [sourceMode]);
+  }, [isAuthenticated, sourceMode]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     if (mountMode) return;
     if (mountDisabledByQuery) return;
     if (autoMountAttemptedRef.current) return;
@@ -1080,7 +1114,7 @@ export default function LivePage() {
     return () => {
       cancelled = true;
     };
-  }, [mountMode, mountDisabledByQuery]);
+  }, [isAuthenticated, mountMode, mountDisabledByQuery]);
 
   useEffect(() => {
     const hasScope = mountProjectId != null || String(mountShareId || "").trim().length > 0;
@@ -1169,6 +1203,24 @@ export default function LivePage() {
 
   // Load CavCloud/CavSafe code files from local caches and refresh on updates.
   useEffect(() => {
+    if (authStatus === "checking") return;
+    if (!isAuthenticated) {
+      remoteCavFilesRef.current.cavcloud = [];
+      remoteCavFilesRef.current.cavsafe = [];
+      remoteCavFilesFetchedAtRef.current.cavcloud = 0;
+      remoteCavFilesFetchedAtRef.current.cavsafe = 0;
+      lastCavSigRef.current = "";
+      window.setTimeout(() => {
+        setCavFiles([]);
+        setCavAllFiles([]);
+        setCavSelectedHtml("");
+        setCavSelectedCss("");
+        setCavSelectedJs("");
+        setBooting(false);
+      }, 0);
+      return;
+    }
+
     let cancelled = false;
 
     const collectLocalCandidates = (): FileNode[] => {
@@ -1290,11 +1342,14 @@ export default function LivePage() {
       window.removeEventListener("cb:workspace", onWorkspace as EventListener);
       window.clearInterval(poll);
     };
-  }, [sourceMode, cavSelectedHtml, cavsafeOwnerStatus, fetchRemoteDriveFileNodes]);
+  }, [authStatus, isAuthenticated, sourceMode, cavSelectedHtml, cavsafeOwnerStatus, fetchRemoteDriveFileNodes]);
 
   const loadSourceTextFile = useCallback(
     async (path: string): Promise<string> => {
       const normalizedPath = normalizePath(path);
+      if (!isAuthenticated) {
+        throw new Error(`Log in to load files from ${sourceLabel(sourceMode)}.`);
+      }
       if (sourceMode === "cavsafe" && cavsafeOwnerStatus === "denied") {
         throw new Error("CavSafe upload is owner-only in this viewer.");
       }
@@ -1325,7 +1380,7 @@ export default function LivePage() {
       }
       return await res.text();
     },
-    [sourceMode, cavsafeOwnerStatus, cavFiles]
+    [isAuthenticated, sourceMode, cavsafeOwnerStatus, cavFiles]
   );
 
   const loadHtmlFromSourcePath = useCallback(
@@ -1677,8 +1732,9 @@ export default function LivePage() {
   }
 
   const sourceDisplayLabel = sourceLabel(sourceMode);
-  const cavsafeBlocked = sourceMode === "cavsafe" && cavsafeOwnerStatus === "denied";
-  const cavsafeChecking = sourceMode === "cavsafe" && cavsafeOwnerStatus === "unknown";
+  const sourceAuthLocked = !isAuthenticated;
+  const cavsafeBlocked = isAuthenticated && sourceMode === "cavsafe" && cavsafeOwnerStatus === "denied";
+  const cavsafeChecking = isAuthenticated && sourceMode === "cavsafe" && cavsafeOwnerStatus === "unknown";
   const cssSelectOptions = useMemo(() => {
     const strict = cavAllFiles.filter((f) => isCssNode(f));
     if (strict.length) return strict;
@@ -1858,10 +1914,20 @@ export default function LivePage() {
             >
               <span
                 className="cb-account-chip cb-avatar-plain"
-                data-tone={normalizedProfileTone || "lime"}
+                data-tone={isAuthenticated ? (normalizedProfileTone || "lime") : undefined}
+                data-auth={isAuthenticated ? "in" : "out"}
                 aria-hidden="true"
               >
-                {profileAvatar ? (
+                {!isAuthenticated ? (
+                  <Image
+                    src="/icons/app/profile-svgrepo-com.svg"
+                    alt=""
+                    width={24}
+                    height={24}
+                    className="ccv-signedOutAvatarIcon"
+                    unoptimized
+                  />
+                ) : profileAvatar ? (
                   <Image
                     src={profileAvatar}
                     alt=""
@@ -1888,16 +1954,18 @@ export default function LivePage() {
                 <button className="cb-menu-item" type="button" role="menuitem" onClick={onOpenAccountSettings}>
                   {profileMenuLabel}
                 </button>
-                <button
-                  className="cb-menu-item danger"
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    void onLogout();
-                  }}
-                >
-                  Log out
-                </button>
+                {isAuthenticated ? (
+                  <button
+                    className="cb-menu-item danger"
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      void onLogout();
+                    }}
+                  >
+                    Log out
+                  </button>
+                ) : null}
               </div>
             )}
           </div>
@@ -1967,6 +2035,7 @@ export default function LivePage() {
                     value={cavSelectedHtml}
                     onChange={(e) => setCavSelectedHtml(e.target.value)}
                     aria-label={`Select an HTML file from ${sourceDisplayLabel}`}
+                    disabled={sourceAuthLocked}
                   >
                     <option value="">Select an HTML file…</option>
                     {cavFiles.filter((f) => isHtmlNode(f)).map((f) => (
@@ -1980,13 +2049,14 @@ export default function LivePage() {
                   <button
                     className="ccv-btn ccv-btnStrong ccv-uploadAction"
                     onClick={() => {
+                      if (sourceAuthLocked) return goToLogin();
                       if (cavsafeBlocked) return toast("CavSafe upload is owner-only in this viewer.", "watch");
                       if (!cavSelectedHtml) return toast(`Pick a ${sourceDisplayLabel} HTML file first.`, "watch");
                       void loadHtmlFromSourcePath(cavSelectedHtml);
                     }}
                     disabled={cavsafeChecking}
                   >
-                    View
+                    {sourceAuthLocked ? "Log in" : "View"}
                   </button>
                 </div>
 
@@ -1998,6 +2068,7 @@ export default function LivePage() {
                   </div>
                 </div>
 
+                {sourceAuthLocked ? <div className="ccv-uploadAlert">Log in to use CavCloud or CavSafe files.</div> : null}
                 {cavsafeChecking ? <div className="ccv-uploadAlert">Checking CavSafe owner access...</div> : null}
                 {cavsafeBlocked ? <div className="ccv-uploadAlert">CavSafe upload is owner-only and requires CavSafe access.</div> : null}
               </div>
@@ -2014,6 +2085,7 @@ export default function LivePage() {
                       value={cavSelectedCss}
                       onChange={(e) => setCavSelectedCss(e.target.value)}
                       aria-label={`Select a CSS file from ${sourceDisplayLabel}`}
+                      disabled={sourceAuthLocked}
                     >
                       <option value="">Select a CSS file…</option>
                       {cssSelectOptions.map((f) => (
@@ -2025,13 +2097,14 @@ export default function LivePage() {
                     <button
                       className="ccv-btn ccv-uploadActionSecondary"
                       onClick={() => {
+                        if (sourceAuthLocked) return goToLogin();
                         if (!cavSelectedCss) return toast("Pick a CSS file first.", "watch");
                         if (cavsafeBlocked) return toast("CavSafe upload is owner-only in this viewer.", "watch");
                         void attachSourceCodePath(cavSelectedCss, "css");
                       }}
                       disabled={cavsafeChecking}
                     >
-                      Attach
+                      {sourceAuthLocked ? "Log in" : "Attach"}
                     </button>
                   </div>
 
@@ -2044,6 +2117,7 @@ export default function LivePage() {
                       value={cavSelectedJs}
                       onChange={(e) => setCavSelectedJs(e.target.value)}
                       aria-label={`Select a JS file from ${sourceDisplayLabel}`}
+                      disabled={sourceAuthLocked}
                     >
                       <option value="">Select a JS file…</option>
                       {jsSelectOptions.map((f) => (
@@ -2055,13 +2129,14 @@ export default function LivePage() {
                     <button
                       className="ccv-btn ccv-uploadActionSecondary"
                       onClick={() => {
+                        if (sourceAuthLocked) return goToLogin();
                         if (!cavSelectedJs) return toast("Pick a JS file first.", "watch");
                         if (cavsafeBlocked) return toast("CavSafe upload is owner-only in this viewer.", "watch");
                         void attachSourceCodePath(cavSelectedJs, "js");
                       }}
                       disabled={cavsafeChecking}
                     >
-                      Attach
+                      {sourceAuthLocked ? "Log in" : "Attach"}
                     </button>
                   </div>
                 </div>

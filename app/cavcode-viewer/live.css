@@ -173,6 +173,22 @@ body{
   border-radius: var(--ccv-radius-control);
 }
 
+.ccv-accountBtn .cb-account-chip.cb-avatar-plain[data-auth="out"]{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff !important;
+  border: 1px solid rgba(15, 23, 42, .18);
+  box-shadow: 0 8px 18px rgba(0,0,0,.22);
+}
+
+.ccv-signedOutAvatarIcon{
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  display: block;
+}
+
 .ccv-accountBtn .cb-account-caret{
   display: none;
 }

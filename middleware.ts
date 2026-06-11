@@ -173,6 +173,10 @@ function isPublicPath(pathname: string) {
   // canonical public/private profile state.
   if (pathname === "/cavbot" || pathname === "/cavbot/") return true;
 
+  // CavCode Viewer is public. CavCloud/CavSafe source APIs still enforce auth
+  // inside their route handlers.
+  if (pathname === "/cavcode-viewer" || pathname === "/cavcode-viewer/") return true;
+
   // CavBot Arcade surfaces are public so in-game links can return to the gallery
   // even when the user enters via a static game page under /public.
   if (
