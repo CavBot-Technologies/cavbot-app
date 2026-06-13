@@ -3,13 +3,11 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyArcadeAssetToken } from "@/lib/arcade/tokens";
 
-const DEFAULT_ARCADE_CDN_BASE = "https://cdn.cavbot.io";
+const DEFAULT_ARCADE_CDN_BASE = "https://cavbot-client.pages.dev";
 
 function resolveArcadeCdnBase() {
   const candidate = String(
     process.env.CAVBOT_ARCADE_CDN_BASE_URL ||
-      process.env.CAVBOT_CDN_BASE_URL ||
-      process.env.NEXT_PUBLIC_CAVBOT_CDN_BASE_URL ||
       DEFAULT_ARCADE_CDN_BASE
   )
     .trim()
@@ -43,7 +41,7 @@ function statusFromUpstream(status: number) {
 }
 
 export async function OPTIONS(req: NextRequest) {
-  return NextResponse.json(null, {
+  return new NextResponse(null, {
     status: 204,
     headers: {
       ...corsHeaders(req.headers.get("origin")),
@@ -70,12 +68,17 @@ export async function GET(req: NextRequest, { params }: { params: { token?: stri
     );
   }
 
-  const requestedPath = `/${segments.join("/")}`;
-  if (!requestedPath.startsWith(verification.payload.basePath)) {
+  const requestPathname = req.nextUrl.pathname;
+  const requestedPath = `/${segments.join("/")}${requestPathname.endsWith("/") ? "/" : ""}`;
+  const upstreamPath = `/arcade${requestedPath}`;
+  if (
+    !requestedPath.startsWith(verification.payload.basePath) &&
+    !upstreamPath.startsWith(verification.payload.basePath)
+  ) {
     return NextResponse.json({ ok: false, error: "TOKEN_MISMATCH" }, { status: 403, headers: responseCors });
   }
 
-  const upstreamUrl = `${resolveArcadeCdnBase()}/arcade${requestedPath}`;
+  const upstreamUrl = `${resolveArcadeCdnBase()}${upstreamPath}`;
 
   try {
     const upstream = await fetch(upstreamUrl, {

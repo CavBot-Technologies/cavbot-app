@@ -3985,7 +3985,7 @@ function iconKeyForName(name: string, lang?: Lang) {
   if (lower.endsWith(".prisma")) return "prisma";
   if (lower.endsWith(".md") || lower.endsWith(".mdx")) return "md";
   if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
-  if (lower.endsWith(".webmanifest")) return "nodot";
+  if (lower === "sitewebmanifest" || lower.endsWith(".webmanifest")) return "json";
   if (lower.endsWith(".yml") || lower.endsWith(".yaml")) return "yml";
   if (lower.endsWith(".env") || lower.startsWith(".env.")) return "env";
   if (lower.endsWith(".sh") || lower.endsWith(".bash") || lower.endsWith(".zsh")) return "sh";

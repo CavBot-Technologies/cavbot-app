@@ -77,7 +77,7 @@ const nextConfig = {
   async headers() {
     return [
       {
-        source: "/:path*",
+        source: "/:path((?!api/embed/arcade/signed).*)",
         headers: [
           { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains; preload" },
           { key: "X-Content-Type-Options", value: "nosniff" },
@@ -138,10 +138,9 @@ const nextConfig = {
       {
         source: "/api/embed/arcade/signed/:path*",
         headers: [
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
           {
             key: "Content-Security-Policy",
-            value: "frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'",
+            value: "frame-ancestors *; base-uri 'self'; form-action 'none'; object-src 'none'",
           },
         ],
       },

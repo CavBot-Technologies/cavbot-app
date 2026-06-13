@@ -29,6 +29,11 @@ const NO_STORE_HEADERS: Record<string, string> = {
 const IP_HEADERS = ["cf-connecting-ip", "true-client-ip", "x-forwarded-for", "x-real-ip"];
 const DEDUPE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const REACTIVATION_WINDOW_MS = 30 * DEDUPE_WINDOW_MS;
+const FIRST_PARTY_CAVBOT_ORIGINS = new Set(["https://www.cavbot.io", "https://cavbot.io"]);
+const FIRST_PARTY_CAVBOT_SITE_IDS = new Set(["cavbot.io", "www.cavbot.io", ""]);
+const FIRST_PARTY_CAVBOT_PROJECT_KEYS = new Set(["cavbot_pk_gHn737DTf4afJ2xGpBFzZQ"]);
+const FIRST_PARTY_CAVBOT_ARCADE_SLUG = "cavbot-imposter";
+const FIRST_PARTY_CAVBOT_ARCADE_VERSION = "v1";
 
 function corsHeaders(origin: string | null) {
   const headers: Record<string, string> = {
@@ -36,7 +41,7 @@ function corsHeaders(origin: string | null) {
     Vary: "Origin",
     "Access-Control-Allow-Origin": origin || "",
     "Access-Control-Allow-Methods": "GET,OPTIONS",
-    "Access-Control-Allow-Headers": "content-type,x-cavbot-project-key,x-cavbot-site",
+    "Access-Control-Allow-Headers": "content-type,x-cavbot-project-key,x-cavbot-site,x-cavbot-env",
   };
   if (!origin) {
     delete headers["Access-Control-Allow-Origin"];
@@ -46,13 +51,14 @@ function corsHeaders(origin: string | null) {
 
 function handleOptions(req: NextRequest) {
   const origin = req.headers.get("origin");
-  return NextResponse.json(
-    { ok: true },
-    {
-      status: 204,
-      headers: corsHeaders(origin),
-    }
-  );
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders(origin),
+  });
+}
+
+export function OPTIONS(req: NextRequest) {
+  return handleOptions(req);
 }
 
 function hashValue(value?: string | null) {
@@ -141,6 +147,74 @@ function buildRuntimeConfig(
   };
 }
 
+function isFirstPartyCavbotArcadeRequest(req: NextRequest, envKind: string) {
+  if (envKind !== ARCADE_KIND_404) return false;
+
+  const url = new URL(req.url);
+  const projectKey = String(req.headers.get("x-cavbot-project-key") || "").trim();
+  const expectedProjectKey = String(process.env.NEXT_PUBLIC_CAVBOT_PROJECT_KEY || "").trim();
+  if (expectedProjectKey) {
+    FIRST_PARTY_CAVBOT_PROJECT_KEYS.add(expectedProjectKey);
+  }
+  if (!FIRST_PARTY_CAVBOT_PROJECT_KEYS.has(projectKey)) return false;
+
+  const origin = String(req.headers.get("origin") || "").trim().replace(/\/+$/, "");
+  if (!FIRST_PARTY_CAVBOT_ORIGINS.has(origin)) return false;
+
+  const site = String(req.headers.get("x-cavbot-site") || url.searchParams.get("site") || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/+$/, "");
+  return FIRST_PARTY_CAVBOT_SITE_IDS.has(site);
+}
+
+function buildFirstPartyCavbotArcadeConfig(req: NextRequest) {
+  const origin = String(req.headers.get("origin") || "https://www.cavbot.io").trim().replace(/\/+$/, "");
+  const game = findArcadeGame(ARCADE_KIND_404, FIRST_PARTY_CAVBOT_ARCADE_SLUG, FIRST_PARTY_CAVBOT_ARCADE_VERSION);
+  if (!game) {
+    return NextResponse.json(
+      { ok: false, allowed: false, code: "GAME_NOT_FOUND" },
+      { status: 404, headers: corsHeaders(origin) }
+    );
+  }
+
+  const ttlSeconds = 240;
+  const embedApiBase = getEmbedApiBase();
+  const token = mintArcadeAssetToken({ origin, basePath: `/arcade/${game.kind}`, ttlSeconds });
+  const signedRoot = `${embedApiBase}/api/embed/arcade/signed/${token}`;
+
+  return NextResponse.json(
+    {
+      ok: true,
+      enabled: true,
+      game: {
+        slug: game.slug,
+        version: game.version,
+        displayName: game.displayName,
+      },
+      urls: {
+        index: `${signedRoot}${game.basePath}/`,
+        manifest: `${signedRoot}${game.basePath}/manifest.json`,
+      },
+      runtime: buildRuntimeConfig(
+        game.slug,
+        game.manifest.runtime,
+        origin,
+        mergeArcadeOptions(undefined),
+        origin
+      ),
+      delivery: {
+        method: "signed",
+        host: embedApiBase,
+        firstPartyFallback: true,
+        expiresAt: new Date(Date.now() + ttlSeconds * 1000).toISOString(),
+      },
+    },
+    { status: 200, headers: corsHeaders(origin) }
+  );
+}
+
 export async function GET(req: NextRequest, ctx: { env?: RateLimitEnv }) {
   if (req.method === "OPTIONS") {
     return handleOptions(req);
@@ -148,6 +222,10 @@ export async function GET(req: NextRequest, ctx: { env?: RateLimitEnv }) {
 
   const url = new URL(req.url);
   const envKind = normalizeKind(url.searchParams.get("env") || url.searchParams.get("kind"));
+  if (isFirstPartyCavbotArcadeRequest(req, envKind)) {
+    return buildFirstPartyCavbotArcadeConfig(req);
+  }
+
   const verification = await verifyEmbedRequest({
     req,
     env: ctx.env,
@@ -409,9 +487,10 @@ export async function GET(req: NextRequest, ctx: { env?: RateLimitEnv }) {
     delivery.host = devHost;
   } else {
     const ttlSeconds = 240;
-    const token = mintArcadeAssetToken({ origin: canonicalOrigin, basePath: game.basePath, ttlSeconds });
+    const signedBasePath = `/arcade/${game.kind}`;
+    const token = mintArcadeAssetToken({ origin: canonicalOrigin, basePath: signedBasePath, ttlSeconds });
     const signedRoot = `${embedApiBase}/api/embed/arcade/signed/${token}`;
-    indexUrl = `${signedRoot}${game.basePath}/index.html`;
+    indexUrl = `${signedRoot}${game.basePath}/`;
     manifestUrl = `${signedRoot}${game.basePath}/manifest.json`;
     delivery.host = embedApiBase;
     delivery.expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
