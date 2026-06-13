@@ -31,6 +31,7 @@ export type AnalyticsConsoleProject = {
   id: number;
   slug: string;
   name: string | null;
+  topSiteId: string | null;
   serverKeyEnc: string | null;
   serverKeyEncIv: string | null;
 };
@@ -125,6 +126,43 @@ async function buildRequestFromHeaders(pathname: string) {
   });
 }
 
+function parseCookieHeader(cookieHeader: string) {
+  const out = new Map<string, string>();
+  for (const part of String(cookieHeader || "").split(";")) {
+    const idx = part.indexOf("=");
+    if (idx < 0) continue;
+    const key = part.slice(0, idx).trim();
+    if (!key) continue;
+    const raw = part.slice(idx + 1).trim();
+    try {
+      out.set(key, decodeURIComponent(raw));
+    } catch {
+      out.set(key, raw);
+    }
+  }
+  return out;
+}
+
+function parseCookieProjectId(value: unknown) {
+  const parsed = parseProjectId(value);
+  return parsed && Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+async function readCommandCenterCookieHints() {
+  const headerStore = await headers();
+  const cookieMap = parseCookieHeader(String(headerStore.get("cookie") || ""));
+  const preferredProjectId =
+    parseCookieProjectId(cookieMap.get("cb_active_project_id")) ||
+    parseCookieProjectId(cookieMap.get("cb_pid"));
+  const projectKey = preferredProjectId ? String(preferredProjectId) : "";
+
+  return {
+    preferredProjectId,
+    activeSiteId: projectKey ? String(cookieMap.get(`cb_active_site_id__${projectKey}`) || "").trim() : "",
+    activeSiteOrigin: projectKey ? canonicalOrigin(cookieMap.get(`cb_active_site_origin__${projectKey}`) || "") : "",
+  };
+}
+
 function toSiteRow(row: { id: string; label: string; origin: string }): AnalyticsConsoleSite | null {
   const origin = canonicalOrigin(row.origin);
   if (!row.id || !origin) return null;
@@ -171,8 +209,10 @@ function pickActiveSite(args: {
   searchParams?: Record<string, string | string[] | undefined> | null;
   sites: AnalyticsConsoleSite[];
   workspace: WorkspacePayload | null;
+  commandHints?: { activeSiteId?: string; activeSiteOrigin?: string } | null;
+  topSiteId?: string | null;
 }) {
-  const { searchParams, sites, workspace } = args;
+  const { searchParams, sites, workspace, commandHints } = args;
   if (!sites.length) return EMPTY_SITE;
 
   const requestedSite =
@@ -187,15 +227,19 @@ function pickActiveSite(args: {
     workspace?.activeSiteOrigin || workspace?.workspace?.activeSiteOrigin || "",
   );
   const workspaceSiteId = String(workspace?.activeSiteId || "").trim();
-  const topSiteId = String(workspace?.topSiteId || "").trim();
+  const commandSiteId = String(commandHints?.activeSiteId || "").trim();
+  const commandOrigin = canonicalOrigin(commandHints?.activeSiteOrigin || "");
+  const topSiteId = String(args.topSiteId || workspace?.topSiteId || "").trim();
 
   return (
     (requestedSite ? sites.find((site) => site.id === requestedSite) : null) ||
     (requestedSiteOrigin ? sites.find((site) => site.origin === requestedSiteOrigin) : null) ||
     (requestedOrigin ? sites.find((site) => site.origin === requestedOrigin) : null) ||
+    (topSiteId ? sites.find((site) => site.id === topSiteId) : null) ||
+    (commandSiteId ? sites.find((site) => site.id === commandSiteId) : null) ||
+    (commandOrigin ? sites.find((site) => site.origin === commandOrigin) : null) ||
     (workspaceSiteId ? sites.find((site) => site.id === workspaceSiteId) : null) ||
     (workspaceOrigin ? sites.find((site) => site.origin === workspaceOrigin) : null) ||
-    (topSiteId ? sites.find((site) => site.id === topSiteId) : null) ||
     sites[0] ||
     EMPTY_SITE
   );
@@ -443,6 +487,11 @@ export async function resolveAnalyticsConsoleContext(args?: {
   const pathname = args?.pathname || "/console";
   const defaultRange = args?.defaultRange || "7d";
   const range = normalizeRange(readSearchParam(args?.searchParams, "range"), defaultRange);
+  const commandHints = await readCommandCenterCookieHints().catch(() => ({
+    preferredProjectId: null,
+    activeSiteId: "",
+    activeSiteOrigin: "",
+  }));
 
   let session: CavbotAccountSession | null = null;
   try {
@@ -488,6 +537,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
   const requestedProjectId =
     parseProjectId(readSearchParam(args?.searchParams, "projectId")) ||
     parseProjectId(readSearchParam(args?.searchParams, "project")) ||
+    commandHints.preferredProjectId ||
     parseProjectId(workspace?.projectId);
   const requestedProjectSlug = readSearchParam(args?.searchParams, "projectSlug");
 
@@ -500,6 +550,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
             id: true,
             slug: true,
             name: true,
+            topSiteId: true,
             serverKeyEnc: true,
             serverKeyEncIv: true,
           },
@@ -511,6 +562,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
               id: true,
               slug: true,
               name: true,
+              topSiteId: true,
               serverKeyEnc: true,
               serverKeyEncIv: true,
             },
@@ -522,6 +574,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
               id: true,
               slug: true,
               name: true,
+              topSiteId: true,
               serverKeyEnc: true,
               serverKeyEncIv: true,
             },
@@ -544,7 +597,12 @@ export async function resolveAnalyticsConsoleContext(args?: {
       projectLabel: "Project unavailable",
       range,
       sites: workspaceSites,
-      activeSite: pickActiveSite({ searchParams: args?.searchParams, sites: workspaceSites, workspace }),
+      activeSite: pickActiveSite({
+        searchParams: args?.searchParams,
+        sites: workspaceSites,
+        workspace,
+        commandHints,
+      }),
       summary: null,
       summaryError: error,
       authError: null,
@@ -561,7 +619,12 @@ export async function resolveAnalyticsConsoleContext(args?: {
       projectLabel: "No project selected",
       range,
       sites: workspaceSites,
-      activeSite: pickActiveSite({ searchParams: args?.searchParams, sites: workspaceSites, workspace }),
+      activeSite: pickActiveSite({
+        searchParams: args?.searchParams,
+        sites: workspaceSites,
+        workspace,
+        commandHints,
+      }),
       summary: null,
       summaryError: new Error("PROJECT_NOT_FOUND"),
       authError: null,
@@ -594,7 +657,13 @@ export async function resolveAnalyticsConsoleContext(args?: {
       projectLabel: project.name || project.slug || `Project #${project.id}`,
       range,
       sites: workspaceSites,
-      activeSite: pickActiveSite({ searchParams: args?.searchParams, sites: workspaceSites, workspace }),
+      activeSite: pickActiveSite({
+        searchParams: args?.searchParams,
+        sites: workspaceSites,
+        workspace,
+        commandHints,
+        topSiteId: project.topSiteId,
+      }),
       summary: null,
       summaryError: error,
       authError: null,
@@ -602,7 +671,13 @@ export async function resolveAnalyticsConsoleContext(args?: {
   }
   const dbSiteRows = dbSites.map(toSiteRow).filter((site): site is AnalyticsConsoleSite => Boolean(site));
   const sites = mergeSiteRows(dbSiteRows, workspaceSites);
-  const activeSite = pickActiveSite({ searchParams: args?.searchParams, sites, workspace });
+  const activeSite = pickActiveSite({
+    searchParams: args?.searchParams,
+    sites,
+    workspace,
+    commandHints,
+    topSiteId: project.topSiteId,
+  });
 
   let summary: ProjectSummary | null = null;
   let summaryError: unknown = null;

@@ -8,7 +8,7 @@ import {
   ensureWorkspaceProjectGuardrails,
   getWorkspaceProjectGuardrails,
 } from "@/lib/workspaceGuardrails.server";
-import { requireWorkspaceSession } from "@/lib/workspaceAuth.server";
+import { requireWorkspaceResilientSession, requireWorkspaceSession } from "@/lib/workspaceAuth.server";
 import { withCavCloudDeadline } from "@/lib/cavcloud/http.server";
 
 export const dynamic = "force-dynamic";
@@ -64,7 +64,7 @@ async function getParams(ctx: unknown): Promise<{ projectId?: string }> {
 
 export async function GET(req: Request, ctx: unknown) {
   try {
-    const sess = await withCavCloudDeadline(requireWorkspaceSession(req), {
+    const sess = await withCavCloudDeadline(requireWorkspaceResilientSession(req), {
       timeoutMs: 1_500,
       message: "Workspace session lookup timed out.",
     });

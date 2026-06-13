@@ -1,4 +1,4 @@
-import { cavcloudErrorResponse, jsonNoStore } from "@/lib/cavcloud/http.server";
+import { jsonNoStore } from "@/lib/cavcloud/http.server";
 import { readImageHistory } from "@/lib/cavai/imageStudio.server";
 import { requireAiRequestContext } from "@/src/lib/ai/ai.guard";
 import {
@@ -68,6 +68,15 @@ export async function GET(req: Request) {
     if (isPassiveAiAuthRequiredError(err)) {
       return jsonNoStore(buildPassiveAiAuthRequiredPayload(readPassiveAiAuthErrorCode(err)), 200);
     }
-    return cavcloudErrorResponse(err, "Failed to load Image Studio history.");
+    console.error("[cavai/image-studio/history] degraded", err);
+    return jsonNoStore(
+      {
+        ok: true,
+        degraded: true,
+        view: parseView(new URL(req.url).searchParams.get("view")),
+        rows: [],
+      },
+      200
+    );
   }
 }

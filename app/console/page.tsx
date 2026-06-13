@@ -747,7 +747,7 @@ type DashboardHeading = {
   accentColor: string;
 };
 
-function withDashboardDeadline<T>(promise: Promise<T>, timeoutMs = 3_500): Promise<T> {
+function withDashboardDeadline<T>(promise: Promise<T>, timeoutMs = 6_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null;
   return Promise.race([
     promise,
@@ -782,7 +782,7 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
     const userId = String(sess.sub || "").trim();
     if (!userId || userId === "system") return fallback;
 
-    const [profile, authUser] = await withDashboardDeadline(
+    const [profile, authUser, account] = await withDashboardDeadline(
       Promise.all([
         prisma.user
           .findUnique({
@@ -791,6 +791,14 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
           })
           .catch(() => null),
         findUserById(getAuthPool(), userId).catch(() => null),
+        sess.accountId
+          ? prisma.account
+              .findUnique({
+                where: { id: sess.accountId },
+                select: { name: true },
+              })
+              .catch(() => null)
+          : Promise.resolve(null),
       ]),
     );
 
@@ -808,6 +816,16 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
     const username = String(profile?.username || authUser?.username || "").trim().replace(/^@+/, "");
     if (username) {
       const ownerLabel = `${username}'s`;
+      return {
+        appShellTitle: `${ownerLabel} Dashboard`,
+        ownerLabel,
+        accentColor,
+      };
+    }
+
+    const accountName = String(account?.name || "").trim();
+    if (accountName) {
+      const ownerLabel = `${accountName}'s`;
       return {
         appShellTitle: `${ownerLabel} Dashboard`,
         ownerLabel,

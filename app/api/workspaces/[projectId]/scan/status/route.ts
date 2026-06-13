@@ -40,6 +40,25 @@ async function getParams(ctx: unknown): Promise<{ projectId?: string }> {
 }
 
 export async function GET(req: NextRequest, ctx: unknown) {
+  const degraded = () => {
+    const planId = "free";
+    const limits = getPlanLimits(planId);
+    return json({
+      ok: true,
+      degraded: true,
+      status: {
+        usage: {
+          planId,
+          planLabel: PLANS[planId].tierLabel,
+          scansThisMonth: 0,
+          scansPerMonth: limits.scansPerMonth,
+          pagesPerScan: limits.pagesPerScan,
+        },
+        lastJob: null,
+      },
+    }, 200);
+  };
+
   try {
     const session = await withCavCloudDeadline(requireWorkspaceResilientSession(req), {
       timeoutMs: 1_500,
@@ -106,25 +125,9 @@ export async function GET(req: NextRequest, ctx: unknown) {
   } catch (error) {
     if (isApiAuthError(error)) return json({ error: error.code }, error.status);
     const status = Number((error as { status?: unknown })?.status || 0);
-    if (status === 503 || status === 504) {
-      const planId = "free";
-      const limits = getPlanLimits(planId);
-      return json({
-        ok: true,
-        degraded: true,
-        status: {
-          usage: {
-            planId,
-            planLabel: PLANS[planId].tierLabel,
-            scansThisMonth: 0,
-            scansPerMonth: limits.scansPerMonth,
-            pagesPerScan: limits.pagesPerScan,
-          },
-          lastJob: null,
-        },
-      }, 200);
-    }
+    if (status === 503 || status === 504) return degraded();
     const message = error instanceof Error ? error.message : "Failed to fetch scan status.";
-    return json({ error: "SERVER_ERROR", message }, 500);
+    console.error("[workspace-scan-status] degraded", { message });
+    return degraded();
   }
 }

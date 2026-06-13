@@ -96,6 +96,27 @@ function json(payload: unknown, init?: number | ResponseInit) {
   });
 }
 
+function degradedAiCatalogPayload(requestId: string, error?: string) {
+  const status = getAiProviderStatus();
+  return {
+    ok: true,
+    degraded: true,
+    requestId,
+    provider: status.providerId,
+    envReady: status.ok,
+    missingEnv: status.missing,
+    invalidEnv: status.invalid,
+    baseUrl: status.baseUrl,
+    models: {
+      chat: status.chatModel,
+      reasoning: status.reasoningModel,
+    },
+    providers: getAiProviderStatuses(),
+    modelCatalog: getAiModelCatalog(),
+    error: error || "AI_CATALOG_DEGRADED",
+  };
+}
+
 export async function GET(req: NextRequest) {
   const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
 
@@ -224,9 +245,7 @@ export async function GET(req: NextRequest) {
     if (isPassiveAiAuthRequiredError(error)) {
       return json(buildPassiveAiAuthRequiredPayload(readPassiveAiAuthErrorCode(error)), 200);
     }
-    if (isApiAuthError(error)) {
-      return json({ ok: false, requestId, error: error.code }, error.status);
-    }
+    if (isApiAuthError(error)) return json(degradedAiCatalogPayload(requestId, error.code), 200);
     if (error instanceof AiServiceError) {
       const details = error.details;
       const guardDecision =
@@ -242,19 +261,12 @@ export async function GET(req: NextRequest) {
           ...(guardDecision && typeof guardDecision === "object" ? { guardDecision } : {}),
           ...(process.env.NODE_ENV !== "production" ? { details: error.details } : {}),
         },
-        error.status
+        200
       );
     }
     const message = error instanceof Error ? error.message : "Server error";
-    return json(
-      {
-        ok: false,
-        requestId,
-        error: "SERVER_ERROR",
-        ...(process.env.NODE_ENV !== "production" ? { message } : {}),
-      },
-      500
-    );
+    console.error("[api/ai/test] degraded catalog", { requestId, message });
+    return json(degradedAiCatalogPayload(requestId, "SERVER_ERROR"), 200);
   }
 }
 
@@ -422,18 +434,20 @@ export async function POST(req: NextRequest) {
           ...(guardDecision && typeof guardDecision === "object" ? { guardDecision } : {}),
           ...(process.env.NODE_ENV !== "production" ? { details: error.details } : {}),
         },
-        error.status
+        200
       );
     }
     const message = error instanceof Error ? error.message : "Server error";
+    console.error("[api/ai/test] degraded roundtrip", { requestId, message });
     return json(
       {
         ok: false,
+        degraded: true,
         requestId,
         error: "SERVER_ERROR",
         ...(process.env.NODE_ENV !== "production" ? { message } : {}),
       },
-      500
+      200
     );
   }
 }

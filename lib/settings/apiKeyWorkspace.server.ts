@@ -150,18 +150,18 @@ export async function resolveApiKeyWorkspace(args: ResolveApiKeyWorkspaceArgs): 
   const requestedSite = requestedSiteId
     ? sites.find((site) => site.id === requestedSiteId) ?? null
     : null;
-  const hintedSite = !requestedSite && activeSiteIdHint
+  const topSite = !requestedSite && resolvedTopSiteId
+    ? sites.find((site) => site.id === resolvedTopSiteId) ?? null
+    : null;
+  const hintedSite = !requestedSite && !topSite && activeSiteIdHint
     ? sites.find((site) => site.id === activeSiteIdHint) ?? null
     : null;
-  const hintedOriginSite = !requestedSite && !hintedSite && activeSiteOriginHint
+  const hintedOriginSite = !requestedSite && !topSite && !hintedSite && activeSiteOriginHint
     ? sites.find((site) => originsShareWebsiteContext(site.origin, activeSiteOriginHint)) ?? null
-    : null;
-  const topSite = !requestedSite && !hintedSite && !hintedOriginSite && resolvedTopSiteId
-    ? sites.find((site) => site.id === resolvedTopSiteId) ?? null
     : null;
   const activeSite = requestedSiteId
     ? requestedSite
-    : requestedSite || hintedSite || hintedOriginSite || topSite || sites[0] || null;
+    : requestedSite || topSite || hintedSite || hintedOriginSite || sites[0] || null;
 
   const originSet = new Set<string>();
   if (activeSite?.origin) {

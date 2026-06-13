@@ -73,6 +73,20 @@ function defaultUsagePayload(): KeyUsagePayload {
   };
 }
 
+async function withApiKeysDeadline<T>(promise: Promise<T>, label: string, timeoutMs = 6_000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label}_TIMEOUT`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function toType(raw: unknown): ApiKeyType {
   const value = String(raw ?? "publishable").trim().toUpperCase();
   if (value === "SECRET" || value === "ADMIN" || value === "PUBLISHABLE") return value as ApiKeyType;
@@ -162,14 +176,17 @@ async function resolveApiKeyWorkspaceWithFallback(args: {
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireSettingsOwnerResilientSession(req);
+    const session = await withApiKeysDeadline(requireSettingsOwnerResilientSession(req), "API_KEYS_SESSION", 5_000);
     const workspaceHints = readApiKeyWorkspaceCookieHints(req);
     const requestedSiteId = String(req.nextUrl.searchParams.get("siteId") || "").trim() || undefined;
-    const workspace = await resolveApiKeyWorkspaceWithFallback({
-      accountId: session.accountId,
-      requestedSiteId,
-      ...workspaceHints,
-    });
+    const workspace = await withApiKeysDeadline(
+      resolveApiKeyWorkspaceWithFallback({
+        accountId: session.accountId,
+        requestedSiteId,
+        ...workspaceHints,
+      }),
+      "API_KEYS_WORKSPACE",
+    );
     if (!workspace) {
       const emptyPayload: KeyResponse = {
         ok: true,
@@ -186,7 +203,7 @@ export async function GET(req: NextRequest) {
 
     let keys: Awaited<ReturnType<typeof listApiKeysForProject>> = [];
     try {
-      keys = await listApiKeysForProject(workspace.projectId);
+      keys = await withApiKeysDeadline(listApiKeysForProject(workspace.projectId), "API_KEYS_LIST", 5_000);
     } catch (error) {
       console.error("[settings/api-keys] project key lookup failed", {
         projectId: workspace.projectId,
@@ -218,7 +235,17 @@ export async function GET(req: NextRequest) {
   } catch (error: unknown) {
     if (isApiAuthError(error)) return json({ ok: false, error: error.code }, error.status);
     console.error("[settings/api-keys] load failed", error);
-    return json({ ok: false, error: "SERVER_ERROR" }, 500);
+    return json({
+      ok: true,
+      degraded: true,
+      projectId: null,
+      sites: [],
+      publishableKeys: [],
+      secretKeys: [],
+      allowedOrigins: [],
+      site: null,
+      usage: defaultUsagePayload(),
+    }, 200);
   }
 }
 

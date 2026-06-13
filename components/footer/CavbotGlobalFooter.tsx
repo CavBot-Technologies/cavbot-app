@@ -111,6 +111,11 @@ export default function CavbotGlobalFooter() {
   const [hoverCard, setHoverCard] = useState<FooterCardKey | null>(null);
   const [pinnedCard, setPinnedCard] = useState<FooterCardKey | null>(null);
   const [canHover, setCanHover] = useState(false);
+  const [footerLabel] = useState(() => {
+    if (typeof window === "undefined") return "Developers";
+    const host = window.location.hostname.toLowerCase();
+    return host === "admin.cavbot.io" || host.endsWith(".admin.cavbot.io") ? "Human Resources" : "Developers";
+  });
   const systemCardId = useId();
   const apiCardId = useId();
   const destinationCardId = useId();
@@ -366,7 +371,7 @@ export default function CavbotGlobalFooter() {
                 className={styles.developerIcon}
                 unoptimized
               />
-              <span>Developers</span>
+              <span>{footerLabel}</span>
             </button>
           </div>
 
@@ -539,7 +544,7 @@ export default function CavbotGlobalFooter() {
             className={`${styles.developerPanel} ${developerOpen ? styles.developerPanelOpen : ""}`}
             role="dialog"
             aria-modal="true"
-            aria-label="Developer links"
+            aria-label={`${footerLabel} links`}
             onClick={(event) => event.stopPropagation()}
           >
             <div className={styles.developerLinks}>
