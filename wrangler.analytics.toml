@@ -1,0 +1,8 @@
+name = "cavbot-analytics"
+main = "worker.js"
+compatibility_date = "2025-12-03"
+
+[[d1_databases]]
+binding = "ANALYTICS_DB"
+database_name = "cavbot-analytics"
+database_id = "9ec63140-5ffe-43d9-aeec-08c6c16a5336"

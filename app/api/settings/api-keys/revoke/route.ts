@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isApiAuthError } from "@/lib/apiAuth";
 import { requireSettingsOwnerResilientSession } from "@/lib/settings/ownerAuth.server";
 import { auditLogWrite } from "@/lib/audit";
+import { syncWorkerProjectKeyBestEffort } from "@/lib/cavbotApi.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import {
   findApiKeyForAccount,
@@ -46,9 +47,15 @@ export async function POST(req: NextRequest) {
     if (!key) return json({ ok: false, error: "KEY_NOT_FOUND" }, 404);
     if (key.status === "REVOKED") return json({ ok: true }, 200);
 
-    await revokeApiKeyRecord({
+    const revoked = await revokeApiKeyRecord({
       keyId: key.id,
       revokedAt: new Date(),
+    });
+
+    await syncWorkerProjectKeyBestEffort({
+      ...key,
+      projectId: key.projectId,
+      revokedAt: revoked?.rotatedAt ?? new Date(),
     });
 
     if (session.accountId) {

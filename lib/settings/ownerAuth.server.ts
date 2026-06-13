@@ -12,13 +12,31 @@ import {
   requireUser,
   type CavbotAccountSession,
 } from "@/lib/apiAuth";
+import { resolveEffectiveAccountIdForSession } from "@/lib/effectiveSessionAccount.server";
+
+async function withEffectiveSettingsAccount(
+  session: CavbotAccountSession,
+): Promise<CavbotAccountSession> {
+  const effectiveAccountId = await resolveEffectiveAccountIdForSession(session).catch(() => null);
+  const normalizedEffectiveAccountId = String(effectiveAccountId || "").trim();
+  const normalizedSessionAccountId = String(session.accountId || "").trim();
+
+  if (!normalizedEffectiveAccountId || normalizedEffectiveAccountId === normalizedSessionAccountId) {
+    return session;
+  }
+
+  return {
+    ...session,
+    accountId: normalizedEffectiveAccountId,
+  };
+}
 
 export async function requireSettingsOwnerSession(req: Request): Promise<CavbotAccountSession> {
   const session = await requireSession(req);
   requireUser(session);
   requireAccountContext(session);
   requireAccountRole(session, ["OWNER"]);
-  return session;
+  return withEffectiveSettingsAccount(session);
 }
 
 export async function requireSettingsOwnerResilientSession(req: Request): Promise<CavbotAccountSession> {
@@ -31,7 +49,7 @@ export async function requireSettingsOwnerResilientSession(req: Request): Promis
     requireUser(session);
     requireAccountContext(session);
     requireAccountRole(session, ["OWNER"]);
-    return session;
+    return withEffectiveSettingsAccount(session);
   }
 }
 

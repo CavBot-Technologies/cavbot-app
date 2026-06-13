@@ -266,6 +266,161 @@ function emptyProjectSummary(args: {
   };
 }
 
+function rangeDays(range: AnalyticsRangeKey) {
+  if (range === "24h") return 1;
+  if (range === "14d") return 14;
+  if (range === "30d") return 30;
+  return 7;
+}
+
+function dayKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function eventMetaRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function localEventKind(type: string, message: string, meta: Record<string, unknown>) {
+  return String(meta.eventType || meta.event_type || message || type || "")
+    .trim()
+    .toLowerCase();
+}
+
+function localRoutePath(meta: Record<string, unknown>) {
+  const routePath = String(meta.routePath || meta.route_path || "").trim();
+  if (routePath) return routePath;
+  const pageUrl = String(meta.pageUrl || meta.page_url || "").trim();
+  if (!pageUrl) return "/";
+  try {
+    const parsed = new URL(pageUrl);
+    return `${parsed.pathname || "/"}${parsed.search || ""}` || "/";
+  } catch {
+    return pageUrl.startsWith("/") ? pageUrl : "/";
+  }
+}
+
+async function readLocalProjectSummaryFallback(args: {
+  project: AnalyticsConsoleProject;
+  range: AnalyticsRangeKey;
+  sites: AnalyticsConsoleSite[];
+  activeSite: AnalyticsConsoleSite;
+}): Promise<ProjectSummary> {
+  const base = emptyProjectSummary(args);
+  if (!args.activeSite.id || args.activeSite.id === EMPTY_SITE.id) return base;
+
+  const days = rangeDays(args.range);
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const rows = await prisma.siteEvent.findMany({
+    where: {
+      siteId: args.activeSite.id,
+      type: "ANALYTICS_EVENT",
+      createdAt: { gte: since },
+    },
+    orderBy: { createdAt: "asc" },
+    take: 5000,
+    select: { createdAt: true, type: true, message: true, meta: true },
+  });
+
+  if (!rows.length) return base;
+
+  const sessions = new Set<string>();
+  const routes = new Map<string, number>();
+  const trend = new Map<string, { day: string; sessions: number; views404: number; jsErrors: number; apiErrors: number }>();
+  let pageViews24h = 0;
+  let views404 = 0;
+  let jsErrors = 0;
+  let apiErrors = 0;
+
+  for (let i = 0; i < days; i += 1) {
+    const d = new Date(since);
+    d.setUTCDate(d.getUTCDate() + i);
+    const key = dayKey(d);
+    trend.set(key, { day: key, sessions: 0, views404: 0, jsErrors: 0, apiErrors: 0 });
+  }
+
+  for (const row of rows) {
+    const meta = eventMetaRecord(row.meta);
+    const kind = localEventKind(row.type, row.message, meta);
+    const routePath = localRoutePath(meta);
+    const sessionId = String(meta.sessionId || meta.session_id || "").trim() || `${routePath}:${row.createdAt.getTime()}`;
+    const day = dayKey(row.createdAt);
+    const point = trend.get(day) || { day, sessions: 0, views404: 0, jsErrors: 0, apiErrors: 0 };
+
+    sessions.add(sessionId);
+    routes.set(routePath, (routes.get(routePath) || 0) + 1);
+    point.sessions += 1;
+    if (row.createdAt >= since24h) pageViews24h += 1;
+    if (kind.includes("404") || kind.includes("not_found") || routePath.includes("404")) {
+      views404 += 1;
+      point.views404 += 1;
+    }
+    if (kind.includes("js") || kind.includes("javascript") || kind.includes("exception")) {
+      jsErrors += 1;
+      point.jsErrors += 1;
+    }
+    if (kind.includes("api") || kind.includes("request_error") || kind.includes("http_error")) {
+      apiErrors += 1;
+      point.apiErrors += 1;
+    }
+    trend.set(day, point);
+  }
+
+  const trendRows = Array.from(trend.values()).sort((a, b) => a.day.localeCompare(b.day));
+  const topRoutes = Array.from(routes.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([routePath, views]) => ({ routePath, views }));
+  const sessionCount = rows.length;
+  const crashFreeSessionsPct = sessionCount > 0
+    ? Math.max(0, 100 - ((jsErrors + apiErrors) / Math.max(1, sessionCount)) * 100)
+    : 100;
+
+  return {
+    ...base,
+    metrics: {
+      ...base.metrics,
+      pageViews24h,
+      sessions30d: sessionCount,
+      uniqueVisitors30d: sessions.size,
+      sessionsUnderGuard30d: sessionCount,
+      routesMonitored: routes.size,
+      views40430d: views404,
+      sessions40430d: views404,
+      jsErrors30d: jsErrors,
+      apiErrors30d: apiErrors,
+      guardianScore: jsErrors || apiErrors || views404 ? 82 : 96,
+      aggregationCoveragePercent: 100,
+      trend7d: trendRows.slice(-7).map(({ day, sessions: s, views404: v }) => ({ day, sessions: s, views404: v })),
+      trend30d: trendRows.map(({ day, sessions: s, views404: v }) => ({ day, sessions: s, views404: v })),
+      topRoutes,
+    },
+    diagnostics: {
+      degraded: true,
+      reason: "LOCAL_ANALYTICS_FALLBACK",
+    },
+    snapshot: {
+      errors: {
+        totals: {
+          jsErrors,
+          apiErrors,
+          views404,
+          crashFreeSessionsPct,
+        },
+        trend: trendRows.map(({ day, jsErrors: js, apiErrors: api, views404: v }) => ({
+          day,
+          jsErrors: js,
+          apiErrors: api,
+          views404: v,
+        })),
+      },
+    },
+  };
+}
+
 function withConsoleDeadline<T>(promise: Promise<T>, label: string, timeoutMs = 4_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null;
   return Promise.race([
@@ -481,7 +636,9 @@ export async function resolveAnalyticsConsoleContext(args?: {
       });
       if (!isFatalSummaryError(error)) {
         summaryError = null;
-        summary = emptyProjectSummary({ project, range, sites, activeSite });
+        summary = await readLocalProjectSummaryFallback({ project, range, sites, activeSite }).catch(() =>
+          emptyProjectSummary({ project, range, sites, activeSite }),
+        );
       }
     }
   }

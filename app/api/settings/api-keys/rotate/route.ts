@@ -6,6 +6,7 @@ import { requireSettingsOwnerResilientSession } from "@/lib/settings/ownerAuth.s
 import { readApiKeyWorkspaceCookieHints, resolveApiKeyWorkspace } from "@/lib/settings/apiKeyWorkspace.server";
 import { buildApiKeyInsertData, serializeApiKey } from "@/lib/apiKeys.server";
 import { auditLogWrite } from "@/lib/audit";
+import { syncWorkerProjectKeyBestEffort } from "@/lib/cavbotApi.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import {
   findApiKeyForAccount,
@@ -81,6 +82,9 @@ export async function POST(req: NextRequest) {
     if (!nextKey) {
       return json({ ok: false, error: "ROTATE_FAILED", message: "Failed to rotate key." }, 500);
     }
+
+    await syncWorkerProjectKeyBestEffort(nextKey);
+    await syncWorkerProjectKeyBestEffort({ ...existing, projectId, revokedAt: now });
 
     if (session.accountId) {
       await auditLogWrite({

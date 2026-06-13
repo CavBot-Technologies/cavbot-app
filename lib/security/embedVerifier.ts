@@ -135,6 +135,27 @@ type EmbedSiteCandidate = {
   allowedOrigins: AllowedOriginRow[];
 };
 
+type EmbedApiKeyRecord = {
+  id: string;
+  accountId: string | null;
+  projectId: number | null;
+  siteId: string | null;
+  status: string;
+  type: string;
+  scopes: string[];
+  last4: string | null;
+  updatedAt?: Date | string | null;
+  site: {
+    id: string;
+    origin: string;
+    projectId: number;
+    isActive: boolean;
+    allowedOrigins: AllowedOriginRow[];
+  } | null;
+};
+
+const KEY_LOOKUP_PRISMA_DEADLINE_MS = 900;
+
 function originExactMatch(candidateOrigin: string, canonicalOrigin: string) {
   try {
     return normalizeOriginStrict(candidateOrigin) === canonicalOrigin;
@@ -207,6 +228,38 @@ async function resolveSiteForEmbed(args: {
   return { ok: false, code: "SITE_NOT_FOUND", status: 404, siteId: null };
 }
 
+async function findApiKeyForEmbed(keyHash: string): Promise<EmbedApiKeyRecord | null> {
+  try {
+    const record = await Promise.race([
+      prisma.apiKey.findFirst({
+        where: { keyHash, projectId: { not: null } },
+        include: {
+          site: {
+            select: {
+              id: true,
+              origin: true,
+              projectId: true,
+              isActive: true,
+              allowedOrigins: {
+                select: { origin: true, matchType: true },
+                orderBy: { createdAt: "asc" },
+              },
+            },
+          },
+        },
+      }),
+      new Promise<null>((resolve) => {
+        setTimeout(() => resolve(null), KEY_LOOKUP_PRISMA_DEADLINE_MS);
+      }),
+    ]);
+    if (record) return record;
+    console.warn("[embedVerifier] prisma key lookup timed out or returned empty");
+  } catch (error) {
+    console.error("[embedVerifier] prisma key lookup failed", error);
+  }
+  return null;
+}
+
 function failure(
   code: string,
   status: number,
@@ -255,23 +308,7 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
   );
 
   const keyHash = hashApiKey(projectKey.trim());
-  const record = await prisma.apiKey.findFirst({
-    where: { keyHash, projectId: { not: null } },
-    include: {
-      site: {
-        select: {
-          id: true,
-          origin: true,
-          projectId: true,
-          isActive: true,
-          allowedOrigins: {
-            select: { origin: true, matchType: true },
-            orderBy: { createdAt: "asc" },
-          },
-        },
-      },
-    },
-  });
+  const record = await findApiKeyForEmbed(keyHash);
   if (!record) return failure("INVALID_KEY", 401, "Key not found.");
   if (record.status !== "ACTIVE") return failure("KEY_INACTIVE", 403, "Key is not active.");
   if (record.type !== "PUBLISHABLE") return failure("INVALID_KEY_TYPE", 403, "Publishable key required.");
@@ -362,6 +399,8 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
     projectKey: projectKey.trim(),
     scopes: record.scopes ?? [],
     keyLast4: record.last4 ?? null,
-    keyVersion: record.updatedAt?.toISOString() ?? "",
+    keyVersion: record.updatedAt instanceof Date
+      ? record.updatedAt.toISOString()
+      : String(record.updatedAt || ""),
   };
 }

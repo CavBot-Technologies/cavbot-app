@@ -11,6 +11,7 @@ import {
 } from "@/lib/apiKeys.server";
 import { DEFAULT_RATE_LIMIT_LABEL, KeyUsagePayload, fetchUsageForWorkspace } from "@/lib/apiKeyUsage.server";
 import { auditLogWrite } from "@/lib/audit";
+import { syncWorkerProjectKeyBestEffort } from "@/lib/cavbotApi.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
 import {
   createApiKeyRecord,
@@ -291,6 +292,8 @@ export async function POST(req: NextRequest) {
     if (!created) {
       return json({ ok: false, error: "CREATE_KEY_FAILED", message: "Failed to create API key." }, 500);
     }
+
+    await syncWorkerProjectKeyBestEffort(created);
 
     if (session.accountId) {
       await auditLogWrite({

@@ -731,14 +731,6 @@ type PageProps = {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function firstInitialFromUsername(input: string): string {
-  const source = String(input || "").trim().replace(/^@+/, "");
-  if (!source) return "";
-  const asciiMatch = source.match(/[A-Za-z0-9]/);
-  const token = asciiMatch?.[0] || source[0] || "";
-  return token.toUpperCase();
-}
-
 function profileToneToAccentColor(tone: string): string {
   const value = String(tone || "").trim().toLowerCase();
   if (value === "violet") return "#8b5cff";
@@ -755,7 +747,7 @@ type DashboardHeading = {
   accentColor: string;
 };
 
-function withDashboardDeadline<T>(promise: Promise<T>, timeoutMs = 1_800): Promise<T> {
+function withDashboardDeadline<T>(promise: Promise<T>, timeoutMs = 3_500): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null;
   return Promise.race([
     promise,
@@ -815,8 +807,7 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
 
     const username = String(profile?.username || authUser?.username || "").trim().replace(/^@+/, "");
     if (username) {
-      const initial = firstInitialFromUsername(username) || "U";
-      const ownerLabel = `${initial}'s`;
+      const ownerLabel = `${username}'s`;
       return {
         appShellTitle: `${ownerLabel} Dashboard`,
         ownerLabel,

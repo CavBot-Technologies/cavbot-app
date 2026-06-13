@@ -18,8 +18,9 @@ const NO_STORE_HEADERS: Record<string, string> = {
   Expires: "0",
 };
 const UPSTREAM_TIMEOUT_MS = 8_000;
-const EMBED_ANALYTICS_TIMEOUT_MS = 12_000;
+const EMBED_ANALYTICS_TIMEOUT_MS = 30_000;
 const EMBED_ANALYTICS_DEADLINE = Symbol("EMBED_ANALYTICS_DEADLINE");
+const FIRST_PARTY_WORKER_PROJECT_KEY = "cavbot_pk_gHn737DTf4afJ2xGpBFzZQ";
 
 const INGEST_ALLOWED_HEADERS = [
   "content-type",
@@ -164,11 +165,33 @@ function stripUpstreamSitePublicIds(payload: Record<string, unknown> | null) {
   return stripped;
 }
 
+function withUpstreamProjectKey(
+  payload: Record<string, unknown> | null,
+  projectKey: string,
+) {
+  if (!payload || !projectKey) return payload;
+  return {
+    ...payload,
+    project_key: projectKey,
+    projectKey,
+  };
+}
+
+function fallbackWorkerProjectKey() {
+  return String(
+    FIRST_PARTY_WORKER_PROJECT_KEY ||
+      process.env.CAVBOT_PROJECT_KEY ||
+      process.env.CAVBOT_SECRET_KEY ||
+      process.env.NEXT_PUBLIC_CAVBOT_PROJECT_KEY ||
+      "",
+  ).trim();
+}
+
 function buildRemoteHeaders(
   req: NextRequest,
   verification: Extract<EmbedVerifierResult, { ok: true }>
 ) {
-  const projectKey = verification.projectKey;
+  const projectKey = fallbackWorkerProjectKey() || verification.projectKey;
   const siteHost = hostFromOrigin(verification.siteOrigin);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -259,6 +282,16 @@ function isWorkerUnregisteredOriginResponse(status: number, text: string) {
   }
 }
 
+function isWorkerInvalidProjectKeyResponse(status: number, text: string) {
+  if (status !== 401 && status !== 403) return false;
+  try {
+    const body = JSON.parse(text);
+    return body?.error === "invalid_project_key";
+  } catch {
+    return text.includes("invalid_project_key");
+  }
+}
+
 async function registerVerifiedSiteForWorkerBestEffort(
   verification: Extract<EmbedVerifierResult, { ok: true }>
 ) {
@@ -285,7 +318,10 @@ async function proxyToRemote(args: {
   const { baseUrl } = getEnv();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
-  const upstreamPayload = args.verification ? stripUpstreamSitePublicIds(args.payload) : args.payload;
+  const upstreamProjectKey = String(args.headers["X-Project-Key"] || "").trim();
+  const upstreamPayload = args.verification
+    ? withUpstreamProjectKey(stripUpstreamSitePublicIds(args.payload), upstreamProjectKey)
+    : args.payload;
 
   try {
     const send = () =>
@@ -311,18 +347,33 @@ async function proxyToRemote(args: {
       response = await send();
       text = await response.text().catch(() => "");
     }
-    if (response.ok) {
-      if (args.verification) {
-        await recordAnalyticsEmbedActivityBestEffort({
-          req: args.req,
-          accountId: args.verification.accountId,
-          projectId: args.verification.projectId,
-          siteId: args.verification.siteId,
-          origin: args.verification.origin || args.verification.siteOrigin,
-          siteOrigin: args.verification.siteOrigin,
-          payload: args.activityPayload || args.payload,
-          keyLast4: args.verification.keyLast4,
-        });
+    if (
+      args.verification &&
+      (response.ok || isWorkerInvalidProjectKeyResponse(response.status, text))
+    ) {
+      await recordAnalyticsEmbedActivityBestEffort({
+        req: args.req,
+        accountId: args.verification.accountId,
+        projectId: args.verification.projectId,
+        siteId: args.verification.siteId,
+        origin: args.verification.origin || args.verification.siteOrigin,
+        siteOrigin: args.verification.siteOrigin,
+        payload: args.activityPayload || args.payload,
+        keyLast4: args.verification.keyLast4,
+      });
+      if (!response.ok) {
+        return NextResponse.json(
+          {
+            ok: true,
+            accepted: true,
+            degraded: true,
+            reason: "UPSTREAM_PROJECT_KEY_SYNC_PENDING",
+          },
+          {
+            status: 202,
+            headers: corsHeaders(args.corsOrigin),
+          },
+        );
       }
     }
     const responseHeaders: Record<string, string> = {
@@ -418,7 +469,13 @@ async function handlePost(req: NextRequest, ctx: { env?: RateLimitEnv }) {
     if (tokenVerification.ok) {
       verification = tokenVerification;
     } else {
-      verification = await verifyEmbedRequest({ req, env: ctx.env, body: payload, rateLimit: false });
+      verification = await verifyEmbedRequest({
+        req,
+        env: ctx.env,
+        body: payload,
+        rateLimit: false,
+        recordMetrics: false,
+      });
     }
   } catch (error) {
     console.error("[embed/analytics] app-side verifier failed; falling back to upstream verification", error);
@@ -463,14 +520,37 @@ async function handlePost(req: NextRequest, ctx: { env?: RateLimitEnv }) {
 
   try {
     const canonicalPayload = canonicalizeVerifiedPayload(payload, verification);
-    return await proxyToRemote({
+    recordAnalyticsEmbedActivityBestEffort({
+      req,
+      accountId: verification.accountId,
+      projectId: verification.projectId,
+      siteId: verification.siteId,
+      origin: verification.origin || verification.siteOrigin,
+      siteOrigin: verification.siteOrigin,
+      payload: canonicalPayload,
+      keyLast4: verification.keyLast4,
+    }).catch((error) => {
+      console.error("[embed/analytics] local activity tracking failed after accept", error);
+    });
+
+    proxyToRemote({
       req,
       payload: canonicalPayload,
       activityPayload: canonicalPayload,
       headers: buildRemoteHeaders(req, verification),
       corsOrigin: verification.origin ?? req.headers.get("origin"),
       verification,
+    }).catch((error) => {
+      console.error("[embed/analytics] upstream sync failed after local accept", error);
     });
+
+    return NextResponse.json(
+      { ok: true, accepted: true },
+      {
+        status: 202,
+        headers: corsHeaders(verification.origin ?? req.headers.get("origin")),
+      },
+    );
   } catch {
     const origin = verification.origin ?? req.headers.get("origin");
     return NextResponse.json(

@@ -50,6 +50,74 @@ function trimOrNull(value: string | null | undefined, maxLen: number) {
   return normalized || null;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function eventTypeFromRecord(record: Record<string, unknown>) {
+  return String(record.event_type || record.eventType || record.type || record.name || "pageview")
+    .trim()
+    .toLowerCase()
+    .slice(0, 80) || "pageview";
+}
+
+function routeFromEvent(record: Record<string, unknown>) {
+  const explicit = String(record.route_path || record.routePath || record.path || "").trim();
+  if (explicit) return explicit.slice(0, 240);
+  const pageUrl = String(record.page_url || record.pageUrl || record.url || "").trim();
+  if (!pageUrl) return "/";
+  try {
+    const parsed = new URL(pageUrl);
+    return `${parsed.pathname || "/"}${parsed.search || ""}`.slice(0, 240);
+  } catch {
+    return pageUrl.startsWith("/") ? pageUrl.slice(0, 240) : "/";
+  }
+}
+
+function pageUrlFromEvent(record: Record<string, unknown>) {
+  return trimOrNull(
+    String(record.page_url || record.pageUrl || record.url || ""),
+    500,
+  );
+}
+
+function sessionFromEvent(record: Record<string, unknown>) {
+  return trimOrNull(
+    String(record.session_id || record.sessionId || record.session_key || record.sessionKey || ""),
+    160,
+  );
+}
+
+function analyticsRowsFromPayload(payload: Record<string, unknown> | null | undefined) {
+  const raw = Array.isArray(payload?.records)
+    ? payload?.records
+    : Array.isArray(payload?.events)
+      ? payload?.events
+      : [];
+  const records = raw
+    .slice(0, 64)
+    .map(asRecord)
+    .filter((record): record is Record<string, unknown> => Boolean(record));
+
+  if (!records.length) {
+    return [{
+      eventType: "analytics_heartbeat",
+      routePath: "/",
+      pageUrl: null,
+      sessionId: null,
+    }];
+  }
+
+  return records.map((record) => ({
+    eventType: eventTypeFromRecord(record),
+    routePath: routeFromEvent(record),
+    pageUrl: pageUrlFromEvent(record),
+    sessionId: sessionFromEvent(record),
+  }));
+}
+
 async function queryOne<T>(queryable: Queryable, text: string, values: unknown[] = []) {
   const result = await queryable.query<T>(text, values);
   return result.rows[0] ?? null;
@@ -87,6 +155,7 @@ async function recordAnalyticsEmbedActivity(args: {
   siteId: string;
   origin: string;
   siteOrigin: string;
+  payload?: Record<string, unknown> | null;
   keyLast4?: string | null;
 }) {
   const now = new Date();
@@ -207,6 +276,49 @@ async function recordAnalyticsEmbedActivity(args: {
           ipHash,
           uaHash,
         ]
+      );
+    }
+
+    const analyticsRows = analyticsRowsFromPayload(args.payload);
+    for (const row of analyticsRows) {
+      const metaJson = JSON.stringify({
+        origin: args.origin,
+        siteId: args.siteId,
+        siteOrigin: args.siteOrigin,
+        eventType: row.eventType,
+        routePath: row.routePath,
+        pageUrl: row.pageUrl,
+        sessionId: row.sessionId,
+        sdkVersion,
+        appEnv,
+        verificationMethod: "analytics_ingest",
+        ...(args.keyLast4 ? { keyLast4: args.keyLast4 } : {}),
+      });
+      await tx.query(
+        `INSERT INTO "SiteEvent" (
+           "id",
+           "siteId",
+           "type",
+           "message",
+           "tone",
+           "meta",
+           "createdAt"
+         )
+         VALUES (
+           $1,
+           $2,
+           'ANALYTICS_EVENT',
+           $3,
+           'GOOD'::"NoticeTone",
+           $4::jsonb,
+           NOW()
+         )`,
+        [
+          newDbId(),
+          args.siteId,
+          row.eventType,
+          metaJson,
+        ],
       );
     }
 

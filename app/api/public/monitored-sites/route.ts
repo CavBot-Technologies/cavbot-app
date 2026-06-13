@@ -2,7 +2,7 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 
-import { prisma } from "@/lib/prisma";
+import { getAuthPool } from "@/lib/authDb";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -12,7 +12,9 @@ const ALLOWED_ORIGINS = new Set([
   "https://www.cavbot.io",
   "https://brand.cavbot.io",
   "http://127.0.0.1:5500",
+  "http://127.0.0.1:5501",
   "http://localhost:5500",
+  "http://localhost:5501",
 ]);
 
 const CACHE_HEADERS: Record<string, string> = {
@@ -27,7 +29,8 @@ const TREND_DAYS = 14;
 const SITE_LIMIT = 150;
 const CATEGORY_LIMIT = 75;
 const TREND_EVENT_LIMIT = 50_000;
-const DB_DEADLINE_MS = 7_000;
+const DB_DEADLINE_MS = 20_000;
+const DEFAULT_PUBLIC_FALLBACK_ORIGINS = ["https://cavbot.io", "https://app.cavbot.io"];
 
 type CountRow = {
   siteId: string;
@@ -57,6 +60,28 @@ type PublicSite = {
   previousSignals: number;
   delta: number;
   trend: number[];
+};
+
+type RawSiteRow = {
+  id: string;
+  origin: string;
+  status: string;
+  createdAt: Date;
+};
+
+type RawCountRow = {
+  siteId: string;
+  count: number | string;
+};
+
+type RawLatestRow = {
+  siteId: string;
+  latestAt: Date | null;
+};
+
+type RawTrendEventRow = {
+  siteId: string;
+  createdAt: Date;
 };
 
 function corsHeaders(req: Request) {
@@ -122,6 +147,24 @@ function toCountMap(rows: CountRow[]) {
   return map;
 }
 
+function rawCountsToCountRows(rows: RawCountRow[]): CountRow[] {
+  return rows.map((row) => ({
+    siteId: row.siteId,
+    _count: {
+      _all: Number(row.count || 0),
+    },
+  }));
+}
+
+function rawLatestToLatestRows(rows: RawLatestRow[]): LatestRow[] {
+  return rows.map((row) => ({
+    siteId: row.siteId,
+    _max: {
+      createdAt: row.latestAt || null,
+    },
+  }));
+}
+
 function toLatestMap(rows: LatestRow[]) {
   const map = new Map<string, Date | null>();
   for (const row of rows) {
@@ -160,6 +203,64 @@ function ranked(sites: PublicSite[]) {
   return sites.map((site, index) => ({ ...site, rank: index + 1 }));
 }
 
+function fallbackOrigins() {
+  const configured = String(process.env.CAVBOT_PUBLIC_MONITORED_SITE_FALLBACKS || "")
+    .split(",")
+    .map((item) => canonicalOrigin(item))
+    .filter(Boolean);
+
+  return configured.length ? configured : DEFAULT_PUBLIC_FALLBACK_ORIGINS;
+}
+
+function publicSiteFromOrigin(origin: string, now: Date, index: number): PublicSite | null {
+  const canonical = canonicalOrigin(origin);
+  const host = publicHost(canonical);
+  if (!canonical || !host) return null;
+
+  return {
+    rank: index + 1,
+    host,
+    origin: canonical,
+    url: canonical,
+    displayName: host,
+    faviconUrl: faviconFor(host),
+    status: "pending",
+    onboardedAt: now.toISOString(),
+    lastSeenAt: null,
+    signals: 0,
+    previousSignals: 0,
+    delta: 0,
+    trend: Array.from({ length: TREND_DAYS }, () => 0),
+  };
+}
+
+function fallbackSnapshot(now: Date) {
+  const sites = fallbackOrigins()
+    .map((origin, index) => publicSiteFromOrigin(origin, now, index))
+    .filter((site): site is PublicSite => Boolean(site));
+
+  return {
+    ok: true,
+    degraded: true,
+    generatedAt: now.toISOString(),
+    window: {
+      currentDays: CURRENT_WINDOW_DAYS,
+      previousDays: PREVIOUS_WINDOW_DAYS,
+      trendDays: TREND_DAYS,
+    },
+    counts: {
+      active: sites.length,
+      recent: sites.length,
+      top: sites.length,
+    },
+    sites: {
+      active: ranked(sites),
+      recent: ranked(sites),
+      top: ranked(sites),
+    },
+  };
+}
+
 function withDeadline<T>(promise: Promise<T>, label: string) {
   let timeout: ReturnType<typeof setTimeout> | null = null;
   const deadline = new Promise<never>((_resolve, reject) => {
@@ -186,22 +287,20 @@ export async function GET(req: Request) {
   const keys = trendKeys(now);
 
   try {
-    const siteRows = await withDeadline(prisma.site.findMany({
-      where: {
-        isActive: true,
-        status: "VERIFIED",
-      },
-      select: {
-        id: true,
-        origin: true,
-        status: true,
-        createdAt: true,
-      },
-      orderBy: [
-        { createdAt: "desc" },
-      ],
-      take: SITE_LIMIT,
-    }), "PUBLIC_MONITORED_SITES");
+    const pool = getAuthPool();
+    const siteRows = await withDeadline(
+      pool.query<RawSiteRow>(
+        `
+          SELECT id, origin, status, "createdAt"
+          FROM "Site"
+          WHERE "isActive" = true
+          ORDER BY "createdAt" DESC
+          LIMIT $1
+        `,
+        [SITE_LIMIT],
+      ).then((result) => result.rows),
+      "PUBLIC_MONITORED_SITES",
+    );
 
     const normalizedSites = uniqueByHost(
       siteRows
@@ -226,46 +325,65 @@ export async function GET(req: Request) {
 
     const siteIds = normalizedSites.map((site) => site.id);
 
-    const [currentCounts, previousCounts, latestRows, trendEvents] = siteIds.length
-      ? await withDeadline(Promise.all([
-        prisma.siteEvent.groupBy({
-          by: ["siteId"],
-          where: {
-            siteId: { in: siteIds },
-            createdAt: { gte: currentStart },
-          },
-          _count: { _all: true },
-        }),
-        prisma.siteEvent.groupBy({
-          by: ["siteId"],
-          where: {
-            siteId: { in: siteIds },
-            createdAt: {
-              gte: previousStart,
-              lt: currentStart,
-            },
-          },
-          _count: { _all: true },
-        }),
-        prisma.siteEvent.groupBy({
-          by: ["siteId"],
-          where: { siteId: { in: siteIds } },
-          _max: { createdAt: true },
-        }),
-        prisma.siteEvent.findMany({
-          where: {
-            siteId: { in: siteIds },
-            createdAt: { gte: trendStart },
-          },
-          select: {
-            siteId: true,
-            createdAt: true,
-          },
-          orderBy: { createdAt: "desc" },
-          take: TREND_EVENT_LIMIT,
-        }),
-      ]), "PUBLIC_MONITORED_SITE_EVENTS")
-      : [[], [], [], []];
+    let currentCounts: CountRow[] = [];
+    let previousCounts: CountRow[] = [];
+    let latestRows: LatestRow[] = [];
+    let trendEvents: RawTrendEventRow[] = [];
+
+    if (siteIds.length) {
+      try {
+        const [currentRaw, previousRaw, latestRaw, trendRaw] = await withDeadline(Promise.all([
+          pool.query<RawCountRow>(
+            `
+              SELECT "siteId", COUNT(*)::int AS count
+              FROM "SiteEvent"
+              WHERE "siteId" = ANY($1::text[])
+                AND "createdAt" >= $2
+              GROUP BY "siteId"
+            `,
+            [siteIds, currentStart],
+          ).then((result) => result.rows),
+          pool.query<RawCountRow>(
+            `
+              SELECT "siteId", COUNT(*)::int AS count
+              FROM "SiteEvent"
+              WHERE "siteId" = ANY($1::text[])
+                AND "createdAt" >= $2
+                AND "createdAt" < $3
+              GROUP BY "siteId"
+            `,
+            [siteIds, previousStart, currentStart],
+          ).then((result) => result.rows),
+          pool.query<RawLatestRow>(
+            `
+              SELECT "siteId", MAX("createdAt") AS "latestAt"
+              FROM "SiteEvent"
+              WHERE "siteId" = ANY($1::text[])
+              GROUP BY "siteId"
+            `,
+            [siteIds],
+          ).then((result) => result.rows),
+          pool.query<RawTrendEventRow>(
+            `
+              SELECT "siteId", "createdAt"
+              FROM "SiteEvent"
+              WHERE "siteId" = ANY($1::text[])
+                AND "createdAt" >= $2
+              ORDER BY "createdAt" DESC
+              LIMIT $3
+            `,
+            [siteIds, trendStart, TREND_EVENT_LIMIT],
+          ).then((result) => result.rows),
+        ]), "PUBLIC_MONITORED_SITE_EVENTS");
+
+        currentCounts = rawCountsToCountRows(currentRaw);
+        previousCounts = rawCountsToCountRows(previousRaw);
+        latestRows = rawLatestToLatestRows(latestRaw);
+        trendEvents = trendRaw;
+      } catch (error) {
+        console.error("[public-monitored-sites] event snapshot unavailable", error);
+      }
+    }
 
     const currentMap = toCountMap(currentCounts);
     const previousMap = toCountMap(previousCounts);
@@ -337,10 +455,6 @@ export async function GET(req: Request) {
     });
   } catch (error) {
     console.error("[public-monitored-sites] snapshot unavailable", error);
-    return json(req, {
-      ok: false,
-      error: "MONITORED_SITES_UNAVAILABLE",
-      generatedAt: now.toISOString(),
-    }, { status: 503 });
+    return json(req, fallbackSnapshot(now));
   }
 }

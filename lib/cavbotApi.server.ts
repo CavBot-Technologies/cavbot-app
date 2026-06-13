@@ -1,6 +1,7 @@
 // lib/cavbotApi.server.ts
 import "server-only";
 import type { CavBotSite, ProjectSummary } from "./cavbotTypes";
+import type { ApiKeyRecord } from "@/lib/apiKeys.server";
 
 export type SummaryRange = "24h" | "7d" | "14d" | "30d";
 
@@ -113,6 +114,43 @@ function normalizeOrigin(input: string): string {
 
 function normalizeLabel(input: string): string {
   return (input || "").trim().slice(0, 120);
+}
+
+function normalizeKeyPrefix(input: string | null | undefined, type?: string | null) {
+  const raw = String(input || "").trim().toLowerCase();
+  if (raw.startsWith("cavbot_sk") || raw === "sk" || raw === "secret") return "sk";
+  if (raw.startsWith("cavbot_pk") || raw === "pk" || raw === "publishable") return "pk";
+  const normalizedType = String(type || "").trim().toUpperCase();
+  return normalizedType === "SECRET" || normalizedType === "ADMIN" ? "sk" : "pk";
+}
+
+function normalizeWorkerScopeFromApiKey(key: Pick<ApiKeyRecord, "type" | "scopes">) {
+  let hasIngest = false;
+  let hasAdmin = false;
+  for (const rawScope of key.scopes || []) {
+    const scope = String(rawScope || "").trim().toLowerCase();
+    if (!scope) continue;
+    if (
+      scope === "events:write" ||
+      scope === "analytics:write" ||
+      scope === "analytics:events" ||
+      scope === "ingest"
+    ) {
+      hasIngest = true;
+    }
+    if (
+      scope === "admin:all" ||
+      scope === "analytics:read" ||
+      scope === "dashboard" ||
+      scope === "dashboard:read"
+    ) {
+      hasAdmin = true;
+    }
+  }
+
+  if (key.type === "SECRET" || key.type === "ADMIN" || hasAdmin) return "admin";
+  if (hasIngest) return "ingest";
+  return "ingest";
 }
 
 function withQuery(url: string, q: Record<string, string | undefined>) {
@@ -395,4 +433,75 @@ export async function updateWorkerSite(
   }
 
   return body;
+}
+
+/* =========================
+   ADMIN KEY SYNC (Worker/D1)
+   ========================= */
+
+export type WorkerProjectKeySyncInput = Pick<
+  ApiKeyRecord,
+  "projectId" | "type" | "prefix" | "keyHash" | "scopes"
+> & {
+  revokedAt?: Date | string | null;
+};
+
+export async function syncWorkerProjectKeys(
+  projectId: string | number,
+  keys: WorkerProjectKeySyncInput[]
+) {
+  const { baseUrl } = assertWorkerSiteRegistrationConfig();
+  const payloadKeys = keys
+    .map((key) => {
+      const keyHash = String(key.keyHash || "").trim().toLowerCase();
+      if (!/^[a-f0-9]{64}$/.test(keyHash)) return null;
+      return {
+        keyHash,
+        keyPrefix: normalizeKeyPrefix(key.prefix, key.type),
+        scope: normalizeWorkerScopeFromApiKey(key),
+        revokedAt: key.revokedAt
+          ? (key.revokedAt instanceof Date ? key.revokedAt.toISOString() : String(key.revokedAt))
+          : null,
+      };
+    })
+    .filter((key): key is NonNullable<typeof key> => Boolean(key));
+
+  if (!payloadKeys.length) {
+    throw new CavBotApiConfigError("No valid API key hashes were available to sync.");
+  }
+
+  const res = await fetchWithTimeout(`${baseUrl}/v1/admin/projects/${String(projectId)}/keys`, {
+    method: "POST",
+    headers: buildHeaders({ requireAdmin: true }),
+    body: JSON.stringify({ keys: payloadKeys }),
+    cache: "no-store",
+  });
+
+  const body = await safeJson(res);
+  if (!res.ok) {
+    const reqId = res.headers.get("X-Request-Id") || undefined;
+    throw new CavBotApiError(
+      errorMessage("Failed to sync project keys in Worker", res.status, body),
+      res.status,
+      body?.code,
+      reqId
+    );
+  }
+
+  return body;
+}
+
+export async function syncWorkerProjectKeyBestEffort(key: WorkerProjectKeySyncInput) {
+  const projectId = key.projectId;
+  if (!projectId) return;
+  try {
+    await syncWorkerProjectKeys(projectId, [key]);
+  } catch (error) {
+    console.error("[cavbot-api] project key sync failed", {
+      projectId,
+      keyType: key.type,
+      keyPrefix: normalizeKeyPrefix(key.prefix, key.type),
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
