@@ -9,7 +9,7 @@ import {
   serializeApiKey,
   type ApiKeyType,
 } from "@/lib/apiKeys.server";
-import { DEFAULT_RATE_LIMIT_LABEL, KeyUsagePayload, fetchUsageForWorkspace } from "@/lib/apiKeyUsage.server";
+import { DEFAULT_RATE_LIMIT_LABEL, KeyUsagePayload } from "@/lib/apiKeyUsage.server";
 import { auditLogWrite } from "@/lib/audit";
 import { syncWorkerProjectKeyBestEffort } from "@/lib/cavbotApi.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -63,6 +63,15 @@ type WorkspaceSiteSummary = {
   origin: string;
   projectId: number;
 };
+
+function defaultUsagePayload(): KeyUsagePayload {
+  return {
+    verifiedToday: null,
+    deniedToday: null,
+    rateLimit: DEFAULT_RATE_LIMIT_LABEL,
+    topDeniedOrigins: null,
+  };
+}
 
 function toType(raw: unknown): ApiKeyType {
   const value = String(raw ?? "publishable").trim().toUpperCase();
@@ -170,12 +179,7 @@ export async function GET(req: NextRequest) {
         secretKeys: [],
         allowedOrigins: [],
         site: null,
-        usage: {
-          verifiedToday: null,
-          deniedToday: null,
-          rateLimit: DEFAULT_RATE_LIMIT_LABEL,
-          topDeniedOrigins: null,
-        },
+        usage: defaultUsagePayload(),
       };
       return json(emptyPayload, 200);
     }
@@ -199,20 +203,6 @@ export async function GET(req: NextRequest) {
     const secretKeys = safeSerializeKeyList(scopedKeys, "SECRET");
     const allowedOrigins = siteRecord ? workspace.allowedOrigins : [];
 
-    const usage =
-      (await fetchUsageForWorkspace({
-        projectId: workspace.projectId,
-        accountId: session.accountId!,
-        siteId: siteRecord?.id ?? null,
-        siteOrigin: siteRecord?.origin ?? null,
-      })) ??
-      {
-        verifiedToday: null,
-        deniedToday: null,
-        rateLimit: DEFAULT_RATE_LIMIT_LABEL,
-        topDeniedOrigins: null,
-      };
-
     const payload: KeyResponse = {
       ok: true,
       projectId: workspace.projectId,
@@ -221,7 +211,7 @@ export async function GET(req: NextRequest) {
       secretKeys,
       allowedOrigins,
       site: siteRecord ? { id: siteRecord.id, origin: siteRecord.origin } : null,
-      usage,
+      usage: defaultUsagePayload(),
     };
 
     return json(payload, 200);

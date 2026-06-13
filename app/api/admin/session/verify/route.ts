@@ -3,7 +3,7 @@ import "server-only";
 import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import { assertWriteOrigin, readVerifiedSession, requireUser } from "@/lib/apiAuth";
+import { assertWriteOrigin, isApiAuthError, readVerifiedSession, requireUser } from "@/lib/apiAuth";
 import { getAuthPool, findAuthTokenByHash, findUserById, markAuthTokenUsed } from "@/lib/authDb";
 import { consumeInMemoryRateLimit } from "@/lib/serverRateLimit";
 import { readSanitizedJson } from "@/lib/security/userInput";
@@ -217,6 +217,9 @@ export async function POST(req: NextRequest) {
       authClient.release();
     }
   } catch (error) {
+    if (isApiAuthError(error)) {
+      return json({ ok: false, error: error.code }, error.status);
+    }
     console.error("[admin/session/verify] failed", error);
     return json({ ok: false, error: "ADMIN_VERIFY_FAILED" }, 500);
   }

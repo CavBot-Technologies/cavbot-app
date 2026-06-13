@@ -1,4 +1,5 @@
 import type { NextResponse } from "next/server";
+import { webcrypto as nodeCrypto } from "crypto";
 
 import { sessionCookieOptions } from "@/lib/apiAuth";
 
@@ -63,14 +64,15 @@ function constantTimeEqual(left: string, right: string) {
 }
 
 async function hmacSha256(secret: string, value: string) {
-  const key = await globalThis.crypto.subtle.importKey(
+  const cryptoImpl = globalThis.crypto?.subtle ? globalThis.crypto : (nodeCrypto as Crypto);
+  const key = await cryptoImpl.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
   );
-  const signature = await globalThis.crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value));
+  const signature = await cryptoImpl.subtle.sign("HMAC", key, new TextEncoder().encode(value));
   return base64urlEncode(new Uint8Array(signature));
 }
 

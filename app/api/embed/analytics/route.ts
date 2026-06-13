@@ -401,6 +401,24 @@ async function proxyToRemote(args: {
   }
 }
 
+async function proxyUnverifiedToRemote(req: NextRequest, payload: Record<string, unknown> | null) {
+  const fallbackHeaders = buildUnverifiedRemoteHeaders(req, payload);
+  const origin = req.headers.get("origin");
+  if (!fallbackHeaders) {
+    return NextResponse.json(
+      { ok: false, allowed: false, code: "MISSING_PROJECT_KEY" },
+      { status: 401, headers: corsHeaders(origin) },
+    );
+  }
+
+  return proxyToRemote({
+    req,
+    payload: stripUpstreamSitePublicIds(payload),
+    headers: fallbackHeaders,
+    corsOrigin: origin,
+  });
+}
+
 function getSiteIdFromPayload(payload: Record<string, unknown> | null, req: NextRequest) {
   const objectSite =
     payload?.site && typeof payload.site === "object"
@@ -479,23 +497,10 @@ async function handlePost(req: NextRequest, ctx: { env?: RateLimitEnv }) {
     }
   } catch (error) {
     console.error("[embed/analytics] app-side verifier failed; falling back to upstream verification", error);
-    const fallbackHeaders = buildUnverifiedRemoteHeaders(req, payload);
-    const origin = req.headers.get("origin");
-    if (!fallbackHeaders) {
-      return NextResponse.json(
-        { ok: false, allowed: false, code: "MISSING_PROJECT_KEY" },
-        { status: 401, headers: corsHeaders(origin) },
-      );
-    }
     try {
-      const upstreamPayload = stripUpstreamSitePublicIds(payload);
-      return await proxyToRemote({
-        req,
-        payload: upstreamPayload,
-        headers: fallbackHeaders,
-        corsOrigin: origin,
-      });
+      return await proxyUnverifiedToRemote(req, payload);
     } catch {
+      const origin = req.headers.get("origin");
       return NextResponse.json(
         { ok: false, error: "UPSTREAM_ERROR" },
         { status: 502, headers: corsHeaders(origin) },
@@ -504,6 +509,13 @@ async function handlePost(req: NextRequest, ctx: { env?: RateLimitEnv }) {
   }
 
   if (!verification.ok) {
+    try {
+      const proxied = await proxyUnverifiedToRemote(req, payload);
+      if (proxied.ok || proxied.status !== 401) return proxied;
+    } catch (error) {
+      console.error("[embed/analytics] upstream verification fallback failed", error);
+    }
+
     const origin = verification.origin ?? req.headers.get("origin");
     const headers = corsHeaders(origin);
     if (verification.retryAfterSec && verification.retryAfterSec > 0) {
