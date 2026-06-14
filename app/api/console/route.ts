@@ -1,13 +1,13 @@
 // app/api/console/route.ts
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
 import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
 import type { SummaryRange } from "@/lib/cavbotApi.server";
 import { CavBotApiError, getProjectSummaryForTenant } from "@/lib/cavbotApi.server";
-import { resolveProjectAnalyticsAuth } from "@/lib/projectAnalyticsKey.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
+import { readApiKeyWorkspaceCookieHints, resolveApiKeyWorkspace } from "@/lib/settings/apiKeyWorkspace.server";
+import { readWorkspace, type WorkspacePayload } from "@/lib/workspaceStore.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,24 +27,6 @@ function json<T>(payload: T, init?: number | ResponseInit) {
   });
 }
 
-// ===== Workspace cookie keys (match Command Center + writeWorkspace) =====
-const KEY_ACTIVE_PROJECT_ID = "cb_active_project_id";
-const KEY_ACTIVE_SITE_ORIGIN_PREFIX = "cb_active_site_origin__";
-const KEY_ACTIVE_SITE_ID_PREFIX = "cb_active_site_id__";
-
-function safeDecode(v: string): string {
-  try {
-    return decodeURIComponent(v);
-  } catch {
-    return v;
-  }
-}
-
-function getCookieDecoded(req: NextRequest, key: string): string {
-  const raw = String(req.cookies.get(key)?.value ?? "").trim();
-  return safeDecode(raw).trim();
-}
-
 function normalizeRange(input: string | null): SummaryRange {
   const v = String(input ?? "").trim();
   if (v === "24h" || v === "7d" || v === "14d" || v === "30d") return v as SummaryRange;
@@ -59,26 +41,6 @@ function parseProjectId(raw: string | null | undefined): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function normalizeMaybeOrigin(input: string | null): string | undefined {
-  const raw = String(input ?? "").trim();
-  if (!raw) return undefined;
-
-  const withProto =
-    raw.startsWith("http://") || raw.startsWith("https://") ? raw : `https://${raw}`;
-
-  let u: URL;
-  try {
-    u = new URL(withProto);
-  } catch {
-    throw new Error("BAD_ORIGIN");
-  }
-
-  if (!u.hostname || u.hostname.includes("..")) throw new Error("BAD_ORIGIN");
-  if (u.username || u.password) throw new Error("BAD_ORIGIN");
-
-  return u.origin;
-}
-
 function toPublicError(e: unknown) {
   // apiAuth.ts errors (session/origin/roles)
   if (isApiAuthError(e)) {
@@ -89,7 +51,7 @@ function toPublicError(e: unknown) {
     return { status: 401, payload: { error: "UNAUTHENTICATED" } };
   }
 
-  // BAD_ORIGIN thrown by normalizeMaybeOrigin
+  // BAD_ORIGIN thrown by request validation
   const message =
     e instanceof Error
       ? e.message
@@ -145,6 +107,24 @@ function withRouteDeadline<T>(promise: Promise<T>, label: string, timeoutMs = 6_
   });
 }
 
+function env(name: string) {
+  return String(process.env[name] || "").trim();
+}
+
+function workspaceFromPayload(payload: WorkspacePayload | null) {
+  if (!payload?.projectId || !Array.isArray(payload.sites) || !payload.sites.length) return null;
+  const topSite =
+    (payload.topSiteId ? payload.sites.find((site) => site.id === payload.topSiteId) : null) ||
+    (payload.activeSiteId ? payload.sites.find((site) => site.id === payload.activeSiteId) : null) ||
+    payload.sites[0] ||
+    null;
+  return {
+    projectId: payload.projectId,
+    sites: payload.sites.map((site) => ({ id: site.id, origin: site.origin })),
+    activeSite: topSite ? { id: topSite.id, origin: topSite.origin } : null,
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     // MUST be NextRequest so apiAuth can reliably read cookies
@@ -162,123 +142,77 @@ export async function GET(req: NextRequest) {
     const pidFromQuery =
       parseProjectId(searchParams.get("project")) || parseProjectId(searchParams.get("projectId"));
 
-    const pidFromCookie =
-      parseProjectId(req.cookies.get(KEY_ACTIVE_PROJECT_ID)?.value) ||
-      parseProjectId(req.cookies.get("cb_pid")?.value);
+    const workspaceHints = readApiKeyWorkspaceCookieHints(req);
+    const pidFromCookie = workspaceHints.preferredProjectId;
 
     const pid = pidFromQuery ?? pidFromCookie;
 
-    const projectSlug = String(searchParams.get("projectSlug") ?? "").trim();
+    const requestedSiteId = String(searchParams.get("siteId") || "").trim() || undefined;
+    let workspace = await withRouteDeadline(
+      resolveApiKeyWorkspace({
+        accountId: session.accountId!,
+        requestedSiteId,
+        preferredProjectId: pid ?? workspaceHints.preferredProjectId,
+        activeSiteIdHint: workspaceHints.activeSiteIdHint,
+        activeSiteOriginHint: workspaceHints.activeSiteOriginHint,
+      }),
+      "CONSOLE_WORKSPACE",
+      8_000,
+    ).catch(async (error) => {
+      console.error("[api/console] workspace resolve failed; using workspace payload", {
+        accountId: session.accountId,
+        detail: error instanceof Error ? error.message : String(error),
+      });
+      return workspaceFromPayload(
+        await withRouteDeadline(readWorkspace({ accountId: session.accountId! }), "CONSOLE_WORKSPACE_PAYLOAD", 8_000).catch(
+          () => null,
+        ),
+      );
+    });
 
-    const project = pid
-      ? await prisma.project.findFirst({
-          where: { id: pid, accountId: session.accountId!, isActive: true },
-          select: {
-            id: true,
-            slug: true,
-            name: true,
-            topSite: {
-              select: {
-                id: true,
-                origin: true,
-              },
-            },
-            serverKeyEnc: true,
-            serverKeyEncIv: true,
-          },
-        })
-      : projectSlug
-      ? await prisma.project.findFirst({
-          where: { slug: projectSlug, accountId: session.accountId!, isActive: true },
-          select: {
-            id: true,
-            slug: true,
-            name: true,
-            topSite: {
-              select: {
-                id: true,
-                origin: true,
-              },
-            },
-            serverKeyEnc: true,
-            serverKeyEncIv: true,
-          },
-        })
-      : await prisma.project.findFirst({
-          where: { accountId: session.accountId!, isActive: true },
-          orderBy: { createdAt: "asc" },
-          select: {
-            id: true,
-            slug: true,
-            name: true,
-            topSite: {
-              select: {
-                id: true,
-                origin: true,
-              },
-            },
-            serverKeyEnc: true,
-            serverKeyEncIv: true,
-          },
-        });
+    if (!workspace) {
+      workspace = workspaceFromPayload(
+        await withRouteDeadline(readWorkspace({ accountId: session.accountId! }), "CONSOLE_WORKSPACE_PAYLOAD", 8_000).catch(
+          () => null,
+        ),
+      );
+    }
 
-    if (!project) return json({ error: "PROJECT_NOT_FOUND" }, 404);
+    if (!workspace?.projectId) return json({ error: "PROJECT_NOT_FOUND" }, 404);
 
-    // ===== SITE SCOPING (this is the fix) =====
-    // Query params win. If absent, fall back to Command Center cookie pointers for THIS project.
-    const pidStr = String(project.id);
-
-    const siteOriginFromQuery = normalizeMaybeOrigin(
-      searchParams.get("origin") ?? searchParams.get("siteOrigin")
-    );
-
-    const siteIdFromQuery = String(searchParams.get("siteId") ?? "").trim() || undefined;
-
-    const siteOriginFromCookie = normalizeMaybeOrigin(
-      getCookieDecoded(req, `${KEY_ACTIVE_SITE_ORIGIN_PREFIX}${pidStr}`) || null
-    );
-
-    const siteIdFromCookie =
-      getCookieDecoded(req, `${KEY_ACTIVE_SITE_ID_PREFIX}${pidStr}`) || undefined;
-
-    const topSiteOrigin = normalizeMaybeOrigin(project.topSite?.origin || null);
-    const topSiteId = String(project.topSite?.id || "").trim() || undefined;
-
-    const siteOrigin = siteOriginFromQuery ?? topSiteOrigin ?? siteOriginFromCookie;
-    const siteId = siteIdFromQuery ?? topSiteId ?? siteIdFromCookie;
-
-    const analyticsAuth = await resolveProjectAnalyticsAuth(project);
+    const siteOrigin =
+      String(searchParams.get("origin") || searchParams.get("siteOrigin") || "").trim() ||
+      workspace.activeSite?.origin ||
+      undefined;
 
     const requestStamp = Date.now();
     let out;
     try {
       out = await withRouteDeadline(
         getProjectSummaryForTenant({
-          projectId: project.id,
+          projectId: workspace.projectId,
           range,
           siteOrigin,
-          siteId,
-          projectKey: analyticsAuth.projectKey,
-          adminToken: analyticsAuth.adminToken,
-          requestId: `console_${project.id}_${requestStamp}`,
+          projectKey: env("CAVBOT_PROJECT_KEY"),
+          adminToken: env("CAVBOT_ADMIN_TOKEN"),
+          requestId: `console_${workspace.projectId}_${requestStamp}`,
         }),
         "CONSOLE_SITE_SUMMARY",
       );
     } catch (error) {
-      if (!siteOrigin && !siteId) throw error;
+      if (!siteOrigin) throw error;
       console.error("[api/console] site-scoped summary failed; retrying project summary", {
-        projectId: project.id,
+        projectId: workspace.projectId,
         siteOrigin,
-        siteId,
         detail: error instanceof Error ? error.message : String(error),
       });
       out = await withRouteDeadline(
         getProjectSummaryForTenant({
-          projectId: project.id,
+          projectId: workspace.projectId,
           range,
-          projectKey: analyticsAuth.projectKey,
-          adminToken: analyticsAuth.adminToken,
-          requestId: `console_${project.id}_${requestStamp}_project`,
+          projectKey: env("CAVBOT_PROJECT_KEY"),
+          adminToken: env("CAVBOT_ADMIN_TOKEN"),
+          requestId: `console_${workspace.projectId}_${requestStamp}_project`,
         }),
         "CONSOLE_PROJECT_SUMMARY",
       );
