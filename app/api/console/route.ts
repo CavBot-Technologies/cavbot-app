@@ -128,6 +128,18 @@ function degradedSummary(range: SummaryRange, projectId = 1): ProjectSummary & {
   };
 }
 
+function withRouteDeadline<T>(promise: Promise<T>, label: string, timeoutMs = 6_000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return Promise.race([
+    promise,
+    new Promise<T>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label}_TIMEOUT`)), timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 export async function GET(req: NextRequest) {
   try {
     // MUST be NextRequest so apiAuth can reliably read cookies
@@ -235,15 +247,18 @@ export async function GET(req: NextRequest) {
     const requestStamp = Date.now();
     let out;
     try {
-      out = await getProjectSummaryForTenant({
-        projectId: project.id,
-        range,
-        siteOrigin,
-        siteId,
-        projectKey: analyticsAuth.projectKey,
-        adminToken: analyticsAuth.adminToken,
-        requestId: `console_${project.id}_${requestStamp}`,
-      });
+      out = await withRouteDeadline(
+        getProjectSummaryForTenant({
+          projectId: project.id,
+          range,
+          siteOrigin,
+          siteId,
+          projectKey: analyticsAuth.projectKey,
+          adminToken: analyticsAuth.adminToken,
+          requestId: `console_${project.id}_${requestStamp}`,
+        }),
+        "CONSOLE_SITE_SUMMARY",
+      );
     } catch (error) {
       if (!siteOrigin && !siteId) throw error;
       console.error("[api/console] site-scoped summary failed; retrying project summary", {
@@ -252,13 +267,16 @@ export async function GET(req: NextRequest) {
         siteId,
         detail: error instanceof Error ? error.message : String(error),
       });
-      out = await getProjectSummaryForTenant({
-        projectId: project.id,
-        range,
-        projectKey: analyticsAuth.projectKey,
-        adminToken: analyticsAuth.adminToken,
-        requestId: `console_${project.id}_${requestStamp}_project`,
-      });
+      out = await withRouteDeadline(
+        getProjectSummaryForTenant({
+          projectId: project.id,
+          range,
+          projectKey: analyticsAuth.projectKey,
+          adminToken: analyticsAuth.adminToken,
+          requestId: `console_${project.id}_${requestStamp}_project`,
+        }),
+        "CONSOLE_PROJECT_SUMMARY",
+      );
     }
 
     return json(out, 200);
