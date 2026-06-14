@@ -167,7 +167,9 @@ export async function POST(req: NextRequest) {
       const nextPath = resolveAdminNextPath(staff, String(meta.nextPath || "/"));
 
       const loginAt = new Date();
-      await markAuthTokenUsed(authClient, token.id);
+      await markAuthTokenUsed(authClient, token.id).catch((tokenUpdateError) => {
+        console.error("[admin/session/verify] token usage update failed", tokenUpdateError);
+      });
       await authClient.query(
         `UPDATE "StaffProfile"
          SET
