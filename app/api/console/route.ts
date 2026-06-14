@@ -232,15 +232,34 @@ export async function GET(req: NextRequest) {
 
     const analyticsAuth = await resolveProjectAnalyticsAuth(project);
 
-    const out = await getProjectSummaryForTenant({
-      projectId: project.id,
-      range,
-      siteOrigin,
-      siteId,
-      projectKey: analyticsAuth.projectKey,
-      adminToken: analyticsAuth.adminToken,
-      requestId: `console_${project.id}_${Date.now()}`,
-    });
+    const requestStamp = Date.now();
+    let out;
+    try {
+      out = await getProjectSummaryForTenant({
+        projectId: project.id,
+        range,
+        siteOrigin,
+        siteId,
+        projectKey: analyticsAuth.projectKey,
+        adminToken: analyticsAuth.adminToken,
+        requestId: `console_${project.id}_${requestStamp}`,
+      });
+    } catch (error) {
+      if (!siteOrigin && !siteId) throw error;
+      console.error("[api/console] site-scoped summary failed; retrying project summary", {
+        projectId: project.id,
+        siteOrigin,
+        siteId,
+        detail: error instanceof Error ? error.message : String(error),
+      });
+      out = await getProjectSummaryForTenant({
+        projectId: project.id,
+        range,
+        projectKey: analyticsAuth.projectKey,
+        adminToken: analyticsAuth.adminToken,
+        requestId: `console_${project.id}_${requestStamp}_project`,
+      });
+    }
 
     return json(out, 200);
   } catch (error) {
