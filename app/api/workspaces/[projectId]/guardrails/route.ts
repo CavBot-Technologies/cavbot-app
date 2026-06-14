@@ -93,7 +93,7 @@ export async function GET(req: Request, ctx: unknown) {
 
     return json({ guardrails }, 200);
   } catch (e: unknown) {
-    if (isApiAuthError(e)) return json({ error: e.code }, e.status);
+    if (isApiAuthError(e) && e.code !== "AUTH_BACKEND_UNAVAILABLE") return json({ error: e.code }, e.status);
     return json({ ok: true, degraded: true, guardrails: defaultWorkspaceProjectGuardrails() }, 200);
   }
 }

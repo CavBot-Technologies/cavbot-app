@@ -13,6 +13,7 @@ import { DEFAULT_RATE_LIMIT_LABEL, KeyUsagePayload } from "@/lib/apiKeyUsage.ser
 import { auditLogWrite } from "@/lib/audit";
 import { syncWorkerProjectKeyBestEffort } from "@/lib/cavbotApi.server";
 import { readSanitizedJson } from "@/lib/security/userInput";
+import { readWorkspace, type WorkspacePayload } from "@/lib/workspaceStore.server";
 import {
   createApiKeyRecord,
   findSiteForAccount,
@@ -63,6 +64,22 @@ type WorkspaceSiteSummary = {
   origin: string;
   projectId: number;
 };
+
+function workspaceFromWorkspacePayload(payload: WorkspacePayload | null): Awaited<ReturnType<typeof resolveApiKeyWorkspaceWithFallback>> | null {
+  if (!payload?.projectId || !Array.isArray(payload.sites) || !payload.sites.length) return null;
+  const topSite =
+    (payload.topSiteId ? payload.sites.find((site) => site.id === payload.topSiteId) : null) ||
+    (payload.activeSiteId ? payload.sites.find((site) => site.id === payload.activeSiteId) : null) ||
+    payload.sites[0] ||
+    null;
+  if (!topSite?.id || !topSite.origin) return null;
+  return {
+    projectId: payload.projectId,
+    sites: payload.sites.map((site) => ({ id: site.id, origin: site.origin })),
+    activeSite: { id: topSite.id, origin: topSite.origin },
+    allowedOrigins: [topSite.origin],
+  };
+}
 
 function defaultUsagePayload(): KeyUsagePayload {
   return {
@@ -179,14 +196,29 @@ export async function GET(req: NextRequest) {
     const session = await withApiKeysDeadline(requireSettingsOwnerResilientSession(req), "API_KEYS_SESSION", 5_000);
     const workspaceHints = readApiKeyWorkspaceCookieHints(req);
     const requestedSiteId = String(req.nextUrl.searchParams.get("siteId") || "").trim() || undefined;
-    const workspace = await withApiKeysDeadline(
+    const workspacePayloadPromise = withApiKeysDeadline(
+      readWorkspace({ accountId: session.accountId }),
+      "API_KEYS_WORKSPACE_PAYLOAD",
+      8_000,
+    ).catch(() => null);
+    let workspace = await withApiKeysDeadline(
       resolveApiKeyWorkspaceWithFallback({
         accountId: session.accountId,
         requestedSiteId,
         ...workspaceHints,
       }),
       "API_KEYS_WORKSPACE",
-    );
+      8_000,
+    ).catch(async (error) => {
+      console.error("[settings/api-keys] workspace deadline fallback", {
+        accountId: session.accountId,
+        detail: error instanceof Error ? error.message : String(error),
+      });
+      return workspaceFromWorkspacePayload(await workspacePayloadPromise);
+    });
+    if (!workspace) {
+      workspace = workspaceFromWorkspacePayload(await workspacePayloadPromise);
+    }
     if (!workspace) {
       const emptyPayload: KeyResponse = {
         ok: true,

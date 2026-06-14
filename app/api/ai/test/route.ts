@@ -96,6 +96,20 @@ function json(payload: unknown, init?: number | ResponseInit) {
   });
 }
 
+async function withAiTestDeadline<T>(promise: Promise<T>, label: string, timeoutMs = 8_000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label}_TIMEOUT`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function degradedAiCatalogPayload(requestId: string, error?: string) {
   const status = getAiProviderStatus();
   return {
@@ -125,26 +139,32 @@ export async function GET(req: NextRequest) {
     const action = s(url.searchParams.get("action")) || "technical_recap";
     const policySurface = parsePolicySurface(url.searchParams.get("surface"));
     const catalogScope = s(url.searchParams.get("catalog")).toLowerCase();
-    const ctx = await requireAiRequestContext({
-      req,
-      surface: "console",
-    });
-    const capabilityPolicy = await resolveAiExecutionPolicy({
-      accountId: ctx.accountId,
-      userId: ctx.userId,
-      memberRole: ctx.memberRole,
-      planId: ctx.planId,
-      surface: policySurface,
-      action,
-      requestedModel: null,
-      requestedReasoningLevel: "medium",
-      promptText: "capability-check",
-      context: null,
-      imageAttachmentCount: 0,
-      researchUrlsCount: 0,
-      sessionId: null,
-      isExecution: false,
-    });
+    const ctx = await withAiTestDeadline(
+      requireAiRequestContext({
+        req,
+        surface: "console",
+      }),
+      "AI_TEST_CONTEXT",
+    );
+    const capabilityPolicy = await withAiTestDeadline(
+      resolveAiExecutionPolicy({
+        accountId: ctx.accountId,
+        userId: ctx.userId,
+        memberRole: ctx.memberRole,
+        planId: ctx.planId,
+        surface: policySurface,
+        action,
+        requestedModel: null,
+        requestedReasoningLevel: "medium",
+        promptText: "capability-check",
+        context: null,
+        imageAttachmentCount: 0,
+        researchUrlsCount: 0,
+        sessionId: null,
+        isExecution: false,
+      }),
+      "AI_TEST_POLICY",
+    );
 
     const status = getAiProviderStatus();
     const statuses = getAiProviderStatuses();
@@ -164,12 +184,16 @@ export async function GET(req: NextRequest) {
           modelCatalog: getAiModelCatalog(),
         });
     const qwenCoderState = policySurface === "cavcode"
-      ? await getQwenCoderPopoverState({
-          accountId: ctx.accountId,
-          userId: ctx.userId,
-          planId: ctx.planId,
-          sessionId: s(url.searchParams.get("sessionId")) || null,
-        }).catch(() => null)
+      ? await withAiTestDeadline(
+          getQwenCoderPopoverState({
+            accountId: ctx.accountId,
+            userId: ctx.userId,
+            planId: ctx.planId,
+            sessionId: s(url.searchParams.get("sessionId")) || null,
+          }),
+          "AI_TEST_QWEN_STATE",
+          3_000,
+        ).catch(() => null)
       : null;
     const qwenGuardDecision = qwenCoderState?.entitlement?.nextActionId
       ? buildGuardDecisionPayload({
@@ -289,10 +313,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const ctx = await requireAiRequestContext({
-      req,
-      surface: "console",
-    });
+    const ctx = await withAiTestDeadline(
+      requireAiRequestContext({
+        req,
+        surface: "console",
+      }),
+      "AI_TEST_POST_CONTEXT",
+    );
 
     const rate = consumeInMemoryRateLimit({
       key: `ai-test:${ctx.accountId}:${ctx.userId}`,
@@ -327,22 +354,25 @@ export async function POST(req: NextRequest) {
     }
 
     const modelOverride = s(parsed.data.model) || undefined;
-    const policy = await resolveAiExecutionPolicy({
-      accountId: ctx.accountId,
-      userId: ctx.userId,
-      memberRole: ctx.memberRole,
-      planId: ctx.planId,
-      surface: "center",
-      action: parsed.data.modelRole === "reasoning" ? "prioritize_fixes" : "technical_recap",
-      requestedModel: modelOverride || null,
-      requestedReasoningLevel: parsed.data.modelRole === "reasoning" ? "high" : "medium",
-      promptText: parsed.data.prompt || "ai-test",
-      context: null,
-      imageAttachmentCount: 0,
-      researchUrlsCount: 0,
-      sessionId: null,
-      isExecution: false,
-    });
+    const policy = await withAiTestDeadline(
+      resolveAiExecutionPolicy({
+        accountId: ctx.accountId,
+        userId: ctx.userId,
+        memberRole: ctx.memberRole,
+        planId: ctx.planId,
+        surface: "center",
+        action: parsed.data.modelRole === "reasoning" ? "prioritize_fixes" : "technical_recap",
+        requestedModel: modelOverride || null,
+        requestedReasoningLevel: parsed.data.modelRole === "reasoning" ? "high" : "medium",
+        promptText: parsed.data.prompt || "ai-test",
+        context: null,
+        imageAttachmentCount: 0,
+        researchUrlsCount: 0,
+        sessionId: null,
+        isExecution: false,
+      }),
+      "AI_TEST_POST_POLICY",
+    );
     const providerId = resolveProviderIdForModel(policy.model, parsed.data.provider);
     const envStatus = assertAiProviderReady(providerId);
     if (parsed.data.mode === "dry_run") {

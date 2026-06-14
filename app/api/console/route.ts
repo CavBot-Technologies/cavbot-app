@@ -2,10 +2,12 @@
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession, requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { requireAccountContext, isApiAuthError } from "@/lib/apiAuth";
+import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
 import type { SummaryRange } from "@/lib/cavbotApi.server";
 import { CavBotApiError, getProjectSummaryForTenant } from "@/lib/cavbotApi.server";
 import { resolveProjectAnalyticsAuth } from "@/lib/projectAnalyticsKey.server";
+import type { ProjectSummary } from "@/lib/cavbotTypes";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -113,10 +115,23 @@ function toPublicError(e: unknown) {
   return { status: 500, payload: { error: "CONSOLE_SUMMARY_FAILED" } };
 }
 
+function degradedSummary(range: SummaryRange, projectId = 1): ProjectSummary & { degraded: true; error: string } {
+  return {
+    degraded: true,
+    error: "CONSOLE_SUMMARY_DEGRADED",
+    project: { id: String(projectId), projectId },
+    window: { range },
+    sites: [],
+    activeSite: { id: "none", label: "No site selected", origin: "" },
+    metrics: {},
+    diagnostics: { degraded: true },
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     // MUST be NextRequest so apiAuth can reliably read cookies
-    const session = await requireSession(req);
+    const session = await requireWorkspaceResilientSession(req);
     requireAccountContext(session);
 
     const { searchParams } = req.nextUrl;
@@ -209,6 +224,11 @@ export async function GET(req: NextRequest) {
     return json(out, 200);
   } catch (error) {
     const { status, payload } = toPublicError(error);
-    return json(payload, status);
+    if (status === 401 || status === 403 || payload.error === "BAD_ORIGIN") {
+      return json(payload, status);
+    }
+
+    console.error("[api/console] degraded", error);
+    return json(degradedSummary(normalizeRange(req.nextUrl.searchParams.get("range"))), 200);
   }
 }

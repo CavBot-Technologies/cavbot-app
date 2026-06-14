@@ -123,7 +123,7 @@ export async function GET(req: NextRequest, ctx: unknown) {
 
     return json({ ok: true, status }, 200);
   } catch (error) {
-    if (isApiAuthError(error)) return json({ error: error.code }, error.status);
+    if (isApiAuthError(error) && error.code !== "AUTH_BACKEND_UNAVAILABLE") return json({ error: error.code }, error.status);
     const status = Number((error as { status?: unknown })?.status || 0);
     if (status === 503 || status === 504) return degraded();
     const message = error instanceof Error ? error.message : "Failed to fetch scan status.";
