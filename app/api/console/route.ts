@@ -115,10 +115,15 @@ function toPublicError(e: unknown) {
   return { status: 500, payload: { error: "CONSOLE_SUMMARY_FAILED" } };
 }
 
-function degradedSummary(range: SummaryRange, projectId = 1): ProjectSummary & { degraded: true; error: string } {
+function degradedSummary(
+  range: SummaryRange,
+  projectId = 1,
+  reason = "CONSOLE_SUMMARY_DEGRADED",
+): ProjectSummary & { degraded: true; error: string; code: string } {
   return {
     degraded: true,
     error: "CONSOLE_SUMMARY_DEGRADED",
+    code: reason,
     project: { id: String(projectId), projectId },
     window: { range },
     sites: [],
@@ -287,6 +292,12 @@ export async function GET(req: NextRequest) {
     }
 
     console.error("[api/console] degraded", error);
-    return json(degradedSummary(normalizeRange(req.nextUrl.searchParams.get("range"))), 200);
+    const reason =
+      error instanceof CavBotApiError
+        ? error.code || "CAVBOT_API_ERROR"
+        : error instanceof Error
+          ? error.message || "CONSOLE_SUMMARY_FAILED"
+          : "CONSOLE_SUMMARY_FAILED";
+    return json(degradedSummary(normalizeRange(req.nextUrl.searchParams.get("range")), 1, reason), 200);
   }
 }

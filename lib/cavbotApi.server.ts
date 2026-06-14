@@ -82,10 +82,7 @@ function normalizeBaseUrl(input: string): string {
 export function getEnv(): CavBotEnv {
   if (_cachedEnv) return _cachedEnv;
 
-  const baseUrlRaw = env("CAVBOT_API_BASE_URL") || env("CAVBOT_API_URL");
-  if (!baseUrlRaw) {
-    throw new CavBotApiConfigError("Missing env vars: CAVBOT_API_BASE_URL or CAVBOT_API_URL.");
-  }
+  const baseUrlRaw = env("CAVBOT_API_BASE_URL") || env("CAVBOT_API_URL") || "https://api.cavbot.io";
 
   const secretKey = env("CAVBOT_SECRET_KEY") || env("CAVBOT_PROJECT_KEY") || "";
   const adminToken = env("CAVBOT_ADMIN_TOKEN") || undefined;
@@ -229,7 +226,8 @@ function buildHeaders(opts?: {
   const explicitProjectKey = typeof opts?.projectKey === "string";
   const explicitAdminToken = typeof opts?.adminToken === "string" && opts.adminToken.length > 0;
   const projectKey = (explicitProjectKey ? opts.projectKey : envv.secretKey) || "";
-  const adminToken = (explicitAdminToken ? opts.adminToken : requireAdmin ? envv.adminToken : "") || "";
+  const adminToken =
+    (explicitAdminToken ? opts.adminToken : requireAdmin || requireProjectKey ? envv.adminToken : "") || "";
 
   if (requireAdmin && !adminToken) {
     throw new CavBotApiConfigError(
