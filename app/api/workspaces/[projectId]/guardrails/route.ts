@@ -6,10 +6,8 @@ import { findAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
 import {
   defaultWorkspaceProjectGuardrails,
   ensureWorkspaceProjectGuardrails,
-  getWorkspaceProjectGuardrails,
 } from "@/lib/workspaceGuardrails.server";
-import { requireWorkspaceResilientSession, requireWorkspaceSession } from "@/lib/workspaceAuth.server";
-import { withCavCloudDeadline } from "@/lib/cavcloud/http.server";
+import { requireWorkspaceSession } from "@/lib/workspaceAuth.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -63,49 +61,9 @@ async function getParams(ctx: unknown): Promise<{ projectId?: string }> {
 }
 
 export async function GET(req: Request, ctx: unknown) {
-  const degraded = () => json({ ok: true, degraded: true, guardrails: defaultWorkspaceProjectGuardrails() }, 200);
-
-  try {
-    let sess;
-    try {
-      sess = await withCavCloudDeadline(requireWorkspaceResilientSession(req), {
-        timeoutMs: 1_200,
-        message: "Workspace session lookup timed out.",
-      });
-    } catch (error) {
-      if (isApiAuthError(error) && error.code !== "AUTH_BACKEND_UNAVAILABLE") {
-        return json({ error: error.code }, error.status);
-      }
-      return degraded();
-    }
-
-    const params = await getParams(ctx);
-    const projectId = parseProjectId(params?.projectId || "");
-    if (!projectId) return degraded();
-
-    const project = await withCavCloudDeadline(
-      findAccountWorkspaceProject({
-        accountId: sess.accountId!,
-        projectId,
-        select: { id: true },
-      }),
-      {
-        timeoutMs: 1_800,
-        message: "Workspace project lookup timed out.",
-      },
-    );
-    if (!project) return degraded();
-
-    const guardrails = await withCavCloudDeadline(getWorkspaceProjectGuardrails(project.id), {
-      timeoutMs: 1_800,
-      message: "Workspace guardrails lookup timed out.",
-    });
-
-    return json({ guardrails }, 200);
-  } catch (e: unknown) {
-    if (isApiAuthError(e) && e.code !== "AUTH_BACKEND_UNAVAILABLE") return json({ error: e.code }, e.status);
-    return degraded();
-  }
+  void req;
+  void ctx;
+  return json({ ok: true, degraded: true, guardrails: defaultWorkspaceProjectGuardrails() }, 200);
 }
 
 export async function PATCH(req: Request, ctx: unknown) {

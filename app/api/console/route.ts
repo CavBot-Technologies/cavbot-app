@@ -160,6 +160,12 @@ export async function GET(req: NextRequest) {
             id: true,
             slug: true,
             name: true,
+            topSite: {
+              select: {
+                id: true,
+                origin: true,
+              },
+            },
             serverKeyEnc: true,
             serverKeyEncIv: true,
           },
@@ -171,6 +177,12 @@ export async function GET(req: NextRequest) {
             id: true,
             slug: true,
             name: true,
+            topSite: {
+              select: {
+                id: true,
+                origin: true,
+              },
+            },
             serverKeyEnc: true,
             serverKeyEncIv: true,
           },
@@ -182,6 +194,12 @@ export async function GET(req: NextRequest) {
             id: true,
             slug: true,
             name: true,
+            topSite: {
+              select: {
+                id: true,
+                origin: true,
+              },
+            },
             serverKeyEnc: true,
             serverKeyEncIv: true,
           },
@@ -206,8 +224,11 @@ export async function GET(req: NextRequest) {
     const siteIdFromCookie =
       getCookieDecoded(req, `${KEY_ACTIVE_SITE_ID_PREFIX}${pidStr}`) || undefined;
 
-    const siteOrigin = siteOriginFromQuery ?? siteOriginFromCookie;
-    const siteId = siteIdFromQuery ?? siteIdFromCookie;
+    const topSiteOrigin = normalizeMaybeOrigin(project.topSite?.origin || null);
+    const topSiteId = String(project.topSite?.id || "").trim() || undefined;
+
+    const siteOrigin = siteOriginFromQuery ?? topSiteOrigin ?? siteOriginFromCookie;
+    const siteId = siteIdFromQuery ?? topSiteId ?? siteIdFromCookie;
 
     const analyticsAuth = await resolveProjectAnalyticsAuth(project);
 

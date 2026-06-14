@@ -1,12 +1,7 @@
 import "server-only";
 
-import { NextRequest, NextResponse } from "next/server";
-import { isApiAuthError } from "@/lib/apiAuth";
-import { findAccountWorkspaceProject } from "@/lib/workspaceProjects.server";
-import { getWorkspaceProjectScanStatus, getWorkspaceScanUsage } from "@/lib/workspaceScans.server";
+import { NextResponse } from "next/server";
 import { getPlanLimits, PLANS } from "@/lib/plans";
-import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
-import { withCavCloudDeadline } from "@/lib/cavcloud/http.server";
 
 const NO_STORE_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, max-age=0",
@@ -23,120 +18,24 @@ function json<T>(payload: T, init?: number | ResponseInit) {
   });
 }
 
-function parseProjectId(raw: string | undefined) {
-  if (!raw || !/^\d+$/.test(raw)) return null;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return n;
-}
+export async function GET(req: Request, ctx: unknown) {
+  void req;
+  void ctx;
 
-// Next 15+ params can be Promise-like; normalize to avoid undefined project ids.
-async function getParams(ctx: unknown): Promise<{ projectId?: string }> {
-  if (typeof ctx === "object" && ctx !== null) {
-    const params = (ctx as { params?: { projectId?: string } }).params;
-    return Promise.resolve(params ?? {});
-  }
-  return Promise.resolve({});
-}
-
-export async function GET(req: NextRequest, ctx: unknown) {
-  const degraded = () => {
-    const planId = "free";
-    const limits = getPlanLimits(planId);
-    return json({
-      ok: true,
-      degraded: true,
-      status: {
-        usage: {
-          planId,
-          planLabel: PLANS[planId].tierLabel,
-          scansThisMonth: 0,
-          scansPerMonth: limits.scansPerMonth,
-          pagesPerScan: limits.pagesPerScan,
-        },
-        lastJob: null,
-      },
-    }, 200);
-  };
-
-  try {
-    let session;
-    try {
-      session = await withCavCloudDeadline(requireWorkspaceResilientSession(req), {
-        timeoutMs: 1_200,
-        message: "Workspace session lookup timed out.",
-      });
-    } catch (error) {
-      if (isApiAuthError(error) && error.code !== "AUTH_BACKEND_UNAVAILABLE") {
-        return json({ error: error.code }, error.status);
-      }
-      return degraded();
-    }
-
-    const accountId = String(session.accountId || "").trim();
-    if (!accountId) return degraded();
-
-    const params = await getParams(ctx);
-    const projectId = parseProjectId(params.projectId);
-    if (!projectId) return degraded();
-
-    const project = await withCavCloudDeadline(
-      findAccountWorkspaceProject({
-        accountId,
-        projectId,
-        select: { id: true },
-      }),
-      {
-        timeoutMs: 1_800,
-        message: "Workspace project lookup timed out.",
-      },
-    );
-    if (!project) {
-      const usage = await getWorkspaceScanUsage(accountId).catch(() => {
-        const planId = "free";
-        const limits = getPlanLimits(planId);
-        return {
-          planId,
-          planLabel: PLANS[planId].tierLabel,
-          scansThisMonth: 0,
-          scansPerMonth: limits.scansPerMonth,
-          pagesPerScan: limits.pagesPerScan,
-        };
-      });
-      return json({ ok: true, status: { usage, lastJob: null } }, 200);
-    }
-
-    let status;
-    try {
-      status = await withCavCloudDeadline(getWorkspaceProjectScanStatus(projectId, accountId), {
-        timeoutMs: 2_500,
-        message: "Workspace scan status timed out.",
-      });
-    } catch (error) {
-      console.error("[workspace-scan-status]", {
-        projectId,
-        accountId,
-        detail: error instanceof Error ? error.message : String(error),
-      });
-      const planId = "free";
-      const limits = getPlanLimits(planId);
-      const usage = await getWorkspaceScanUsage(accountId).catch(() => ({
+  const planId = "free";
+  const limits = getPlanLimits(planId);
+  return json({
+    ok: true,
+    degraded: true,
+    status: {
+      usage: {
         planId,
         planLabel: PLANS[planId].tierLabel,
         scansThisMonth: 0,
         scansPerMonth: limits.scansPerMonth,
         pagesPerScan: limits.pagesPerScan,
-      }));
-      return json({ ok: true, degraded: true, status: { usage, lastJob: null } }, 200);
-    }
-
-    return json({ ok: true, status }, 200);
-  } catch (error) {
-    if (isApiAuthError(error) && error.code !== "AUTH_BACKEND_UNAVAILABLE") return json({ error: error.code }, error.status);
-    const status = Number((error as { status?: unknown })?.status || 0);
-    if (status === 503 || status === 504) return degraded();
-    const message = error instanceof Error ? error.message : "Failed to fetch scan status.";
-    console.error("[workspace-scan-status] degraded", { message });
-    return degraded();
-  }
+      },
+      lastJob: null,
+    },
+  }, 200);
 }
