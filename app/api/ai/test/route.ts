@@ -110,8 +110,47 @@ async function withAiTestDeadline<T>(promise: Promise<T>, label: string, timeout
   }
 }
 
+function safeProviderStatus() {
+  try {
+    return getAiProviderStatus();
+  } catch {
+    return {
+      ok: false,
+      providerId: "unavailable",
+      missing: ["AI_PROVIDER_STATUS"],
+      invalid: [],
+      baseUrl: "",
+      chatModel: "",
+      reasoningModel: "",
+      asrRealtimeModel: "",
+      asrModel: "",
+      ttsRealtimeModel: "",
+      audioModel: "",
+      omniRealtimeModel: "",
+      embeddingModel: "",
+      rerankModel: "",
+    };
+  }
+}
+
+function safeProviderStatuses() {
+  try {
+    return getAiProviderStatuses();
+  } catch {
+    return [];
+  }
+}
+
+function safeModelCatalog() {
+  try {
+    return getAiModelCatalog();
+  } catch {
+    return { text: [], audio: [], image: [] };
+  }
+}
+
 function degradedAiCatalogPayload(requestId: string, error?: string) {
-  const status = getAiProviderStatus();
+  const status = safeProviderStatus();
   return {
     ok: true,
     degraded: true,
@@ -125,8 +164,8 @@ function degradedAiCatalogPayload(requestId: string, error?: string) {
       chat: status.chatModel,
       reasoning: status.reasoningModel,
     },
-    providers: getAiProviderStatuses(),
-    modelCatalog: getAiModelCatalog(),
+    providers: safeProviderStatuses(),
+    modelCatalog: safeModelCatalog(),
     error: error || "AI_CATALOG_DEGRADED",
   };
 }

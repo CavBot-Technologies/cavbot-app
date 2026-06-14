@@ -60,16 +60,25 @@ export async function GET(req: NextRequest, ctx: unknown) {
   };
 
   try {
-    const session = await withCavCloudDeadline(requireWorkspaceResilientSession(req), {
-      timeoutMs: 1_500,
-      message: "Workspace session lookup timed out.",
-    });
+    let session;
+    try {
+      session = await withCavCloudDeadline(requireWorkspaceResilientSession(req), {
+        timeoutMs: 1_200,
+        message: "Workspace session lookup timed out.",
+      });
+    } catch (error) {
+      if (isApiAuthError(error) && error.code !== "AUTH_BACKEND_UNAVAILABLE") {
+        return json({ error: error.code }, error.status);
+      }
+      return degraded();
+    }
+
     const accountId = String(session.accountId || "").trim();
-    if (!accountId) return json({ error: "UNAUTHORIZED" }, 401);
+    if (!accountId) return degraded();
 
     const params = await getParams(ctx);
     const projectId = parseProjectId(params.projectId);
-    if (!projectId) return json({ error: "BAD_PROJECT" }, 400);
+    if (!projectId) return degraded();
 
     const project = await withCavCloudDeadline(
       findAccountWorkspaceProject({

@@ -31,16 +31,24 @@ export async function resolveProjectAnalyticsAuth(project: ProjectKeyRecord): Pr
   const adminToken = env("CAVBOT_ADMIN_TOKEN");
 
   if (project.serverKeyEnc && project.serverKeyEncIv) {
-    const projectKey = String(
-      await decryptAesGcm({
-        enc: project.serverKeyEnc,
-        iv: project.serverKeyEncIv,
-      }),
-    ).trim();
-    if (!projectKey) throw new Error("PROJECT_KEY_DECRYPT_FAILED");
-    return adminToken
-      ? { projectKey, adminToken, source: "project_encrypted" as const }
-      : { projectKey, source: "project_encrypted" as const };
+    try {
+      const projectKey = String(
+        await decryptAesGcm({
+          enc: project.serverKeyEnc,
+          iv: project.serverKeyEncIv,
+        }),
+      ).trim();
+      if (projectKey) {
+        return adminToken
+          ? { projectKey, adminToken, source: "project_encrypted" as const }
+          : { projectKey, source: "project_encrypted" as const };
+      }
+    } catch (error) {
+      console.error("[analytics-auth] project key decrypt failed; using server fallback", {
+        projectId: project.id,
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   if (adminToken) return { adminToken, source: "admin_token" };

@@ -28,23 +28,43 @@ function parseView(value: unknown): "recent" | "saved" | "history" {
   return "recent";
 }
 
+async function withHistoryDeadline<T>(promise: Promise<T>, label: string, timeoutMs = 4_000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label}_TIMEOUT`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function GET(req: Request) {
   try {
-    const ctx = await requireAiRequestContext({
-      req,
-      surface: "console",
-    });
+    const ctx = await withHistoryDeadline(
+      requireAiRequestContext({
+        req,
+        surface: "console",
+      }),
+      "IMAGE_HISTORY_CONTEXT",
+    );
     const url = new URL(req.url);
     const view = parseView(url.searchParams.get("view"));
 
     try {
       const limit = toLimit(url.searchParams.get("limit"));
-      const rows = await readImageHistory({
-        accountId: ctx.accountId,
-        userId: ctx.userId,
-        view,
-        limit,
-      });
+      const rows = await withHistoryDeadline(
+        readImageHistory({
+          accountId: ctx.accountId,
+          userId: ctx.userId,
+          view,
+          limit,
+        }),
+        "IMAGE_HISTORY_READ",
+      );
       return jsonNoStore(
         {
           ok: true,
