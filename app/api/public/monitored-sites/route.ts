@@ -132,6 +132,14 @@ function publicHost(origin: string) {
 }
 
 function faviconFor(host: string) {
+  const normalizedHost = host.toLowerCase().replace(/^www\./, "");
+  if (normalizedHost === "cavbot.io") {
+    return "https://www.cavbot.io/assets/icons/favicon-32x32.png";
+  }
+  if (normalizedHost === "app.cavbot.io") {
+    return "https://app.cavbot.io/favicon-32x32.png";
+  }
+
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`;
 }
 
