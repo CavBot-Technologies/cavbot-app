@@ -1242,7 +1242,7 @@ html body :is(
   .cb-notes-toggle-ctrl,
   .cb-notes-toggle-track
 ):not([class*="icon"]):not([class*="Icon"]):not([class*="glyph"]):not([class*="Glyph"]):not([class*="chevron"]):not([class*="Chevron"]):not([class*="check"]):not([class*="Check"]):not([class*="mark"]):not([class*="Mark"]){
-  border-radius: 8px !important;
+  border-radius: var(--cb-r) !important;
 }
 
 html body :is(

@@ -1635,14 +1635,7 @@ export default function AppShell({
   }, [requestAuthRefresh]);
 
   const handlePassiveAuthLoss = useCallback(() => {
-    setSessionAuthenticated(false);
-    setMemberRole(null);
-    setStaffChatEnabled(false);
-    setStaffChatUnreadCount(0);
     setNotifOpen(false);
-    setNotifItems([]);
-    setNotifCount(0);
-    lastUnreadRef.current = 0;
     cavPadPendingOpenRef.current = false;
     void requestAuthRefresh({ force: true });
   }, [requestAuthRefresh]);
