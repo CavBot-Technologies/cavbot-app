@@ -12,6 +12,7 @@ const ALLOWED_ORIGINS = new Set([
   "https://cavbot.io",
   "https://www.cavbot.io",
   "https://brand.cavbot.io",
+  "https://ai.cavbot.io",
 ]);
 
 const NO_STORE_HEADERS: Record<string, string> = {

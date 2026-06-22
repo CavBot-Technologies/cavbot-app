@@ -12,6 +12,7 @@ test("public website session endpoint exposes credentialed CavBot website awaren
 
   assert.equal(source.includes('"https://cavbot.io"'), true);
   assert.equal(source.includes('"https://www.cavbot.io"'), true);
+  assert.equal(source.includes('"https://ai.cavbot.io"'), true);
   assert.equal(source.includes('"Access-Control-Allow-Credentials"] = "true"'), true);
   assert.equal(source.includes('Vary: "Origin, Cookie"'), true);
   assert.equal(source.includes("readVerifiedSession(req)"), true);
