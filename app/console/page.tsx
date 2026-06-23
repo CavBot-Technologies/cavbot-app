@@ -13,7 +13,6 @@ import { REGION_GROUPED } from "@/geo/regions";
 import { getSession } from "@/lib/apiAuth";
 import { findUserById, getAuthPool } from "@/lib/authDb";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
-import { prisma } from "@/lib/prisma";
 import {
   analyticsConsoleErrorCode,
   resolveAnalyticsConsoleContext,
@@ -747,6 +746,10 @@ type DashboardHeading = {
   accentColor: string;
 };
 
+type DashboardAccountNameRow = {
+  name: string | null;
+};
+
 function withDashboardDeadline<T>(promise: Promise<T>, timeoutMs = 6_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null;
   return Promise.race([
@@ -760,7 +763,7 @@ function withDashboardDeadline<T>(promise: Promise<T>, timeoutMs = 6_000): Promi
 }
 
 async function resolveDashboardHeading(): Promise<DashboardHeading> {
-  const fallbackOwner = "Your";
+  const fallbackOwner = "CavBot";
   const fallback: DashboardHeading = {
     appShellTitle: `${fallbackOwner} Dashboard`,
     ownerLabel: fallbackOwner,
@@ -782,28 +785,22 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
     const userId = String(sess.sub || "").trim();
     if (!userId || userId === "system") return fallback;
 
-    const [profile, authUser, account] = await withDashboardDeadline(
+    const [authUser, accountResult] = await withDashboardDeadline(
       Promise.all([
-        prisma.user
-          .findUnique({
-            where: { id: userId },
-            select: { displayName: true, fullName: true, username: true, avatarTone: true },
-          })
-          .catch(() => null),
         findUserById(getAuthPool(), userId).catch(() => null),
         sess.accountId
-          ? prisma.account
-              .findUnique({
-                where: { id: sess.accountId },
-                select: { name: true },
-              })
+          ? getAuthPool()
+              .query<DashboardAccountNameRow>(
+                `SELECT "name" FROM "Account" WHERE "id" = $1 LIMIT 1`,
+                [sess.accountId],
+              )
               .catch(() => null)
           : Promise.resolve(null),
       ]),
     );
 
-    const accentColor = profileToneToAccentColor(String(profile?.avatarTone || authUser?.avatarTone || ""));
-    const preferredName = String(profile?.fullName || profile?.displayName || authUser?.fullName || authUser?.displayName || "").trim();
+    const accentColor = profileToneToAccentColor(String(authUser?.avatarTone || ""));
+    const preferredName = String(authUser?.fullName || authUser?.displayName || "").trim();
     if (preferredName) {
       const ownerLabel = `${preferredName}'s`;
       return {
@@ -813,7 +810,7 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
       };
     }
 
-    const username = String(profile?.username || authUser?.username || "").trim().replace(/^@+/, "");
+    const username = String(authUser?.username || "").trim().replace(/^@+/, "");
     if (username) {
       const ownerLabel = `${username}'s`;
       return {
@@ -823,7 +820,7 @@ async function resolveDashboardHeading(): Promise<DashboardHeading> {
       };
     }
 
-    const accountName = String(account?.name || "").trim();
+    const accountName = String(accountResult?.rows?.[0]?.name || "").trim();
     if (accountName) {
       const ownerLabel = `${accountName}'s`;
       return {
