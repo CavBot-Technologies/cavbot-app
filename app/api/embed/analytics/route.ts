@@ -244,6 +244,10 @@ function getProjectKeyFromRequest(req: NextRequest, payload: Record<string, unkn
   return "";
 }
 
+function isCavbotPublishableKey(value: string) {
+  return String(value || "").trim().startsWith("cavbot_pk");
+}
+
 function buildUnverifiedRemoteHeaders(req: NextRequest, payload: Record<string, unknown> | null) {
   const projectKey = getProjectKeyFromRequest(req, payload);
   if (!projectKey) return null;
@@ -497,6 +501,13 @@ async function handlePost(req: NextRequest, ctx: { env?: RateLimitEnv }) {
     }
   } catch (error) {
     console.error("[embed/analytics] app-side verifier failed; falling back to upstream verification", error);
+    const projectKey = getProjectKeyFromRequest(req, payload);
+    if (isCavbotPublishableKey(projectKey)) {
+      return NextResponse.json(
+        { ok: false, allowed: false, code: "LOCAL_VERIFIER_UNAVAILABLE" },
+        { status: 503, headers: corsHeaders(req.headers.get("origin")) },
+      );
+    }
     try {
       return await proxyUnverifiedToRemote(req, payload);
     } catch {
@@ -509,11 +520,14 @@ async function handlePost(req: NextRequest, ctx: { env?: RateLimitEnv }) {
   }
 
   if (!verification.ok) {
-    try {
-      const proxied = await proxyUnverifiedToRemote(req, payload);
-      if (proxied.ok || proxied.status !== 401) return proxied;
-    } catch (error) {
-      console.error("[embed/analytics] upstream verification fallback failed", error);
+    const projectKey = getProjectKeyFromRequest(req, payload);
+    if (!isCavbotPublishableKey(projectKey)) {
+      try {
+        const proxied = await proxyUnverifiedToRemote(req, payload);
+        if (proxied.ok || proxied.status !== 401) return proxied;
+      } catch (error) {
+        console.error("[embed/analytics] upstream verification fallback failed", error);
+      }
     }
 
     const origin = verification.origin ?? req.headers.get("origin");
