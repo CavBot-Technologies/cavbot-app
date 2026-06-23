@@ -777,7 +777,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
           });
         })(),
         "SUMMARY_READ",
-        4_500,
+        10_000,
       );
     } catch (error) {
       summaryError = error;

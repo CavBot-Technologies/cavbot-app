@@ -65,6 +65,12 @@ type RawBillingPlanAccountRow = {
   trialEndsAt: Date | string | null;
 };
 
+function planRank(planId: PlanId) {
+  if (planId === "premium_plus") return 2;
+  if (planId === "premium") return 1;
+  return 0;
+}
+
 export type BillingPlanResolution = {
   currentPlanId: PlanId;
   accountPlanId: PlanId;
@@ -150,7 +156,10 @@ export function computeBillingPlanResolution(args: {
   let planSource: BillingPlanSource = "account";
   if (isTrialSeatEntitled(account)) {
     planSource = "trial";
-  } else if (isSubscriptionEntitled(entitledSubscription)) {
+  } else if (
+    isSubscriptionEntitled(entitledSubscription) &&
+    planRank(resolvePlanIdFromTier(entitledSubscription?.tier || "FREE")) > planRank(accountPlanId)
+  ) {
     planSource = "subscription";
   }
 

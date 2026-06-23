@@ -5,7 +5,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { isApiAuthError, requireSession, requireAccountContext } from "@/lib/apiAuth";
-import { findAccountById, findUserById, getAuthPool } from "@/lib/authDb";
+import { findAccountById, findSessionMembership, findUserById, getAuthPool } from "@/lib/authDb";
 import { resolveTierFromAccount } from "@/lib/billing/featureGates";
 import { resolveBillingPlanResolution } from "@/lib/billingPlan.server";
 import { resolvePlanIdFromTier, hasModule, type ModuleId, type PlanId } from "@/lib/plans";
@@ -34,7 +34,7 @@ function isSafePageRead(req: Request) {
   return method === "GET" || method === "HEAD";
 }
 
-function withGateDeadline<T>(promise: Promise<T>, timeoutMs = 1_800): Promise<T> {
+function withGateDeadline<T>(promise: Promise<T>, timeoutMs = 3_500): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null;
   return Promise.race([
     promise,
@@ -47,13 +47,24 @@ function withGateDeadline<T>(promise: Promise<T>, timeoutMs = 1_800): Promise<T>
 }
 
 async function resolveStoredAccountPlan(accountId: string): Promise<ReturnType<typeof resolvePlanIdFromTier> | null> {
-  const account = await withGateDeadline(findAccountById(getAuthPool(), accountId), 900).catch(() => null);
+  const account = await withGateDeadline(findAccountById(getAuthPool(), accountId), 2_500).catch(() => null);
   if (!account) return null;
   return resolveTierFromAccount({
     tier: account.tier,
     trialSeatActive: account.trialSeatActive,
     trialEndsAt: account.trialEndsAt,
   });
+}
+
+async function resolveMembershipAccountPlan(
+  userId: string,
+  accountId: string,
+): Promise<ReturnType<typeof resolvePlanIdFromTier> | null> {
+  const membership = await withGateDeadline(
+    findSessionMembership(getAuthPool(), userId, accountId),
+    2_500,
+  ).catch(() => null);
+  return membership?.accountTier ? resolvePlanIdFromTier(membership.accountTier) : null;
 }
 
 async function resolveOwnerEntitlementPlan(userId: string): Promise<PlanId | null> {
@@ -93,8 +104,11 @@ export async function gateModuleAccess(
   const accountId = sess.accountId!;
   const fallbackPlanId = resolvePlanIdFromTier("free");
   let planId: ReturnType<typeof resolvePlanIdFromTier> = fallbackPlanId;
-  const storedPlanId = await resolveStoredAccountPlan(accountId);
-  const ownerPlanId = await resolveOwnerEntitlementPlan(sess.sub);
+  const [storedPlanId, membershipPlanId, ownerPlanId] = await Promise.all([
+    resolveStoredAccountPlan(accountId),
+    resolveMembershipAccountPlan(sess.sub, accountId),
+    resolveOwnerEntitlementPlan(sess.sub),
+  ]);
   try {
     // Keep navigation bounded; billing reconciliation handles clearExpiredTrialSeat elsewhere.
     const planResolution = await withGateDeadline(
@@ -103,9 +117,9 @@ export async function gateModuleAccess(
         repair: false,
       }),
     );
-    planId = strongestPlanId(planResolution.currentPlanId, storedPlanId, ownerPlanId);
+    planId = strongestPlanId(planResolution.currentPlanId, storedPlanId, membershipPlanId, ownerPlanId);
   } catch (error) {
-    planId = strongestPlanId(storedPlanId, ownerPlanId);
+    planId = strongestPlanId(storedPlanId, membershipPlanId, ownerPlanId);
     try {
       console.error(
         "[module-gate]",
@@ -115,6 +129,7 @@ export async function gateModuleAccess(
           moduleId,
           code: error instanceof Error ? error.message : String(error),
           fallbackPlanId: storedPlanId,
+          membershipPlanId,
           ownerPlanId,
         }),
       );
