@@ -43,7 +43,7 @@ body.cb-home-delete-open .cb-main{
   justify-content:center;
   gap: 8px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(255,255,255,0.02);
   color: rgba(247,251,255,0.92);
@@ -74,7 +74,7 @@ body.cb-home-delete-open .cb-main{
   justify-content:center;
   gap: 8px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,120,120,0.28);
   background: rgba(255,255,255,0.02);
   color: rgba(247,251,255,0.92);
@@ -98,7 +98,7 @@ body.cb-home-delete-open .cb-main{
   justify-content:center;
   gap: 8px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(78,168,255,0.35);
   background: rgba(255,255,255,0.02);
   color: rgba(247,251,255,0.92);
@@ -122,7 +122,7 @@ body.cb-home-delete-open .cb-main{
   justify-content:center;
   gap: 8px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(185, 200, 90, 0.22);
   background: rgba(255,255,255,0.02);
   color: rgba(247,251,255,0.92);
@@ -170,7 +170,7 @@ body.cb-home-delete-open .cb-main{
   justify-content:center;
   gap: 8px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(185,200,90,0.34);
   background: rgba(185,200,90,0.18);
   color: rgba(247,251,255,0.88) !important;
@@ -212,7 +212,7 @@ body.cb-home-delete-open .cb-main{
 }
 
 .cb-home .cb-card{
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(5,7,18,0.92);
   overflow:hidden;
@@ -265,7 +265,7 @@ body.cb-home-delete-open .cb-main{
 .cb-home .cb-cavpri-empty,
 .cb-home .cb-cavpri-overlay,
 .cb-home .cb-cavpri-history {
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.02);
 }
@@ -453,7 +453,7 @@ body.cb-home-delete-open .cb-main{
 .cb-home .cb-profile-avatar{
   width: 120px;
   height: 120px;
-  border-radius: 16px;
+  border-radius: 4px;
   background: var(--cb-profile-tone, rgba(1,3,15,0.78));
   border: 1px solid rgba(255,255,255,0.14);
   display:grid;
@@ -532,7 +532,7 @@ body.cb-home-delete-open .cb-main{
 .cb-home .cb-profile-link-icon-btn{
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.16);
   background: rgba(0,0,0,0.45);
   display:inline-flex;
@@ -596,7 +596,7 @@ body.cb-home-delete-open .cb-main{
 .cb-home .cb-profile-dot{
   width: 8px;
   height: 8px;
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(185,200,90,0.92);
   border: 1px solid rgba(255,255,255,0.22);
 }
@@ -762,7 +762,7 @@ body.cb-home-delete-open .cb-main{
 }
 
 .cb-home .cb-dev-tile{
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.10);
   background: rgba(0,0,0,0.10);
   padding: 12px 12px;
@@ -810,7 +810,7 @@ body.cb-home-delete-open .cb-main{
   width: 34px;
   height: 34px;
   min-width: 34px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.16);
   background: rgba(0,0,0,0.22);
   color: rgba(247,251,255,0.94);
@@ -938,7 +938,7 @@ body.cb-home-delete-open .cb-main{
 }
 
 .cb-home .cb-card-cavcloud{
-  border-radius: 22px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.10);
   background: rgba(6,10,24,0.92);
   display:flex;
@@ -1146,7 +1146,7 @@ body.cb-home-delete-open .cb-main{
   }
 
   .cb-home .cb-card-cavcloud{
-    border-radius: 18px;
+    border-radius: 4px;
   }
 
   .cb-home .cb-cavcloud-body{
@@ -1162,7 +1162,7 @@ body.cb-home-delete-open .cb-main{
   .cb-home .cb-cavcloud-metric{
     min-height: 58px;
     padding: 8px 6px;
-    border-radius: 12px;
+    border-radius: 4px;
     border: 1px solid rgba(255,255,255,0.08);
     background: rgba(7,12,30,0.88);
     justify-content: center;
@@ -1243,7 +1243,7 @@ body.cb-home-delete-open .cb-main{
 .cb-home .cb-table{
   width:100%;
   border-collapse: collapse;
-  border-radius: 12px;
+  border-radius: 4px;
   overflow:hidden;
   border: 1px solid rgba(255,255,255,0.10);
   background: rgba(0,0,0,0.10);
@@ -1314,7 +1314,7 @@ body.cb-home-delete-open .cb-main{
 .cb-home .cb-iconbtn{
   width: 30px;
   height: 30px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.03);
   color: rgba(247,251,255,0.92);
@@ -1358,7 +1358,7 @@ body.cb-home-delete-open .cb-main{
 /* ===== Empty states ===== */
 .cb-home .cb-home-empty{
   padding: 18px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.10);
   background: rgba(0,0,0,0.10);
   display:flex;
@@ -1390,7 +1390,7 @@ body.cb-home-delete-open .cb-main{
   gap: 10px;
 }
 .cb-home .cb-home-notice{
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.10);
   background: rgba(0,0,0,0.10);
   padding: 12px 12px;
@@ -1410,7 +1410,7 @@ body.cb-home-delete-open .cb-main{
   align-items:center;
   height: 20px;
   padding: 0 10px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.03);
   color: rgba(247,251,255,0.92);
@@ -1451,7 +1451,7 @@ body.cb-home-delete-open .cb-main{
 
   max-width: min(720px, calc(100vw - 28px));
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(3,6,22,0.92);
   color: rgba(247,251,255,0.92);
@@ -1504,7 +1504,7 @@ body.cb-home-delete-open .cb-main{
   justify-content: space-between;
   gap: 14px;
   padding: 10px 12px 10px 14px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.10);
   background: rgba(255,255,255,0.03);
   position: relative;
@@ -1574,7 +1574,7 @@ body.cb-home-delete-open .cb-main{
 /* ===== Select + Tools list ===== */
 .cb-home .cb-home-select{
   width:100%;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(0,0,0,0.12);
   color: rgba(247,251,255,0.92);
@@ -1601,7 +1601,7 @@ body.cb-home-delete-open .cb-main{
   justify-content: space-between;
   gap: 10px;
   padding: 0 12px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.10);
   background: rgba(255,255,255,0.03);
   color: rgba(247,251,255,0.92);
@@ -1653,7 +1653,7 @@ html{
 
   width: min(420px, calc(100% - 28px));
   max-height: calc(100vh - 88px);
-  border-radius: 22px;
+  border-radius: 4px;
   /* Glass: layered highlights + tint, with backdrop blur. */
   background:
     linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03)),
@@ -1752,7 +1752,7 @@ html{
 }
 .cb-home-modal .cb-home-kv{
   margin: 18px 0;
-  border-radius: 16px;
+  border-radius: 4px;
   padding: 12px 16px;
   background: rgba(255,255,255,0.02);
 }
@@ -1796,7 +1796,7 @@ html{
 }
 .cb-home-input{
   width: 100%;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.2);
   background: rgba(255,255,255,0.03);
   color: rgba(255,255,255,0.95);
@@ -1806,7 +1806,7 @@ html{
 .cb-home-textarea{
   width: 100%;
   min-height: 120px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.2);
   background: rgba(255,255,255,0.04);
   color: rgba(255,255,255,0.95);
@@ -2005,7 +2005,7 @@ html{
   position: absolute;
   inset: 0;
   background: rgba(1, 2, 6, 0.95);
-  border-radius: 28px;
+  border-radius: 4px;
 }
 
 .cb-manage-modal-panel {
@@ -2013,7 +2013,7 @@ html{
   width: min(760px, calc(100% - 40px));
   max-height: min(84vh, 660px);
   margin: 0 auto;
-  border-radius: 20px;
+  border-radius: 4px;
   background: linear-gradient(180deg, var(--cb-modal-gradient-from), var(--cb-modal-gradient-to));
   border: 1px solid var(--cb-modal-border);
   box-shadow: 0 24px 48px rgba(2, 4, 10, 0.72);
@@ -2054,7 +2054,7 @@ html{
 .cb-manage-modal-close {
   width: 32px;
   height: 32px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.85);
@@ -2154,7 +2154,7 @@ html{
   align-items: center;
   gap: 12px;
   padding: 12px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.02);
 }
@@ -2200,7 +2200,7 @@ html{
 
 .cb-manage-empty {
   padding: 12px;
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px dashed rgba(255, 255, 255, 0.12);
   color: rgba(255, 255, 255, 0.7);
@@ -2221,7 +2221,7 @@ html{
 .cb-manage-modal-panel .cb-linkpill-lime {
   height: 28px;
   padding: 0 10px;
-  border-radius: 9px;
+  border-radius: 4px;
   font-size: 9px;
   letter-spacing: 0.12em;
 }
@@ -2234,7 +2234,7 @@ html{
   .cb-manage-modal-panel {
     width: min(100%, calc(100% - 20px));
     max-height: calc(100vh - 20px);
-    border-radius: 14px;
+    border-radius: 4px;
   }
 
   .cb-manage-modal-header {
@@ -2307,7 +2307,7 @@ html{
 
 .cb-home .cb-scan-error {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 120, 120, 0.4);
   background: rgba(255, 120, 120, 0.08);
   color: rgba(255, 180, 180, 0.95);
@@ -2320,7 +2320,7 @@ html{
   font-size: 12px;
   color: rgba(255, 255, 255, 0.7);
   background: rgba(255, 255, 255, 0.03);
-  border-radius: 12px;
+  border-radius: 4px;
   padding: 10px 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -2344,7 +2344,7 @@ html{
 }
 
 .cb-home .cb-scan-metric {
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.02);
   padding: 10px 12px;
@@ -2395,7 +2395,7 @@ html{
   width: min(80vw, 1100px);
   height: min(85vh, 820px);
   background: linear-gradient(180deg, rgba(8, 13, 32, 0.95), rgba(2, 4, 10, 0.95));
-  border-radius: 26px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   padding: 28px;
   box-shadow: 0 45px 80px rgba(0, 0, 0, 0.7);
@@ -2436,7 +2436,7 @@ html{
 .cb-home .cb-scan-modal-close {
   width: 36px;
   height: 36px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.92);
