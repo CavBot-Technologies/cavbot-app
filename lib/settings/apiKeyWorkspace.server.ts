@@ -37,6 +37,9 @@ type RawProjectRow = {
 type RawSiteRow = {
   id: string;
   origin: string;
+  status: string | null;
+  verifiedAt: Date | string | null;
+  activePublishableKeys: number | string | null;
 };
 
 type RawAllowedOriginRow = {
@@ -131,11 +134,28 @@ export async function resolveApiKeyWorkspace(args: ResolveApiKeyWorkspaceArgs): 
   if (!projectId) return null;
 
   const sitesResult = await pool.query<RawSiteRow>(
-    `SELECT "id", "origin"
-     FROM "Site"
-     WHERE "projectId" = $1
-       AND "isActive" = TRUE
-     ORDER BY "createdAt" ASC`,
+    `SELECT
+       s."id",
+       s."origin",
+       s."status",
+       s."verifiedAt",
+       COUNT(k."id") FILTER (
+         WHERE k."type" = 'PUBLISHABLE'::"ApiKeyType"
+           AND k."status" = 'ACTIVE'::"ApiKeyStatus"
+       ) AS "activePublishableKeys"
+     FROM "Site" s
+     LEFT JOIN "ApiKey" k
+       ON k."siteId" = s."id"
+     WHERE s."projectId" = $1
+       AND s."isActive" = TRUE
+     GROUP BY s."id", s."origin", s."status", s."verifiedAt", s."createdAt"
+     ORDER BY
+       CASE WHEN s."status" = 'VERIFIED'::"SiteStatus" AND s."verifiedAt" IS NOT NULL THEN 0 ELSE 1 END ASC,
+       CASE WHEN COUNT(k."id") FILTER (
+         WHERE k."type" = 'PUBLISHABLE'::"ApiKeyType"
+           AND k."status" = 'ACTIVE'::"ApiKeyStatus"
+       ) > 0 THEN 0 ELSE 1 END ASC,
+       s."createdAt" ASC`,
     [projectId],
   );
 
@@ -143,6 +163,11 @@ export async function resolveApiKeyWorkspace(args: ResolveApiKeyWorkspaceArgs): 
     id: String(row.id || "").trim(),
     origin: String(row.origin || "").trim(),
   }));
+  const preferredDefaultSite =
+    sitesResult.rows.find((row) => String(row.status || "").trim() === "VERIFIED" && row.verifiedAt && asNumber(row.activePublishableKeys) > 0) ??
+    sitesResult.rows.find((row) => String(row.status || "").trim() === "VERIFIED" && row.verifiedAt) ??
+    null;
+  const preferredDefaultSiteId = String(preferredDefaultSite?.id || "").trim();
 
   const requestedSiteId = asText(args.requestedSiteId);
   const activeSiteIdHint = asText(args.activeSiteIdHint);
@@ -150,18 +175,21 @@ export async function resolveApiKeyWorkspace(args: ResolveApiKeyWorkspaceArgs): 
   const requestedSite = requestedSiteId
     ? sites.find((site) => site.id === requestedSiteId) ?? null
     : null;
-  const topSite = !requestedSite && resolvedTopSiteId
+  const defaultVerifiedSite = !requestedSite && preferredDefaultSiteId
+    ? sites.find((site) => site.id === preferredDefaultSiteId) ?? null
+    : null;
+  const topSite = !requestedSite && !defaultVerifiedSite && resolvedTopSiteId
     ? sites.find((site) => site.id === resolvedTopSiteId) ?? null
     : null;
-  const hintedSite = !requestedSite && !topSite && activeSiteIdHint
+  const hintedSite = !requestedSite && !defaultVerifiedSite && !topSite && activeSiteIdHint
     ? sites.find((site) => site.id === activeSiteIdHint) ?? null
     : null;
-  const hintedOriginSite = !requestedSite && !topSite && !hintedSite && activeSiteOriginHint
+  const hintedOriginSite = !requestedSite && !defaultVerifiedSite && !topSite && !hintedSite && activeSiteOriginHint
     ? sites.find((site) => originsShareWebsiteContext(site.origin, activeSiteOriginHint)) ?? null
     : null;
   const activeSite = requestedSiteId
     ? requestedSite
-    : requestedSite || topSite || hintedSite || hintedOriginSite || sites[0] || null;
+    : requestedSite || defaultVerifiedSite || topSite || hintedSite || hintedOriginSite || sites[0] || null;
 
   const originSet = new Set<string>();
   if (activeSite?.origin) {
