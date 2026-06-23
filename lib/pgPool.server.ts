@@ -73,6 +73,14 @@ function wrapQueryWithRetry<TArgs extends unknown[], TResult>(
 
 function poolConfig(connectionString: string): pg.PoolConfig {
   const workerd = isWorkerdRuntime();
+  const parsedUrl = (() => {
+    try {
+      return new URL(connectionString);
+    } catch {
+      return null;
+    }
+  })();
+  const sslMode = String(parsedUrl?.searchParams.get("sslmode") || "").trim().toLowerCase();
   const queryTimeoutMs = envNonNegativeInt("CAVBOT_PG_QUERY_TIMEOUT_MS", workerd ? 30_000 : 15_000);
   const statementTimeoutMs = envNonNegativeInt(
     "CAVBOT_PG_STATEMENT_TIMEOUT_MS",
@@ -88,6 +96,10 @@ function poolConfig(connectionString: string): pg.PoolConfig {
     connectionTimeoutMillis: envPositiveInt("CAVBOT_PG_CONNECT_TIMEOUT_MS", workerd ? 30_000 : 5_000),
     keepAlive: true,
   };
+
+  if (sslMode === "require") {
+    config.ssl = { rejectUnauthorized: false };
+  }
 
   if (queryTimeoutMs > 0) {
     config.query_timeout = queryTimeoutMs;
