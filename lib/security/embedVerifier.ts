@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { hashApiKey } from "@/lib/apiKeys.server";
+import { getAuthPool } from "@/lib/authDb";
 import { AllowedOriginRow, originAllowed, normalizeOriginStrict } from "@/originMatch";
 import { enforceRateLimit, type RateLimitEnv } from "@/rateLimit";
 import { recordEmbedMetric, trackDeniedOrigin } from "@/lib/security/embedMetrics.server";
@@ -154,7 +154,7 @@ type EmbedApiKeyRecord = {
   } | null;
 };
 
-const KEY_LOOKUP_PRISMA_DEADLINE_MS = 900;
+const KEY_LOOKUP_DB_DEADLINE_MS = 2_500;
 
 function originExactMatch(candidateOrigin: string, canonicalOrigin: string) {
   try {
@@ -184,32 +184,16 @@ async function resolveSiteForEmbed(args: {
   | { ok: true; site: EmbedSiteCandidate }
   | { ok: false; code: "SITE_NOT_FOUND" | "SITE_AMBIGUOUS"; status: number; siteId: string | null }
 > {
-  const select = {
-    id: true,
-    origin: true,
-    allowedOrigins: {
-      select: { origin: true, matchType: true },
-      orderBy: { createdAt: "asc" as const },
-    },
-  };
   const directSiteId = args.explicitSiteId || args.boundSiteId || null;
   if (directSiteId) {
-    const site = await prisma.site.findFirst({
-      where: { id: directSiteId, projectId: args.projectId, isActive: true },
-      select,
-    });
+    const site = await findActiveSiteById(args.projectId, directSiteId);
     if (!site) {
       return { ok: false, code: "SITE_NOT_FOUND", status: 404, siteId: directSiteId };
     }
     return { ok: true, site };
   }
 
-  const candidates = await prisma.site.findMany({
-    where: { projectId: args.projectId, isActive: true },
-    select,
-    orderBy: { createdAt: "asc" },
-    take: 200,
-  });
+  const candidates = await listActiveSitesForProject(args.projectId);
 
   const exact = candidates.filter((site) => originExactMatch(site.origin, args.canonicalOrigin));
   if (exact.length === 1) return { ok: true, site: exact[0] };
@@ -231,33 +215,186 @@ async function resolveSiteForEmbed(args: {
 async function findApiKeyForEmbed(keyHash: string): Promise<EmbedApiKeyRecord | null> {
   try {
     const record = await Promise.race([
-      prisma.apiKey.findFirst({
-        where: { keyHash, projectId: { not: null } },
-        include: {
-          site: {
-            select: {
-              id: true,
-              origin: true,
-              projectId: true,
-              isActive: true,
-              allowedOrigins: {
-                select: { origin: true, matchType: true },
-                orderBy: { createdAt: "asc" },
-              },
-            },
-          },
-        },
-      }),
+      findApiKeyForEmbedDb(keyHash),
       new Promise<null>((resolve) => {
-        setTimeout(() => resolve(null), KEY_LOOKUP_PRISMA_DEADLINE_MS);
+        setTimeout(() => resolve(null), KEY_LOOKUP_DB_DEADLINE_MS);
       }),
     ]);
     if (record) return record;
-    console.warn("[embedVerifier] prisma key lookup timed out or returned empty");
+    console.warn("[embedVerifier] key lookup timed out or returned empty");
   } catch (error) {
-    console.error("[embedVerifier] prisma key lookup failed", error);
+    console.error("[embedVerifier] key lookup failed", error);
   }
   return null;
+}
+
+type RawApiKeyEmbedRow = {
+  id: string;
+  accountId: string | null;
+  projectId: number | string | null;
+  siteId: string | null;
+  status: string;
+  type: string;
+  scopes: string[] | null;
+  last4: string | null;
+  updatedAt: Date | string | null;
+  siteOrigin: string | null;
+  siteProjectId: number | string | null;
+  siteIsActive: boolean | null;
+};
+
+type RawSiteEmbedRow = {
+  id: string;
+  origin: string;
+  projectId: number | string;
+  isActive: boolean;
+};
+
+type RawAllowedOriginEmbedRow = {
+  siteId: string;
+  origin: string | null;
+  matchType: string | null;
+};
+
+function toNumber(value: number | string | null | undefined) {
+  if (typeof value === "number") return value;
+  if (typeof value === "string" && value.trim()) return Number(value);
+  return 0;
+}
+
+function normalizeAllowedOriginRow(row: RawAllowedOriginEmbedRow): AllowedOriginRow | null {
+  const origin = String(row.origin || "").trim();
+  if (!origin) return null;
+  const rawMatchType = String(row.matchType || "EXACT").trim().toUpperCase();
+  const matchType = rawMatchType === "WILDCARD_SUBDOMAIN" || rawMatchType === "WILDCARD"
+    ? "WILDCARD_SUBDOMAIN"
+    : "EXACT";
+  return { origin, matchType };
+}
+
+async function listAllowedOriginsForSites(siteIds: string[]) {
+  const ids = siteIds.map((id) => String(id || "").trim()).filter(Boolean);
+  const bySite = new Map<string, AllowedOriginRow[]>();
+  if (!ids.length) return bySite;
+
+  const result = await getAuthPool().query<RawAllowedOriginEmbedRow>(
+    `SELECT "siteId", "origin", "matchType"
+     FROM "SiteAllowedOrigin"
+     WHERE "siteId" = ANY($1::text[])
+     ORDER BY "createdAt" ASC`,
+    [ids],
+  );
+
+  for (const row of result.rows) {
+    const siteId = String(row.siteId || "").trim();
+    const allowedRow = normalizeAllowedOriginRow(row);
+    if (!siteId || !allowedRow) continue;
+    const current = bySite.get(siteId) || [];
+    current.push(allowedRow);
+    bySite.set(siteId, current);
+  }
+
+  return bySite;
+}
+
+async function findActiveSiteById(projectId: number, siteId: string): Promise<EmbedSiteCandidate | null> {
+  const result = await getAuthPool().query<RawSiteEmbedRow>(
+    `SELECT "id", "origin", "projectId", "isActive"
+     FROM "Site"
+     WHERE "id" = $1
+       AND "projectId" = $2
+       AND "isActive" = TRUE
+     LIMIT 1`,
+    [siteId, projectId],
+  );
+
+  const row = result.rows[0];
+  if (!row) return null;
+  const allowedOrigins = await listAllowedOriginsForSites([row.id]);
+  return {
+    id: String(row.id || "").trim(),
+    origin: String(row.origin || "").trim(),
+    allowedOrigins: allowedOrigins.get(String(row.id || "").trim()) || [],
+  };
+}
+
+async function listActiveSitesForProject(projectId: number): Promise<EmbedSiteCandidate[]> {
+  const result = await getAuthPool().query<RawSiteEmbedRow>(
+    `SELECT "id", "origin", "projectId", "isActive"
+     FROM "Site"
+     WHERE "projectId" = $1
+       AND "isActive" = TRUE
+     ORDER BY "createdAt" ASC
+     LIMIT 200`,
+    [projectId],
+  );
+
+  const allowedOrigins = await listAllowedOriginsForSites(result.rows.map((row) => String(row.id || "").trim()));
+  return result.rows
+    .map((row) => {
+      const id = String(row.id || "").trim();
+      return {
+        id,
+        origin: String(row.origin || "").trim(),
+        allowedOrigins: allowedOrigins.get(id) || [],
+      };
+    })
+    .filter((site) => Boolean(site.id && site.origin));
+}
+
+async function findApiKeyForEmbedDb(keyHash: string): Promise<EmbedApiKeyRecord | null> {
+  const result = await getAuthPool().query<RawApiKeyEmbedRow>(
+    `SELECT
+       k."id",
+       k."accountId",
+       k."projectId",
+       k."siteId",
+       k."status",
+       k."type",
+       k."scopes",
+       k."last4",
+       k."updatedAt",
+       s."origin" AS "siteOrigin",
+       s."projectId" AS "siteProjectId",
+       s."isActive" AS "siteIsActive"
+     FROM "ApiKey" k
+     LEFT JOIN "Site" s
+       ON s."id" = k."siteId"
+     WHERE k."keyHash" = $1
+       AND k."projectId" IS NOT NULL
+     ORDER BY k."createdAt" DESC
+     LIMIT 1`,
+    [keyHash],
+  );
+
+  const row = result.rows[0];
+  if (!row) return null;
+
+  const siteId = String(row.siteId || "").trim();
+  const allowedOrigins = siteId ? await listAllowedOriginsForSites([siteId]) : new Map<string, AllowedOriginRow[]>();
+  const site =
+    siteId && row.siteOrigin
+      ? {
+          id: siteId,
+          origin: String(row.siteOrigin || "").trim(),
+          projectId: toNumber(row.siteProjectId),
+          isActive: Boolean(row.siteIsActive),
+          allowedOrigins: allowedOrigins.get(siteId) || [],
+        }
+      : null;
+
+  return {
+    id: String(row.id || "").trim(),
+    accountId: row.accountId ? String(row.accountId).trim() : null,
+    projectId: toNumber(row.projectId),
+    siteId: siteId || null,
+    status: String(row.status || "").trim().toUpperCase(),
+    type: String(row.type || "").trim().toUpperCase(),
+    scopes: Array.isArray(row.scopes) ? row.scopes : [],
+    last4: row.last4 ? String(row.last4).trim() : null,
+    updatedAt: row.updatedAt ?? null,
+    site,
+  };
 }
 
 function failure(

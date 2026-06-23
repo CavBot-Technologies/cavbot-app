@@ -1,13 +1,13 @@
 import "server-only";
 
 import { headers } from "next/headers";
-import { prisma } from "@/lib/prisma";
 import {
   getAppOrigin,
   isApiAuthError,
   requireAccountContext,
   type CavbotAccountSession,
 } from "@/lib/apiAuth";
+import { getAuthPool } from "@/lib/authDb";
 import {
   CavBotApiError,
   getProjectSummaryForTenant,
@@ -51,6 +51,28 @@ export type AnalyticsConsoleContext = {
   authError: string | null;
 };
 
+type RawAnalyticsProjectRow = {
+  id: number | string;
+  slug: string;
+  name: string | null;
+  topSiteId: string | null;
+  serverKeyEnc: string | null;
+  serverKeyEncIv: string | null;
+};
+
+type RawAnalyticsSiteRow = {
+  id: string;
+  label: string | null;
+  origin: string;
+};
+
+type RawAnalyticsEventRow = {
+  createdAt: Date | string;
+  type: string;
+  message: string;
+  meta: unknown;
+};
+
 const EMPTY_SITE: AnalyticsConsoleSite = {
   id: "none",
   label: "No site selected",
@@ -78,6 +100,16 @@ function parseProjectId(input: unknown): number | null {
   if (!/^\d+$/.test(value)) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function toNumber(input: unknown) {
+  if (typeof input === "number") return input;
+  if (typeof input === "string" && input.trim()) return Number(input);
+  return 0;
+}
+
+function toDate(input: Date | string) {
+  return input instanceof Date ? input : new Date(input);
 }
 
 export function canonicalOrigin(input: unknown): string {
@@ -264,6 +296,98 @@ function safeLog(event: string, payload: Record<string, unknown>) {
   }
 }
 
+function mapAnalyticsProject(row: RawAnalyticsProjectRow | undefined): AnalyticsConsoleProject | null {
+  if (!row) return null;
+  const id = toNumber(row.id);
+  if (!id) return null;
+  return {
+    id,
+    slug: String(row.slug || "").trim(),
+    name: row.name ? String(row.name).trim() : null,
+    topSiteId: row.topSiteId ? String(row.topSiteId).trim() : null,
+    serverKeyEnc: row.serverKeyEnc ? String(row.serverKeyEnc).trim() : null,
+    serverKeyEncIv: row.serverKeyEncIv ? String(row.serverKeyEncIv).trim() : null,
+  };
+}
+
+async function findAnalyticsProject(args: {
+  accountId: string;
+  requestedProjectId: number | null;
+  requestedProjectSlug: string;
+}) {
+  const baseSql = `
+    SELECT "id", "slug", "name", "topSiteId", "serverKeyEnc", "serverKeyEncIv"
+    FROM "Project"
+    WHERE "accountId" = $1
+      AND "isActive" = TRUE
+  `;
+
+  if (args.requestedProjectId) {
+    const result = await getAuthPool().query<RawAnalyticsProjectRow>(
+      `${baseSql}
+       AND "id" = $2
+       LIMIT 1`,
+      [args.accountId, args.requestedProjectId],
+    );
+    return mapAnalyticsProject(result.rows[0]);
+  }
+
+  if (args.requestedProjectSlug) {
+    const result = await getAuthPool().query<RawAnalyticsProjectRow>(
+      `${baseSql}
+       AND "slug" = $2
+       LIMIT 1`,
+      [args.accountId, args.requestedProjectSlug],
+    );
+    return mapAnalyticsProject(result.rows[0]);
+  }
+
+  const result = await getAuthPool().query<RawAnalyticsProjectRow>(
+    `${baseSql}
+     ORDER BY "createdAt" ASC
+     LIMIT 1`,
+    [args.accountId],
+  );
+  return mapAnalyticsProject(result.rows[0]);
+}
+
+async function listAnalyticsSites(projectId: number) {
+  const result = await getAuthPool().query<RawAnalyticsSiteRow>(
+    `SELECT "id", "label", "origin"
+     FROM "Site"
+     WHERE "projectId" = $1
+       AND "isActive" = TRUE
+     ORDER BY "createdAt" ASC`,
+    [projectId],
+  );
+
+  return result.rows.map((row) => ({
+    id: String(row.id || "").trim(),
+    label: String(row.label || row.origin || "").trim(),
+    origin: String(row.origin || "").trim(),
+  }));
+}
+
+async function listLocalAnalyticsEvents(siteId: string, since: Date) {
+  const result = await getAuthPool().query<RawAnalyticsEventRow>(
+    `SELECT "createdAt", "type", "message", "meta"
+     FROM "SiteEvent"
+     WHERE "siteId" = $1
+       AND "type" = 'ANALYTICS_EVENT'
+       AND "createdAt" >= $2
+     ORDER BY "createdAt" ASC
+     LIMIT 5000`,
+    [siteId, since],
+  );
+
+  return result.rows.map((row) => ({
+    createdAt: toDate(row.createdAt),
+    type: String(row.type || "").trim(),
+    message: String(row.message || "").trim(),
+    meta: row.meta,
+  }));
+}
+
 function isFatalSummaryError(error: unknown) {
   const code = publicAnalyticsError(error);
   return (
@@ -358,16 +482,7 @@ async function readLocalProjectSummaryFallback(args: {
   const days = rangeDays(args.range);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const rows = await prisma.siteEvent.findMany({
-    where: {
-      siteId: args.activeSite.id,
-      type: "ANALYTICS_EVENT",
-      createdAt: { gte: since },
-    },
-    orderBy: { createdAt: "asc" },
-    take: 5000,
-    select: { createdAt: true, type: true, message: true, meta: true },
-  });
+  const rows = await listLocalAnalyticsEvents(args.activeSite.id, since);
 
   if (!rows.length) return base;
 
@@ -543,43 +658,14 @@ export async function resolveAnalyticsConsoleContext(args?: {
 
   let project: AnalyticsConsoleProject | null = null;
   try {
-    const projectPromise = requestedProjectId
-      ? prisma.project.findFirst({
-          where: { id: requestedProjectId, accountId: session.accountId, isActive: true },
-          select: {
-            id: true,
-            slug: true,
-            name: true,
-            topSiteId: true,
-            serverKeyEnc: true,
-            serverKeyEncIv: true,
-          },
-        })
-      : requestedProjectSlug
-        ? prisma.project.findFirst({
-            where: { slug: requestedProjectSlug, accountId: session.accountId, isActive: true },
-            select: {
-              id: true,
-              slug: true,
-              name: true,
-              topSiteId: true,
-              serverKeyEnc: true,
-              serverKeyEncIv: true,
-            },
-          })
-        : prisma.project.findFirst({
-            where: { accountId: session.accountId, isActive: true },
-            orderBy: { createdAt: "asc" },
-            select: {
-              id: true,
-              slug: true,
-              name: true,
-              topSiteId: true,
-              serverKeyEnc: true,
-              serverKeyEncIv: true,
-            },
-          });
-    project = await withConsoleDeadline(projectPromise, "PROJECT_READ");
+    project = await withConsoleDeadline(
+      findAnalyticsProject({
+        accountId: session.accountId,
+        requestedProjectId,
+        requestedProjectSlug,
+      }),
+      "PROJECT_READ",
+    );
   } catch (error) {
     safeLog("project_read_failed", {
       requestId: rid,
@@ -633,14 +719,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
 
   let dbSites: Array<{ id: string; label: string; origin: string }> = [];
   try {
-    dbSites = await withConsoleDeadline(
-      prisma.site.findMany({
-        where: { projectId: project.id, isActive: true },
-        orderBy: { createdAt: "asc" },
-        select: { id: true, label: true, origin: true },
-      }),
-      "SITE_READ",
-    );
+    dbSites = await withConsoleDeadline(listAnalyticsSites(project.id), "SITE_READ");
   } catch (error) {
     safeLog("site_read_failed", {
       requestId: rid,

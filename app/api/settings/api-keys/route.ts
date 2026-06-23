@@ -131,6 +131,21 @@ function safeSerializeKeyList(
     });
 }
 
+function keysForSelectedSite(
+  keys: Awaited<ReturnType<typeof listApiKeysForProject>>,
+  siteId: string | null | undefined,
+) {
+  const selectedSiteId = String(siteId || "").trim();
+  if (!selectedSiteId) return keys.filter((key) => !String(key.siteId || "").trim());
+
+  const exact = keys.filter((key) => String(key.siteId || "").trim() === selectedSiteId);
+  const projectLevel = keys.filter((key) => !String(key.siteId || "").trim());
+  const combined = [...exact, ...projectLevel];
+  if (combined.length) return combined;
+
+  return keys;
+}
+
 async function resolveApiKeyWorkspaceWithFallback(args: {
   accountId: string;
   requestedSiteId?: string | null;
@@ -244,9 +259,7 @@ export async function GET(req: NextRequest) {
     }
 
     const siteRecord = workspace.activeSite;
-    const scopedKeys = siteRecord?.id
-      ? keys.filter((key) => String(key.siteId || "").trim() === siteRecord.id)
-      : keys.filter((key) => !String(key.siteId || "").trim());
+    const scopedKeys = keysForSelectedSite(keys, siteRecord?.id);
 
     const publishableKeys = safeSerializeKeyList(scopedKeys, "PUBLISHABLE", true);
     const secretKeys = safeSerializeKeyList(scopedKeys, "SECRET");
