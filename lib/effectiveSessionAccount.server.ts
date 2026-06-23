@@ -11,7 +11,7 @@ import {
   withDedicatedAuthClient,
 } from "@/lib/authDb";
 
-const EFFECTIVE_ACCOUNT_LOOKUP_TIMEOUT_MS = 650;
+const EFFECTIVE_ACCOUNT_LOOKUP_TIMEOUT_MS = 2_500;
 
 async function withEffectiveAccountDeadline<T>(
   promise: Promise<T>,

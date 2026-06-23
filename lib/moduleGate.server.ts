@@ -4,11 +4,12 @@ import "server-only";
 import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { isApiAuthError, requireSession, requireAccountContext } from "@/lib/apiAuth";
+import { isApiAuthError, requireAccountContext } from "@/lib/apiAuth";
 import { findAccountById, findSessionMembership, findUserById, getAuthPool } from "@/lib/authDb";
 import { resolveTierFromAccount } from "@/lib/billing/featureGates";
 import { resolveBillingPlanResolution } from "@/lib/billingPlan.server";
 import { resolvePlanIdFromTier, hasModule, type ModuleId, type PlanId } from "@/lib/plans";
+import { requireWorkspaceResilientSession } from "@/lib/workspaceAuth.server";
 
 export type GateMode = "screen" | "redirect";
 
@@ -90,9 +91,9 @@ export async function gateModuleAccess(
 ): Promise<GateResult> {
   noStore();
 
-  let sess: Awaited<ReturnType<typeof requireSession>>;
+  let sess: Awaited<ReturnType<typeof requireWorkspaceResilientSession>>;
   try {
-    sess = await requireSession(req);
+    sess = await requireWorkspaceResilientSession(req);
     requireAccountContext(sess);
   } catch (error) {
     if (mode === "screen" && isSafePageRead(req) && isApiAuthError(error) && error.code === "AUTH_BACKEND_UNAVAILABLE") {
