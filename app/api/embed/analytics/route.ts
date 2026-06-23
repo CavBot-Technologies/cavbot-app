@@ -18,7 +18,7 @@ const NO_STORE_HEADERS: Record<string, string> = {
   Expires: "0",
 };
 const UPSTREAM_TIMEOUT_MS = 8_000;
-const EMBED_ANALYTICS_TIMEOUT_MS = 75_000;
+const EMBED_ANALYTICS_TIMEOUT_MS = 30_000;
 const EMBED_ANALYTICS_DEADLINE = Symbol("EMBED_ANALYTICS_DEADLINE");
 const FIRST_PARTY_WORKER_PROJECT_KEY = "cavbot_pk_gHn737DTf4afJ2xGpBFzZQ";
 
@@ -177,6 +177,19 @@ function withUpstreamProjectKey(
   };
 }
 
+function withUpstreamEnvelope(
+  payload: Record<string, unknown> | null,
+  req: NextRequest,
+) {
+  if (!payload) return payload;
+  return {
+    ...payload,
+    sdk_version: String(payload.sdk_version || payload.sdkVersion || req.headers.get("x-cavbot-sdk-version") || "app-proxy").trim(),
+    sdkVersion: String(payload.sdkVersion || payload.sdk_version || req.headers.get("x-cavbot-sdk-version") || "app-proxy").trim(),
+    env: String(payload.env || req.headers.get("x-cavbot-env") || "production").trim(),
+  };
+}
+
 function fallbackWorkerProjectKey() {
   return String(
     FIRST_PARTY_WORKER_PROJECT_KEY ||
@@ -205,14 +218,8 @@ function buildRemoteHeaders(
   if (projectKey) {
     headers["X-Project-Key"] = projectKey;
   }
-  const sdkVersion = req.headers.get("x-cavbot-sdk-version");
-  if (sdkVersion) {
-    headers["X-Cavbot-Sdk-Version"] = sdkVersion;
-  }
-  const env = req.headers.get("x-cavbot-env");
-  if (env) {
-    headers["X-Cavbot-Env"] = env;
-  }
+  headers["X-Cavbot-Sdk-Version"] = req.headers.get("x-cavbot-sdk-version") || "app-proxy";
+  headers["X-Cavbot-Env"] = req.headers.get("x-cavbot-env") || "production";
   const adminToken = getEnv().adminToken;
   if (adminToken) {
     headers["X-Admin-Token"] = adminToken;
@@ -244,10 +251,6 @@ function getProjectKeyFromRequest(req: NextRequest, payload: Record<string, unkn
   return "";
 }
 
-function isCavbotPublishableKey(value: string) {
-  return String(value || "").trim().startsWith("cavbot_pk");
-}
-
 function buildUnverifiedRemoteHeaders(req: NextRequest, payload: Record<string, unknown> | null) {
   const projectKey = getProjectKeyFromRequest(req, payload);
   if (!projectKey) return null;
@@ -263,10 +266,8 @@ function buildUnverifiedRemoteHeaders(req: NextRequest, payload: Record<string, 
       headers.Origin = origin;
     }
   }
-  const sdkVersion = req.headers.get("x-cavbot-sdk-version");
-  if (sdkVersion) headers["X-Cavbot-Sdk-Version"] = sdkVersion;
-  const env = req.headers.get("x-cavbot-env");
-  if (env) headers["X-Cavbot-Env"] = env;
+  headers["X-Cavbot-Sdk-Version"] = req.headers.get("x-cavbot-sdk-version") || "app-proxy";
+  headers["X-Cavbot-Env"] = req.headers.get("x-cavbot-env") || "production";
   const siteHost = req.headers.get("x-cavbot-site-host");
   if (siteHost) headers["X-Cavbot-Site-Host"] = siteHost;
   const siteOrigin = req.headers.get("x-cavbot-site-origin");
@@ -323,9 +324,10 @@ async function proxyToRemote(args: {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
   const upstreamProjectKey = String(args.headers["X-Project-Key"] || "").trim();
+  const upstreamPayloadBase = withUpstreamEnvelope(stripUpstreamSitePublicIds(args.payload), args.req);
   const upstreamPayload = args.verification
-    ? withUpstreamProjectKey(stripUpstreamSitePublicIds(args.payload), upstreamProjectKey)
-    : args.payload;
+    ? withUpstreamProjectKey(upstreamPayloadBase, upstreamProjectKey)
+    : upstreamPayloadBase;
 
   try {
     const send = () =>
@@ -501,13 +503,6 @@ async function handlePost(req: NextRequest, ctx: { env?: RateLimitEnv }) {
     }
   } catch (error) {
     console.error("[embed/analytics] app-side verifier failed; falling back to upstream verification", error);
-    const projectKey = getProjectKeyFromRequest(req, payload);
-    if (isCavbotPublishableKey(projectKey)) {
-      return NextResponse.json(
-        { ok: false, allowed: false, code: "LOCAL_VERIFIER_UNAVAILABLE" },
-        { status: 503, headers: corsHeaders(req.headers.get("origin")) },
-      );
-    }
     try {
       return await proxyUnverifiedToRemote(req, payload);
     } catch {
@@ -520,14 +515,11 @@ async function handlePost(req: NextRequest, ctx: { env?: RateLimitEnv }) {
   }
 
   if (!verification.ok) {
-    const projectKey = getProjectKeyFromRequest(req, payload);
-    if (!isCavbotPublishableKey(projectKey)) {
-      try {
-        const proxied = await proxyUnverifiedToRemote(req, payload);
-        if (proxied.ok || proxied.status !== 401) return proxied;
-      } catch (error) {
-        console.error("[embed/analytics] upstream verification fallback failed", error);
-      }
+    try {
+      const proxied = await proxyUnverifiedToRemote(req, payload);
+      if (proxied.ok || proxied.status !== 401) return proxied;
+    } catch (error) {
+      console.error("[embed/analytics] upstream verification fallback failed", error);
     }
 
     const origin = verification.origin ?? req.headers.get("origin");

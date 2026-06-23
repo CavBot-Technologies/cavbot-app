@@ -154,7 +154,7 @@ type EmbedApiKeyRecord = {
   } | null;
 };
 
-const KEY_LOOKUP_DB_DEADLINE_MS = 55_000;
+const KEY_LOOKUP_DB_DEADLINE_MS = 2_500;
 
 function originExactMatch(candidateOrigin: string, canonicalOrigin: string) {
   try {
