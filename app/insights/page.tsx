@@ -889,7 +889,7 @@ function missionForecast(input: {
   const summary =
     input.queueSize > 0
       ? `Expected lift: recover ~${fmtInt(recover404)} broken-route sessions, remove ~${fmtInt(errorCut)} recurring errors, and tighten high-friction pages before regressions stack.`
-      : "No ranked queue yet. As live telemetry expands, CavBot will auto-promote deterministic fixes here.";
+      : "No ranked queue yet. As live telemetry expands, CavBot will auto-promote prioritized fixes here.";
 
   const chips = [
     `Recovery +${fmtInt(recover404)} sessions`,
@@ -1230,7 +1230,7 @@ function buildMissionQueue(input: {
       owner: "Console",
       metricLabel: "Signals observed",
       metricValue: `${fmtInt(observedSignals)}/14`,
-      why: "CavBot only ranks what it can observe. Add live traffic + audits for full deterministic queueing.",
+      why: "CavBot only ranks what it can observe. Add live traffic + audits for full priority queueing.",
       improves: "Expected outcome: once coverage fills, Mission Control will auto-rank route-level and fingerprint-level fixes.",
       href: "/dashboard",
       _rank: observedSignals >= 6 ? 2 : 3,
@@ -1831,7 +1831,7 @@ export default async function InsightsPage({ searchParams }: PageProps) {
                             Open in CavCode
                           </button>
                           <span className="ins-cavai-actions-status" data-cavai-actions-status>
-                            Preparing deterministic priority actions...
+                            Preparing priority actions...
                           </span>
                           <span className="ins-cavai-actions-toast" data-cavai-actions-toast hidden />
                         </div>
@@ -2113,7 +2113,7 @@ export default async function InsightsPage({ searchParams }: PageProps) {
   var chooserCancel = chooserRoot ? chooserRoot.querySelector("[data-cavai-file-chooser-cancel]") : null;
   var chooserCloseEls = chooserRoot ? chooserRoot.querySelectorAll("[data-cavai-file-chooser-close]") : [];
   var toastTimer = null;
-  var deterministicPack = null;
+  var activePack = null;
   var activePriority = null;
   var pendingAmbiguousResolution = null;
 
@@ -2124,9 +2124,9 @@ export default async function InsightsPage({ searchParams }: PageProps) {
         projectId: requestContext.projectId || null,
         siteId: requestContext.siteId || null,
         origin: requestContext.origin || null,
-        runId: deterministicPack && deterministicPack.runId ? String(deterministicPack.runId) : null,
+        runId: activePack && activePack.runId ? String(activePack.runId) : null,
         priorityCode: activePriority && activePriority.code ? String(activePriority.code) : null,
-        request_id: deterministicPack && deterministicPack.requestId ? String(deterministicPack.requestId) : null
+        request_id: activePack && activePack.requestId ? String(activePack.requestId) : null
       };
       if(extra && typeof extra === "object"){
         for(var key in extra){
@@ -2298,10 +2298,10 @@ export default async function InsightsPage({ searchParams }: PageProps) {
   }
 
   function updatePriorityActions(pack){
-    deterministicPack = pack;
+    activePack = pack;
     activePriority = chooseTopPriority(pack);
     if(!activePriority){
-      setPriorityActions(false, "No deterministic priorities available yet.", false);
+      setPriorityActions(false, "No priorities available yet.", false);
       return;
     }
     var targets = collectOpenTargets(activePriority);
@@ -2319,7 +2319,7 @@ export default async function InsightsPage({ searchParams }: PageProps) {
     var workspaceId = String(current.get("workspaceId") || current.get("workspace") || current.get("ws") || "").trim();
     var folderId = String(current.get("folderId") || "").trim();
     return {
-      generatedAt: deterministicPack && deterministicPack.generatedAt ? String(deterministicPack.generatedAt) : "",
+      generatedAt: activePack && activePack.generatedAt ? String(activePack.generatedAt) : "",
       workspaceId: workspaceId || "",
       folderId: folderId || "",
       projectId: requestContext.projectId || "",
@@ -2429,7 +2429,7 @@ export default async function InsightsPage({ searchParams }: PageProps) {
   }
 
   function onCreatePriorityNote(){
-    if(!deterministicPack || !activePriority){
+    if(!activePack || !activePriority){
       setPriorityActions(false, "Run diagnostics first to create a note.", false);
       return;
     }
@@ -2440,15 +2440,15 @@ export default async function InsightsPage({ searchParams }: PageProps) {
     }
     var template = null;
     try{
-      template = intel.priorityToCavPadNote(deterministicPack, String(activePriority.code || ""));
+      template = intel.priorityToCavPadNote(activePack, String(activePriority.code || ""));
     }catch(_e){
       template = null;
     }
     if(!template){
-      setPriorityActions(true, "No deterministic note template available for this priority.", collectOpenTargets(activePriority).length > 0);
+      setPriorityActions(true, "No note template available for this priority.", collectOpenTargets(activePriority).length > 0);
       return;
     }
-    var runPart = deterministicPack && deterministicPack.runId ? String(deterministicPack.runId) : "run";
+    var runPart = activePack && activePack.runId ? String(activePack.runId) : "run";
     var codePart = activePriority && activePriority.code ? String(activePriority.code) : "priority";
     var requestId = "note_" + runPart + "_" + codePart + "_" + Date.now().toString(36);
     window.dispatchEvent(new CustomEvent("cb:cavpad:create-note-from-priority", {
@@ -2586,7 +2586,7 @@ export default async function InsightsPage({ searchParams }: PageProps) {
     if(e.key === "Escape") closeChooser();
   });
 
-  setPriorityActions(false, "Preparing deterministic priority actions...", false);
+  setPriorityActions(false, "Preparing priority actions...", false);
 
   function requestPersistedPack(){
     if(!requestContext.origin) return Promise.resolve(null);

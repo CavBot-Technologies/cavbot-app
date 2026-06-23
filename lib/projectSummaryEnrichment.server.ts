@@ -90,6 +90,8 @@ const API_ERROR_CODES = new Set([
   "route_http_5xx",
 ]);
 
+const CAVAI_PACK_SUMMARY_FRESHNESS_MS = 30 * 24 * 60 * 60 * 1000;
+
 function isRecord(value: unknown): value is AnyRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -125,6 +127,11 @@ function firstNumber(root: unknown, paths: string[]) {
     if (Number.isFinite(value)) return value;
   }
   return null;
+}
+
+function isFreshCavAiPack(pack: CavAiInsightPackV1): boolean {
+  const ts = Date.parse(String(pack.generatedAt || ""));
+  return Number.isFinite(ts) && Date.now() - ts <= CAVAI_PACK_SUMMARY_FRESHNESS_MS;
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -604,6 +611,17 @@ export function enrichProjectSummaryWithLatestPack(
   if (!latestPackWithHistory?.pack) return summary;
 
   const pack = latestPackWithHistory.pack;
+  if (!isFreshCavAiPack(pack)) {
+    const enriched = { ...summary } as ProjectSummary & AnyRecord;
+    const diagnostics = ensureRecord(enriched, "diagnostics");
+    diagnostics.cavaiPack = {
+      stale: true,
+      generatedAtISO: pack.generatedAt,
+      runId: pack.runId,
+    };
+    return enriched;
+  }
+
   const priorityMap = new Map(pack.priorities.map((priority) => [priority.code, priority]));
   const enriched = { ...summary } as ProjectSummary & AnyRecord;
   const diagnostics = ensureRecord(enriched, "diagnostics");

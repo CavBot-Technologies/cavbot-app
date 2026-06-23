@@ -64,13 +64,14 @@ type FixPlanState = {
 };
 
 const PACK_CACHE_TTL_MS = 5_000;
+const PACK_FRESHNESS_MS = 30 * 24 * 60 * 60 * 1000;
 const packCache = new Map<string, { at: number; value: PackResponseOk }>();
 const SCAN_METRICS_READY_EVENT = "cb:scan-metrics-ready";
 
 function normalizeOrigin(input: string): string {
   const raw = String(input || "").trim();
   if (!raw) return "";
-  // Keep SSR/CSR deterministic: placeholder labels (e.g. "All monitored targets")
+  // Keep SSR/CSR stable: placeholder labels (e.g. "All monitored targets")
   // must never be treated as URLs in one runtime and invalid in another.
   if (/\s/.test(raw)) return "";
   const withProto = raw.startsWith("http://") || raw.startsWith("https://") ? raw : `https://${raw}`;
@@ -98,6 +99,27 @@ function fmtScore(value: unknown): string {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(n);
+}
+
+function dateMs(iso: string | null | undefined): number | null {
+  const value = String(iso || "").trim();
+  if (!value) return null;
+  const ts = Date.parse(value);
+  return Number.isFinite(ts) ? ts : null;
+}
+
+function isFreshDate(iso: string | null | undefined): boolean {
+  const ts = dateMs(iso);
+  if (ts == null) return false;
+  return Date.now() - ts <= PACK_FRESHNESS_MS;
+}
+
+function packStatus(pack: CavAiInsightPackV1 | null): string {
+  if (!pack) return "No persisted InsightPack for this origin yet.";
+  const label = fmtDateTime(pack.generatedAt);
+  return isFreshDate(pack.generatedAt)
+    ? `Latest scan run: ${label}`
+    : `Last scan run: ${label}. No completed scan has run recently.`;
 }
 
 function priorityRecencyMs(priority: CavAiPriorityV1): number {
@@ -146,7 +168,7 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
     if (!Array.isArray(props.pillars) || !props.pillars.length) return null;
     return new Set(props.pillars.map((item) => String(item)));
   }, [props.pillars]);
-  const [status, setStatus] = useState("Preparing deterministic recommendations...");
+  const [status, setStatus] = useState("Preparing recommendations...");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [pack, setPack] = useState<CavAiInsightPackV1 | null>(null);
@@ -185,7 +207,7 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
 
     setLoading(true);
     setLoadError(null);
-    setStatus("Loading deterministic priorities...");
+    setStatus("Loading priorities...");
 
     try {
       const cacheKey = normalizedOrigin;
@@ -193,11 +215,7 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
       if (cached && Date.now() - cached.at <= PACK_CACHE_TTL_MS) {
         setPack(cached.value.pack);
         setHistory(Array.isArray(cached.value.history) ? cached.value.history : []);
-        setStatus(
-          cached.value.pack
-            ? `Latest deterministic run: ${fmtDateTime(cached.value.pack.generatedAt)}`
-            : "No persisted InsightPack for this origin yet."
-        );
+        setStatus(packStatus(cached.value.pack));
         setLoading(false);
         return;
       }
@@ -210,7 +228,7 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
       });
       const json = (await res.json().catch(() => null)) as PackResponseOk | PackResponseErr | null;
       if (!res.ok || !json || json.ok !== true) {
-        throw new Error(readPackErrorMessage(json as PackResponseErr | null, "Failed to load deterministic pack."));
+        throw new Error(readPackErrorMessage(json as PackResponseErr | null, "Failed to load scan pack."));
       }
 
       packCache.set(cacheKey, {
@@ -220,14 +238,10 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
 
       setPack(json.pack);
       setHistory(Array.isArray(json.history) ? json.history : []);
-      setStatus(
-        json.pack
-          ? `Latest deterministic run: ${fmtDateTime(json.pack.generatedAt)}`
-          : "No persisted InsightPack for this origin yet."
-      );
+      setStatus(packStatus(json.pack));
     } catch (error) {
       setLoadError(summarizeError(error));
-      setStatus("Deterministic priorities failed to load.");
+      setStatus("Priorities failed to load.");
     } finally {
       setLoading(false);
     }
@@ -270,7 +284,7 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
         const intel = getCavAiIntelligenceClient();
         const note = intel.priorityToCavPadNote(pack, code);
         if (!note) {
-          setActionStatus("No deterministic CavPad template is available for this priority.");
+          setActionStatus("No CavPad template is available for this priority.");
           return;
         }
         window.dispatchEvent(
@@ -391,7 +405,7 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
       <div className="cb-card-head">
         <div>
           <h2 className="cb-h2">{props.title || "CavBot Recommendations"}</h2>
-          <p className="cb-sub">{props.subtitle || "Evidence-linked, deterministic priorities for this surface."}</p>
+          <p className="cb-sub">{props.subtitle || "Evidence-linked priorities for this surface."}</p>
         </div>
       </div>
 
@@ -554,7 +568,7 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
                   }
             }
           >
-            <div className="cb-sub">{loading ? "Preparing deterministic priorities..." : emptyMessage}</div>
+            <div className="cb-sub">{loading ? "Preparing priorities..." : emptyMessage}</div>
             {!loading ? (
               <>
                 <br />
@@ -590,14 +604,15 @@ export default function CavAiRouteRecommendations(props: CavAiRouteRecommendatio
 
         {topHistory.length ? (
           <div className={isCommandCenter ? "cb-cavpri-history" : undefined} style={isCommandCenter ? undefined : { marginTop: 12 }}>
-            <div className="cb-sub">Recent runs</div>
+            <div className="cb-sub">{topHistory.some((run) => isFreshDate(run.generatedAtISO || run.createdAtISO)) ? "Recent scan runs" : "Older scan runs"}</div>
             <ul
               className={isCommandCenter ? "cb-cavpri-history-list" : undefined}
               style={isCommandCenter ? undefined : { marginTop: 6, marginBottom: 0, paddingLeft: 0, listStyle: "none" }}
             >
               {topHistory.map((run) => (
                 <li key={run.runId} className={`cb-sub${isCommandCenter ? " cb-cavpri-history-item" : ""}`} style={isCommandCenter ? undefined : { marginTop: 4 }}>
-                  {fmtDateTime(run.generatedAtISO || run.createdAtISO)} · Findings {fmtScore(run.findingCount)} · Top{" "}
+                  {fmtDateTime(run.generatedAtISO || run.createdAtISO)}
+                  {isFreshDate(run.generatedAtISO || run.createdAtISO) ? "" : " · Older"} · Findings {fmtScore(run.findingCount)} · Top{" "}
                   {run.topPriorityCode || "—"}
                 </li>
               ))}
