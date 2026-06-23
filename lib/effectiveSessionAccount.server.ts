@@ -11,8 +11,8 @@ import {
   withDedicatedAuthClient,
 } from "@/lib/authDb";
 
-const EFFECTIVE_ACCOUNT_LOOKUP_TIMEOUT_MS = 2_500;
-const ACTIVE_PROJECT_COOKIE_NAMES = ["cb_active_project_id", "cb_active_project", "cavbot_active_project_id"];
+const EFFECTIVE_ACCOUNT_LOOKUP_TIMEOUT_MS = 6_000;
+const ACTIVE_PROJECT_COOKIE_NAMES = ["cb_active_project_id", "cb_pid", "cb_active_project", "cavbot_active_project_id"];
 
 async function withEffectiveAccountDeadline<T>(
   promise: Promise<T>,
@@ -76,7 +76,13 @@ function parseActiveProjectId(req: Request): number | null {
     const name = rawName?.trim();
     if (!name || !ACTIVE_PROJECT_COOKIE_NAMES.includes(name)) continue;
 
-    const value = decodeURIComponent(rawValueParts.join("=")).trim();
+    const rawValue = rawValueParts.join("=").trim();
+    let value = rawValue;
+    try {
+      value = decodeURIComponent(rawValue).trim();
+    } catch {
+      value = rawValue;
+    }
     const projectId = Number(value);
     if (Number.isInteger(projectId) && projectId > 0) return projectId;
   }

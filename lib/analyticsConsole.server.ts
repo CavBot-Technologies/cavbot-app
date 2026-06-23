@@ -611,7 +611,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
   let session: CavbotAccountSession | null = null;
   try {
     const req = await buildRequestFromHeaders(pathname);
-    const rawSession = await withConsoleDeadline(requireWorkspaceResilientSession(req), "SESSION_READ", 2_000);
+    const rawSession = await withConsoleDeadline(requireWorkspaceResilientSession(req), "SESSION_READ", 8_000);
     requireAccountContext(rawSession);
     session = rawSession;
   } catch (error) {
@@ -638,7 +638,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
     workspace = await withConsoleDeadline(
       readWorkspace({ accountId: session.accountId }),
       "WORKSPACE_READ",
-      2_000,
+      8_000,
     );
   } catch (error) {
     safeLog("workspace_read_failed", {
@@ -665,6 +665,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
         requestedProjectSlug,
       }),
       "PROJECT_READ",
+      8_000,
     );
   } catch (error) {
     safeLog("project_read_failed", {
@@ -719,7 +720,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
 
   let dbSites: Array<{ id: string; label: string; origin: string }> = [];
   try {
-    dbSites = await withConsoleDeadline(listAnalyticsSites(project.id), "SITE_READ");
+    dbSites = await withConsoleDeadline(listAnalyticsSites(project.id), "SITE_READ", 8_000);
   } catch (error) {
     safeLog("site_read_failed", {
       requestId: rid,

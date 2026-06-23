@@ -208,7 +208,7 @@ async function resolveApiKeyWorkspaceWithFallback(args: {
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await withApiKeysDeadline(requireSettingsOwnerResilientSession(req), "API_KEYS_SESSION", 5_000);
+    const session = await withApiKeysDeadline(requireSettingsOwnerResilientSession(req), "API_KEYS_SESSION", 8_000);
     const workspaceHints = readApiKeyWorkspaceCookieHints(req);
     const requestedSiteId = String(req.nextUrl.searchParams.get("siteId") || "").trim() || undefined;
     const workspacePayloadPromise = withApiKeysDeadline(
@@ -250,7 +250,7 @@ export async function GET(req: NextRequest) {
 
     let keys: Awaited<ReturnType<typeof listApiKeysForProject>> = [];
     try {
-      keys = await withApiKeysDeadline(listApiKeysForProject(workspace.projectId), "API_KEYS_LIST", 5_000);
+      keys = await withApiKeysDeadline(listApiKeysForProject(workspace.projectId), "API_KEYS_LIST", 8_000);
     } catch (error) {
       console.error("[settings/api-keys] project key lookup failed", {
         projectId: workspace.projectId,

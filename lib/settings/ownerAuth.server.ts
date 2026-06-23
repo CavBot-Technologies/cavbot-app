@@ -12,12 +12,18 @@ import {
   requireUser,
   type CavbotAccountSession,
 } from "@/lib/apiAuth";
-import { resolveEffectiveAccountIdForSession } from "@/lib/effectiveSessionAccount.server";
+import {
+  resolveEffectiveAccountIdForSession,
+  resolveEffectiveAccountIdFromRequest,
+} from "@/lib/effectiveSessionAccount.server";
 
 async function withEffectiveSettingsAccount(
   session: CavbotAccountSession,
+  req?: Request,
 ): Promise<CavbotAccountSession> {
-  const effectiveAccountId = await resolveEffectiveAccountIdForSession(session).catch(() => null);
+  const effectiveAccountId = await (
+    req ? resolveEffectiveAccountIdFromRequest(req, session) : resolveEffectiveAccountIdForSession(session)
+  ).catch(() => null);
   const normalizedEffectiveAccountId = String(effectiveAccountId || "").trim();
   const normalizedSessionAccountId = String(session.accountId || "").trim();
 
@@ -36,7 +42,7 @@ export async function requireSettingsOwnerSession(req: Request): Promise<CavbotA
   requireUser(session);
   requireAccountContext(session);
   requireAccountRole(session, ["OWNER"]);
-  return withEffectiveSettingsAccount(session);
+  return withEffectiveSettingsAccount(session, req);
 }
 
 export async function requireSettingsOwnerResilientSession(req: Request): Promise<CavbotAccountSession> {
@@ -49,7 +55,7 @@ export async function requireSettingsOwnerResilientSession(req: Request): Promis
     requireUser(session);
     requireAccountContext(session);
     requireAccountRole(session, ["OWNER"]);
-    return withEffectiveSettingsAccount(session);
+    return withEffectiveSettingsAccount(session, req);
   }
 }
 
