@@ -25,7 +25,7 @@
   --sx-glass: blur(20px);
 
   /* Geometry: grounded rounded-rects across Settings */
-  --sx-r10: 10px;
+  --sx-r10: 4px;
   --sx-r16: var(--sx-r10);
   --sx-r18: var(--sx-r10);
   --sx-r20: var(--sx-r10);
@@ -3854,7 +3854,7 @@
   min-width: 34px;
   height: 34px;
   padding: 0 !important;
-  border-radius: 8px;
+  border-radius: 4px;
 }
 
 .sx-actionIcon{
@@ -4042,7 +4042,7 @@ body.cb-modal-open{
   top: 50%;
   transform: translate(-50%, -50%);
   width: min(520px, calc(100% - 28px));
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: linear-gradient(180deg, rgba(0,0,0,0.56), rgba(0,0,0,0.36));
   box-shadow: 0 24px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06);
@@ -4067,7 +4067,7 @@ body.cb-modal-open{
 .cb-modal-close{
   width: 30px;
   height: 30px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.04);
   color: rgba(234,240,255,0.88);
@@ -4148,7 +4148,7 @@ body.cb-modal-open{
 .cb-modal .sx-input{
   width: 100%;
   height: 38px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(0,0,0,0.18);
   color: rgba(234,240,255,0.92);
@@ -4179,7 +4179,7 @@ body.cb-modal-open{
 .cb-modal-action{
   height: 34px;
   padding: 0 14px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.04);
   color: rgba(234,240,255,0.90);
@@ -4210,7 +4210,7 @@ body.cb-modal-open{
 .sx-requestAccessModalCard{
   width: min(620px, 100%);
   padding: 0;
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(78,168,255,0.24);
   background:
     radial-gradient(120% 140% at 0% 0%, rgba(78,168,255,0.16), rgba(78,168,255,0) 45%),
@@ -4273,7 +4273,7 @@ body.cb-modal-open{
 
 .sx-requestAccessField .sx-input{
   height: 48px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.16);
   background: rgba(1,4,12,0.68);
 }
@@ -4328,7 +4328,7 @@ body.cb-modal-open{
   min-height: 38px;
   width: 100%;
   padding: 0 12px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(185,200,90,0.30);
   background: rgba(185,200,90,0.10);
   color: rgba(247,249,255,0.92);
@@ -4345,7 +4345,7 @@ body.cb-modal-open{
   border: 1px solid rgba(255,120,120,0.24);
   background: rgba(255,120,120,0.08);
   color: rgba(255,170,170,0.94);
-  border-radius: 12px;
+  border-radius: 4px;
   padding: 10px 12px;
   font-size: 12px;
   line-height: 1.45;
@@ -4356,7 +4356,7 @@ body.cb-modal-open{
   border: 1px solid rgba(185,200,90,0.32);
   background: rgba(185,200,90,0.12);
   color: rgba(247,249,255,0.92);
-  border-radius: 12px;
+  border-radius: 4px;
   padding: 10px 12px;
   font-size: 12px;
   line-height: 1.45;
