@@ -12,6 +12,7 @@ import {
 } from "@/lib/authDb";
 
 const EFFECTIVE_ACCOUNT_LOOKUP_TIMEOUT_MS = 2_500;
+const ACTIVE_PROJECT_COOKIE_NAMES = ["cb_active_project_id", "cb_active_project", "cavbot_active_project_id"];
 
 async function withEffectiveAccountDeadline<T>(
   promise: Promise<T>,
@@ -66,8 +67,66 @@ export async function resolveEffectiveAccountIdForSession(
   }
 }
 
-export async function resolveEffectiveAccountIdFromRequest(req: Request) {
-  const session = await getSession(req);
+function parseActiveProjectId(req: Request): number | null {
+  const cookieHeader = String(req.headers.get("cookie") || "");
+  if (!cookieHeader) return null;
+
+  for (const part of cookieHeader.split(";")) {
+    const [rawName, ...rawValueParts] = part.trim().split("=");
+    const name = rawName?.trim();
+    if (!name || !ACTIVE_PROJECT_COOKIE_NAMES.includes(name)) continue;
+
+    const value = decodeURIComponent(rawValueParts.join("=")).trim();
+    const projectId = Number(value);
+    if (Number.isInteger(projectId) && projectId > 0) return projectId;
+  }
+
+  return null;
+}
+
+async function resolveEffectiveAccountIdFromProjectCookie(
+  req: Request,
+  session: CavbotSession | null | undefined,
+): Promise<string | null> {
+  if (!session || session.systemRole !== "user") return null;
+
+  const userId = String(session.sub || "").trim();
+  const projectId = parseActiveProjectId(req);
+  if (!userId || !projectId) return null;
+
+  try {
+    return await withEffectiveAccountDeadline(
+      withDedicatedAuthClient(async (authClient) => {
+        const result = await authClient.query<{ accountId: string }>(
+          `
+            SELECT p."accountId"
+              FROM "Project" p
+              JOIN "Membership" m
+                ON m."accountId" = p."accountId"
+               AND m."userId" = $2
+             WHERE p."id" = $1
+               AND p."isActive" = TRUE
+             LIMIT 1
+          `,
+          [projectId, userId],
+        );
+
+        return String(result.rows[0]?.accountId || "").trim() || null;
+      }),
+    );
+  } catch {
+    return null;
+  }
+}
+
+export async function resolveEffectiveAccountIdFromRequest(
+  req: Request,
+  sessionInput?: CavbotSession | null | undefined,
+) {
+  const session = sessionInput ?? (await getSession(req));
+  const projectAccountId = await resolveEffectiveAccountIdFromProjectCookie(req, session);
+  if (projectAccountId) return projectAccountId;
+
   return resolveEffectiveAccountIdForSession(session);
 }
 

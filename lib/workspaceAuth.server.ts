@@ -8,14 +8,20 @@ import {
   type CavbotSession,
   type CavbotAccountSession,
 } from "@/lib/apiAuth";
-import { resolveEffectiveAccountIdForSession } from "@/lib/effectiveSessionAccount.server";
+import {
+  resolveEffectiveAccountIdForSession,
+  resolveEffectiveAccountIdFromRequest,
+} from "@/lib/effectiveSessionAccount.server";
 
 async function withEffectiveWorkspaceAccount(
   session: CavbotSession,
+  req?: Request,
 ): Promise<CavbotAccountSession> {
   requireAccountContext(session);
 
-  const effectiveAccountId = await resolveEffectiveAccountIdForSession(session).catch(() => null);
+  const effectiveAccountId = await (
+    req ? resolveEffectiveAccountIdFromRequest(req, session) : resolveEffectiveAccountIdForSession(session)
+  ).catch(() => null);
   const normalizedEffectiveAccountId = String(effectiveAccountId || "").trim();
   const normalizedSessionAccountId = String(session.accountId || "").trim();
 
@@ -31,14 +37,14 @@ async function withEffectiveWorkspaceAccount(
 
 export async function requireWorkspaceSession(req: Request): Promise<CavbotAccountSession> {
   const session = await requireSession(req);
-  return withEffectiveWorkspaceAccount(session);
+  return withEffectiveWorkspaceAccount(session, req);
 }
 
 export async function requireLowRiskWorkspaceSession(
   req: Request,
 ): Promise<CavbotAccountSession> {
   const session = await requireLowRiskWriteSession(req);
-  return withEffectiveWorkspaceAccount(session);
+  return withEffectiveWorkspaceAccount(session, req);
 }
 
 export async function requireWorkspaceResilientSession(req: Request): Promise<CavbotAccountSession> {

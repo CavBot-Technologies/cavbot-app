@@ -6,7 +6,6 @@ import Script from "next/script";
 import { unstable_noStore as noStore } from "next/cache";
 import { headers } from "next/headers";
 import { gateModuleAccess } from "@/lib/moduleGate.server";
-import LockedModule from "@/components/LockedModule";
 import AppShell from "@/components/AppShell";
 import { resolveAnalyticsConsoleContext } from "@/lib/analyticsConsole.server";
 import type { ProjectSummary } from "@/lib/cavbotTypes";
@@ -1321,19 +1320,7 @@ export default async function InsightsPage({ searchParams }: PageProps) {
     headers: new Headers(requestHeaders),
   });
 
-  const gate = await gateModuleAccess(req, "insights");
-
-  if (!gate.ok) {
-    return (
-      <AppShell title="Workspace" subtitle="Workspace command center">
-        <LockedModule
-          moduleName="Guardian Intelligence"
-          description="A consolidated posture read across SEO, stability, vitals, and accessibility—prioritized into actionable fixes."
-          requiredPlanLabel="Premium+"
-        />
-      </AppShell>
-    );
-  }
+  await gateModuleAccess(req, "insights");
 
   const range = (typeof sp?.range === "string" ? sp.range : "24h") as RangeKey;
 

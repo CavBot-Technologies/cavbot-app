@@ -6,7 +6,6 @@ import Script from "next/script";
 import { unstable_noStore as noStore } from "next/cache";
 import { headers } from "next/headers";
 import { gateModuleAccess } from "@/lib/moduleGate.server";
-import LockedModule from "@/components/LockedModule";
 import AppShell from "@/components/AppShell";
 import CavAiRouteRecommendations from "@/components/CavAiRouteRecommendations";
 import { resolveAnalyticsConsoleContext } from "@/lib/analyticsConsole.server";
@@ -830,19 +829,7 @@ export default async function A11yPage({ searchParams }: PageProps) {
     headers: new Headers(requestHeaders),
   });
 
-  const gate = await gateModuleAccess(req, "a11y");
-
-  if (!gate.ok) {
-    return (
-      <AppShell title="Workspace" subtitle="Workspace command center">
-        <LockedModule
-          moduleName="Accessibility Intelligence"
-          description="WCAG posture, audit coverage, contrast and focus visibility signals across your monitored targets."
-          requiredPlanLabel="Premium+"
-        />
-      </AppShell>
-    );
-  }
+  await gateModuleAccess(req, "a11y");
 
   const range = (typeof sp?.range === "string" ? sp.range : "24h") as RangeKey;
 
