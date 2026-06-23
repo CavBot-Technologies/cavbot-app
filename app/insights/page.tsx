@@ -1,7 +1,6 @@
 // app/insights/page.tsx
 import "./insights.css";
 
-import Image from "next/image";
 import Script from "next/script";
 import { unstable_noStore as noStore } from "next/cache";
 import { headers } from "next/headers";
@@ -1329,7 +1328,6 @@ export default async function InsightsPage({ searchParams }: PageProps) {
     defaultRange: range,
     pathname: "/insights",
   });
-  const sites = analyticsContext.sites;
   const activeSite = analyticsContext.activeSite;
   const projectId = analyticsContext.projectId;
 
@@ -1416,17 +1414,6 @@ export default async function InsightsPage({ searchParams }: PageProps) {
     hotspots = normalizeHotspots(summary);
 
     scoreTrendRaw = normalizeScoreTrend(summary);
-  }
-
-  function hrefWith(next: Partial<{ range: RangeKey; site: string }>) {
-    const p = new URLSearchParams();
-    p.set("module", "insights");
-    p.set("projectId", projectId);
-    p.set("range", next.range || range);
-    const siteId = next.site || activeSite.id;
-    if (siteId && siteId !== "none") p.set("siteId", siteId);
-    const s = p.toString();
-    return s ? `?${s}` : "";
   }
 
   const breakdown = calcScoreBreakdown({
@@ -1659,26 +1646,6 @@ export default async function InsightsPage({ searchParams }: PageProps) {
                   <option value="30d">30D</option>
                 </select>
               </label>
-
-              <button
-                className="cb-tool-pill"
-                type="button"
-                data-tools-open
-                aria-haspopup="dialog"
-                aria-expanded="false"
-                aria-label="Dashboard tools"
-                title="Dashboard tools"
-              >
-                <Image
-                  src="/icons/app/tools-svgrepo-com.svg"
-                  alt=""
-                  width={16}
-                  height={16}
-                  className="cb-tool-ico cb-tools-icon"
-                  aria-hidden="true"
-                  unoptimized
-                />
-              </button>
             </div>
           </header>
           <br />
@@ -2082,45 +2049,6 @@ export default async function InsightsPage({ searchParams }: PageProps) {
               </article>
             </section>
           </main>
-
-          {/* Tools modal (still available, but de-toyed) */}
-          <div className="cb-modal cb-dashboard-tools-modal" role="dialog" aria-modal="true" aria-label="Dashboard tools" hidden data-tools-modal>
-            <div className="cb-modal-backdrop" data-tools-close />
-            <div className="cb-modal-card" role="document">
-              <div className="cb-modal-top">
-                <div className="cb-modal-title">Dashboard Tools</div>
-                <button className="cb-iconbtn" type="button" aria-label="Close" data-tools-close>
-                  <span className="cb-closeIcon" aria-hidden="true" />
-                </button>
-              </div>
-
-              <div className="cb-modal-body">
-                <div className="cb-field">
-                  <div className="cb-field-label">Target</div>
-                  <select className="cb-select" defaultValue={activeSite.id} data-tools-site>
-                    {sites.length ? (
-                      sites.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.label}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="none">No sites</option>
-                    )}
-                  </select>
-                  <div className="cb-field-hint">Select which site to analyze.</div>
-                </div>
-
-                <div className="cb-modal-actions">
-                  <a className="cb-btn cb-btn-ghost" data-tools-report href={`/dashboard/report${hrefWith({})}`} target="_blank" rel="noreferrer">
-                    Download report
-                  </a>
-                  <button className="cb-btn" type="button" data-tools-apply>
-                    Apply
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* LIVE time ticker */}
@@ -2154,102 +2082,6 @@ export default async function InsightsPage({ searchParams }: PageProps) {
   }
   tick();
   window.__cbInsightsLiveTimeInt = setInterval(tick, 10000);
-})();`}
-          </Script>
-
-          {/* Tools wiring (guarded) */}
-          <Script id="cb-insights-tools-wire" strategy="afterInteractive">
-            {`
-(function(){
-  if(document.documentElement.dataset.cbInsightsToolsWired === "1") return;
-  document.documentElement.dataset.cbInsightsToolsWired = "1";
-
-  var modal = document.querySelector("[data-tools-modal]");
-  var openBtn = document.querySelector("[data-tools-open]");
-  var closeEls = document.querySelectorAll("[data-tools-close]");
-  var siteSel = document.querySelector("[data-tools-site]");
-  var applyBtn = document.querySelector("[data-tools-apply]");
-  var reportLink = document.querySelector("[data-tools-report]");
-
-  function lockBody(on){
-    try{ document.body.classList.toggle("cb-modal-open", !!on); }catch(e){}
-  }
-
-  function syncReportLink(){
-    if(!reportLink) return;
-    try{
-      var p = new URLSearchParams(window.location.search || "");
-      var range = p.get("range") || "24h";
-      var site = (siteSel && siteSel.value) ? siteSel.value : (p.get("site") || "none");
-      var projectId = ${JSON.stringify(projectId)};
-
-      var next = new URLSearchParams();
-      next.set("module", "insights");
-      if(projectId) next.set("projectId", projectId);
-      next.set("range", range);
-      if(site && site !== "none") next.set("siteId", site);
-
-      reportLink.setAttribute("href", "/dashboard/report?" + next.toString());
-    }catch(e){}
-  }
-
-  function open(){
-    if(!modal) return;
-    modal.hidden = false;
-    lockBody(true);
-    if(openBtn) openBtn.setAttribute("aria-expanded","true");
-    try{
-      syncReportLink();
-      if(siteSel) siteSel.focus();
-    }catch(e){}
-  }
-
-  function close(){
-    if(!modal) return;
-    modal.hidden = true;
-    lockBody(false);
-    if(openBtn) openBtn.setAttribute("aria-expanded","false");
-    try{ if(openBtn) openBtn.focus(); }catch(e){}
-  }
-
-  if(openBtn) openBtn.addEventListener("click", open);
-  closeEls.forEach(function(el){ el.addEventListener("click", close); });
-  document.addEventListener("keydown", function(e){ if(e.key === "Escape") close(); });
-
-  function apply(){
-    try{
-      var p = new URLSearchParams(window.location.search || "");
-      var range = p.get("range") || "24h";
-      var site = siteSel && siteSel.value ? siteSel.value : (p.get("site") || "none");
-
-      var next = new URLSearchParams();
-      next.set("range", range);
-      next.set("site", site);
-
-      window.location.search = "?" + next.toString();
-    }catch(e){}
-  }
-  if(applyBtn) applyBtn.addEventListener("click", apply);
-
-  if(siteSel){
-    siteSel.addEventListener("change", function(){ syncReportLink(); });
-  }
-
-  var rangeSel = document.querySelector("[data-range-select]");
-  if(rangeSel && rangeSel.tagName === "SELECT"){
-    rangeSel.addEventListener("change", function(){
-      try{
-        var p = new URLSearchParams(window.location.search || "");
-        var nextRange = rangeSel.value || (p.get("range") || "24h");
-        var nextSite = p.get("site") || (rangeSel.getAttribute("data-default-site") || "none");
-        p.set("range", nextRange);
-        p.set("site", nextSite);
-        window.location.search = "?" + p.toString();
-      }catch(e){}
-    });
-  }
-
-  syncReportLink();
 })();`}
           </Script>
           <Script id="cb-insights-cavai-intel" strategy="afterInteractive">
@@ -2828,7 +2660,6 @@ export default async function InsightsPage({ searchParams }: PageProps) {
 })();`}
           </Script>
         </div>
-      </div>
     </AppShell>
   );
 }

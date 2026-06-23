@@ -3,7 +3,6 @@
 /// <reference types="react-dom" />
 import "./errors.css";
 
-import Image from "next/image";
 import Script from "next/script";
 import { unstable_noStore as noStore } from "next/cache";
 import { headers } from "next/headers";
@@ -323,7 +322,6 @@ export default async function ErrorsPage({ searchParams }: PageProps) {
     defaultRange: range,
     pathname: "/errors",
   });
-  const sites = analyticsContext.sites;
   const activeSite = analyticsContext.activeSite;
   const projectId = analyticsContext.projectId;
   let summary: unknown = null;
@@ -397,27 +395,6 @@ export default async function ErrorsPage({ searchParams }: PageProps) {
                   <option value="30d">30D</option>
                 </select>
               </label>
-
-              {/* Tools pill (wrench icon, Console-style) */}
-              <button
-                className="cb-tool-pill"
-                type="button"
-                data-tools-open
-                aria-haspopup="dialog"
-                aria-expanded="false"
-                aria-label="Dashboard tools"
-                title="Dashboard tools"
-              >
-                <Image
-                  src="/icons/app/tools-svgrepo-com.svg"
-                  alt=""
-                  width={16}
-                  height={16}
-                  className="cb-tool-ico cb-tools-icon"
-                  aria-hidden="true"
-                  unoptimized
-                />
-              </button>
             </div>
           </header>
 
@@ -715,45 +692,6 @@ export default async function ErrorsPage({ searchParams }: PageProps) {
             subtitle="Deterministic reliability, route, and auth-funnel priorities for this target."
             pillars={["reliability", "ux", "performance", "engagement"]}
           />
-
-          {/* Tools modal (Console-grade: above glass, body lock, synced links) */}
-          <div className="cb-modal cb-dashboard-tools-modal" role="dialog" aria-modal="true" aria-label="Dashboard tools" hidden data-tools-modal>
-            <div className="cb-modal-backdrop" data-tools-close />
-            <div className="cb-modal-card" role="document">
-              <div className="cb-modal-top">
-                <div className="cb-modal-title">Dashboard Tools</div>
-                <button className="cb-iconbtn" type="button" aria-label="Close" data-tools-close>
-                  <span className="cb-closeIcon" aria-hidden="true" />
-                </button>
-              </div>
-
-              <div className="cb-modal-body">
-                <div className="cb-field">
-                  <div className="cb-field-label">Target</div>
-                  <select className="cb-select" defaultValue={activeSite.id} data-tools-site>
-                    {sites.length ? (
-                      sites.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.label}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="none">No sites</option>
-                    )}
-                  </select>
-                  <div className="cb-field-hint">Select which site to analyze.</div>
-                </div>
-
-                <div className="cb-modal-actions">
-                  <a className="cb-btn cb-btn-ghost" data-tools-report href={`/dashboard/report${hrefWith({ fp })}`} target="_blank" rel="noreferrer">
-                    Download report
-                  </a>
-                  <button className="cb-btn" type="button" data-tools-apply>
-                    Apply
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* LIVE time ticker (LA time + 10s tick) */}
@@ -816,94 +754,7 @@ export default async function ErrorsPage({ searchParams }: PageProps) {
     });
   }
 
-  var modal = document.querySelector("[data-tools-modal]");
-  var openBtn = document.querySelector("[data-tools-open]");
-  var closeEls = document.querySelectorAll("[data-tools-close]");
-  var siteSel = document.querySelector("[data-tools-site]");
-  var applyBtn = document.querySelector("[data-tools-apply]");
-  var reportLink = document.querySelector("[data-tools-report]");
   var deepFilter = document.querySelector("[data-deep-filter]");
-
-  // Hard safety: modal must NEVER be visible on first paint.
-  if(modal){
-    modal.hidden = true;
-  }
-  lockBody(false);
-  if(openBtn) openBtn.setAttribute("aria-expanded","false");
-
-  function lockBody(on){
-    try{
-      document.body.classList.toggle("cb-modal-open", !!on);
-    }catch(e){}
-  }
-
-  function syncReportLink(){
-    if(!reportLink) return;
-    try{
-      var p = new URLSearchParams(window.location.search || "");
-      var range = p.get("range") || "24h";
-      var fp = p.get("fp") || "";
-      var site = (siteSel && siteSel.value) ? siteSel.value : (p.get("site") || "none");
-      var projectId = ${JSON.stringify(projectId)};
-
-      var next = new URLSearchParams();
-      next.set("module", "errors");
-      if(projectId) next.set("projectId", projectId);
-      next.set("range", range);
-      if(site && site !== "none") next.set("siteId", site);
-      if(fp) next.set("fp", fp);
-
-      reportLink.setAttribute("href", "/dashboard/report?" + next.toString());
-    }catch(e){}
-  }
-
-  function open(){
-    if(!modal) return;
-    modal.hidden = false;
-    lockBody(true);
-    if(openBtn) openBtn.setAttribute("aria-expanded","true");
-    try{
-      syncReportLink();
-      if(siteSel) siteSel.focus();
-    }catch(e){}
-  }
-
-  function close(){
-    if(!modal) return;
-    modal.hidden = true;
-    lockBody(false);
-    if(openBtn) openBtn.setAttribute("aria-expanded","false");
-    try{
-      if(openBtn) openBtn.focus();
-    }catch(e){}
-  }
-
-  if(openBtn) openBtn.addEventListener("click", open);
-  closeEls.forEach(function(el){ el.addEventListener("click", close); });
-  document.addEventListener("keydown", function(e){ if(e.key === "Escape") close(); });
-
-  function apply(){
-    try{
-      var p = new URLSearchParams(window.location.search || "");
-      var range = p.get("range") || "24h";
-      var fp = p.get("fp") || "";
-      var site = siteSel && siteSel.value ? siteSel.value : (p.get("site") || "none");
-
-      var next = new URLSearchParams();
-      next.set("range", range);
-      next.set("site", site);
-      if(fp) next.set("fp", fp);
-
-      window.location.search = "?" + next.toString();
-    }catch(e){}
-  }
-  if(applyBtn) applyBtn.addEventListener("click", apply);
-
-  if(siteSel){
-    siteSel.addEventListener("change", function(){
-      syncReportLink();
-    });
-  }
 
   function applyDeepFilter(){
     var v = deepFilter && deepFilter.value ? deepFilter.value : "all";
@@ -920,11 +771,9 @@ export default async function ErrorsPage({ searchParams }: PageProps) {
     applyDeepFilter();
   }
 
-  syncReportLink();
 })();`}
           </Script>
         </div>
-      </div>
     </AppShell>
   );
 }
