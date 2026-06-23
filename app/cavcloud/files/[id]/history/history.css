@@ -10,7 +10,7 @@
 
 .cc-historyHead {
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 14px;
+  border-radius: 4px;
   background: rgba(8, 12, 28, 0.96);
   padding: 14px;
   display: flex;
@@ -65,7 +65,7 @@
 .cc-historyViewerCard {
   min-height: 0;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 14px;
+  border-radius: 4px;
   background: rgba(8, 12, 28, 0.96);
   padding: 12px;
   display: flex;
@@ -144,7 +144,7 @@
   min-height: 0;
   flex: 1 1 auto;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(1, 4, 15, 0.84);
   overflow: auto;
   padding: 10px;
@@ -170,7 +170,7 @@
 
 .cc-historyError {
   border: 1px solid rgba(255, 132, 132, 0.45);
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(50, 8, 14, 0.8);
   color: rgba(255, 196, 201, 0.96);
   padding: 10px 12px;

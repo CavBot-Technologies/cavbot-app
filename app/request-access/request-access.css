@@ -2,7 +2,7 @@
   max-width: 780px;
   margin: 26px auto;
   padding: 18px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(6, 10, 21, 0.86);
 }
@@ -33,7 +33,7 @@
 
 .request-access-field input {
   height: 42px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.04);
   color: rgba(247, 249, 255, 0.95);
@@ -58,7 +58,7 @@
   max-height: 220px;
   overflow: auto;
   padding: 8px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(3, 6, 14, 0.9);
 }
@@ -66,7 +66,7 @@
 .request-access-result {
   width: 100%;
   text-align: left;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.03);
   color: rgba(247, 249, 255, 0.94);
@@ -91,7 +91,7 @@
 .request-access-error,
 .request-access-success {
   margin-top: 14px;
-  border-radius: 10px;
+  border-radius: 4px;
   padding: 10px 12px;
   font-size: 13px;
 }
@@ -117,7 +117,7 @@
 .request-access-submit {
   height: 42px;
   padding: 0 18px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid var(--cb-cavsafe-accent-strong, rgba(185, 200, 90, 0.52));
   background: var(--cb-cavsafe-accent-soft, rgba(185, 200, 90, 0.22));
   color: rgba(247, 249, 255, 0.96);

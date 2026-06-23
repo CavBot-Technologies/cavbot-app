@@ -17,10 +17,10 @@
   --cb-lime: #b9c85a;
   --cb-amber: #ffcc66;
   --cb-red: #ff4d4d;
-  --ccv-radius-panel: 10px;
-  --ccv-radius-control: 8px;
-  --ccv-radius-chip: 8px;
-  --ccv-radius-frame: 12px;
+  --ccv-radius-panel: 4px;
+  --ccv-radius-control: 4px;
+  --ccv-radius-chip: 4px;
+  --ccv-radius-frame: 4px;
   --ccv-header-bg: linear-gradient(
     to bottom,
     rgba(10, 11, 30, 0.98),
@@ -1277,12 +1277,12 @@ body{
   .ccv-frame.is-phone .ccv-iframe{
     width: min(100%, 360px);
     height: min(72dvh, 700px);
-    border-radius: 12px;
+    border-radius: 4px;
   }
 
   .ccv-frame.is-tablet .ccv-iframe{
     width: 100%;
     height: min(76dvh, 860px);
-    border-radius: 12px;
+    border-radius: 4px;
   }
 }

@@ -35,7 +35,7 @@
   display:none;
   margin-top: 6px;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(78,168,255,.26);
   background: rgba(78,168,255,.10);
   color: var(--ink);

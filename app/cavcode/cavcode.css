@@ -38,12 +38,12 @@
   --status-h: 24px;
   --panel-h: 272px;
 
-  --r10: 10px;
-  --r12: 12px;
-  --r14: 14px;
-  --r16: 16px;
-  --r18: 18px;
-  --r22: 22px;
+  --r10: 4px;
+  --r12: 4px;
+  --r14: 4px;
+  --r16: 4px;
+  --r18: 4px;
+  --r22: 4px;
 
   --glass: rgba(255,255,255,.02);
   --glass2: rgba(255,255,255,.03);
@@ -214,7 +214,7 @@ body[data-cb-footer-hidden="1"] .cc-root{
 .cc-root *:focus-visible{
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-  border-radius: 10px;
+  border-radius: 4px;
 }
 
 .cc-hidden{ display: none !important; }
@@ -301,7 +301,7 @@ body[data-cb-footer-hidden="1"] .cc-ide{
   height: 36px;
   appearance: none;
   -webkit-appearance: none;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 0;
   background: transparent;
   color: rgba(235,245,255,.85);
@@ -375,7 +375,7 @@ body[data-cb-footer-hidden="1"] .cc-ide{
   margin-top: 8px;
   width: 36px;
   height: 36px;
-  border-radius: 12px;
+  border-radius: 4px;
 }
 
 /* profile button (your markup already uses cc-profile + optional avatar) */
@@ -384,7 +384,7 @@ body[data-cb-footer-hidden="1"] .cc-ide{
 .cc-profile-button{
   width: 36px;
   height: 36px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 0;
   background: transparent;
   overflow: visible;
@@ -405,7 +405,7 @@ body[data-cb-footer-hidden="1"] .cc-ide{
 .cc-profile .cb-account-chip.cb-avatar-plain{
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: 4px;
 }
 
 .cc-avatar{ width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -500,7 +500,7 @@ body[data-cb-footer-hidden="1"] .cc-ide{
   position: fixed;
   z-index: var(--z-pop);
   width: 260px;
-  border-radius: 18px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(3,6,22,.92);
   padding: 10px;
@@ -526,7 +526,7 @@ body[data-cb-footer-hidden="1"] .cc-ide{
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.14);
   color: rgba(247,251,255,.90);
-  border-radius: 14px;
+  border-radius: 4px;
   padding: 10px 10px;
   cursor: pointer;
   display: flex;
@@ -650,7 +650,7 @@ body[data-cb-footer-hidden="1"] .cc-ide{
   height: 26px;
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   background: transparent;
   color: rgba(228,236,252,.84);
   display: inline-flex;
@@ -673,7 +673,7 @@ body[data-cb-footer-hidden="1"] .cc-ide{
   min-width: 188px;
   padding: 7px;
   border: 1px solid rgba(255,255,255,.14);
-  border-radius: 14px;
+  border-radius: 4px;
   background:
     linear-gradient(180deg, rgba(16,20,34,.99), rgba(8,12,24,.995)),
     rgba(8,12,24,.995);
@@ -690,7 +690,7 @@ body[data-cb-footer-hidden="1"] .cc-ide{
 
 .cc-side-menuItem{
   border: 0;
-  border-radius: 10px;
+  border-radius: 4px;
   height: 30px;
   padding: 0 11px;
   background: transparent;
@@ -1001,7 +1001,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-rename{
   width: 100%;
   height: 26px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(185,200,90,.20);
   background: rgba(0,0,0,.18);
   color: rgba(247,251,255,.92);
@@ -1100,7 +1100,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-run.cc-run-scmMinimal .cc-run-card{
-  border-radius: 12px;
+  border-radius: 4px;
   border-color: rgba(255,255,255,.16);
   background: rgba(2,6,22,.52);
   padding: 14px 13px 12px;
@@ -1117,7 +1117,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-run.cc-run-scmMinimal .cc-run-btn{
-  border-radius: 10px;
+  border-radius: 4px;
 }
 
 .cc-run-card-scm .cc-run-title{
@@ -1181,7 +1181,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   height: 32px;
   width: auto;
   min-width: 0;
-  border-radius: 10px;
+  border-radius: 4px;
   border-color: rgba(255,255,255,.12);
   background: rgba(0,0,0,.28);
   color: rgba(223,235,252,.88);
@@ -1230,7 +1230,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-settingsNavItem{
   width: 100%;
   border: 1px solid rgba(255,255,255,.08);
-  border-radius: 14px;
+  border-radius: 4px;
   background: rgba(255,255,255,.015);
   color: rgba(241,247,255,.94);
   padding: 10px 11px;
@@ -1300,7 +1300,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-set-card{
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.08);
   background: rgba(255,255,255,.015);
   padding: 12px 12px 13px;
@@ -1373,7 +1373,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-set-input{
   min-width: 88px;
   height: 34px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.1);
   background: rgba(0,0,0,.18);
   color: rgba(247,251,255,.92);
@@ -1426,7 +1426,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-set-stepper{
   min-width: 78px;
   height: 38px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.1);
   background: rgba(0,0,0,.2);
   display: grid;
@@ -1520,7 +1520,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-themeCard{
   width: 100%;
   border: 1px solid rgba(255,255,255,.08);
-  border-radius: 14px;
+  border-radius: 4px;
   background: rgba(255,255,255,.01);
   color: rgba(247,251,255,.94);
   padding: 9px 10px;
@@ -1578,7 +1578,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-themeCardCode{
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid var(--cc-theme-card-border);
   background: var(--cc-theme-card-bg);
   color: var(--cc-theme-card-fg);
@@ -1634,7 +1634,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-collabRow{
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.14);
   padding: 8px 10px;
@@ -1696,7 +1696,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-shortcutsSearch{
   height: 38px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(255,255,255,.03);
   color: rgba(247,251,255,.94);
@@ -1787,7 +1787,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   min-width: 24px;
   height: 24px;
   padding: 0 7px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(255,255,255,.04);
   color: rgba(247,251,255,.94);
@@ -1835,7 +1835,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 }
 
 .cc-run-card{
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.12);
   padding: 10px;
@@ -1874,7 +1874,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-run-btn{
   height: 29px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.18);
   color: rgba(247,251,255,.90);
@@ -1919,7 +1919,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   margin-top: 8px;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.18);
-  border-radius: 10px;
+  border-radius: 4px;
   color: rgba(214,224,244,.88);
   padding: 6px 8px;
   text-align: left;
@@ -1965,7 +1965,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-debug-item{
   width: 100%;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.16);
   color: rgba(240,246,255,.90);
@@ -1996,7 +1996,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-debug-remove{
   width: 26px;
   height: 26px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.20);
   color: rgba(255,214,214,.92);
@@ -2049,7 +2049,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   justify-content: space-between;
   gap: 10px;
   padding: 8px 10px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.14);
 }
@@ -2073,7 +2073,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   width: 100%;
   height: 100%;
   border: 1px solid rgba(255,255,255,.10);
-  border-radius: 16px;
+  border-radius: 4px;
   background: rgba(0,0,0,.18);
   overflow: hidden;
 }
@@ -2125,7 +2125,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   gap: 9px;
   padding: 12px 12px 13px;
   border: 1px solid rgba(255,255,255,.10);
-  border-radius: 14px;
+  border-radius: 4px;
   background:
     linear-gradient(180deg, rgba(8,12,24,.9), rgba(4,8,20,.82)),
     rgba(4,8,20,.82);
@@ -2150,7 +2150,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-search .cc-search-in{
   width: 100%;
   height: 32px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.20);
   color: rgba(247,251,255,.92);
@@ -2179,7 +2179,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-search-results{
   min-height: 0;
   overflow: auto;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.10);
   background:
     linear-gradient(180deg, rgba(8,12,24,.72), rgba(4,7,18,.78)),
@@ -2423,14 +2423,14 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-changes-searchInput{
   height: 28px;
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 0 9px;
   font-size: 11px;
 }
 
 .cc-changes-group{
   border: 1px solid rgba(255,255,255,.08);
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(0,0,0,.14);
   min-height: 0;
   overflow: hidden;
@@ -2479,7 +2479,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   border: 1px solid transparent;
   background: transparent;
   color: rgba(236,244,255,.92);
-  border-radius: 6px;
+  border-radius: 4px;
   height: 24px;
   padding: 0 6px;
   display: grid;
@@ -2517,7 +2517,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-changes-entryBtns .cc-git-miniBtn{
   height: 22px;
-  border-radius: 6px;
+  border-radius: 4px;
   font-size: 9px;
   padding: 0 6px;
 }
@@ -2551,7 +2551,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   border: 1px solid transparent;
   background: transparent;
   color: rgba(230,240,255,.9);
-  border-radius: 8px;
+  border-radius: 4px;
   height: 28px;
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr);
@@ -2649,7 +2649,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-changes-miniAction{
   height: 24px;
   padding: 0 8px;
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 10px;
 }
 
@@ -3145,7 +3145,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   padding: 2px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(8,12,28,.86);
-  border-radius: 10px;
+  border-radius: 4px;
 }
 
 .cc-skills-switchBtn{
@@ -3156,7 +3156,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   font-weight: 700;
   line-height: 1;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: 4px;
   cursor: pointer;
   transition: background 130ms ease, color 130ms ease;
 }
@@ -3175,7 +3175,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   border: 0;
   background: transparent;
   color: rgba(230,238,252,.92);
-  border-radius: 10px;
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 700;
   padding: 8px 12px;
@@ -3208,7 +3208,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   border: 1px solid rgba(255,255,255,.16);
   background: rgba(8,12,28,.88);
   color: rgba(236,244,255,.95);
-  border-radius: 12px;
+  border-radius: 4px;
   font-size: 13px;
   line-height: 1.3;
   padding: 8px 12px;
@@ -3222,7 +3222,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   border: 1px solid rgba(255,255,255,.2);
   background: rgba(245,248,255,.95);
   color: rgba(10,14,30,.94);
-  border-radius: 12px;
+  border-radius: 4px;
   font-size: 13px;
   font-weight: 700;
   line-height: 1;
@@ -3282,7 +3282,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   width: 34px;
   height: 34px;
   flex: 0 0 34px;
-  border-radius: 10px;
+  border-radius: 4px;
   font-size: 0;
   padding: 0;
   cursor: pointer;
@@ -3334,7 +3334,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   width: 34px;
   height: 34px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(255,255,255,.03);
   padding: 0;
   color: rgba(232,241,255,.94);
@@ -3365,7 +3365,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   top: calc(100% + 10px);
   bottom: auto;
   min-width: 188px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(4,8,22,.97);
   box-shadow: 0 22px 40px rgba(0,0,0,.34);
@@ -3390,7 +3390,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   border: 1px solid transparent;
   background: rgba(255,255,255,.03);
   color: rgba(247,251,255,.88);
-  border-radius: 10px;
+  border-radius: 4px;
   text-align: left;
   cursor: pointer;
   padding: 9px 10px;
@@ -3532,7 +3532,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   min-height: 96px;
   max-height: 220px;
   resize: vertical;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.16);
   background: rgba(1,4,16,.66);
   color: rgba(247,251,255,.96);
@@ -3588,7 +3588,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-agentCreateAiPromptBtn{
   height: 32px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.16);
   background: rgba(255,255,255,.04);
   color: rgba(247,251,255,.9);
@@ -3659,7 +3659,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-agentCreateSection{
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(255,255,255,.03);
-  border-radius: 18px;
+  border-radius: 4px;
   box-shadow: none;
 }
 
@@ -3714,7 +3714,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-agentCreateIconBox{
   width: 84px;
   height: 84px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px dashed rgba(234,240,255,.12);
   background: rgba(0,0,0,.28);
   display: inline-flex;
@@ -3747,7 +3747,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-agentCreateColorBtn{
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 0;
   background: transparent;
   color: rgba(234,240,255,.88);
@@ -3778,7 +3778,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   top: calc(100% + 10px);
   left: 0;
   width: 214px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(3,6,22,.97);
   box-shadow: 0 22px 40px rgba(0,0,0,.34);
@@ -3791,7 +3791,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-agentCreateColorPreview{
   width: 100%;
   height: 88px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.14);
   background: #4ea8ff;
   display: flex;
@@ -3829,7 +3829,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-agentCreateColorHexInput{
   width: 100%;
   height: 36px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(234,240,255,.12);
   background: rgba(0,0,0,.28);
   color: rgba(234,240,255,.92);
@@ -3854,7 +3854,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   margin: 0;
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(255,255,255,.06);
   color: rgba(245,249,255,.98);
   display: inline-flex;
@@ -4061,7 +4061,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   border: 1px solid rgba(234,240,255,.12);
   background: rgba(0,0,0,.28);
   color: rgba(234,240,255,.92);
-  border-radius: 10px;
+  border-radius: 4px;
   font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 500;
@@ -4123,7 +4123,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   min-height: 174px;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(255,255,255,.03);
-  border-radius: 18px;
+  border-radius: 4px;
   padding: 16px;
   cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
@@ -4206,7 +4206,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   gap: 12px;
   border: 1px solid rgba(255,255,255,.08);
   background: rgba(255,255,255,.03);
-  border-radius: 16px;
+  border-radius: 4px;
   padding: 14px 16px;
 }
 
@@ -4229,7 +4229,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   width: 18px;
   height: 18px;
   margin-top: 2px;
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.18);
   background: rgba(0,0,0,.24);
   display: inline-flex;
@@ -4318,7 +4318,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   margin-top: -2px;
   border: 1px solid rgba(255,255,255,.06);
   background: rgba(255,255,255,.02);
-  border-radius: 14px;
+  border-radius: 4px;
   padding: 13px 15px;
 }
 
@@ -4341,7 +4341,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   border: 1px solid rgba(255,107,107,.30);
   background: rgba(100,18,24,.20);
   color: rgba(255,220,225,.96);
-  border-radius: 12px;
+  border-radius: 4px;
   font-size: 12px;
   line-height: 1.5;
   padding: 10px 12px;
@@ -4367,7 +4367,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   border: 1px solid rgba(255,255,255,.16);
   background: rgba(255,255,255,.04);
   color: rgba(233,241,255,.94);
-  border-radius: 14px;
+  border-radius: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -4448,7 +4448,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   width: 100%;
   min-width: 0;
   min-height: 58px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.1);
   background: rgba(255,255,255,.03);
   padding: 8px 12px;
@@ -4477,7 +4477,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-skills-cardIcon{
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -4860,7 +4860,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-skills-cardManageBtn{
   width: 26px;
   height: 26px;
-  border-radius: 6px;
+  border-radius: 4px;
   position: relative;
   opacity: 0;
   pointer-events: none;
@@ -4918,7 +4918,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   z-index: var(--z-pop);
   width: 224px;
   border: 1px solid rgba(255,255,255,.14);
-  border-radius: 16px;
+  border-radius: 4px;
   background: rgba(3,6,22,.94);
   box-shadow: 0 18px 60px rgba(0,0,0,.55);
   backdrop-filter: blur(14px);
@@ -4930,7 +4930,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-skills-cardManageMenuItem{
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   color: rgba(240,246,255,.94);
   font-size: 11px;
@@ -4965,7 +4965,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   display: grid;
   gap: 8px;
   padding: 12px;
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.1);
   background: rgba(255,255,255,.04);
 }
@@ -5098,7 +5098,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   margin-top: 56px;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(255,255,255,.03);
-  border-radius: 10px;
+  border-radius: 4px;
   overflow: hidden;
 }
 
@@ -5143,7 +5143,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   border: 1px solid rgba(255,255,255,.16);
   background: rgba(9,14,30,.94);
   color: rgba(241,248,255,.95);
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.3;
@@ -5192,7 +5192,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   padding: 2px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(8,12,28,.86);
-  border-radius: 8px;
+  border-radius: 4px;
 }
 
 .cc-ideFollowUpsBtn{
@@ -5203,7 +5203,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   font-weight: 700;
   line-height: 1;
   padding: 7px 10px;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
 }
 
@@ -5288,7 +5288,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   .cc-agentCreateIconBox{
     width: 84px;
     height: 84px;
-    border-radius: 12px;
+    border-radius: 4px;
   }
   .cc-agentCreateIdentityName{
     font-size: 22px;
@@ -5319,7 +5319,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   right: 12px;
   z-index: 50;
   width: min(560px, 86vw);
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(3,6,22,.92);
   padding: 10px;
@@ -5333,7 +5333,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-find-in{
   width: 100%;
   height: 32px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.18);
   color: rgba(247,251,255,.92);
@@ -5352,7 +5352,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-find-toggle{
   height: 32px;
   min-width: 36px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.16);
   color: rgba(235,245,255,.78);
@@ -5374,7 +5374,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-find-x,
 .cc-find-btn{
   height: 32px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.16);
   color: rgba(235,245,255,.78);
@@ -5662,7 +5662,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   min-width: 188px;
   padding: 7px;
   border: 1px solid rgba(255,255,255,.14);
-  border-radius: 14px;
+  border-radius: 4px;
   background: rgba(3,6,22,.92);
   box-shadow: 0 18px 60px rgba(0,0,0,.55);
   backdrop-filter: blur(14px);
@@ -5674,7 +5674,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 
 .cc-panel-viewItem{
   border: 0;
-  border-radius: 10px;
+  border-radius: 4px;
   height: 30px;
   padding: 0 11px;
   background: transparent;
@@ -5906,7 +5906,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-git-section{
   border: 1px solid rgba(255,255,255,.06);
   background: rgba(255,255,255,.02);
-  border-radius: 12px;
+  border-radius: 4px;
   padding: 12px;
   display: grid;
   gap: 30px;
@@ -5955,7 +5955,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   color: rgba(244,249,255,.92);
   padding: 0 9px;
   min-width: 160px;
-  border-radius: 10px;
+  border-radius: 4px;
   font-size: 12px;
   outline: none;
 }
@@ -5979,7 +5979,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   border: 1px solid transparent;
   background: rgba(255,255,255,.05);
   color: rgba(239,246,255,.92);
-  border-radius: 10px;
+  border-radius: 4px;
   font-size: 11px;
   font-weight: 700;
   padding: 0 11px;
@@ -6072,7 +6072,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border-radius: 10px;
+  border-radius: 4px;
 }
 
 .cc-git-miniBtn{
@@ -6084,7 +6084,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   letter-spacing: .01em;
   text-transform: none;
   padding: 0 8px;
-  border-radius: 9px;
+  border-radius: 4px;
   cursor: pointer;
   transition: background 150ms ease, border-color 150ms ease;
 }
@@ -6160,7 +6160,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-git-advancedGroup{
   border: 1px solid rgba(255,255,255,.08);
   background: rgba(255,255,255,.02);
-  border-radius: 12px;
+  border-radius: 4px;
   padding: 12px 11px;
   display: grid;
   gap: 12px;
@@ -6247,14 +6247,14 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
 .cc-panel-git .cc-git-input,
 .cc-panel-git .cc-git-miniBtn,
 .cc-panel-git .cc-git-filePath{
-  border-radius: 10px;
+  border-radius: 4px;
 }
 
 /* Run panel uses the same visual language as the Git panel. */
 .cc-panel-run .cc-run-card{
   border: 1px solid rgba(255,255,255,.06);
   background: rgba(255,255,255,.02);
-  border-radius: 12px;
+  border-radius: 4px;
   padding: 12px;
   display: grid;
   gap: 0;
@@ -6297,7 +6297,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   border: 1px solid transparent;
   background: rgba(255,255,255,.05);
   color: rgba(239,246,255,.92);
-  border-radius: 10px;
+  border-radius: 4px;
   font-size: 11px;
   font-weight: 700;
   padding: 0 11px;
@@ -6342,7 +6342,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   background: rgba(5,10,28,.64);
   color: rgba(244,249,255,.92);
   padding: 0 9px;
-  border-radius: 10px;
+  border-radius: 4px;
   font-size: 12px;
 }
 
@@ -6375,7 +6375,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   width: 100%;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(255,255,255,.04);
-  border-radius: 10px;
+  border-radius: 4px;
   color: rgba(236,244,255,.90);
   font-size: 11px;
   line-height: 1.45;
@@ -6395,7 +6395,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   border: 1px solid transparent;
   background: rgba(255,255,255,.05);
   color: rgba(236,244,255,.90);
-  border-radius: 9px;
+  border-radius: 4px;
   cursor: pointer;
   transition: background 150ms ease, border-color 150ms ease;
 }
@@ -6409,7 +6409,7 @@ html body .cc-root .cc-tree button.cc-row.cc-row-folder.is-toggle-border{
   margin-top: 30px;
   border: 0;
   background: rgba(255,255,255,.04);
-  border-radius: 10px;
+  border-radius: 4px;
   color: rgba(236,244,255,.90);
   padding: 6px 8px;
   text-align: left;
@@ -6577,7 +6577,7 @@ html body .cc-root .cc-git-fileList::-webkit-scrollbar-thumb:hover{
 .cc-prob{
   width: 100%;
   text-align: left;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.14);
   padding: 10px 10px;
@@ -6945,7 +6945,7 @@ html body .cc-root .cc-ide .cc-status .cc-sbadge.is-live:active .cc-live-ic-mask
   transform: translateX(-50%);
   z-index: var(--z-pop);
   padding: 10px 12px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(3,6,22,.92);
   font-size: 12px;
@@ -6978,7 +6978,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 
 .cc-mobile-card{
   width: min(520px, 92vw);
-  border-radius: 22px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(3,6,22,.62);
   padding: 22px 18px;
@@ -7179,7 +7179,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 .cc-brand-row .cc-wordmark:focus-visible{
   outline: 2px solid var(--focus);
   outline-offset: 4px;
-  border-radius: 12px;
+  border-radius: 4px;
 }
 
 /* If the wordmark ever overflows, clamp it nicely */
@@ -7242,7 +7242,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
   position: relative;
   z-index: 1;
   width: min(520px, 94vw);
-  border-radius: 22px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(3,6,22,.92);
   box-shadow:
@@ -7296,7 +7296,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 [data-cc-close="true"]{
   width: 34px;
   height: 34px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.18);
   color: rgba(235,245,255,.85);
@@ -7340,7 +7340,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 [data-cc-modal="true"] textarea{
   width: 100%;
   min-height: 36px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.18);
   color: rgba(247,251,255,.92);
@@ -7370,7 +7370,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 .cc-profileModal button,
 [data-cc-modal="true"] button{
   height: 38px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.18);
   color: rgba(247,251,255,.92);
@@ -7454,7 +7454,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
   height: 40px;
   font-size: 12px;
   letter-spacing: .02em;
-  border-radius: 14px;
+  border-radius: 4px;
   border-color: rgba(255,255,255,.10);
   background: rgba(0,0,0,.22);
 }
@@ -7535,7 +7535,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
   justify-content: space-between;
   gap: 10px;
   padding: 10px 10px;
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.14);
 }
@@ -7570,7 +7570,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 [data-cc-storage-action="true"]{
   height: 34px;
   padding: 0 12px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.18);
   color: rgba(247,251,255,.90);
@@ -7595,7 +7595,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 .cc-storage-empty,
 .cc-folders-empty,
 [data-cc-storage-empty="true"]{
-  border-radius: 18px;
+  border-radius: 4px;
   border: 1px dashed rgba(255,255,255,.18);
   background: rgba(0,0,0,.12);
   padding: 16px 14px;
@@ -7626,7 +7626,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 .cc-folders-upload,
 [data-cc-storage-upload="true"]{
   margin-top: 2px;
-  border-radius: 18px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(255,255,255,.02);
   padding: 14px 12px;
@@ -7654,7 +7654,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 .cc-folders-upload-ic{
   width: 44px;
   height: 44px;
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.16);
   display: grid;
@@ -7703,7 +7703,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 .cc-storage-item,
 .cc-folderItem,
 [data-cc-storage-item="true"]{
-  border-radius: 18px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.14);
   padding: 12px 12px;
@@ -7747,7 +7747,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 .cc-filePreview,
 [data-cc-storage-preview="true"]{
   margin-top: 10px;
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.18);
   overflow: hidden;
@@ -7770,7 +7770,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 .cc-storage-viewer,
 .cc-fileViewer,
 [data-cc-storage-viewer="true"]{
-  border-radius: 18px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.14);
   overflow: hidden;
@@ -7825,7 +7825,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 .cb-wordmark:focus-visible{
   outline: 2px solid var(--focus) !important;
   outline-offset: 4px;
-  border-radius: 12px;
+  border-radius: 4px;
 }
 
 /* keep logo size stable + premium */
@@ -7843,7 +7843,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 .cc-empty-hero{
   width: 44px;
   height: 44px;
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.18);
   display: grid;
@@ -7883,7 +7883,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
 
 .cc-empty-btn{
   height: 34px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.18);
   color: rgba(247,251,255,.92);
@@ -7950,7 +7950,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
   bottom: 10px;
   z-index: var(--z-pop);
   width: 220px;
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(3,6,22,.94);
   padding: 10px;
@@ -7964,7 +7964,7 @@ body[data-cb-footer-hidden="1"] .cc-mobile{
   width: 100%;
   text-align: left;
   min-height: 40px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid transparent;
   background: transparent;
   color: rgba(247,251,255,.92);

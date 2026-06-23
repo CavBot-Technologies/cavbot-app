@@ -1,9 +1,9 @@
 /* components/LightToggle.css */
 
 .cb-lightToggle{
-  --lt-size: 44px;
-  --lt-pad: 6px;
-  --lt-r: 14px;
+  --lt-size: 4px;
+  --lt-pad: 4px;
+  --lt-r: 4px;
 
   position: relative;
   width: var(--lt-size);

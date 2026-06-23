@@ -27,10 +27,10 @@
   --cb-red:#ff4d4d;
   --cb-amber:#ffcc66;
 
-  --cb-radius-xl:18px;
-  --cb-radius-lg:16px;
-  --cb-radius-md:14px;
-  --cb-radius-sm:12px;
+  --cb-radius-xl:4px;
+  --cb-radius-lg:4px;
+  --cb-radius-md:4px;
+  --cb-radius-sm:4px;
 
   --cb-shadow: 0 20px 60px rgba(0,0,0,0.55);
   --cb-shadow2: 0 12px 30px rgba(0,0,0,0.45);
@@ -92,7 +92,7 @@ body{
   margin: 0 auto 10px;
   display:grid;
   place-items:center;
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(185,200,90,.45);
   background: rgba(185,200,90,.12);
   color: #b9c85a;
@@ -291,7 +291,7 @@ body{
 .cb-cavtools-title-row:focus-visible{
   outline: 2px solid rgba(185,200,90,0.72);
   outline-offset: 4px;
-  border-radius: 10px;
+  border-radius: 4px;
 }
 .cb-cavtools-title-ic{
   width:24px; height:24px;

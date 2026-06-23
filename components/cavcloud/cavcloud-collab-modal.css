@@ -13,7 +13,7 @@
   overflow: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.16);
   background: rgba(8,12,28,.98);
   padding: 14px;
@@ -47,7 +47,7 @@
 .cc-collabClose{
   width: 30px;
   height: 30px;
-  border-radius: 9px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.16);
   background: rgba(0,0,0,.22);
   color: rgba(247,251,255,.92);
@@ -70,7 +70,7 @@
 }
 
 .cc-collabTab{
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.16);
   background: rgba(0,0,0,.22);
   color: rgba(247,251,255,.92);
@@ -88,7 +88,7 @@
 .cc-collabSection{
   margin-top: 12px;
   border: 1px solid rgba(255,255,255,.10);
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(255,255,255,.03);
   padding: 10px;
 }
@@ -125,7 +125,7 @@
 }
 
 .cc-collabInput{
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.16);
   background: rgba(0,0,0,.24);
   color: rgba(247,251,255,.92);
@@ -233,7 +233,7 @@ select.cc-collabInput{
 }
 
 .cc-collabBtn{
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,.16);
   background: rgba(0,0,0,.22);
   color: rgba(247,251,255,.94);
@@ -331,7 +331,7 @@ select.cc-collabInput{
 .cc-collabLookupList{
   margin-top: 8px;
   border: 1px solid rgba(255,255,255,.12);
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(0,0,0,.18);
   max-height: 180px;
   overflow: auto;
@@ -445,7 +445,7 @@ select.cc-collabInput{
   justify-content: space-between;
   gap: 10px;
   border: 1px solid rgba(255,255,255,.10);
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(255,255,255,.03);
   padding: 8px 10px;
 }

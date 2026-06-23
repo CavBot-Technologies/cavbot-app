@@ -35,7 +35,7 @@
 
 .sx-integrationCategory {
   padding: 0;
-  border-radius: 12px; /* rounded-rect */
+  border-radius: 4px; /* rounded-rect */
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.01);
   color: rgba(255, 255, 255, 0.78);
@@ -74,7 +74,7 @@
   padding: 0;
   width: 40px;
   height: 40px;
-  border-radius: 14px;
+  border-radius: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -141,7 +141,7 @@
 .sx-platformHeroIcon {
   width: 72px;
   height: 72px;
-  border-radius: 20px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.12);
   display: flex;
@@ -166,7 +166,7 @@
 
 .sx-integrationCard {
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 14px; /* rounded-rect, less "bubble" */
+  border-radius: 4px; /* rounded-rect, less "bubble" */
   padding: 28px 22px 22px;
   background:
     linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.18)),
@@ -220,7 +220,7 @@
 .cb-heroIcon {
   width: 54px;
   height: 54px;
-  border-radius: 18px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
@@ -262,7 +262,7 @@
 
 .cb-pathIntro {
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 18px;
+  border-radius: 4px;
   padding: 16px;
   background: rgba(255, 255, 255, 0.02);
   margin-bottom: 12px;
@@ -286,7 +286,7 @@
     linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.16)),
     rgba(6, 8, 20, 0.86);
   border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 12px; /* grounded rounded-rect */
+  border-radius: 4px; /* grounded rounded-rect */
   padding: 16px 16px 14px;
   display: flex;
   flex-direction: column;
@@ -332,7 +332,7 @@
 .cb-contractCode {
   margin: 0;
   font-size: 13px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.10);
   background:
     linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.16)),
@@ -434,7 +434,7 @@
   min-width: 100px;
   height: 34px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   font-weight: 600;
   letter-spacing: 0.02em;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -457,7 +457,7 @@
   height: 34px;
   padding: 0 12px;
   font-size: 12px;
-  border-radius: 10px; /* match CavBot integration "Open CavCode" button */
+  border-radius: 4px; /* match CavBot integration "Open CavCode" button */
   letter-spacing: 0.01em;
 }
 
@@ -536,7 +536,7 @@
   width: 34px;
   height: 34px;
   padding: 0;
-  border-radius: 10px; /* rounded-rect */
+  border-radius: 4px; /* rounded-rect */
   border: 0;
   background: transparent;
   display: inline-flex;
@@ -573,7 +573,7 @@
 .sx-integrationCardIcon {
   width: 48px;
   height: 48px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
   display: flex;
@@ -681,7 +681,7 @@
   -moz-appearance: none;
   height: 34px;
   padding: 0 40px 0 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.16);
   background:
     linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.12)),
@@ -721,14 +721,14 @@
   flex-wrap: wrap;
   gap: 10px;
   padding: 12px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.02);
 }
 
 .cb-filterTab {
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 4px;
   padding: 8px 14px;
   background: transparent;
   color: rgba(255, 255, 255, 0.78);
@@ -786,7 +786,7 @@
     radial-gradient(900px 180px at 20% -20%, rgba(255,255,255,0.05), transparent 55%),
     radial-gradient(900px 220px at 90% 120%, rgba(0,0,0,0.22), transparent 60%),
     linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.18));
-  border-radius: 18px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.10);
   padding: 18px;
   margin-top: 10px;
@@ -967,7 +967,7 @@
 .cb-arcadeDevice {
   width: min(220px, 100%);
   height: 172px;
-  border-radius: 26px;
+  border-radius: 4px;
   padding: 6px 6px;
   background: linear-gradient(180deg, rgba(12, 20, 45, 0.96), rgba(6, 8, 20, 0.98));
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -1009,7 +1009,7 @@
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
-  border-radius: 30px;
+  border-radius: 4px;
   overflow: hidden;
   background: transparent;
   position: relative;
@@ -1091,7 +1091,7 @@
 
 .cb-arcadeOptionInput {
   height: 38px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background:
     linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.14)),
@@ -1135,7 +1135,7 @@
   display: grid;
   gap: 20px;
   background: rgba(255, 255, 255, 0.02);
-  border-radius: 18px;
+  border-radius: 4px;
   box-shadow: 0 12px 30px rgba(4, 6, 16, 0.55);
   margin-top: auto;
   grid-template-columns: minmax(0, 1fr);
@@ -1261,7 +1261,7 @@
 
 .cb-arcadePreviewTablet {
   width: min(100%, 280px);
-  border-radius: 32px;
+  border-radius: 4px;
   padding: 0;
   border: none;
   background: transparent;
@@ -1272,20 +1272,20 @@
 .cb-arcadePreviewTablet .cb-arcadeDevice {
   width: min(100%, 280px);
   height: 212px;
-  border-radius: 32px;
+  border-radius: 4px;
   padding: 12px 12px 10px;
   gap: 10px;
 }
 
 .cb-arcadePreviewTablet .cb-arcadeGameThumb {
-  border-radius: 28px;
+  border-radius: 4px;
   box-shadow: inset 0 0 45px rgba(0, 0, 0, 0.65);
 }
 
 .cb-arcadePreviewEmpty {
   width: 100%;
   aspect-ratio: 16 / 9;
-  border-radius: 22px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   overflow: hidden;
   display: flex;
@@ -1351,7 +1351,7 @@
   -webkit-appearance: none;
   -moz-appearance: none;
   height: 38px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background:
     linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.14)),
@@ -1419,7 +1419,7 @@
   align-items: center;
   justify-content: center;
   min-height: 32px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(148, 163, 184, 0.8);
   background: transparent;
   color: rgba(255, 255, 255, 0.92);
@@ -1543,7 +1543,7 @@
 }
 
 .cb-analyticsBlob {
-  border-radius: 18px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.02);
   padding: 14px 16px;
@@ -1565,7 +1565,7 @@
 }
 
 .cb-analyticsApiLink {
-  border-radius: 10px;
+  border-radius: 4px;
   padding: 5px 12px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1596,7 +1596,7 @@
   min-width: 110px;
   padding: 0 12px;
   font-size: 12px;
-  border-radius: 10px; /* rounded-rect, not pill */
+  border-radius: 4px; /* rounded-rect, not pill */
   background:
     linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.12)),
     rgba(0,0,0,0.28);
@@ -1695,7 +1695,7 @@
   justify-content: center;
   height: 24px;
   padding: 0 10px;
-  border-radius: 8px; /* rounded-rect */
+  border-radius: 4px; /* rounded-rect */
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -1730,7 +1730,7 @@
 .sx-integrationProfileLogo {
   width: 56px;
   height: 56px;
-  border-radius: 18px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
   display: flex;

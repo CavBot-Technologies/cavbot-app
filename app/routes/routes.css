@@ -30,9 +30,9 @@
   --stroke: rgba(255,255,255,0.12);
   --cb-surface-empty: rgba(255,255,255,0.03);
 
-  --r-lg: 14px;
-  --r-md: 10px;
-  --r-sm: 8px;
+  --r-lg: 4px;
+  --r-md: 4px;
+  --r-sm: 4px;
 
   --pad-lg: 18px;
   --pad-md: 14px;
@@ -102,7 +102,7 @@
   color: var(--muted);
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(0,0,0,0.28);
-  border-radius: 10px;
+  border-radius: 4px;
   padding: 8px 10px;
 
   display:inline-flex;
@@ -156,7 +156,7 @@
   gap: 10px;
   height: 34px;
   padding: 0 10px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(0,0,0,0.22);
 }
@@ -169,7 +169,7 @@
 }
 .routes-range-select{
   height: 26px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(234,240,255,0.16);
   background: rgba(0,0,0,0.25);
   color: rgba(234,240,255,0.92);
@@ -199,7 +199,7 @@
   justify-content:center;
   height: 34px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: 4px;
 
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(0,0,0,0.18);
@@ -233,7 +233,7 @@
   gap: 10px;
   height: 34px;
   padding: 0 14px;
-  border-radius: 10px;
+  border-radius: 4px;
 
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(0,0,0,0.18);
@@ -482,7 +482,7 @@
 .routes-dot{
   width: 10px;
   height: 10px;
-  border-radius: 10px;
+  border-radius: 4px;
   display:inline-block;
   border: 1px solid rgba(255,255,255,0.10);
 }
@@ -556,7 +556,7 @@
   display:inline-flex;
   align-items:center;
   padding: 6px 8px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid var(--stroke);
   background: rgba(255,255,255,0.05);
   color: rgba(255,255,255,0.82);
@@ -592,7 +592,7 @@
   color: var(--muted);
   border: 1px solid var(--stroke);
   background: rgba(255,255,255,0.04);
-  border-radius: 10px;
+  border-radius: 4px;
   padding: 8px 10px;
 
   display:inline-flex;
@@ -619,7 +619,7 @@
   margin-top: 10px;
   padding: 11px 12px;
   border: 1px dashed rgba(255,255,255,0.14);
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(255,255,255,0.02);
   overflow: hidden;
 }

@@ -23,7 +23,7 @@
 .centerShellPage {
   --cb-ui-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --cb-user-prompt-bg: rgba(255, 255, 255, 0.055);
-  --cb-user-prompt-radius: 14px;
+  --cb-user-prompt-radius: 4px;
   font-family: var(--cb-ui-sans);
 }
 
@@ -34,7 +34,7 @@
   max-height: min(90vh, 980px);
   display: grid;
   grid-template-rows: auto 1fr;
-  border-radius: 24px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background:
     radial-gradient(700px 360px at 8% -5%, rgba(56, 115, 255, 0.16), transparent 58%),
@@ -362,7 +362,7 @@
 .context {
   min-width: 0;
   max-width: 340px;
-  border-radius: 11px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.04);
   color: rgba(197, 206, 231, 0.95);
@@ -395,7 +395,7 @@
   top: calc(100% + 8px);
   width: min(280px, calc(100vw - 28px));
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(4, 10, 30, 0.98);
   padding: 8px;
   display: grid;
@@ -407,7 +407,7 @@
 .settingsMenuSectionBtn {
   width: 100%;
   border: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 8px 10px;
   background: transparent;
   color: rgba(231, 238, 255, 0.94);
@@ -437,7 +437,7 @@
 .settingsMenuAction {
   width: 100%;
   border: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 8px 10px;
   background: transparent;
   color: rgba(231, 238, 255, 0.95);
@@ -456,7 +456,7 @@
 }
 
 .settingsMenuSwitchRow {
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 8px 10px;
   display: inline-flex;
   align-items: center;
@@ -502,7 +502,7 @@
 .headBtn {
   height: 34px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.03);
   color: rgba(247, 251, 255, 0.94);
@@ -618,7 +618,7 @@
 .sessionsSearchInput {
   width: 100%;
   height: 34px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   background: rgba(2, 8, 26, 0.7);
   color: rgba(247, 251, 255, 0.95);
@@ -636,7 +636,7 @@
   width: 100%;
   text-align: left;
   padding: 10px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.11);
   background: rgba(255, 255, 255, 0.02);
   cursor: pointer;
@@ -687,7 +687,7 @@
 
 .heroWrap {
   margin: 14px 14px 0;
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background:
     radial-gradient(450px 230px at 95% -35%, rgba(78, 168, 255, 0.2), transparent 60%),
@@ -728,7 +728,7 @@
 
 .sessionRibbon {
   margin: 0 14px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.11);
   background: rgba(255, 255, 255, 0.02);
   padding: 10px;
@@ -739,7 +739,7 @@
 
 .composerWrap {
   margin: 12px 14px 0;
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(1, 5, 18, 0.68);
   padding: 14px;
@@ -767,7 +767,7 @@
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.02);
   color: rgba(231, 238, 255, 0.92);
-  border-radius: 10px;
+  border-radius: 4px;
   padding: 7px 11px;
   font-size: 11px;
   font-weight: 700;
@@ -789,7 +789,7 @@
   border: 1px solid transparent;
   background: transparent;
   color: rgba(247, 251, 255, 0.96);
-  border-radius: 9px;
+  border-radius: 4px;
   padding: 0;
   width: 36px;
   min-width: 36px;
@@ -885,7 +885,7 @@
   bottom: calc(100% + 8px);
   min-width: 200px;
   padding: 8px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(4, 10, 28, 0.96);
   box-shadow: none;
@@ -899,7 +899,7 @@
   border: 0;
   background: transparent;
   color: rgba(231, 238, 255, 0.94);
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 400;
   line-height: 1.35;
@@ -957,7 +957,7 @@
 .qwenUsageBadgeBtn {
   min-width: 52px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.05);
   color: rgba(231, 238, 255, 0.94);
   padding: 5px 6px;
@@ -997,7 +997,7 @@
   left: 0;
   bottom: calc(100% + 8px);
   width: min(270px, calc(100vw - 32px));
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   background:
     radial-gradient(240px 140px at 92% -36%, rgba(78, 168, 255, 0.16), transparent 62%),
@@ -1045,7 +1045,7 @@
 .qwenUsagePopoverCta {
   margin-top: 6px;
   min-height: 30px;
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(78, 168, 255, 0.16);
   color: rgba(229, 237, 255, 0.98);
   font-size: 11px;
@@ -1074,7 +1074,7 @@
   width: 20px;
   height: 20px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   color: rgba(206, 216, 236, 0.9);
   display: inline-flex;
@@ -1139,7 +1139,7 @@
 .input,
 .goalInput {
   width: 100%;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   background: rgba(1, 4, 16, 0.58);
   color: rgba(247, 251, 255, 0.96);
@@ -1182,7 +1182,7 @@
   border: 1px solid transparent;
   background: transparent;
   color: rgba(247, 251, 255, 0.96);
-  border-radius: 11px;
+  border-radius: 4px;
   height: 44px;
   width: 44px;
   min-width: 44px;
@@ -1269,7 +1269,7 @@
   min-width: 0;
   overflow: auto;
   margin: 12px 14px 14px;
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.11);
   background: rgba(0, 0, 0, 0.2);
   padding: 14px;
@@ -1278,7 +1278,7 @@
 }
 
 .message {
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.02);
   padding: 11px;
@@ -1351,7 +1351,7 @@
 }
 
 .inlineEditShell {
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(52, 56, 66, 0.9);
   padding: 10px;
   display: grid;
@@ -1362,7 +1362,7 @@
   width: 100%;
   min-height: 92px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   color: rgba(247, 251, 255, 0.96);
   font-family: var(--cb-ui-sans);
@@ -1390,7 +1390,7 @@
 .inlineEditCancelBtn {
   min-height: 32px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(19, 24, 34, 0.92);
   color: rgba(228, 236, 251, 0.94);
   padding: 0 12px;
@@ -1416,7 +1416,7 @@
   min-width: 34px;
   height: 34px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(19, 24, 34, 0.92);
   color: rgba(232, 240, 255, 0.96);
   padding: 0;
@@ -1439,7 +1439,7 @@
 }
 
 .codeMessageBlock {
-  border-radius: 11px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   background: rgba(1, 7, 24, 0.66);
   overflow: hidden;
@@ -1523,7 +1523,7 @@
   position: relative;
   width: 76px;
   height: 76px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(154, 189, 255, 0.32);
   background:
     radial-gradient(120% 100% at 0% 0%, rgba(88, 130, 255, 0.26), transparent 54%),
@@ -1599,7 +1599,7 @@
 }
 
 .resultBlock {
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   background:
     radial-gradient(420px 220px at 98% -20%, rgba(78, 168, 255, 0.16), transparent 58%),
@@ -1643,7 +1643,7 @@
 }
 
 .error {
-  border-radius: 11px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 120, 120, 0.48);
   background: rgba(255, 120, 120, 0.1);
   color: rgba(255, 214, 214, 0.96);
@@ -1653,7 +1653,7 @@
 
 .empty,
 .emptyLarge {
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px dashed rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.02);
   color: rgba(197, 206, 231, 0.84);
@@ -1714,7 +1714,7 @@
 .cavenLockedCard {
   border: 1px solid rgba(167, 194, 255, 0.34);
   background: linear-gradient(180deg, rgba(8, 16, 38, 0.9), rgba(6, 11, 30, 0.88));
-  border-radius: 14px;
+  border-radius: 4px;
   padding: 14px 14px 12px;
   display: grid;
   gap: 8px;
@@ -1777,7 +1777,7 @@
 
 .cavenLockedDockCta {
   flex: 0 0 auto;
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.03);
   color: rgba(247, 251, 255, 0.96);
@@ -1978,7 +1978,7 @@
   background: transparent;
   color: rgba(231, 238, 255, 0.94);
   text-align: left;
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 700;
   padding: 8px;
@@ -2095,7 +2095,7 @@
 .historyIllustration {
   width: 84px;
   height: 84px;
-  border-radius: 24px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.03);
   color: rgba(197, 206, 231, 0.78);
@@ -2247,7 +2247,7 @@
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(140, 164, 209, 0.56);
-  border-radius: 7px;
+  border-radius: 4px;
   background:
     linear-gradient(180deg, rgba(242, 248, 255, 0.96), rgba(223, 235, 255, 0.92)),
     rgba(223, 235, 255, 0.92);
@@ -2326,7 +2326,7 @@
 
 .messagePatch {
   margin-top: 10px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   background: rgba(0, 0, 0, 0.18);
   padding: 10px;
@@ -2459,7 +2459,7 @@
 .triggerPill {
   height: 38px;
   padding: 0 12px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background:
     radial-gradient(220px 90px at 50% -120%, rgba(78, 168, 255, 0.22), transparent 60%),
@@ -2577,7 +2577,7 @@
     width: calc(100vw - 20px);
     max-height: calc(100vh - 20px);
     min-height: calc(100vh - 20px);
-    border-radius: 16px;
+    border-radius: 4px;
   }
 
   .pageShell {
@@ -2734,7 +2734,7 @@
   min-width: 28px;
   height: 28px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(0, 0, 0, 0.56);
   color: rgba(214, 223, 245, 0.92);
   display: inline-flex;
@@ -3337,7 +3337,7 @@
   z-index: 36;
   min-width: 150px;
   padding: 5px;
-  border-radius: 11px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(3, 9, 30, 0.98);
   box-shadow: 0 18px 36px rgba(2, 5, 18, 0.62);
@@ -3367,7 +3367,7 @@
 .centerSessionMoreMenuItem {
   width: 100%;
   border: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   background: transparent;
   color: rgba(241, 246, 255, 0.95);
   font-size: 12px;
@@ -3533,7 +3533,7 @@
   min-width: 228px;
   max-width: min(320px, calc(100vw - 22px));
   padding: 8px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(4, 10, 28, 0.96);
   box-shadow: 0 16px 34px rgba(0, 0, 0, 0.45);
@@ -3636,7 +3636,7 @@
 .centerHeaderLoginBtn {
   min-height: 32px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(241, 246, 255, 0.94);
   color: rgba(8, 14, 28, 0.95);
   padding: 0 11px;
@@ -3719,7 +3719,7 @@
 .centerHeaderAccountChip {
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: 4px;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -3751,7 +3751,7 @@
   right: 0;
   min-width: 170px;
   padding: 8px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(3, 6, 22, 0.96);
   box-shadow: 0 16px 34px rgba(0, 0, 0, 0.45);
@@ -3769,7 +3769,7 @@
   width: 100%;
   min-height: 34px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 4px;
   background: transparent;
   color: rgba(247, 251, 255, 0.92);
   padding: 8px 10px;
@@ -3812,7 +3812,7 @@
   right: clamp(12px, 1.8vw, 22px);
   bottom: clamp(10px, 1.8vw, 22px);
   width: min(336px, calc(100vw - 24px));
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   background: rgba(2, 7, 24, 0.98);
   box-shadow: 0 18px 38px rgba(1, 4, 16, 0.6);
@@ -3878,7 +3878,7 @@
   min-width: 28px;
   height: 28px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(0, 0, 0, 0.62);
   color: rgba(209, 220, 244, 0.9);
   display: inline-flex;
@@ -4255,7 +4255,7 @@
 .centerGuestMobilePrompt {
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 14px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.03);
   padding: 12px;
   text-align: left;
@@ -4286,7 +4286,7 @@
 .centerGuestMobilePromptAction {
   min-height: 32px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.12);
   color: rgba(247, 251, 255, 0.98);
   padding: 0 12px;
@@ -4490,7 +4490,7 @@
 .centerPromptBox {
   position: relative;
   border: 1px solid rgba(131, 146, 192, 0.34);
-  border-radius: 12px;
+  border-radius: 4px;
   background:
     radial-gradient(115% 140% at 0% 0%, rgba(88, 108, 214, 0.24), transparent 45%),
     radial-gradient(90% 120% at 100% 0%, rgba(114, 82, 214, 0.2), transparent 46%),
@@ -4543,7 +4543,7 @@
   min-width: 26px;
   height: 26px;
   border: 1px solid rgba(148, 161, 204, 0.34);
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(22, 28, 49, 0.72);
   color: rgba(221, 230, 249, 0.96);
   padding: 0;
@@ -4782,7 +4782,7 @@
 .centerError {
   margin: 0 14px 10px;
   border: 1px solid rgba(255, 120, 120, 0.48);
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(255, 120, 120, 0.1);
   color: rgba(255, 214, 214, 0.96);
   padding: 9px 10px;
@@ -4792,7 +4792,7 @@
 .centerNotice {
   margin: 0 14px 10px;
   border: 1px solid rgba(126, 170, 230, 0.34);
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(91, 135, 205, 0.08);
   color: rgba(213, 232, 255, 0.95);
   padding: 9px 10px;
@@ -4813,7 +4813,7 @@
 .centerSessionModal {
   width: min(520px, 100%);
   max-width: 100%;
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(4, 10, 30, 0.98);
   box-shadow: 0 30px 54px rgba(2, 4, 16, 0.7);
@@ -4836,7 +4836,7 @@
 .centerImageViewer {
   width: min(1040px, 100%);
   max-height: min(94vh, 920px);
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(3, 8, 22, 0.98);
   box-shadow: 0 34px 58px rgba(1, 4, 16, 0.74);
@@ -4882,7 +4882,7 @@
   min-width: 28px;
   height: 28px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.05);
   color: rgba(214, 226, 247, 0.9);
   padding: 0;
@@ -4915,7 +4915,7 @@
   max-height: min(72vh, 760px);
   height: auto;
   object-fit: contain;
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(1, 5, 18, 0.92);
 }
 
@@ -5098,7 +5098,7 @@
 
 .cavcodeHistoryFilterBtn {
   border: 0;
-  border-radius: 10px;
+  border-radius: 4px;
   background: transparent;
   color: rgba(232, 240, 255, 0.95);
   font-size: 12px;
@@ -5132,7 +5132,7 @@
 
 .cavcodeHistoryEmpty {
   min-height: 240px;
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.02);
   display: grid;
   justify-items: center;
@@ -5183,7 +5183,7 @@
 
 .cavenSettingsPane {
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(11, 18, 42, 0.46);
   padding: 12px;
   display: grid;
@@ -5209,7 +5209,7 @@
 
 .cavenSettingRow {
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.03);
   padding: 8px 10px;
   display: grid;
@@ -5233,7 +5233,7 @@
 
 .cavenSettingSelect {
   min-width: 170px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(2, 7, 21, 0.86);
   color: rgba(240, 246, 255, 0.96);
@@ -5245,7 +5245,7 @@
 .cavenSkillCard {
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.03);
   padding: 10px;
   display: inline-flex;
@@ -5335,7 +5335,7 @@
 
 .cavenSkillInfoSection {
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(11, 18, 42, 0.4);
   padding: 10px;
   display: grid;
@@ -5352,7 +5352,7 @@
 
 .cavenSkillInfoPrompt {
   margin: 0;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   background: rgba(2, 8, 23, 0.82);
   color: rgba(229, 238, 255, 0.95);
@@ -5428,7 +5428,7 @@
 
 .centerReasoningPromptBlock {
   border: 1px solid rgba(156, 181, 235, 0.18);
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(16, 25, 52, 0.42);
   padding: 10px 11px;
   display: grid;
@@ -5478,7 +5478,7 @@
 
 .centerReasoningSectionCard {
   border: 1px solid rgba(137, 159, 214, 0.16);
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(12, 20, 45, 0.32);
   padding: 9px 11px;
 }
@@ -5493,7 +5493,7 @@
 
 .centerReasoningMetric {
   border: 1px solid rgba(146, 171, 225, 0.16);
-  border-radius: 9px;
+  border-radius: 4px;
   background: rgba(18, 29, 58, 0.44);
   min-height: 42px;
   padding: 6px 8px;
@@ -5535,7 +5535,7 @@
 .centerSessionModalInput {
   width: 100%;
   min-height: 36px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(1, 6, 20, 0.78);
   color: rgba(247, 251, 255, 0.96);
@@ -5577,7 +5577,7 @@
 .centerSessionShareModeBtn {
   height: 32px;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 9px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.03);
   color: rgba(223, 233, 250, 0.95);
   font-size: 12px;
@@ -5618,7 +5618,7 @@
   min-width: 64px;
   height: 36px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.03);
   color: rgba(233, 242, 255, 0.96);
   font-size: 12px;
@@ -5646,7 +5646,7 @@
   min-width: 84px;
   height: 34px;
   border: 1px solid rgba(255, 255, 255, 0.17);
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.03);
   color: rgba(234, 242, 255, 0.95);
   font-size: 12px;
@@ -5845,14 +5845,14 @@
   width: 132px;
   min-width: 132px;
   height: 132px;
-  border-radius: 14px;
+  border-radius: 4px;
 }
 
 .centerAttachmentChipCompact {
   width: 52px;
   min-width: 52px;
   height: 52px;
-  border-radius: 10px;
+  border-radius: 4px;
 }
 
 .centerAttachmentChipUploading {
@@ -6030,7 +6030,7 @@
   position: relative;
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(1, 5, 18, 0.72);
   display: grid;
   gap: 0;
@@ -6486,7 +6486,7 @@
   grid-template-rows: auto minmax(0, 1fr);
   padding: 8px;
   gap: 8px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(4, 10, 28, 0.96);
   box-shadow: none;
@@ -6542,7 +6542,7 @@
   background-position: 0 0 !important;
   background-size: 0 0 !important;
   border: 0;
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(8, 12, 28, 0.88);
   color: rgba(236, 244, 255, 0.95);
   font-size: 13px;
@@ -6647,7 +6647,7 @@
   min-height: 40px;
   padding: 8px 10px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 4px;
 }
 
 .centerAgentModeMenuItemOn {
@@ -6769,7 +6769,7 @@
   width: 22px;
   height: 22px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 4px;
   background: transparent;
   color: rgba(211, 224, 247, 0.86);
   display: inline-flex;
@@ -6807,7 +6807,7 @@
   z-index: 5;
   min-width: 156px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(10, 15, 31, 0.98);
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.42);
   padding: 4px;
@@ -6817,7 +6817,7 @@
 
 .centerAgentModeManageMenuItem {
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   color: rgba(240, 246, 255, 0.94);
   font-size: 11px;
@@ -6884,7 +6884,7 @@
 
 .centerComposerModeBox {
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 11px;
+  border-radius: 4px;
   background:
     radial-gradient(120% 160% at 0% -20%, rgba(129, 162, 255, 0.22), transparent 52%),
     radial-gradient(110% 150% at 100% 0%, rgba(186, 171, 255, 0.18), transparent 58%),
@@ -6933,7 +6933,7 @@
   min-width: 24px;
   height: 24px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.06);
   color: rgba(247, 251, 255, 0.88);
   cursor: pointer;
@@ -6962,7 +6962,7 @@
 
 .centerComposerModeAction {
   border: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.09);
   color: rgba(247, 251, 255, 0.96);
   padding: 7px 10px;
@@ -7204,7 +7204,7 @@
 
 .centerInlineEditShell {
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(1, 5, 18, 0.72);
   padding: 0;
   gap: 0;
@@ -7296,7 +7296,7 @@
 
 .centerImageResultCard {
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.02);
   padding: 8px;
   display: grid;
@@ -7306,7 +7306,7 @@
 .centerImageResultPreview {
   width: 100%;
   height: auto;
-  border-radius: 9px;
+  border-radius: 4px;
   object-fit: cover;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(6, 12, 28, 0.62);
@@ -7339,7 +7339,7 @@
 .centerImageResultActionBtn {
   min-height: 26px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.04);
   color: rgba(245, 249, 255, 0.97);
   font-size: 10px;
@@ -7360,7 +7360,7 @@
 
 .imageStudioModePanel {
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 18px;
+  border-radius: 4px;
   background: rgba(9, 14, 24, 0.9);
   padding: 12px;
   display: grid;
@@ -7439,7 +7439,7 @@
 
 .imageStudioControl select {
   min-height: 30px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.04);
   color: rgba(241, 246, 255, 0.96);
@@ -7449,7 +7449,7 @@
 
 .imageStudioSourcePreview {
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 11px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.03);
   padding: 8px;
   display: grid;
@@ -7461,7 +7461,7 @@
 .imageStudioSourcePreviewImage {
   width: 52px;
   height: 52px;
-  border-radius: 8px;
+  border-radius: 4px;
   object-fit: cover;
   border: 1px solid rgba(255, 255, 255, 0.16);
 }
@@ -7490,7 +7490,7 @@
 .imageStudioSourcePreviewBtn {
   min-height: 28px;
   border: 1px solid rgba(255, 255, 255, 0.17);
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.04);
   color: rgba(241, 246, 255, 0.95);
   font-size: 11px;
@@ -7504,7 +7504,7 @@
 
 .imageStudioPresetShelf {
   border: 1px solid rgba(255, 255, 255, 0.13);
-  border-radius: 14px;
+  border-radius: 4px;
   background: rgba(17, 20, 28, 0.78);
   padding: 10px;
   margin-top: 24px;
@@ -7541,7 +7541,7 @@
   min-width: 24px;
   height: 24px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 6px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.04);
   color: rgba(241, 246, 255, 0.95);
   display: inline-flex;
@@ -7608,7 +7608,7 @@
 }
 
 .imageStudioEditTileMedia {
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(0, 0, 0, 0.32);
   aspect-ratio: 3 / 4;
@@ -7705,7 +7705,7 @@
   position: relative;
   aspect-ratio: 3 / 4;
   min-height: 0;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(0, 0, 0, 0.34);
   overflow: hidden;
@@ -7754,7 +7754,7 @@
 .imageStudioPresetLockBadge {
   width: 26px;
   height: 26px;
-  border-radius: 7px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.32);
   background: rgba(8, 14, 32, 0.9);
   display: inline-flex;
@@ -7772,7 +7772,7 @@
 
 .imageStudioPresetLockTooltip {
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(8, 14, 32, 0.92);
   color: rgba(244, 250, 255, 0.98);
@@ -7787,7 +7787,7 @@
   height: 100%;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px dashed rgba(255, 255, 255, 0.22);
   background: rgba(255, 255, 255, 0.03);
 }
@@ -7865,7 +7865,7 @@
 .imageStudioPresetLockCloseBtn {
   min-width: 84px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: 4px;
   padding: 0 14px;
   font-size: 12px;
   font-weight: 640;
@@ -7912,7 +7912,7 @@
 
 .imageStudioDeviceUploadPane {
   border: 1px solid rgba(255, 255, 255, 0.13);
-  border-radius: 10px;
+  border-radius: 4px;
   padding: 12px;
   background: rgba(255, 255, 255, 0.02);
   display: grid;
@@ -7922,7 +7922,7 @@
 .imageStudioDeviceUploadBtn {
   min-height: 36px;
   border: 1px solid rgba(132, 184, 255, 0.44);
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(78, 168, 255, 0.14);
   color: rgba(238, 245, 255, 0.98);
   font-size: 12px;
@@ -7939,7 +7939,7 @@
   width: 100%;
   min-height: 36px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.035);
   color: rgba(247, 251, 255, 0.96);
   font-size: 12px;
@@ -7978,7 +7978,7 @@
   max-width: 160px;
   aspect-ratio: 1 / 1;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.03);
   color: rgba(238, 245, 255, 0.95);
   padding: 10px 8px;
@@ -8004,7 +8004,7 @@
 .cavCloudAttachCardIconWrap {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -8078,7 +8078,7 @@
 .imageStudioImportGalleryItem {
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 9px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.03);
   color: rgba(238, 245, 255, 0.95);
   padding: 8px 9px;
@@ -8107,7 +8107,7 @@
 
 .imageStudioImportEmpty {
   border: 1px dashed rgba(255, 255, 255, 0.2);
-  border-radius: 9px;
+  border-radius: 4px;
   padding: 12px;
   color: rgba(206, 218, 241, 0.9);
   font-size: 12px;
@@ -8122,7 +8122,7 @@
   width: 100%;
   min-height: 34px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.04);
   color: rgba(239, 246, 255, 0.97);
   padding: 0 10px;
@@ -8348,7 +8348,7 @@
     max-height: min(560px, calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
     border-right: 1px solid rgba(255, 255, 255, 0.13);
     border-bottom: 1px solid rgba(255, 255, 255, 0.13);
-    border-radius: 16px;
+    border-radius: 4px;
     box-shadow: 0 18px 38px rgba(1, 4, 16, 0.6);
   }
 
@@ -8418,7 +8418,7 @@
   .imageStudioPresetShelf,
   .imageStudioModal {
     padding: 9px;
-    border-radius: 12px;
+    border-radius: 4px;
   }
 
   .imageStudioPresetRail {
@@ -8555,7 +8555,7 @@
   }
 
   .centerImageViewer {
-    border-radius: 12px;
+    border-radius: 4px;
   }
 
   .centerImageViewerHead {

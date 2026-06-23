@@ -49,7 +49,7 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   background: transparent;
 }
 
@@ -68,7 +68,7 @@
 
 .status-incident-chip {
   padding: 4px 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.02);
   font-size: 0.7rem;
@@ -81,7 +81,7 @@
 
 .status-incident-impactLabel {
   padding: 4px 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.02);
   font-size: 0.7rem;
@@ -191,7 +191,7 @@
 
 .incident-affected-list span {
   padding: 6px 10px;
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.12);
   font-size: 0.78rem;
@@ -353,7 +353,7 @@
   justify-content: center;
   gap: 4px;
   padding: 2px 10px;
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(5, 7, 18, 0.85);
   font-size: 0.62rem;

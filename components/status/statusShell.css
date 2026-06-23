@@ -60,7 +60,7 @@ body[data-cb-footer-hidden="1"] .status-route {
   .status-shell {
     --status-shell-pad-inline: 20px;
     padding: var(--status-shell-pad-inline);
-    border-radius: 20px;
+    border-radius: 4px;
     gap: 18px;
   }
 }

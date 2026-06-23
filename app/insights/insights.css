@@ -33,9 +33,9 @@
   --cb-surface-panel-hover: linear-gradient(160deg, rgba(12,18,36,0.95), rgba(5,10,24,0.98));
   --cb-surface-empty: rgba(255,255,255,0.03);
 
-  --r-lg: 14px;
-  --r-md: 10px;
-  --r-sm: 8px;
+  --r-lg: 4px;
+  --r-md: 4px;
+  --r-sm: 4px;
 
   --pad-lg: 18px;
   --pad-md: 14px;
@@ -115,7 +115,7 @@
   gap: 10px;
   height: 34px;
   padding: 0 10px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(0,0,0,0.22);
 }
@@ -130,7 +130,7 @@
 
 .seo-range-select{
   height: 26px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(234,240,255,0.16);
   background: rgba(0,0,0,0.25);
   color: rgba(234,240,255,0.92);
@@ -168,7 +168,7 @@
   justify-content:center;
   height: 34px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: 4px;
 
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(0,0,0,0.18);
@@ -202,7 +202,7 @@
   height: 34px;
   padding: 0 14px;
   gap: 10px;
-  border-radius: 10px;
+  border-radius: 4px;
 
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(0,0,0,0.18);
@@ -587,7 +587,7 @@
   justify-content:center;
   height: 32px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: 4px;
 
   border: 1px solid rgba(255,255,255,0.16);
   background: rgba(255,255,255,0.05);
@@ -660,7 +660,7 @@
   min-height: 30px;
   height: 30px;
   padding: 0 11px;
-  border-radius: 9px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.05);
   font-size: 10px;
@@ -712,7 +712,7 @@
   align-items: center;
   min-height: 30px;
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.15);
   background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
   color: rgba(240,246,255,0.86);
@@ -790,7 +790,7 @@
   min-width: 30px;
   height: 22px;
   margin-top: 1px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.04);
   color: rgba(234,240,255,0.76);
@@ -1130,7 +1130,7 @@
   gap: 8px;
   border: 1px solid rgba(255,255,255,0.14);
   background: var(--cb-surface-card);
-  border-radius: 10px;
+  border-radius: 4px;
   padding: 14px 12px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
 }
@@ -1164,7 +1164,7 @@
   margin: 0;
   border: 1px solid rgba(255,255,255,0.14);
   background: var(--cb-surface-card);
-  border-radius: 10px;
+  border-radius: 4px;
   padding: 15px 14px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
 }
@@ -1191,7 +1191,7 @@
   gap: 12px;
   border: 1px solid rgba(255,255,255,0.14);
   background: var(--cb-surface-card);
-  border-radius: 12px;
+  border-radius: 4px;
   padding: 15px 14px 14px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
 }
@@ -1201,7 +1201,7 @@
   height: 34px;
   padding: 0 13px;
   font-size: 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   font-weight: 760;
   background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));
   border-color: rgba(255,255,255,0.18);
@@ -1222,7 +1222,7 @@
   margin-top: 2px;
   padding: 10px 11px;
   border: 1px solid rgba(255,255,255,0.11);
-  border-radius: 10px;
+  border-radius: 4px;
   background: var(--cb-surface-card);
 }
 .ins-cavai-actions-toast{
@@ -1231,7 +1231,7 @@
   grid-column: 1 / -1;
   min-height: 26px;
   padding: 5px 10px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.14);
   background: var(--cb-surface-card);
   color: rgba(234,240,255,0.92);
@@ -1274,7 +1274,7 @@
   width: min(580px, 94vw);
   max-height: min(72vh, 680px);
   overflow: auto;
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.15);
   background: linear-gradient(165deg, rgba(10,12,20,0.98), rgba(20,22,36,0.97));
   padding: 14px;
@@ -1296,7 +1296,7 @@
   text-align: left;
   display: grid;
   gap: 3px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.11);
   background: var(--cb-surface-card);
   color: rgba(240,246,255,0.94);
@@ -1546,7 +1546,7 @@
   min-width: 54px;
   height: 26px;
   padding: 0 10px;
-  border-radius: 9px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.04);
   font-size: 12px;
@@ -1742,7 +1742,7 @@
 .cb-modal-card{
   position: relative;
   width: min(560px, calc(100% - 28px));
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(234,240,255,0.14);
   background: rgba(10,14,28,0.95);
   box-shadow: none;
@@ -1769,7 +1769,7 @@
   justify-content:center;
   width: 38px;
   height: 38px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(234,240,255,0.12);
   background: rgba(255,255,255,0.06);
   color: rgba(234,240,255,0.90);
@@ -1791,7 +1791,7 @@
 
 .cb-select{
   height: 42px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(234,240,255,0.12);
   background: rgba(0,0,0,0.26);
   color: rgba(234,240,255,0.92);
@@ -1827,7 +1827,7 @@
   width: 132px;
   height: 36px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   font-size: 13px;
   font-weight: 700;
 }
@@ -1842,7 +1842,7 @@ body.cb-modal-open{ overflow: hidden; }
   justify-content:center;
   height: 40px;
   padding: 0 14px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.06);
   color: rgba(234,240,255,0.92);
@@ -2300,7 +2300,7 @@ body.cb-modal-open{ overflow: hidden; }
   gap: 2px;
   padding: 2px;
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(0,0,0,0.22);
 }
 
@@ -2309,7 +2309,7 @@ body.cb-modal-open{ overflow: hidden; }
   min-width: 52px;
   padding: 0 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   background: transparent;
   color: rgba(234,240,255,0.78);
   font-size: 11px;
@@ -2508,7 +2508,7 @@ body.cb-modal-open{ overflow: hidden; }
   min-width: 54px;
   height: 26px;
   padding: 0 10px;
-  border-radius: 9px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.04);
   font-size: 12px;
@@ -2525,7 +2525,7 @@ body.cb-modal-open{ overflow: hidden; }
 }
 
 .ins-page .cb-modal-card{
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(234,240,255,0.14);
   background: rgba(10,14,28,0.95);
   box-shadow: 0 24px 60px rgba(0,0,0,0.45);

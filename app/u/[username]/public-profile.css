@@ -106,7 +106,7 @@
 
 .pp-viewToggleBtn{
   height: 34px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.04);
   color: rgba(234,240,255,0.82);
@@ -167,7 +167,7 @@
 .pp-viewToggleMembersSearchInput{
   width: 100%;
   height: 34px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.16);
   background: rgba(0,0,0,0.25);
   color: rgba(247,251,255,0.94);
@@ -250,7 +250,7 @@
 .pp-avatarLg{
   width: 220px;
   height: 220px;
-  border-radius: 18px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.14);
   background: radial-gradient(120% 120% at 20% 10%, rgba(78,168,255,0.18), rgba(0,0,0,0.18));
   overflow: hidden;
@@ -295,7 +295,7 @@
   color: rgba(234,240,255,0.55);
   text-decoration: none;
   padding: 6px 8px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid transparent;
   background: transparent;
   white-space: nowrap;
@@ -372,7 +372,7 @@
 .pp-profileBioText{
   margin-top: 8px;
   padding: 12px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(0,0,0,0.35);
   color: rgba(247,251,255,0.95);
@@ -483,7 +483,7 @@
   height: 28px;
   padding: 0;
   line-height: 0;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.04);
   cursor: pointer;
@@ -573,7 +573,7 @@
 
 .pp-profileTeamBtn{
   height: 34px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.04);
   color: rgba(234,240,255,0.90);
@@ -692,7 +692,7 @@
 .pp-memberCard{
   border: 1px solid rgba(255,255,255,0.08);
   background: linear-gradient(180deg, rgba(0,0,0,0.22), rgba(0,0,0,0.14));
-  border-radius: 12px;
+  border-radius: 4px;
   padding: 12px;
   aspect-ratio: 1 / 1;
   min-height: 0;
@@ -821,7 +821,7 @@
 
 .pp-collabItems{
   border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(0,0,0,0.18);
   max-height: 240px;
   overflow: auto;
@@ -835,7 +835,7 @@
   width: 100%;
   border: 1px solid rgba(255,255,255,0.10);
   background: rgba(255,255,255,0.02);
-  border-radius: 10px;
+  border-radius: 4px;
   color: inherit;
   text-align: left;
   padding: 8px 9px;
@@ -1024,7 +1024,7 @@
 .pp-avatar{
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.10);
   background: radial-gradient(120% 120% at 20% 10%, rgba(78,168,255,0.18), rgba(0,0,0,0.18));
   overflow: hidden;
@@ -1114,7 +1114,7 @@
   justify-content: center;
   height: 36px;
   padding: 0 14px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.04);
   color: rgba(234,240,255,0.92);
@@ -1146,7 +1146,7 @@
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.04);
   color: rgba(234,240,255,0.90);
@@ -1304,7 +1304,7 @@
 .pp-md-pre{
   margin: 13px 0;
   padding: 13px 14px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(0,0,0,0.26);
   overflow: auto;
@@ -1318,7 +1318,7 @@
   font-family: var(--mono);
   font-size: 12px;
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(0,0,0,0.22);
   color: rgba(234,240,255,0.92);
@@ -1363,7 +1363,7 @@ body.cb-modal-open{
   top: 50%;
   transform: translate(-50%, -50%);
   width: min(420px, calc(100% - 28px));
-  border-radius: 16px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: linear-gradient(180deg, rgba(4,7,16,0.97), rgba(2,4,10,0.95));
   box-shadow: 0 24px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06);
@@ -1418,7 +1418,7 @@ body.cb-modal-open{
 .cb-modal-close{
   width: 30px;
   height: 30px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.04);
   color: rgba(234,240,255,0.88);
@@ -1538,7 +1538,7 @@ body.cb-modal-open{
 .pp-field{
   width: 100%;
   height: 38px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(0,0,0,0.18);
   color: rgba(234,240,255,0.92);
@@ -1587,7 +1587,7 @@ body.cb-modal-open{
 .pp-modalError{
   margin-top: 12px;
   padding: 10px 10px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,77,77,0.22);
   background: rgba(255,77,77,0.08);
   color: rgba(247,251,255,0.92);
@@ -1597,7 +1597,7 @@ body.cb-modal-open{
 .pp-modalSuccess{
   margin-top: 12px;
   padding: 10px 10px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(185,200,90,0.28);
   background: rgba(185,200,90,0.10);
   color: rgba(247,251,255,0.92);
@@ -1615,7 +1615,7 @@ body.cb-modal-open{
 .cb-modal-action{
   height: 36px;
   padding: 0 14px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.04);
   color: rgba(234,240,255,0.92);
@@ -1798,7 +1798,7 @@ body.cb-modal-open{
 .pp-healthMetric{
   border: 1px solid rgba(255,255,255,0.10);
   background: linear-gradient(180deg, rgba(0,0,0,0.22), rgba(0,0,0,0.14));
-  border-radius: 12px;
+  border-radius: 4px;
   padding: 11px 12px 12px;
   min-height: 84px;
   box-shadow:
@@ -1997,7 +1997,7 @@ body.cb-modal-open{
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 12px;
+  border-radius: 4px;
   overflow: hidden;
   background: rgba(255,255,255,0.02);
 }
@@ -2165,7 +2165,7 @@ body.cb-modal-open{
 .pp-capCard{
   border: 1px solid rgba(255,255,255,0.10);
   background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.10));
-  border-radius: 12px;
+  border-radius: 4px;
   padding: 11px 12px 12px;
 }
 
@@ -2259,7 +2259,7 @@ body.cb-modal-open{
 
 .pp-chip.is-rect{
   /* Reliability Monitoring: small-radius rectangle instead of a full pill. */
-  border-radius: 10px;
+  border-radius: 4px;
 }
 
 .pp-chip.tone-good{ border-color: rgba(185,200,90,0.32); background: rgba(185,200,90,0.06); }
@@ -2268,7 +2268,7 @@ body.cb-modal-open{
 .pp-chip.tone-neutral{
   border-color: rgba(255,255,255,0.10);
   /* "Not configured" should read like a small rectangular badge, not a pill. */
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(0,0,0,0.24);
 }
 
@@ -2322,7 +2322,7 @@ body.cb-modal-open{
   justify-content:center;
   width: 34px;
   height: 34px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.04);
   color: rgba(234,240,255,0.90);
@@ -2469,7 +2469,7 @@ body.cb-modal-open{
   position: relative;
   top: 6px;
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 9px;
+  border-radius: 4px;
   padding: 8px 8px 7px;
   background: rgba(0,0,0,0.22);
 }
@@ -2591,7 +2591,7 @@ body.cb-modal-open{
 .pp-ohEntry{
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(0,0,0,0.20);
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 8px 10px;
 }
 
@@ -2711,7 +2711,7 @@ body.cb-modal-open{
 
 .pp-artifactExplorer{
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 12px;
+  border-radius: 4px;
   background: rgba(0,0,0,0.18);
   padding: 12px;
 }
@@ -2726,7 +2726,7 @@ body.cb-modal-open{
 .pp-artifactExplorerBack{
   width: 28px;
   height: 28px;
-  border-radius: 9px;
+  border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.03);
   color: rgba(235,244,255,0.9);
@@ -2852,7 +2852,7 @@ body.cb-modal-open{
   appearance: none;
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(255,255,255,0.02);
-  border-radius: 12px;
+  border-radius: 4px;
   min-height: 150px;
   padding: 12px 10px;
   position: relative;
@@ -3115,7 +3115,7 @@ body.cb-modal-open{
 .pp-artifactIcon{
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

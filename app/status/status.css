@@ -309,7 +309,7 @@
   align-items: center;
   gap: 6px;
   padding: 3px 9px;
-  border-radius: 10px;
+  border-radius: 4px;
   font-size: 0.72rem;
   letter-spacing: 0.08em;
   text-transform: none;
@@ -386,7 +386,7 @@
 .status-history--uptime .status-historyHeaderStat {
   align-items: flex-start;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.03);
 }
@@ -396,7 +396,7 @@
 }
 
 .status-history--uptime .status-historyPanel {
-  border-radius: 16px;
+  border-radius: 4px;
   border-color: rgba(255, 255, 255, 0.16);
   background: rgba(4, 6, 18, 0.8);
   gap: 14px;
@@ -446,7 +446,7 @@
   gap: 4px;
   align-content: start;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.03);
 }
@@ -764,7 +764,7 @@
   z-index: 2201;
   max-width: 280px;
   padding: 14px 16px;
-  border-radius: 18px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(3, 5, 18, 0.92);
   color: var(--ink);
@@ -907,7 +907,7 @@
 
 .status-incidentBadge {
   padding: 4px 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   font-size: 0.8rem;
   letter-spacing: 0.08em;
   text-transform: none;
@@ -922,7 +922,7 @@
   text-transform: none;
   color: rgba(255, 255, 255, 0.65);
   padding: 4px 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.16);
 }
@@ -1107,7 +1107,7 @@
 .status-footerBtn {
   margin-top: 0;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.05);
   color: #ffffff;
