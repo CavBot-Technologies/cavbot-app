@@ -19,6 +19,7 @@ import {
   findSiteForAccount,
   findSiteForProject,
   listActiveSitesForAccount,
+  listActiveSitesForUser,
   listApiKeysForProject,
   listAllowedOriginsForSite,
 } from "@/lib/settings/apiKeysRuntime.server";
@@ -83,17 +84,29 @@ function workspaceFromWorkspacePayload(payload: WorkspacePayload | null): Awaite
 
 async function workspaceFromAccountSites(args: {
   accountId: string;
+  userId?: string | null;
   requestedSiteId?: string | null;
 }) {
   let sites: WorkspaceSiteSummary[] = [];
   try {
     sites = await listActiveSitesForAccount(args.accountId);
+    if (!sites.length && args.userId) {
+      sites = await listActiveSitesForUser(args.userId);
+    }
   } catch (error) {
     console.error("[settings/api-keys] account sites fallback failed", {
       accountId: args.accountId,
       detail: error instanceof Error ? error.message : String(error),
     });
-    return null;
+    if (args.userId) {
+      try {
+        sites = await listActiveSitesForUser(args.userId);
+      } catch {
+        return null;
+      }
+    } else {
+      return null;
+    }
   }
 
   if (!sites.length) return null;
@@ -198,6 +211,7 @@ function keysForSelectedSite(
 
 async function resolveApiKeyWorkspaceWithFallback(args: {
   accountId: string;
+  userId?: string | null;
   requestedSiteId?: string | null;
   preferredProjectId?: number | null;
   activeSiteIdHint?: string | null;
@@ -216,12 +230,23 @@ async function resolveApiKeyWorkspaceWithFallback(args: {
   let sites: WorkspaceSiteSummary[] = [];
   try {
     sites = await listActiveSitesForAccount(args.accountId);
+    if (!sites.length && args.userId) {
+      sites = await listActiveSitesForUser(args.userId);
+    }
   } catch (error) {
     console.error("[settings/api-keys] site fallback failed", {
       accountId: args.accountId,
       detail: error instanceof Error ? error.message : String(error),
     });
-    return null;
+    if (args.userId) {
+      try {
+        sites = await listActiveSitesForUser(args.userId);
+      } catch {
+        return null;
+      }
+    } else {
+      return null;
+    }
   }
 
   if (!sites.length) return null;
@@ -269,6 +294,7 @@ export async function GET(req: NextRequest) {
     let workspace = await withApiKeysDeadline(
       resolveApiKeyWorkspaceWithFallback({
         accountId: session.accountId,
+        userId: session.sub,
         requestedSiteId,
         ...workspaceHints,
       }),
@@ -288,6 +314,7 @@ export async function GET(req: NextRequest) {
       workspace = await withApiKeysDeadline(
         workspaceFromAccountSites({
           accountId: session.accountId,
+          userId: session.sub,
           requestedSiteId,
         }),
         "API_KEYS_ACCOUNT_SITE_FALLBACK",
@@ -363,6 +390,7 @@ export async function POST(req: NextRequest) {
     let workspace = await withApiKeysDeadline(
       resolveApiKeyWorkspaceWithFallback({
         accountId: session.accountId,
+        userId: session.sub,
         requestedSiteId,
         ...workspaceHints,
       }),
@@ -373,6 +401,7 @@ export async function POST(req: NextRequest) {
       workspace = await withApiKeysDeadline(
         workspaceFromAccountSites({
           accountId: session.accountId,
+          userId: session.sub,
           requestedSiteId,
         }),
         "API_KEYS_CREATE_ACCOUNT_SITE_FALLBACK",

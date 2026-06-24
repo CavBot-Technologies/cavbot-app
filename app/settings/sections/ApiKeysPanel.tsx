@@ -148,6 +148,7 @@ type SnippetSection = {
 export default function ApiKeysPanel() {
   const [payload, setPayload] = useState<ApiKeysPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [selectedSiteId, setSelectedSiteId] = useState("");
   const [allowedOrigins, setAllowedOrigins] = useState<string[]>([]);
   const [originInput, setOriginInput] = useState("");
@@ -228,6 +229,7 @@ export default function ApiKeysPanel() {
 
   const loadData = useCallback(async (siteIdOverride?: string | null) => {
     setError(null);
+    setLoading(true);
     try {
       const requestedSiteId = String(siteIdOverride ?? selectedSiteIdRef.current).trim();
       const response = await apiJSON<ApiKeysPayload>(buildApiKeysUrl(requestedSiteId || undefined));
@@ -241,6 +243,8 @@ export default function ApiKeysPanel() {
       await refreshUsageOverride();
     } catch (err: unknown) {
       setError(getErrorMessage(err, "Failed to load API keys."));
+    } finally {
+      setLoading(false);
     }
   }, [buildApiKeysUrl, refreshUsageOverride, updateSelectedSiteId]);
 
@@ -665,6 +669,8 @@ export default function ApiKeysPanel() {
               </select>
             </div>
           </div>
+        ) : loading ? (
+          <div className="sx-api-originEmpty">Loading website context…</div>
         ) : (
           <div className="sx-api-originEmpty">
             Add a website in Command Center first. CavBot generates keys and snippets per site origin, not across the
@@ -700,7 +706,11 @@ export default function ApiKeysPanel() {
         </div>
         <div className="sx-api-keyRow">
           <span className="sx-api-key sx-api-key--soft">
-            {activePublishable ? `${activePublishable.prefix}••••${activePublishable.last4}` : "No publishable key yet"}
+            {activePublishable
+              ? `${activePublishable.prefix}••••${activePublishable.last4}`
+              : loading
+                ? "Loading publishable key…"
+                : "No publishable key yet"}
           </span>
         </div>
         {activePublishable ? (
@@ -714,6 +724,8 @@ export default function ApiKeysPanel() {
               </span>
             ) : null}
           </div>
+        ) : loading ? (
+          <p className="sx-status-sub">Checking existing keys for this site.</p>
         ) : (
           <p className="sx-status-sub">No publishable key detected yet. Create one to get started.</p>
         )}
