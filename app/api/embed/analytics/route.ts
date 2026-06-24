@@ -538,7 +538,7 @@ async function handlePost(req: NextRequest, ctx: { env?: RateLimitEnv }) {
 
   try {
     const canonicalPayload = canonicalizeVerifiedPayload(payload, verification);
-    recordAnalyticsEmbedActivityBestEffort({
+    await recordAnalyticsEmbedActivityBestEffort({
       req,
       accountId: verification.accountId,
       projectId: verification.projectId,
@@ -547,8 +547,6 @@ async function handlePost(req: NextRequest, ctx: { env?: RateLimitEnv }) {
       siteOrigin: verification.siteOrigin,
       payload: canonicalPayload,
       keyLast4: verification.keyLast4,
-    }).catch((error) => {
-      console.error("[embed/analytics] local activity tracking failed after accept", error);
     });
 
     proxyToRemote({
