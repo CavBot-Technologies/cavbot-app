@@ -2,10 +2,10 @@
 import { NextResponse } from "next/server";
 import { revalidateTag, unstable_noStore as noStore } from "next/cache";
 
-import type { AuditAction, Prisma } from "@prisma/client";
+import type { AuditAction } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isBasicUsername, isReservedUsername, isValidUsername, normalizeUsername } from "@/lib/username";
-import { findPublicProfileUserById, findUserById, withDedicatedAuthClient } from "@/lib/authDb";
+import { findPublicProfileUserById, findUserById, getAuthPool, withDedicatedAuthClient } from "@/lib/authDb";
 import { isApiAuthError, requireSession, requireUser } from "@/lib/apiAuth";
 import { readAuthSessionView } from "@/lib/authSessionView.server";
 import {
@@ -26,6 +26,14 @@ import { readSanitizedJson } from "@/lib/security/userInput";
 type RawDb = {
   $executeRawUnsafe: (sql: string) => Promise<unknown>;
   $queryRaw: <T = unknown>(query: TemplateStringsArray, ...params: unknown[]) => Promise<T>;
+};
+
+type SettingsAccountProfileRow = Record<string, unknown> & {
+  id?: string;
+  email?: string | null;
+  username?: string | null;
+  displayName?: string | null;
+  fullName?: string | null;
 };
 
 export const runtime = "nodejs";
@@ -114,12 +122,16 @@ async function getAvailableProfileColumns() {
   }
 
   try {
-    const rows = await prisma.$queryRaw<{ column_name: string }[]>`
-    SELECT column_name
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND (table_name = 'User' OR table_name = 'user')
-  `;
+    const rows = (
+      await getAuthPool().query<{ column_name: string }>(
+        `
+          SELECT column_name
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND (table_name = 'User' OR table_name = 'user')
+        `,
+      )
+    ).rows;
     const columns = new Set(rows.map((row) => row.column_name));
     profileColumnsCache = { columns, fetchedAt: Date.now() };
     return columns;
@@ -137,6 +149,131 @@ async function buildProfileSelect() {
     }
   });
   return select;
+}
+
+async function readSettingsAccountProfile(userId: string) {
+  const result = await getAuthPool().query<SettingsAccountProfileRow>(
+    `
+      SELECT
+        "id",
+        "email",
+        "username",
+        "displayName",
+        "fullName",
+        "bio",
+        "country",
+        "region",
+        "timeZone",
+        "avatarTone",
+        "avatarImage",
+        "companyName",
+        "companyCategory",
+        "companySubcategory",
+        "githubUrl",
+        "instagramUrl",
+        "linkedinUrl",
+        "customLinkUrl",
+        "showCavbotProfileLink",
+        "showStatusOnPublicProfile",
+        "userStatus",
+        "userStatusNote",
+        "userStatusUpdatedAt",
+        "publicProfileEnabled",
+        "publicShowReadme",
+        "publicShowWorkspaceSnapshot",
+        "publicShowHealthOverview",
+        "publicShowCapabilities",
+        "publicShowArtifacts",
+        "publicShowPlanTier",
+        "publicShowBio",
+        "publicShowIdentityLinks",
+        "publicShowIdentityLocation",
+        "publicShowIdentityEmail",
+        "publicWorkspaceId"
+      FROM "User"
+      WHERE "id" = $1
+      LIMIT 1
+    `,
+    [userId],
+  );
+  return result.rows[0] ?? null;
+}
+
+async function profileValueExists(field: "email" | "username", value: string, userId: string) {
+  const column = field === "email" ? `"email"` : `"username"`;
+  const result = await getAuthPool().query<{ id: string }>(
+    `
+      SELECT "id"
+      FROM "User"
+      WHERE lower(${column}) = lower($1)
+        AND "id" <> $2
+      LIMIT 1
+    `,
+    [value, userId],
+  );
+  return Boolean(result.rows[0]);
+}
+
+async function updateSettingsAccountProfile(
+  userId: string,
+  assignments: Record<string, unknown>,
+): Promise<SettingsAccountProfileRow> {
+  const entries = Object.entries(assignments);
+  if (!entries.length) {
+    const existing = await readSettingsAccountProfile(userId);
+    if (!existing) throw new Error("USER_NOT_FOUND");
+    return existing;
+  }
+
+  const setSql = entries.map(([column], index) => `"${column}" = $${index + 2}`).join(", ");
+  const result = await getAuthPool().query<SettingsAccountProfileRow>(
+    `
+      UPDATE "User"
+      SET ${setSql}, "updatedAt" = NOW()
+      WHERE "id" = $1
+      RETURNING
+        "id",
+        "email",
+        "username",
+        "displayName",
+        "fullName",
+        "bio",
+        "country",
+        "region",
+        "timeZone",
+        "avatarTone",
+        "avatarImage",
+        "companyName",
+        "companyCategory",
+        "companySubcategory",
+        "githubUrl",
+        "instagramUrl",
+        "linkedinUrl",
+        "customLinkUrl",
+        "showCavbotProfileLink",
+        "showStatusOnPublicProfile",
+        "userStatus",
+        "userStatusNote",
+        "userStatusUpdatedAt",
+        "publicProfileEnabled",
+        "publicShowReadme",
+        "publicShowWorkspaceSnapshot",
+        "publicShowHealthOverview",
+        "publicShowCapabilities",
+        "publicShowArtifacts",
+        "publicShowPlanTier",
+        "publicShowBio",
+        "publicShowIdentityLinks",
+        "publicShowIdentityLocation",
+        "publicShowIdentityEmail",
+        "publicWorkspaceId"
+    `,
+    [userId, ...entries.map(([, value]) => value)],
+  );
+
+  const updated = result.rows[0];
+  if (!updated) throw new Error("USER_NOT_FOUND");
+  return updated;
 }
 
 const OWNER_USERNAME = normalizeUsername(process.env.CAVBOT_OWNER_USERNAME || "");
@@ -504,11 +641,7 @@ export async function PATCH(req: Request) {
     const { userId, session } = info;
 
     const availableColumns = await getAvailableProfileColumns();
-    const profileSelect = await buildProfileSelect();
-    const existingProfile = await prisma.user.findUnique({
-      where: { id: userId },
-      select: profileSelect,
-    });
+    const existingProfile = await readSettingsAccountProfile(userId);
     if (!existingProfile) {
       return jsonNoStore({ ok: false, message: "User not found" }, { status: 404 });
     }
@@ -642,35 +775,26 @@ export async function PATCH(req: Request) {
     if (email) {
       const emailNorm = email.toLowerCase().trim();
 
-      const existing = await prisma.user.findFirst({
-        where: { email: emailNorm, NOT: { id: userId } },
-        select: { id: true },
-      });
-
-      if (existing) {
+      if (await profileValueExists("email", emailNorm, userId)) {
         return jsonNoStore({ ok: false, message: "Email already in use" }, { status: 409 });
       }
     }
 
       if (hasUsernamePatch && username) {
-        const existing = await prisma.user.findFirst({
-          where: { username, NOT: { id: userId } },
-          select: { id: true },
-        });
-      if (existing) {
+      if (await profileValueExists("username", username, userId)) {
         return jsonNoStore({ ok: false, message: "Username already in use" }, { status: 409 });
       }
     }
 
     const normalizedEmail = email ? email.toLowerCase().trim() : null;
-    const profileUpdatePayload: Prisma.UserUpdateInput = {
+    const profileUpdatePayload: Record<string, unknown> = {
       fullName,
       displayName: fullName,
       bio,
       country,
       region,
       timeZone,
-      avatarTone,
+      ...(avatarTone !== undefined ? { avatarTone } : {}),
       avatarImage,
       ...(availableColumns.has("companyName") ? { companyName } : {}),
       ...(availableColumns.has("companyCategory") ? { companyCategory } : {}),
@@ -720,7 +844,7 @@ export async function PATCH(req: Request) {
         : {}),
       ...(hasUsernamePatch ? { username } : {}),
       ...(normalizedEmail ? { email: normalizedEmail } : {}),
-    } as Prisma.UserUpdateInput;
+    };
 
     // If public profile columns aren't available, store in fallback table (dev bootstrap) and avoid losing state on refresh.
     const hasPublicColumns =
@@ -737,82 +861,82 @@ export async function PATCH(req: Request) {
       availableColumns.has("publicShowIdentityEmail") &&
       availableColumns.has("publicWorkspaceId");
 
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data: profileUpdatePayload,
-      select: profileSelect,
-    });
+    const updated = await updateSettingsAccountProfile(userId, profileUpdatePayload);
 
-    const renameableOwnerMemberships = await prisma.membership.findMany({
-      where: { userId, role: "OWNER" },
-      select: {
-        accountId: true,
-        account: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            _count: { select: { members: true } },
+    try {
+      const renameableOwnerMemberships = await prisma.membership.findMany({
+        where: { userId, role: "OWNER" },
+        select: {
+          accountId: true,
+          account: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              _count: { select: { members: true } },
+            },
           },
         },
-      },
-    });
-
-    if (fullName) {
-      const oldWorkspaceNames = buildAutoWorkspaceNameCandidates({
-        email: existingProfile.email,
-        username: existingProfile.username,
-        displayName: (existingProfile as Record<string, unknown>).displayName,
-        fullName: existingProfile.fullName,
       });
-      const nextWorkspaceName = buildPersonalWorkspaceName(fullName);
-      if (!oldWorkspaceNames.has(nextWorkspaceName)) {
-        const renameableAccountIds = renameableOwnerMemberships
-          .filter((membership) => {
-            const accountName = String(membership.account.name || "").trim();
-            return accountName && oldWorkspaceNames.has(accountName) && membership.account._count.members <= 1;
-          })
-          .map((membership) => membership.account.id);
 
-        if (renameableAccountIds.length > 0) {
-          await prisma.account.updateMany({
-            where: { id: { in: renameableAccountIds } },
-            data: { name: nextWorkspaceName },
-          });
+      if (fullName) {
+        const oldWorkspaceNames = buildAutoWorkspaceNameCandidates({
+          email: existingProfile.email,
+          username: existingProfile.username,
+          displayName: (existingProfile as Record<string, unknown>).displayName,
+          fullName: existingProfile.fullName,
+        });
+        const nextWorkspaceName = buildPersonalWorkspaceName(fullName);
+        if (!oldWorkspaceNames.has(nextWorkspaceName)) {
+          const renameableAccountIds = renameableOwnerMemberships
+            .filter((membership) => {
+              const accountName = String(membership.account.name || "").trim();
+              return accountName && oldWorkspaceNames.has(accountName) && membership.account._count.members <= 1;
+            })
+            .map((membership) => membership.account.id);
+
+          if (renameableAccountIds.length > 0) {
+            await prisma.account.updateMany({
+              where: { id: { in: renameableAccountIds } },
+              data: { name: nextWorkspaceName },
+            });
+          }
         }
       }
-    }
 
-    if (hasUsernamePatch && username) {
-      const oldWorkspaceSlugs = buildAutoWorkspaceSlugCandidates({
-        email: existingProfile.email,
-        username: existingProfile.username,
-        displayName: (existingProfile as Record<string, unknown>).displayName,
-        fullName: existingProfile.fullName,
-      });
-      const slugRenameCandidates = renameableOwnerMemberships.filter((membership) => {
-        const accountSlug = String(membership.account.slug || "").trim().toLowerCase();
-        return accountSlug && oldWorkspaceSlugs.has(accountSlug) && membership.account._count.members <= 1;
-      });
-
-      if (slugRenameCandidates.length > 0) {
-        const desiredSlug = buildPreferredPersonalWorkspaceSlug({
-          username,
-          email: normalizedEmail || existingProfile.email,
-          displayName: fullName || (existingProfile as Record<string, unknown>).displayName,
-          fullName: fullName || existingProfile.fullName,
+      if (hasUsernamePatch && username) {
+        const oldWorkspaceSlugs = buildAutoWorkspaceSlugCandidates({
+          email: existingProfile.email,
+          username: existingProfile.username,
+          displayName: (existingProfile as Record<string, unknown>).displayName,
+          fullName: existingProfile.fullName,
+        });
+        const slugRenameCandidates = renameableOwnerMemberships.filter((membership) => {
+          const accountSlug = String(membership.account.slug || "").trim().toLowerCase();
+          return accountSlug && oldWorkspaceSlugs.has(accountSlug) && membership.account._count.members <= 1;
         });
 
-        for (const membership of slugRenameCandidates) {
-          const currentSlug = String(membership.account.slug || "").trim().toLowerCase();
-          if (currentSlug === desiredSlug) continue;
-          const nextSlug = await findAvailablePersonalAccountSlug(desiredSlug, [membership.account.id]);
-          await prisma.account.update({
-            where: { id: membership.account.id },
-            data: { slug: nextSlug },
+        if (slugRenameCandidates.length > 0) {
+          const desiredSlug = buildPreferredPersonalWorkspaceSlug({
+            username,
+            email: normalizedEmail || existingProfile.email,
+            displayName: fullName || (existingProfile as Record<string, unknown>).displayName,
+            fullName: fullName || existingProfile.fullName,
           });
+
+          for (const membership of slugRenameCandidates) {
+            const currentSlug = String(membership.account.slug || "").trim().toLowerCase();
+            if (currentSlug === desiredSlug) continue;
+            const nextSlug = await findAvailablePersonalAccountSlug(desiredSlug, [membership.account.id]);
+            await prisma.account.update({
+              where: { id: membership.account.id },
+              data: { slug: nextSlug },
+            });
+          }
         }
       }
+    } catch (renameError) {
+      console.warn("PATCH /api/settings/account workspace sync skipped:", renameError);
     }
 
     let updatedForResponse = updated as unknown as Record<string, unknown>;
@@ -831,13 +955,21 @@ export async function PATCH(req: Request) {
       if (publicShowIdentityEmailEffective !== null) patch.publicShowIdentityEmail = publicShowIdentityEmailEffective;
       if (publicWorkspaceIdRaw != null) patch.publicWorkspaceId = publicWorkspaceId;
 
-      const settings = await writePublicProfileSettingsFallback(prisma as unknown as RawDb, userId, patch);
-      updatedForResponse = { ...updatedForResponse, ...settings };
+      try {
+        const settings = await writePublicProfileSettingsFallback(prisma as unknown as RawDb, userId, patch);
+        updatedForResponse = { ...updatedForResponse, ...settings };
+      } catch (fallbackError) {
+        console.warn("PATCH /api/settings/account public profile fallback skipped:", fallbackError);
+      }
     }
 
     // Persist in dev fallback table so the value survives reloads even if migrations/columns lag.
-    const v = await writeCustomLinkUrlFallback(prisma as unknown as RawDb, userId, customLinkUrl);
-    updatedForResponse = { ...updatedForResponse, customLinkUrl: v };
+    try {
+      const v = await writeCustomLinkUrlFallback(prisma as unknown as RawDb, userId, customLinkUrl);
+      updatedForResponse = { ...updatedForResponse, customLinkUrl: v };
+    } catch (fallbackError) {
+      console.warn("PATCH /api/settings/account custom link fallback skipped:", fallbackError);
+    }
     updatedForResponse = normalizePublicProfileSettings(updatedForResponse);
 
     const trackedBaseFields = ["fullName", "bio", "country", "region", "timeZone", "avatarTone", "avatarImage"];
@@ -905,16 +1037,20 @@ export async function PATCH(req: Request) {
     if (logAction && session.accountId) {
       const existingUsernameLabel =
         (existingProfile as unknown as Record<string, unknown>)["username"] ?? null;
-      await auditLogWrite({
-        request: req,
-        action: logAction,
-        accountId: session.accountId,
-        operatorUserId: userId,
-        targetType: "user",
-        targetId: userId,
-        targetLabel: String((usernameChanged && username) || existingUsernameLabel || userId),
-        metaJson: logMeta,
-      });
+      try {
+        await auditLogWrite({
+          request: req,
+          action: logAction,
+          accountId: session.accountId,
+          operatorUserId: userId,
+          targetType: "user",
+          targetId: userId,
+          targetLabel: String((usernameChanged && username) || existingUsernameLabel || userId),
+          metaJson: logMeta,
+        });
+      } catch (auditError) {
+        console.warn("PATCH /api/settings/account audit log skipped:", auditError);
+      }
     }
 
     // Invalidate public profile VM cache so identity links (GitHub/Instagram/LinkedIn/etc) appear immediately.
