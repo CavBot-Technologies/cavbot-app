@@ -31,7 +31,7 @@ const DEDUPE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const REACTIVATION_WINDOW_MS = 30 * DEDUPE_WINDOW_MS;
 const FIRST_PARTY_CAVBOT_ORIGINS = new Set(["https://www.cavbot.io", "https://cavbot.io"]);
 const FIRST_PARTY_CAVBOT_SITE_IDS = new Set(["cavbot.io", "www.cavbot.io", ""]);
-const FIRST_PARTY_CAVBOT_PROJECT_KEYS = new Set(["cavbot_pk_web_63f7e8d534b9947268967a1244c18622f5089b4dd5481db1"]);
+const FIRST_PARTY_CAVBOT_PROJECT_KEYS = new Set(["cavbot_pk_gHn737DTf4afJ2xGpBFzZQ"]);
 const FIRST_PARTY_CAVBOT_ARCADE_SLUG = "cavbot-imposter";
 const FIRST_PARTY_CAVBOT_ARCADE_VERSION = "v1";
 
