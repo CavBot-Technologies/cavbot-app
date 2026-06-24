@@ -81,6 +81,56 @@ function workspaceFromWorkspacePayload(payload: WorkspacePayload | null): Awaite
   };
 }
 
+async function workspaceFromAccountSites(args: {
+  accountId: string;
+  requestedSiteId?: string | null;
+}) {
+  let sites: WorkspaceSiteSummary[] = [];
+  try {
+    sites = await listActiveSitesForAccount(args.accountId);
+  } catch (error) {
+    console.error("[settings/api-keys] account sites fallback failed", {
+      accountId: args.accountId,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+
+  if (!sites.length) return null;
+  const requestedSiteId = String(args.requestedSiteId || "").trim();
+  const activeSite =
+    (requestedSiteId ? sites.find((site) => site.id === requestedSiteId) : null) ??
+    sites[0] ??
+    null;
+  if (!activeSite?.projectId) return null;
+
+  const projectSites = sites
+    .filter((site) => site.projectId === activeSite.projectId)
+    .map((site) => ({ id: site.id, origin: site.origin }));
+
+  let allowedOrigins = activeSite.origin ? [activeSite.origin] : [];
+  try {
+    const extraOrigins = await listAllowedOriginsForSite(activeSite.id);
+    allowedOrigins = Array.from(new Set([...allowedOrigins, ...extraOrigins]));
+  } catch (error) {
+    console.error("[settings/api-keys] account fallback allowed origins lookup failed", {
+      siteId: activeSite.id,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  return {
+    projectId: activeSite.projectId,
+    sites: projectSites,
+    activeSite: { id: activeSite.id, origin: activeSite.origin },
+    allowedOrigins,
+  };
+}
+
+function hasUsableSite(workspace: Awaited<ReturnType<typeof resolveApiKeyWorkspaceWithFallback>> | null) {
+  return Boolean(workspace?.projectId && workspace.activeSite?.id && workspace.sites.length);
+}
+
 function defaultUsagePayload(): KeyUsagePayload {
   return {
     verifiedToday: null,
@@ -231,8 +281,18 @@ export async function GET(req: NextRequest) {
       });
       return workspaceFromWorkspacePayload(await workspacePayloadPromise);
     });
-    if (!workspace) {
+    if (!hasUsableSite(workspace)) {
       workspace = workspaceFromWorkspacePayload(await workspacePayloadPromise);
+    }
+    if (!hasUsableSite(workspace)) {
+      workspace = await withApiKeysDeadline(
+        workspaceFromAccountSites({
+          accountId: session.accountId,
+          requestedSiteId,
+        }),
+        "API_KEYS_ACCOUNT_SITE_FALLBACK",
+        8_000,
+      ).catch(() => null);
     }
     if (!workspace) {
       const emptyPayload: KeyResponse = {
@@ -305,6 +365,12 @@ export async function POST(req: NextRequest) {
       requestedSiteId,
       ...workspaceHints,
     });
+    if (!hasUsableSite(workspace)) {
+      workspace = await workspaceFromAccountSites({
+        accountId: session.accountId,
+        requestedSiteId,
+      });
+    }
 
     const type = toType(body?.type);
     let siteId: string | null = null;

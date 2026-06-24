@@ -187,12 +187,12 @@ export async function listActiveSitesForAccount(accountId: string) {
        AND p."isActive" = TRUE
      GROUP BY s."id", s."origin", s."projectId", s."status", s."verifiedAt", s."createdAt", p."createdAt"
      ORDER BY
-       p."createdAt" ASC,
        CASE WHEN s."status" = 'VERIFIED'::"SiteStatus" AND s."verifiedAt" IS NOT NULL THEN 0 ELSE 1 END ASC,
        CASE WHEN COUNT(k."id") FILTER (
          WHERE k."type" = 'PUBLISHABLE'::"ApiKeyType"
            AND k."status" = 'ACTIVE'::"ApiKeyStatus"
        ) > 0 THEN 0 ELSE 1 END ASC,
+       p."createdAt" ASC,
        s."createdAt" ASC`,
     [accountId],
   );

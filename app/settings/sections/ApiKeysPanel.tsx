@@ -330,7 +330,7 @@ export default function ApiKeysPanel() {
           method: "POST",
           body: JSON.stringify({ keyId }),
         });
-        await loadData();
+        await loadData(response.key.bindings.siteId ?? selectedSiteIdRef.current ?? payload?.site?.id ?? null);
         await overrideUsageForSite(response.key.bindings.siteId ?? null);
         if (type === "PUBLISHABLE") {
           setPendingPublishable(response.plaintextKey);
@@ -347,7 +347,7 @@ export default function ApiKeysPanel() {
         setRotatingKeyId(null);
       }
     },
-    [loadData, overrideUsageForSite, showToast]
+    [loadData, overrideUsageForSite, payload?.site?.id, showToast]
   );
 
   const closeRevokeModal = useCallback(() => {
@@ -381,7 +381,7 @@ export default function ApiKeysPanel() {
           method: "POST",
           body: JSON.stringify({ type, siteId: selectedSiteIdRef.current || payload?.site?.id || undefined }),
         });
-        await loadData();
+        await loadData(response.key.bindings.siteId ?? selectedSiteIdRef.current ?? payload?.site?.id ?? null);
         await overrideUsageForSite(response.key.bindings.siteId ?? null);
         if (type === "PUBLISHABLE") {
           setPendingPublishable(response.plaintextKey);
