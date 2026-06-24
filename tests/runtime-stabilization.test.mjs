@@ -29,7 +29,7 @@ test("embed analytics route records local activity after successful upstream del
   const footerSource = read("app/api/system-footer/metrics/route.ts");
 
   assert.equal(routeSource.includes("recordAnalyticsEmbedActivityBestEffort"), true);
-  assert.equal(routeSource.includes("if (response.ok)"), true);
+  assert.equal(routeSource.includes("response.ok || isWorkerInvalidProjectKeyResponse"), true);
   assert.equal(routeSource.includes("payload: canonicalPayload"), true);
   assert.equal(helperSource.includes("'ANALYTICS'::\"EmbedInstallKind\""), true);
   assert.equal(helperSource.includes('"WorkspaceNotice"'), true);
@@ -44,6 +44,21 @@ test("embed analytics route records local activity after successful upstream del
   assert.equal(footerSource.includes("getAuthPool"), true);
 });
 
+test("embed analytics treats object site payloads as metadata, not site ids", () => {
+  const routeSource = read("app/api/embed/analytics/route.ts");
+  const verifierSource = read("lib/security/embedVerifier.ts");
+
+  assert.equal(routeSource.includes("const EMBED_ANALYTICS_TIMEOUT_MS = 75_000"), true);
+  assert.equal(verifierSource.includes("const KEY_LOOKUP_DB_DEADLINE_MS = 35_000"), true);
+  assert.equal(verifierSource.includes("key lookup timed out"), true);
+  assert.equal(verifierSource.includes("key lookup returned empty"), true);
+  assert.equal(verifierSource.includes("function stringBodyValue"), true);
+  assert.equal(verifierSource.includes("body?.site as string"), false);
+  assert.equal(verifierSource.includes("stringBodyValue(body?.site)"), true);
+  assert.equal(routeSource.includes('typeof payload?.site === "string" ? payload.site : ""'), true);
+  assert.equal(routeSource.includes("String(payload?.site_id ?? payload?.siteId ?? payload?.site ??"), false);
+});
+
 test("cavai persistence paths avoid prisma runtime access on production routes", () => {
   const packsSource = read("lib/cavai/packs.server.ts");
   const intelligenceSource = read("lib/cavai/intelligence.server.ts");
@@ -53,7 +68,7 @@ test("cavai persistence paths avoid prisma runtime access on production routes",
   const packRoute = read("app/api/cavai/packs/route.ts");
 
   assert.equal(packsSource.includes('from "@/lib/prisma"'), false);
-  assert.equal(packsSource.includes("getAuthPool"), true);
+  assert.equal(packsSource.includes("withDedicatedAuthClient"), true);
   assert.equal(packsSource.includes('"CavAiRun"'), true);
   assert.equal(intelligenceSource.includes('from "@/lib/prisma"'), false);
   assert.equal(intelligenceSource.includes("withAuthTransaction"), true);
@@ -66,7 +81,8 @@ test("cavai persistence paths avoid prisma runtime access on production routes",
   assert.equal(metricsRoute.includes("diagnosticsPending"), true);
   assert.equal(metricsRoute.includes("initialScan"), true);
   assert.equal(fixesRoute.includes("requireWorkspaceResilientSession"), true);
-  assert.equal(packRoute.includes("requireWorkspaceResilientSession"), true);
+  assert.equal(packRoute.includes("requireSession"), true);
+  assert.equal(packRoute.includes("requireAccountContext"), true);
 });
 
 test("scan completion now bridges raw scan artifacts into persisted CavAi packs", () => {

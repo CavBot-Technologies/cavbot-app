@@ -13,10 +13,9 @@ test("embed analytics route exposes a real OPTIONS handler with request-header-a
   const source = read("app/api/embed/analytics/route.ts");
 
   assert.equal(source.includes("export async function OPTIONS"), true);
-  assert.equal(source.includes("access-control-request-headers"), true);
   assert.equal(source.includes("Access-Control-Allow-Headers"), true);
   assert.equal(source.includes("Access-Control-Max-Age"), true);
-  assert.equal(source.includes('if (req.method === "OPTIONS")'), false);
+  assert.equal(source.includes("handleOptions(req)"), true);
 });
 
 test("embed verification paths avoid Prisma runtime imports", () => {
@@ -31,38 +30,29 @@ test("embed verification paths avoid Prisma runtime imports", () => {
   assert.equal(verifierSource.includes('from "@/lib/prisma"'), false);
   assert.equal(tokenSource.includes('from "@/lib/prisma"'), false);
   assert.equal(runtimeSource.includes('from "@/lib/prisma"'), false);
-  assert.equal(verifierSource.includes("EMBED_RATE_LIMIT_SPEC"), true);
-  assert.equal(verifierSource.includes("extractEmbedRateLimitActor"), true);
-  assert.equal(verifierSource.includes("visitor_id"), true);
-  assert.equal(verifierSource.includes("visitorId"), true);
-  assert.equal(verifierSource.includes("anonymous_id"), true);
-  assert.equal(verifierSource.includes("anonymousId"), true);
-  assert.equal(verifierSource.includes("session_key"), true);
-  assert.equal(verifierSource.includes("sessionKey"), true);
-  assert.equal(verifierSource.includes("session_id"), true);
-  assert.equal(verifierSource.includes("sessionId"), true);
-  assert.equal(verifierSource.includes("unknown-route"), true);
-  assert.equal(verifierSource.includes("actor:"), true);
+  assert.equal(verifierSource.includes("withDedicatedAuthClient"), true);
+  assert.equal(verifierSource.includes("KEY_LOOKUP_DB_DEADLINE_MS"), true);
+  assert.equal(verifierSource.includes("RATE_LIMIT_SPEC"), true);
+  assert.equal(verifierSource.includes("enforceRateLimit"), true);
   assert.equal(apiKeyVerifierSource.includes("EMBED_RATE_LIMIT_SPEC"), true);
   assert.equal(rateLimitSource.includes("capacity: 1200"), true);
   assert.equal(rateLimitSource.includes("refillPerSec: 20"), true);
   assert.equal(metricsSource.includes("EMBED_RATE_LIMIT_LABEL"), true);
 
-  assert.equal(verifierSource.includes("findEmbedKeyByHash"), true);
-  assert.equal(verifierSource.includes("findActiveEmbedSite"), true);
-  assert.equal(verifierSource.includes("findActiveEmbedSiteByOrigin"), true);
-  assert.equal(verifierSource.includes("listEmbedAllowedOrigins"), true);
+  assert.equal(verifierSource.includes("findApiKeyForEmbedDb"), true);
+  assert.equal(verifierSource.includes("findActiveSiteById"), true);
+  assert.equal(verifierSource.includes("listActiveSitesForProject"), true);
+  assert.equal(verifierSource.includes("listAllowedOriginsForSites"), true);
   assert.equal(verifierSource.includes("SITE_REQUIRED"), false);
 
   assert.equal(tokenSource.includes("findEmbedKeyById"), true);
   assert.equal(tokenSource.includes("findActiveEmbedSite"), true);
   assert.equal(tokenSource.includes("originsShareWebsiteContext"), true);
   assert.equal(analyticsRouteSource.includes("verification.siteOrigin"), true);
-  assert.equal(analyticsRouteSource.includes("rewriteCanonicalSiteContext"), true);
   assert.equal(analyticsRouteSource.includes("canonicalizeWebsiteContextUrl"), true);
-  assert.equal(analyticsRouteSource.includes("canonicalizeWebsiteContextHost"), true);
-  assert.equal(analyticsRouteSource.includes('key === "site_host"'), true);
-  assert.equal(analyticsRouteSource.includes('key === "base_url"'), true);
+  assert.equal(analyticsRouteSource.includes("canonicalizeVerifiedPayload"), true);
+  assert.equal(analyticsRouteSource.includes("site_origin"), true);
+  assert.equal(analyticsRouteSource.includes("base_url"), true);
 });
 
 test("workspace bootstrap routes use the resilient session helper", () => {

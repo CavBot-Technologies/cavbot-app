@@ -18,7 +18,7 @@ const NO_STORE_HEADERS: Record<string, string> = {
   Expires: "0",
 };
 const UPSTREAM_TIMEOUT_MS = 8_000;
-const EMBED_ANALYTICS_TIMEOUT_MS = 30_000;
+const EMBED_ANALYTICS_TIMEOUT_MS = 75_000;
 const EMBED_ANALYTICS_DEADLINE = Symbol("EMBED_ANALYTICS_DEADLINE");
 const FIRST_PARTY_WORKER_PROJECT_KEY = "cavbot_pk_gHn737DTf4afJ2xGpBFzZQ";
 
@@ -430,7 +430,12 @@ function getSiteIdFromPayload(payload: Record<string, unknown> | null, req: Next
     payload?.site && typeof payload.site === "object"
       ? String((payload.site as Record<string, unknown>).site_public_id ?? "")
       : "";
-  const fallback = String(payload?.site_id ?? payload?.siteId ?? payload?.site ?? "");
+  const fallback = String(
+    payload?.site_id ??
+      payload?.siteId ??
+      (typeof payload?.site === "string" ? payload.site : "") ??
+      ""
+  );
   const trimmed = (objectSite || fallback).trim();
   const headerSite =
     req.headers.get("x-cavbot-site") ||

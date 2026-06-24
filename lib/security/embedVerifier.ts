@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { hashApiKey } from "@/lib/apiKeys.server";
-import { getAuthPool } from "@/lib/authDb";
+import { withDedicatedAuthClient } from "@/lib/authDb";
 import { AllowedOriginRow, originAllowed, normalizeOriginStrict } from "@/originMatch";
 import { enforceRateLimit, type RateLimitEnv } from "@/rateLimit";
 import { recordEmbedMetric, trackDeniedOrigin } from "@/lib/security/embedMetrics.server";
@@ -41,6 +41,10 @@ function pickFirstValue(...candidates: Array<string | null | undefined>) {
     }
   }
   return null;
+}
+
+function stringBodyValue(value: unknown) {
+  return typeof value === "string" ? value : undefined;
 }
 
 function inferRequestOrigin(req: Request) {
@@ -154,7 +158,7 @@ type EmbedApiKeyRecord = {
   } | null;
 };
 
-const KEY_LOOKUP_DB_DEADLINE_MS = 8_000;
+const KEY_LOOKUP_DB_DEADLINE_MS = 35_000;
 const FIRST_PARTY_CAVBOT_PROJECT_KEYS = [
   "cavbot_pk_gHn737DTf4afJ2xGpBFzZQ",
   process.env.NEXT_PUBLIC_CAVBOT_PROJECT_KEY,
@@ -247,14 +251,22 @@ async function findApiKeyForEmbed(keyHash: string): Promise<EmbedApiKeyRecord | 
   }
 
   try {
+    let timedOut = false;
     const record = await Promise.race([
       findApiKeyForEmbedDb(keyHash),
       new Promise<null>((resolve) => {
-        setTimeout(() => resolve(null), KEY_LOOKUP_DB_DEADLINE_MS);
+        setTimeout(() => {
+          timedOut = true;
+          resolve(null);
+        }, KEY_LOOKUP_DB_DEADLINE_MS);
       }),
     ]);
     if (record) return record;
-    console.warn("[embedVerifier] key lookup timed out or returned empty");
+    console.warn(
+      timedOut
+        ? "[embedVerifier] key lookup timed out"
+        : "[embedVerifier] key lookup returned empty",
+    );
   } catch (error) {
     console.error("[embedVerifier] key lookup failed", error);
   }
@@ -310,13 +322,13 @@ async function listAllowedOriginsForSites(siteIds: string[]) {
   const bySite = new Map<string, AllowedOriginRow[]>();
   if (!ids.length) return bySite;
 
-  const result = await getAuthPool().query<RawAllowedOriginEmbedRow>(
+  const result = await withDedicatedAuthClient((authClient) => authClient.query<RawAllowedOriginEmbedRow>(
     `SELECT "siteId", "origin", "matchType"
      FROM "SiteAllowedOrigin"
      WHERE "siteId" = ANY($1::text[])
      ORDER BY "createdAt" ASC`,
     [ids],
-  );
+  ));
 
   for (const row of result.rows) {
     const siteId = String(row.siteId || "").trim();
@@ -331,7 +343,7 @@ async function listAllowedOriginsForSites(siteIds: string[]) {
 }
 
 async function findActiveSiteById(projectId: number, siteId: string): Promise<EmbedSiteCandidate | null> {
-  const result = await getAuthPool().query<RawSiteEmbedRow>(
+  const result = await withDedicatedAuthClient((authClient) => authClient.query<RawSiteEmbedRow>(
     `SELECT "id", "origin", "projectId", "isActive"
      FROM "Site"
      WHERE "id" = $1
@@ -339,7 +351,7 @@ async function findActiveSiteById(projectId: number, siteId: string): Promise<Em
        AND "isActive" = TRUE
      LIMIT 1`,
     [siteId, projectId],
-  );
+  ));
 
   const row = result.rows[0];
   if (!row) return null;
@@ -352,7 +364,7 @@ async function findActiveSiteById(projectId: number, siteId: string): Promise<Em
 }
 
 async function listActiveSitesForProject(projectId: number): Promise<EmbedSiteCandidate[]> {
-  const result = await getAuthPool().query<RawSiteEmbedRow>(
+  const result = await withDedicatedAuthClient((authClient) => authClient.query<RawSiteEmbedRow>(
     `SELECT "id", "origin", "projectId", "isActive"
      FROM "Site"
      WHERE "projectId" = $1
@@ -360,7 +372,7 @@ async function listActiveSitesForProject(projectId: number): Promise<EmbedSiteCa
      ORDER BY "createdAt" ASC
      LIMIT 200`,
     [projectId],
-  );
+  ));
 
   const allowedOrigins = await listAllowedOriginsForSites(result.rows.map((row) => String(row.id || "").trim()));
   return result.rows
@@ -376,7 +388,7 @@ async function listActiveSitesForProject(projectId: number): Promise<EmbedSiteCa
 }
 
 async function findApiKeyForEmbedDb(keyHash: string): Promise<EmbedApiKeyRecord | null> {
-  const result = await getAuthPool().query<RawApiKeyEmbedRow>(
+  const result = await withDedicatedAuthClient((authClient) => authClient.query<RawApiKeyEmbedRow>(
     `SELECT
        k."id",
        k."accountId",
@@ -398,7 +410,7 @@ async function findApiKeyForEmbedDb(keyHash: string): Promise<EmbedApiKeyRecord 
      ORDER BY k."createdAt" DESC
      LIMIT 1`,
     [keyHash],
-  );
+  ));
 
   const row = result.rows[0];
   if (!row) return null;
@@ -471,9 +483,9 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
     req.headers.get("X-Cavbot-Site"),
     req.headers.get("X-Cavbot-Site-Public-Id"),
     url.searchParams.get("site"),
-    body?.site as string | undefined,
-    body?.siteId as string | undefined,
-    body?.site_id as string | undefined,
+    stringBodyValue(body?.site),
+    stringBodyValue(body?.siteId),
+    stringBodyValue(body?.site_id),
     siteCandidate
   );
 
