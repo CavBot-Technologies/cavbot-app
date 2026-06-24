@@ -2,18 +2,11 @@
 import { NextResponse } from "next/server";
 import { revalidateTag, unstable_noStore as noStore } from "next/cache";
 
-import type { AuditAction } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
 import { isBasicUsername, isReservedUsername, isValidUsername, normalizeUsername } from "@/lib/username";
 import { findPublicProfileUserById, findUserById, getAuthPool, withDedicatedAuthClient } from "@/lib/authDb";
 import { isApiAuthError, requireSession, requireUser } from "@/lib/apiAuth";
 import { readAuthSessionView } from "@/lib/authSessionView.server";
-import {
-  buildAutoWorkspaceSlugCandidates,
-  buildPersonalWorkspaceName,
-  buildPreferredPersonalWorkspaceSlug,
-  normalizeCavbotFounderProfile,
-} from "@/lib/profileIdentity";
+import { normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 import { auditLogWrite } from "@/lib/audit";
 import {
   readPublicProfileSettingsFallback,
@@ -41,76 +34,11 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const ALLOW_EMAIL_CHANGE = true;
-const SETTINGS_ACCOUNT_PROFILE_TIMEOUT_MS = 1_800;
+const SETTINGS_ACCOUNT_PROFILE_TIMEOUT_MS = 8_000;
 
 type ToneKey = "lime" | "violet" | "blue" | "white" | "navy" | "transparent";
+type AccountAuditAction = "USERNAME_CHANGED" | "EMAIL_CHANGED" | "PROFILE_UPDATED";
 const MAX_CUSTOM_LINKS = 6;
-
-const BASE_PROFILE_SELECT = {
-  email: true,
-  username: true,
-  displayName: true,
-  fullName: true,
-  bio: true,
-  country: true,
-  region: true,
-  timeZone: true,
-  avatarTone: true,
-  avatarImage: true,
-} as const;
-
-type ExtraProfileColumn =
-  | "companyName"
-  | "companyCategory"
-  | "companySubcategory"
-  | "githubUrl"
-  | "instagramUrl"
-  | "linkedinUrl"
-  | "customLinkUrl"
-  | "showCavbotProfileLink"
-  | "showStatusOnPublicProfile"
-  | "userStatus"
-  | "userStatusNote"
-  | "userStatusUpdatedAt"
-  | "publicProfileEnabled"
-  | "publicShowReadme"
-  | "publicShowWorkspaceSnapshot"
-  | "publicShowHealthOverview"
-  | "publicShowCapabilities"
-  | "publicShowArtifacts"
-  | "publicShowPlanTier"
-  | "publicShowBio"
-  | "publicShowIdentityLinks"
-  | "publicShowIdentityLocation"
-  | "publicShowIdentityEmail"
-  | "publicWorkspaceId";
-
-const EXTRA_PROFILE_COLUMNS: ExtraProfileColumn[] = [
-  "companyName",
-  "companyCategory",
-  "companySubcategory",
-  "githubUrl",
-  "instagramUrl",
-  "linkedinUrl",
-  "customLinkUrl",
-  "showCavbotProfileLink",
-  "showStatusOnPublicProfile",
-  "userStatus",
-  "userStatusNote",
-  "userStatusUpdatedAt",
-  "publicProfileEnabled",
-  "publicShowReadme",
-  "publicShowWorkspaceSnapshot",
-  "publicShowHealthOverview",
-  "publicShowCapabilities",
-  "publicShowArtifacts",
-  "publicShowPlanTier",
-  "publicShowBio",
-  "publicShowIdentityLinks",
-  "publicShowIdentityLocation",
-  "publicShowIdentityEmail",
-  "publicWorkspaceId",
-];
 
 const PROFILE_COLUMNS_CACHE_TTL = process.env.NODE_ENV === "production" ? 60_000 : 2_000;
 
@@ -140,15 +68,28 @@ async function getAvailableProfileColumns() {
   }
 }
 
-async function buildProfileSelect() {
-  const columns = await getAvailableProfileColumns();
-  const select: Record<string, boolean> = { ...BASE_PROFILE_SELECT };
-  EXTRA_PROFILE_COLUMNS.forEach((column) => {
-    if (columns.has(column)) {
-      select[column] = true;
+function sqlFromTemplate(query: TemplateStringsArray, params: unknown[]) {
+  let text = "";
+  query.forEach((part, index) => {
+    text += part;
+    if (index < params.length) {
+      text += `$${index + 1}`;
     }
   });
-  return select;
+  return text;
+}
+
+function authRawDb(): RawDb {
+  return {
+    async $executeRawUnsafe(sql: string) {
+      return getAuthPool().query(sql);
+    },
+    async $queryRaw<T = unknown>(query: TemplateStringsArray, ...params: unknown[]) {
+      const text = sqlFromTemplate(query, params);
+      const result = await getAuthPool().query(text, params);
+      return result.rows as T;
+    },
+  };
 }
 
 async function readSettingsAccountProfile(userId: string) {
@@ -301,50 +242,6 @@ function cleanTone(v: unknown): ToneKey | null {
   const s = String(v ?? "").trim().toLowerCase();
   const allowed: ToneKey[] = ["lime", "violet", "blue", "white", "navy", "transparent"];
   return (allowed as string[]).includes(s) ? (s as ToneKey) : null;
-}
-
-function buildAutoWorkspaceNameCandidates(input: {
-  email?: unknown;
-  username?: unknown;
-  displayName?: unknown;
-  fullName?: unknown;
-}) {
-  const values = new Set<string>();
-  const emailLocal = String(input.email ?? "")
-    .trim()
-    .toLowerCase()
-    .split("@")[0]
-    ?.trim();
-
-  const push = (value: unknown) => {
-    const normalized = String(value ?? "").trim();
-    if (!normalized) return;
-    values.add(buildPersonalWorkspaceName(normalized));
-  };
-
-  push(input.displayName);
-  push(input.fullName);
-  push(input.username);
-  push(emailLocal);
-  return values;
-}
-
-async function findAvailablePersonalAccountSlug(requested: string, excludeAccountIds: string[] = []) {
-  let slug = requested;
-
-  for (let i = 0; i < 10; i++) {
-    const exists = await prisma.account.findFirst({
-      where: {
-        slug,
-        ...(excludeAccountIds.length ? { id: { notIn: excludeAccountIds } } : {}),
-      },
-      select: { id: true },
-    });
-    if (!exists) return slug;
-    slug = `${requested}-${Math.random().toString(16).slice(2, 8)}`;
-  }
-
-  return `${requested}-${Math.random().toString(16).slice(2, 10)}`;
 }
 
 function normalizeHttpUrl(raw: string): string | null {
@@ -530,10 +427,7 @@ export async function GET(req: Request) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: info.userId },
-      select: await buildProfileSelect(),
-    });
+    const user = await withSettingsProfileDeadline(readSettingsAccountProfile(info.userId));
 
     if (!user) {
       return jsonNoStore({ ok: false, message: "User not found" }, { status: 404 });
@@ -541,7 +435,8 @@ export async function GET(req: Request) {
 
     // If DB columns don't exist yet (dev bootstrap), persist/read from fallback store.
     const columns = await getAvailableProfileColumns();
-    const customLinkUrlFallback = await readCustomLinkUrlFallback(prisma as unknown as RawDb, info.userId);
+    const rawDb = authRawDb();
+    const customLinkUrlFallback = await readCustomLinkUrlFallback(rawDb, info.userId);
     const userCustom = (() => {
       const raw = (user as unknown as Record<string, unknown>)["customLinkUrl"];
       const s = typeof raw === "string" ? raw.trim() : "";
@@ -564,7 +459,7 @@ export async function GET(req: Request) {
       columns.has("publicWorkspaceId");
 
     if (!hasPublicColumns) {
-      const settings = await readPublicProfileSettingsFallback(prisma as unknown as RawDb, info.userId);
+      const settings = await readPublicProfileSettingsFallback(rawDb, info.userId);
       return jsonNoStore(
         {
           ok: true,
@@ -640,8 +535,9 @@ export async function PATCH(req: Request) {
 
     const { userId, session } = info;
 
-    const availableColumns = await getAvailableProfileColumns();
-    const existingProfile = await readSettingsAccountProfile(userId);
+    const [availableColumns, existingProfile] = await withSettingsProfileDeadline(
+      Promise.all([getAvailableProfileColumns(), readSettingsAccountProfile(userId)]),
+    );
     if (!existingProfile) {
       return jsonNoStore({ ok: false, message: "User not found" }, { status: 404 });
     }
@@ -861,85 +757,10 @@ export async function PATCH(req: Request) {
       availableColumns.has("publicShowIdentityEmail") &&
       availableColumns.has("publicWorkspaceId");
 
-    const updated = await updateSettingsAccountProfile(userId, profileUpdatePayload);
-
-    try {
-      const renameableOwnerMemberships = await prisma.membership.findMany({
-        where: { userId, role: "OWNER" },
-        select: {
-          accountId: true,
-          account: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              _count: { select: { members: true } },
-            },
-          },
-        },
-      });
-
-      if (fullName) {
-        const oldWorkspaceNames = buildAutoWorkspaceNameCandidates({
-          email: existingProfile.email,
-          username: existingProfile.username,
-          displayName: (existingProfile as Record<string, unknown>).displayName,
-          fullName: existingProfile.fullName,
-        });
-        const nextWorkspaceName = buildPersonalWorkspaceName(fullName);
-        if (!oldWorkspaceNames.has(nextWorkspaceName)) {
-          const renameableAccountIds = renameableOwnerMemberships
-            .filter((membership) => {
-              const accountName = String(membership.account.name || "").trim();
-              return accountName && oldWorkspaceNames.has(accountName) && membership.account._count.members <= 1;
-            })
-            .map((membership) => membership.account.id);
-
-          if (renameableAccountIds.length > 0) {
-            await prisma.account.updateMany({
-              where: { id: { in: renameableAccountIds } },
-              data: { name: nextWorkspaceName },
-            });
-          }
-        }
-      }
-
-      if (hasUsernamePatch && username) {
-        const oldWorkspaceSlugs = buildAutoWorkspaceSlugCandidates({
-          email: existingProfile.email,
-          username: existingProfile.username,
-          displayName: (existingProfile as Record<string, unknown>).displayName,
-          fullName: existingProfile.fullName,
-        });
-        const slugRenameCandidates = renameableOwnerMemberships.filter((membership) => {
-          const accountSlug = String(membership.account.slug || "").trim().toLowerCase();
-          return accountSlug && oldWorkspaceSlugs.has(accountSlug) && membership.account._count.members <= 1;
-        });
-
-        if (slugRenameCandidates.length > 0) {
-          const desiredSlug = buildPreferredPersonalWorkspaceSlug({
-            username,
-            email: normalizedEmail || existingProfile.email,
-            displayName: fullName || (existingProfile as Record<string, unknown>).displayName,
-            fullName: fullName || existingProfile.fullName,
-          });
-
-          for (const membership of slugRenameCandidates) {
-            const currentSlug = String(membership.account.slug || "").trim().toLowerCase();
-            if (currentSlug === desiredSlug) continue;
-            const nextSlug = await findAvailablePersonalAccountSlug(desiredSlug, [membership.account.id]);
-            await prisma.account.update({
-              where: { id: membership.account.id },
-              data: { slug: nextSlug },
-            });
-          }
-        }
-      }
-    } catch (renameError) {
-      console.warn("PATCH /api/settings/account workspace sync skipped:", renameError);
-    }
+    const updated = await withSettingsProfileDeadline(updateSettingsAccountProfile(userId, profileUpdatePayload));
 
     let updatedForResponse = updated as unknown as Record<string, unknown>;
+    const rawDb = authRawDb();
     if (!hasPublicColumns) {
       const patch: Partial<PublicProfileSettings> = {};
       if (publicProfileEnabled !== null) patch.publicProfileEnabled = publicProfileEnabled;
@@ -956,7 +777,7 @@ export async function PATCH(req: Request) {
       if (publicWorkspaceIdRaw != null) patch.publicWorkspaceId = publicWorkspaceId;
 
       try {
-        const settings = await writePublicProfileSettingsFallback(prisma as unknown as RawDb, userId, patch);
+        const settings = await writePublicProfileSettingsFallback(rawDb, userId, patch);
         updatedForResponse = { ...updatedForResponse, ...settings };
       } catch (fallbackError) {
         console.warn("PATCH /api/settings/account public profile fallback skipped:", fallbackError);
@@ -965,8 +786,10 @@ export async function PATCH(req: Request) {
 
     // Persist in dev fallback table so the value survives reloads even if migrations/columns lag.
     try {
-      const v = await writeCustomLinkUrlFallback(prisma as unknown as RawDb, userId, customLinkUrl);
-      updatedForResponse = { ...updatedForResponse, customLinkUrl: v };
+      const v = await writeCustomLinkUrlFallback(rawDb, userId, customLinkUrl);
+      if (!availableColumns.has("customLinkUrl")) {
+        updatedForResponse = { ...updatedForResponse, customLinkUrl: v };
+      }
     } catch (fallbackError) {
       console.warn("PATCH /api/settings/account custom link fallback skipped:", fallbackError);
     }
@@ -1014,7 +837,7 @@ export async function PATCH(req: Request) {
       return before !== after;
     });
 
-    let logAction: AuditAction | null = null;
+    let logAction: AccountAuditAction | null = null;
     let logMeta: Record<string, unknown> | null = null;
 
     if (usernameChanged) {

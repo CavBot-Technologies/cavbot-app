@@ -843,39 +843,6 @@ export default function AccountOverviewClient() {
 
         if (!res.ok || !data?.ok) {
           setErr(data?.message || "Failed to load profile.");
-
-          const baseline: ProfileDTO = {
-            email: "",
-            username: "",
-            fullName: "",
-            bio: "",
-            country: "",
-            region: "",
-            timeZone: "America/Los_Angeles",
-            avatarTone: "lime",
-            avatarImage: "",
-            companyName: "",
-            companyCategory: "",
-            companySubcategory: "",
-            githubUrl: "",
-            instagramUrl: "",
-            linkedinUrl: "",
-            customLinkUrl: "",
-            publicProfileEnabled: true,
-            publicShowReadme: true,
-            publicShowWorkspaceSnapshot: true,
-            publicShowHealthOverview: true,
-            publicShowCapabilities: true,
-            publicShowArtifacts: true,
-            publicShowPlanTier: true,
-            publicShowBio: true,
-            publicShowIdentityLinks: true,
-            publicShowIdentityLocation: true,
-            publicShowIdentityEmail: false,
-            publicWorkspaceId: null,
-          };
-
-          setSnapshot(baseline);
           setLoading(false);
           return;
         }
