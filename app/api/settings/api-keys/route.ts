@@ -18,6 +18,7 @@ import {
   createApiKeyRecord,
   findSiteForAccount,
   findSiteForProject,
+  findSiteForUser,
   listActiveSitesForAccount,
   listActiveSitesForUser,
   listApiKeysForProject,
@@ -432,7 +433,17 @@ export async function POST(req: NextRequest) {
           }),
           "API_KEYS_CREATE_SITE_ACCOUNT_LOOKUP",
           8_000,
-        ).catch(() => null));
+        ).catch(() => null)) ??
+        (session.sub
+          ? await withApiKeysDeadline(
+              findSiteForUser({
+                siteId: bodySiteId,
+                userId: session.sub,
+              }),
+              "API_KEYS_CREATE_SITE_USER_LOOKUP",
+              8_000,
+            ).catch(() => null)
+          : null);
       if (!site) return json({ ok: false, error: "SITE_NOT_FOUND" }, 404);
       siteId = site.id;
       projectId = site.projectId;

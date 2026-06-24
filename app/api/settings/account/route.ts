@@ -4,7 +4,7 @@ import { revalidateTag, unstable_noStore as noStore } from "next/cache";
 
 import { isBasicUsername, isReservedUsername, isValidUsername, normalizeUsername } from "@/lib/username";
 import { findPublicProfileUserById, findUserById, getAuthPool, withDedicatedAuthClient } from "@/lib/authDb";
-import { isApiAuthError, requireSession, requireUser } from "@/lib/apiAuth";
+import { isApiAuthError, requireLowRiskWriteSession, requireSession, requireUser } from "@/lib/apiAuth";
 import { readAuthSessionView } from "@/lib/authSessionView.server";
 import { normalizeCavbotFounderProfile } from "@/lib/profileIdentity";
 import { auditLogWrite } from "@/lib/audit";
@@ -398,7 +398,12 @@ async function requireAuthenticatedProfileSession(req: Request): Promise<{
   session: Awaited<ReturnType<typeof requireSession>>;
   userId: string;
 }> {
-  const session = await requireSession(req);
+  const session = await requireSession(req).catch(async (error: unknown) => {
+    if (isApiAuthError(error) && error.code === "AUTH_BACKEND_UNAVAILABLE") {
+      return requireLowRiskWriteSession(req);
+    }
+    throw error;
+  });
   requireUser(session);
   const userId = String(session.sub || "").trim();
   if (!userId) {

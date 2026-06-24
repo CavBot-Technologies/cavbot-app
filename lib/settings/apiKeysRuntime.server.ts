@@ -174,6 +174,35 @@ export async function findSiteForAccount(args: {
   };
 }
 
+export async function findSiteForUser(args: {
+  siteId: string;
+  userId: string;
+}) {
+  const result = await getAuthPool().query<RawApiKeySiteRow>(
+    `SELECT s."id", s."origin", s."projectId"
+     FROM "Site" s
+     INNER JOIN "Project" p
+       ON p."id" = s."projectId"
+     INNER JOIN "Membership" m
+       ON m."accountId" = p."accountId"
+     WHERE s."id" = $1
+       AND s."isActive" = TRUE
+       AND p."isActive" = TRUE
+       AND m."userId" = $2
+       AND m."role" = 'OWNER'::"MembershipRole"
+     LIMIT 1`,
+    [args.siteId, args.userId],
+  );
+
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    id: String(row.id || "").trim(),
+    origin: String(row.origin || "").trim(),
+    projectId: asNumber(row.projectId),
+  };
+}
+
 export async function listActiveSitesForAccount(accountId: string) {
   const result = await getAuthPool().query<RawAccountSiteRow>(
     `SELECT s."id", s."origin", s."projectId"
