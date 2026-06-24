@@ -181,6 +181,17 @@ function safeSerializeKeyList(
 ) {
   return keys
     .filter((key) => key.type === type)
+    .sort((a, b) => {
+      const activeRank = Number(b.status === "ACTIVE") - Number(a.status === "ACTIVE");
+      if (activeRank) return activeRank;
+
+      const webPrefixRank = Number(b.prefix === "cavbot_pk_web") - Number(a.prefix === "cavbot_pk_web");
+      if (webPrefixRank) return webPrefixRank;
+
+      const aTime = new Date(a.createdAt).getTime();
+      const bTime = new Date(b.createdAt).getTime();
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+    })
     .flatMap((key) => {
       try {
         return [serializeApiKey(key, { includeValue: includeActiveValue && key.status === "ACTIVE" })];

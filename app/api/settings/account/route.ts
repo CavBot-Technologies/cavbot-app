@@ -673,21 +673,27 @@ export async function PATCH(req: Request) {
       );
     }
 
-    if (email) {
-      const emailNorm = email.toLowerCase().trim();
+    const existingEmail = (existingProfile as unknown as Record<string, unknown>)["email"] ?? null;
+    const oldEmail = existingEmail ? String(existingEmail).toLowerCase().trim() : null;
+    const normalizedEmail = email ? email.toLowerCase().trim() : null;
+    const emailChanged = Boolean(normalizedEmail && normalizedEmail !== oldEmail);
 
-      if (await profileValueExists("email", emailNorm, userId)) {
+    if (emailChanged && normalizedEmail) {
+      if (await withSettingsProfileDeadline(profileValueExists("email", normalizedEmail, userId))) {
         return jsonNoStore({ ok: false, message: "Email already in use" }, { status: 409 });
       }
     }
 
-      if (hasUsernamePatch && username) {
-      if (await profileValueExists("username", username, userId)) {
+    const existingUsername = (existingProfile as unknown as Record<string, unknown>)["username"] ?? null;
+    const existingUsernameNorm = existingUsername != null ? normalizeUsername(String(existingUsername)) : "";
+    const usernameChanged = hasUsernamePatch && Boolean(username) && username !== existingUsernameNorm;
+
+    if (usernameChanged && username) {
+      if (await withSettingsProfileDeadline(profileValueExists("username", username, userId))) {
         return jsonNoStore({ ok: false, message: "Username already in use" }, { status: 409 });
       }
     }
 
-    const normalizedEmail = email ? email.toLowerCase().trim() : null;
     const profileUpdatePayload: Record<string, unknown> = {
       fullName,
       displayName: fullName,
@@ -827,14 +833,6 @@ export async function PATCH(req: Request) {
 
     const previousSnapshot = existingProfile as Record<string, unknown>;
     const updatedSnapshot = profileUpdatePayload as Record<string, unknown>;
-
-    const existingUsername = (existingProfile as unknown as Record<string, unknown>)["username"] ?? null;
-    const existingUsernameNorm = existingUsername != null ? normalizeUsername(String(existingUsername)) : "";
-    const usernameChanged = hasUsernamePatch && Boolean(username) && username !== existingUsernameNorm;
-
-    const existingEmail = (existingProfile as unknown as Record<string, unknown>)["email"] ?? null;
-    const oldEmail = existingEmail ? String(existingEmail).toLowerCase().trim() : null;
-    const emailChanged = normalizedEmail && normalizedEmail !== oldEmail;
 
     const changedProfileFields = trackedFields.filter((field) => {
       const before = previousSnapshot[field];
