@@ -3,14 +3,14 @@ import "server-only";
 import { createHash } from "crypto";
 import type { NextRequest } from "next/server";
 import { getLatestPackWithHistory } from "@/lib/cavai/packs.server";
-import { newDbId, withAuthTransaction } from "@/lib/authDb";
+import { newDbId, withDedicatedAuthTransaction } from "@/lib/authDb";
 import { requestInitialSiteScanBestEffort } from "@/lib/scanner";
 import { payloadContainsWarmTelemetry, recordWebVitalsSamplesBestEffort } from "@/lib/webVitals.server";
 import { markWorkspaceSiteVerified } from "@/lib/workspaceSites.server";
 
 const DEDUPE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const REACTIVATION_WINDOW_MS = 30 * DEDUPE_WINDOW_MS;
-const BEST_EFFORT_TIMEOUT_MS = 6_000;
+const BEST_EFFORT_TIMEOUT_MS = 25_000;
 
 type Queryable = {
   query: <T = unknown>(text: string, values?: unknown[]) => Promise<{ rows: T[] }>;
@@ -166,7 +166,7 @@ async function recordAnalyticsEmbedActivity(args: {
   const appEnv = trimOrNull(args.req.headers.get("x-cavbot-env"), 64);
   const dedupeKey = `analytics:${args.siteId}:${args.origin}`;
 
-  await withAuthTransaction(async (tx) => {
+  await withDedicatedAuthTransaction(async (tx) => {
     const existingInstall = await queryOne<RawInstallRow>(
       tx,
       `SELECT "id", "lastSeenAt", "lastNotifiedAt"

@@ -424,6 +424,26 @@ export async function withDedicatedAuthClient<T>(fn: (client: pg.Client) => Prom
   }
 }
 
+export async function withDedicatedAuthTransaction<T>(fn: (client: pg.Client) => Promise<T>) {
+  const client = createDedicatedAuthClient(databaseUrl());
+  await client.connect();
+  try {
+    await client.query("BEGIN");
+    try {
+      const result = await fn(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    }
+  } finally {
+    await client.end().catch((error) => {
+      console.error("[authDb] dedicated transaction close failed", error);
+    });
+  }
+}
+
 async function queryOne<T extends pg.QueryResultRow>(queryable: Queryable, text: string, values: unknown[] = []) {
   const result = await queryable.query<T>(text, values);
   return result.rows[0] ?? null;

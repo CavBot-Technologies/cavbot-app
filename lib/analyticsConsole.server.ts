@@ -7,7 +7,7 @@ import {
   requireAccountContext,
   type CavbotAccountSession,
 } from "@/lib/apiAuth";
-import { getAuthPool } from "@/lib/authDb";
+import { withDedicatedAuthClient } from "@/lib/authDb";
 import {
   CavBotApiError,
   getProjectSummaryForTenant,
@@ -323,43 +323,43 @@ async function findAnalyticsProject(args: {
   `;
 
   if (args.requestedProjectId) {
-    const result = await getAuthPool().query<RawAnalyticsProjectRow>(
+    const result = await withDedicatedAuthClient((client) => client.query<RawAnalyticsProjectRow>(
       `${baseSql}
        AND "id" = $2
        LIMIT 1`,
       [args.accountId, args.requestedProjectId],
-    );
+    ));
     return mapAnalyticsProject(result.rows[0]);
   }
 
   if (args.requestedProjectSlug) {
-    const result = await getAuthPool().query<RawAnalyticsProjectRow>(
+    const result = await withDedicatedAuthClient((client) => client.query<RawAnalyticsProjectRow>(
       `${baseSql}
        AND "slug" = $2
        LIMIT 1`,
       [args.accountId, args.requestedProjectSlug],
-    );
+    ));
     return mapAnalyticsProject(result.rows[0]);
   }
 
-  const result = await getAuthPool().query<RawAnalyticsProjectRow>(
+  const result = await withDedicatedAuthClient((client) => client.query<RawAnalyticsProjectRow>(
     `${baseSql}
      ORDER BY "createdAt" ASC
      LIMIT 1`,
     [args.accountId],
-  );
+  ));
   return mapAnalyticsProject(result.rows[0]);
 }
 
 async function listAnalyticsSites(projectId: number) {
-  const result = await getAuthPool().query<RawAnalyticsSiteRow>(
+  const result = await withDedicatedAuthClient((client) => client.query<RawAnalyticsSiteRow>(
     `SELECT "id", "label", "origin"
      FROM "Site"
      WHERE "projectId" = $1
        AND "isActive" = TRUE
      ORDER BY "createdAt" ASC`,
     [projectId],
-  );
+  ));
 
   return result.rows.map((row) => ({
     id: String(row.id || "").trim(),
@@ -368,17 +368,21 @@ async function listAnalyticsSites(projectId: number) {
   }));
 }
 
-async function listLocalAnalyticsEvents(siteId: string, since: Date) {
-  const result = await getAuthPool().query<RawAnalyticsEventRow>(
+async function listLocalAnalyticsEvents(siteId: string, since: Date, siteOrigin: string) {
+  const result = await withDedicatedAuthClient((client) => client.query<RawAnalyticsEventRow>(
     `SELECT "createdAt", "type", "message", "meta"
      FROM "SiteEvent"
      WHERE "siteId" = $1
        AND "type" = 'ANALYTICS_EVENT'
        AND "createdAt" >= $2
+       AND (
+         $3::text = ''
+         OR COALESCE(NULLIF("meta"->>'siteOrigin', ''), NULLIF("meta"->>'origin', ''), $3::text) = $3::text
+       )
      ORDER BY "createdAt" ASC
      LIMIT 5000`,
-    [siteId, since],
-  );
+    [siteId, since, siteOrigin],
+  ));
 
   return result.rows.map((row) => ({
     createdAt: toDate(row.createdAt),
@@ -482,7 +486,7 @@ async function readLocalProjectSummaryFallback(args: {
   const days = rangeDays(args.range);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const rows = await listLocalAnalyticsEvents(args.activeSite.id, since);
+  const rows = await listLocalAnalyticsEvents(args.activeSite.id, since, args.activeSite.origin);
 
   if (!rows.length) return base;
 
@@ -576,6 +580,37 @@ async function readLocalProjectSummaryFallback(args: {
           views404: v,
         })),
       },
+    },
+  };
+}
+
+function localSummaryHasEvents(summary: ProjectSummary | null) {
+  const metrics = summary?.metrics || {};
+  const pageViews = toNumber(metrics.pageViews24h);
+  const sessions = toNumber(metrics.sessions30d);
+  const routes = Array.isArray(metrics.topRoutes) ? metrics.topRoutes.length : 0;
+  return pageViews > 0 || sessions > 0 || routes > 0;
+}
+
+function preferFreshLocalSummary(
+  remoteSummary: ProjectSummary | null,
+  localSummary: ProjectSummary,
+): ProjectSummary {
+  if (!remoteSummary) return localSummary;
+
+  return {
+    ...remoteSummary,
+    sites: localSummary.sites?.length ? localSummary.sites : remoteSummary.sites,
+    activeSite: localSummary.activeSite || remoteSummary.activeSite,
+    metrics: {
+      ...(remoteSummary.metrics || {}),
+      ...(localSummary.metrics || {}),
+    },
+    snapshot: localSummary.snapshot || remoteSummary.snapshot,
+    diagnostics: {
+      ...(typeof remoteSummary.diagnostics === "object" && remoteSummary.diagnostics ? remoteSummary.diagnostics : {}),
+      freshLocalEvents: true,
+      localReason: "LOCAL_ANALYTICS_DB",
     },
   };
 }
@@ -761,6 +796,7 @@ export async function resolveAnalyticsConsoleContext(args?: {
 
   let summary: ProjectSummary | null = null;
   let summaryError: unknown = null;
+  let loadedLocalFallback = false;
 
   if (args?.loadSummary !== false) {
     try {
@@ -791,9 +827,31 @@ export async function resolveAnalyticsConsoleContext(args?: {
       });
       if (!isFatalSummaryError(error)) {
         summaryError = null;
+        loadedLocalFallback = true;
         summary = await readLocalProjectSummaryFallback({ project, range, sites, activeSite }).catch(() =>
           emptyProjectSummary({ project, range, sites, activeSite }),
         );
+      }
+    }
+
+    if (!loadedLocalFallback && !summaryError) {
+      const localSummary = await withConsoleDeadline(
+        readLocalProjectSummaryFallback({ project, range, sites, activeSite }),
+        "LOCAL_SUMMARY_READ",
+        12_000,
+      ).catch((error) => {
+        safeLog("local_summary_failed", {
+          requestId: rid,
+          accountId: session.accountId,
+          projectId: project.id,
+          siteId: activeSite.id || null,
+          code: publicAnalyticsError(error),
+        });
+        return null;
+      });
+
+      if (localSummaryHasEvents(localSummary)) {
+        summary = preferFreshLocalSummary(summary, localSummary!);
       }
     }
   }

@@ -35,6 +35,8 @@ test("embed analytics route records local activity after successful upstream del
   assert.equal(helperSource.includes('"WorkspaceNotice"'), true);
   assert.equal(helperSource.includes('"SiteEvent"'), true);
   assert.equal(helperSource.includes("analytics_ingest"), true);
+  assert.equal(helperSource.includes("withDedicatedAuthTransaction"), true);
+  assert.equal(helperSource.includes("BEST_EFFORT_TIMEOUT_MS = 25_000"), true);
   assert.equal(helperSource.includes("markWorkspaceSiteVerified"), true);
   assert.equal(helperSource.includes("recordWebVitalsSamplesBestEffort"), true);
   assert.equal(helperSource.includes("Telemetry warm scan"), true);
@@ -57,6 +59,17 @@ test("embed analytics treats object site payloads as metadata, not site ids", ()
   assert.equal(verifierSource.includes("stringBodyValue(body?.site)"), true);
   assert.equal(routeSource.includes('typeof payload?.site === "string" ? payload.site : ""'), true);
   assert.equal(routeSource.includes("String(payload?.site_id ?? payload?.siteId ?? payload?.site ??"), false);
+});
+
+test("analytics console prefers fresh local site events over stale upstream summaries", () => {
+  const source = read("lib/analyticsConsole.server.ts");
+
+  assert.equal(source.includes("withDedicatedAuthClient"), true);
+  assert.equal(source.includes("preferFreshLocalSummary"), true);
+  assert.equal(source.includes("localSummaryHasEvents"), true);
+  assert.equal(source.includes("LOCAL_ANALYTICS_DB"), true);
+  assert.equal(source.includes("COALESCE(NULLIF(\"meta\"->>'siteOrigin'"), true);
+  assert.equal(source.includes("readLocalProjectSummaryFallback({ project, range, sites, activeSite })"), true);
 });
 
 test("cavai persistence paths avoid prisma runtime access on production routes", () => {
