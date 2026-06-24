@@ -499,12 +499,25 @@ export async function verifyEmbedRequest(options: EmbedVerifierOptions): Promise
     return failure("DENIED_ORIGIN", 403, "Origin parsing failed.", originHeader);
   }
 
-  const siteResult = await resolveSiteForEmbed({
-    projectId,
-    explicitSiteId: siteId,
-    boundSiteId: record.siteId ?? null,
-    canonicalOrigin,
-  });
+  const embeddedSite =
+    record.site && record.site.isActive && (!siteId || siteId === record.site.id)
+      ? {
+          ok: true as const,
+          site: {
+            id: record.site.id,
+            origin: record.site.origin,
+            allowedOrigins: record.site.allowedOrigins ?? [],
+          },
+        }
+      : null;
+  const siteResult =
+    embeddedSite ??
+    (await resolveSiteForEmbed({
+      projectId,
+      explicitSiteId: siteId,
+      boundSiteId: record.siteId ?? null,
+      canonicalOrigin,
+    }));
   if (!siteResult.ok) {
     await slowFailMetric(record, siteResult.siteId ?? siteId, canonicalOrigin, false, false, req, siteResult.code);
     return failure(siteResult.code, siteResult.status, "Requested site missing, inactive, or ambiguous.", canonicalOrigin);
