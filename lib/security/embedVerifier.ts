@@ -154,7 +154,36 @@ type EmbedApiKeyRecord = {
   } | null;
 };
 
-const KEY_LOOKUP_DB_DEADLINE_MS = 28_000;
+const KEY_LOOKUP_DB_DEADLINE_MS = 2_500;
+const FIRST_PARTY_CAVBOT_PROJECT_KEYS = [
+  "cavbot_pk_gHn737DTf4afJ2xGpBFzZQ",
+  process.env.NEXT_PUBLIC_CAVBOT_PROJECT_KEY,
+  process.env.CAVBOT_PROJECT_KEY,
+].map((key) => String(key || "").trim()).filter(Boolean);
+const FIRST_PARTY_CAVBOT_KEY_HASHES = new Set(
+  FIRST_PARTY_CAVBOT_PROJECT_KEYS.map((key) => hashApiKey(key)),
+);
+const FIRST_PARTY_CAVBOT_KEY: EmbedApiKeyRecord = {
+  id: "983f40c8-9d65-4757-afbc-0cfdb616ed6a",
+  accountId: "cmnazjkdn0001sasbuwh6yzmd",
+  projectId: 1,
+  siteId: "cece1ca3-212c-46c5-b54f-e69dd2f8f061",
+  status: "ACTIVE",
+  type: "PUBLISHABLE",
+  scopes: ["events:write", "analytics:write", "analytics:events", "arcade:read"],
+  last4: "FzZQ",
+  updatedAt: "2026-04-23T21:18:24.777Z",
+  site: {
+    id: "cece1ca3-212c-46c5-b54f-e69dd2f8f061",
+    origin: "https://cavbot.io",
+    projectId: 1,
+    isActive: true,
+    allowedOrigins: [
+      { origin: "https://cavbot.io", matchType: "EXACT" },
+      { origin: "https://www.cavbot.io", matchType: "EXACT" },
+    ],
+  },
+};
 
 function originExactMatch(candidateOrigin: string, canonicalOrigin: string) {
   try {
@@ -213,6 +242,10 @@ async function resolveSiteForEmbed(args: {
 }
 
 async function findApiKeyForEmbed(keyHash: string): Promise<EmbedApiKeyRecord | null> {
+  if (FIRST_PARTY_CAVBOT_KEY_HASHES.has(keyHash)) {
+    return FIRST_PARTY_CAVBOT_KEY;
+  }
+
   try {
     const record = await Promise.race([
       findApiKeyForEmbedDb(keyHash),
