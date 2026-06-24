@@ -34,6 +34,7 @@ const NO_STORE_HEADERS: Record<string, string> = {
   Expires: "0",
   Vary: "Cookie",
 };
+const API_KEYS_DB_DEADLINE_MS = 25_000;
 
 function json<T>(payload: T, init?: number | ResponseInit) {
   const baseInit = typeof init === "number" ? { status: init } : init ?? {};
@@ -295,13 +296,13 @@ async function resolveApiKeyWorkspaceWithFallback(args: {
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await withApiKeysDeadline(requireSettingsOwnerResilientSession(req), "API_KEYS_SESSION", 8_000);
+    const session = await withApiKeysDeadline(requireSettingsOwnerResilientSession(req), "API_KEYS_SESSION", API_KEYS_DB_DEADLINE_MS);
     const workspaceHints = readApiKeyWorkspaceCookieHints(req);
     const requestedSiteId = String(req.nextUrl.searchParams.get("siteId") || "").trim() || undefined;
     const workspacePayloadPromise = withApiKeysDeadline(
       readWorkspace({ accountId: session.accountId }),
       "API_KEYS_WORKSPACE_PAYLOAD",
-      8_000,
+      API_KEYS_DB_DEADLINE_MS,
     ).catch(() => null);
     let workspace = await withApiKeysDeadline(
       resolveApiKeyWorkspaceWithFallback({
@@ -311,7 +312,7 @@ export async function GET(req: NextRequest) {
         ...workspaceHints,
       }),
       "API_KEYS_WORKSPACE",
-      8_000,
+      API_KEYS_DB_DEADLINE_MS,
     ).catch(async (error) => {
       console.error("[settings/api-keys] workspace deadline fallback", {
         accountId: session.accountId,
@@ -330,7 +331,7 @@ export async function GET(req: NextRequest) {
           requestedSiteId,
         }),
         "API_KEYS_ACCOUNT_SITE_FALLBACK",
-        8_000,
+        API_KEYS_DB_DEADLINE_MS,
       ).catch(() => null);
     }
     if (!workspace) {
@@ -349,7 +350,7 @@ export async function GET(req: NextRequest) {
 
     let keys: Awaited<ReturnType<typeof listApiKeysForProject>> = [];
     try {
-      keys = await withApiKeysDeadline(listApiKeysForProject(workspace.projectId), "API_KEYS_LIST", 8_000);
+      keys = await withApiKeysDeadline(listApiKeysForProject(workspace.projectId), "API_KEYS_LIST", API_KEYS_DB_DEADLINE_MS);
     } catch (error) {
       console.error("[settings/api-keys] project key lookup failed", {
         projectId: workspace.projectId,
@@ -396,7 +397,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = (await readSanitizedJson(req, null)) as ApiKeyCreateBody | null;
-    const session = await withApiKeysDeadline(requireSettingsOwnerResilientSession(req), "API_KEYS_CREATE_SESSION", 8_000);
+    const session = await withApiKeysDeadline(requireSettingsOwnerResilientSession(req), "API_KEYS_CREATE_SESSION", API_KEYS_DB_DEADLINE_MS);
     const workspaceHints = readApiKeyWorkspaceCookieHints(req);
     const requestedSiteId = String(body?.siteId ?? "").trim() || undefined;
     let workspace = await withApiKeysDeadline(
@@ -407,7 +408,7 @@ export async function POST(req: NextRequest) {
         ...workspaceHints,
       }),
       "API_KEYS_CREATE_WORKSPACE",
-      8_000,
+      API_KEYS_DB_DEADLINE_MS,
     ).catch(() => null);
     if (!hasUsableSite(workspace)) {
       workspace = await withApiKeysDeadline(
@@ -417,7 +418,7 @@ export async function POST(req: NextRequest) {
           requestedSiteId,
         }),
         "API_KEYS_CREATE_ACCOUNT_SITE_FALLBACK",
-        8_000,
+        API_KEYS_DB_DEADLINE_MS,
       ).catch(() => null);
     }
 
@@ -434,7 +435,7 @@ export async function POST(req: NextRequest) {
                 projectId,
               }),
               "API_KEYS_CREATE_SITE_PROJECT_LOOKUP",
-              8_000,
+              API_KEYS_DB_DEADLINE_MS,
             ).catch(() => null)
           : null) ??
         (await withApiKeysDeadline(
@@ -443,7 +444,7 @@ export async function POST(req: NextRequest) {
             accountId: session.accountId,
           }),
           "API_KEYS_CREATE_SITE_ACCOUNT_LOOKUP",
-          8_000,
+          API_KEYS_DB_DEADLINE_MS,
         ).catch(() => null)) ??
         (session.sub
           ? await withApiKeysDeadline(
@@ -452,7 +453,7 @@ export async function POST(req: NextRequest) {
                 userId: session.sub,
               }),
               "API_KEYS_CREATE_SITE_USER_LOOKUP",
-              8_000,
+              API_KEYS_DB_DEADLINE_MS,
             ).catch(() => null)
           : null);
       if (!site) return json({ ok: false, error: "SITE_NOT_FOUND" }, 404);
@@ -483,7 +484,7 @@ export async function POST(req: NextRequest) {
       scopes: Array.isArray(body?.scopes) ? body.scopes : undefined,
     });
 
-    const created = await withApiKeysDeadline(createApiKeyRecord(insert.data), "API_KEYS_CREATE_INSERT", 8_000);
+    const created = await withApiKeysDeadline(createApiKeyRecord(insert.data), "API_KEYS_CREATE_INSERT", API_KEYS_DB_DEADLINE_MS);
     if (!created) {
       return json({ ok: false, error: "CREATE_KEY_FAILED", message: "Failed to create API key." }, 500);
     }

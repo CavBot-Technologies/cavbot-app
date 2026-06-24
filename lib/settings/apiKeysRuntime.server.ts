@@ -1,8 +1,8 @@
 import "server-only";
 
 import {
-  getAuthPool,
   newDbId,
+  withDedicatedAuthClient,
   withAuthTransaction,
 } from "@/lib/authDb";
 import type {
@@ -97,7 +97,7 @@ function mapApiKey(row: RawApiKeyRow): ApiKeyRecord {
 }
 
 export async function listApiKeysForProject(projectId: number) {
-  const result = await getAuthPool().query<RawApiKeyRow>(
+  const result = await withDedicatedAuthClient((authClient) => authClient.query<RawApiKeyRow>(
     `SELECT
        "id",
        "accountId",
@@ -120,7 +120,7 @@ export async function listApiKeysForProject(projectId: number) {
      WHERE "projectId" = $1
      ORDER BY "createdAt" DESC`,
     [projectId],
-  );
+  ));
 
   return result.rows.map(mapApiKey);
 }
@@ -129,7 +129,7 @@ export async function findSiteForProject(args: {
   siteId: string;
   projectId: number;
 }) {
-  const result = await getAuthPool().query<RawApiKeySiteRow>(
+  const result = await withDedicatedAuthClient((authClient) => authClient.query<RawApiKeySiteRow>(
     `SELECT "id", "origin", "projectId"
      FROM "Site"
      WHERE "id" = $1
@@ -137,7 +137,7 @@ export async function findSiteForProject(args: {
        AND "isActive" = TRUE
      LIMIT 1`,
     [args.siteId, args.projectId],
-  );
+  ));
 
   const row = result.rows[0];
   if (!row) return null;
@@ -152,7 +152,7 @@ export async function findSiteForAccount(args: {
   siteId: string;
   accountId: string;
 }) {
-  const result = await getAuthPool().query<RawApiKeySiteRow>(
+  const result = await withDedicatedAuthClient((authClient) => authClient.query<RawApiKeySiteRow>(
     `SELECT s."id", s."origin", s."projectId"
      FROM "Site" s
      INNER JOIN "Project" p
@@ -163,7 +163,7 @@ export async function findSiteForAccount(args: {
        AND p."isActive" = TRUE
      LIMIT 1`,
     [args.siteId, args.accountId],
-  );
+  ));
 
   const row = result.rows[0];
   if (!row) return null;
@@ -178,7 +178,7 @@ export async function findSiteForUser(args: {
   siteId: string;
   userId: string;
 }) {
-  const result = await getAuthPool().query<RawApiKeySiteRow>(
+  const result = await withDedicatedAuthClient((authClient) => authClient.query<RawApiKeySiteRow>(
     `SELECT s."id", s."origin", s."projectId"
      FROM "Site" s
      INNER JOIN "Project" p
@@ -192,7 +192,7 @@ export async function findSiteForUser(args: {
        AND m."role" = 'OWNER'::"MembershipRole"
      LIMIT 1`,
     [args.siteId, args.userId],
-  );
+  ));
 
   const row = result.rows[0];
   if (!row) return null;
@@ -204,7 +204,7 @@ export async function findSiteForUser(args: {
 }
 
 export async function listActiveSitesForAccount(accountId: string) {
-  const result = await getAuthPool().query<RawAccountSiteRow>(
+  const result = await withDedicatedAuthClient((authClient) => authClient.query<RawAccountSiteRow>(
     `SELECT s."id", s."origin", s."projectId"
      FROM "Site" s
      INNER JOIN "Project" p
@@ -224,7 +224,7 @@ export async function listActiveSitesForAccount(accountId: string) {
        p."createdAt" ASC,
        s."createdAt" ASC`,
     [accountId],
-  );
+  ));
 
   return result.rows.map((row) => ({
     id: String(row.id || "").trim(),
@@ -234,7 +234,7 @@ export async function listActiveSitesForAccount(accountId: string) {
 }
 
 export async function listActiveSitesForUser(userId: string) {
-  const result = await getAuthPool().query<RawAccountSiteRow>(
+  const result = await withDedicatedAuthClient((authClient) => authClient.query<RawAccountSiteRow>(
     `SELECT s."id", s."origin", s."projectId"
      FROM "Site" s
      INNER JOIN "Project" p
@@ -257,7 +257,7 @@ export async function listActiveSitesForUser(userId: string) {
        p."createdAt" ASC,
        s."createdAt" ASC`,
     [userId],
-  );
+  ));
 
   return result.rows.map((row) => ({
     id: String(row.id || "").trim(),
@@ -267,13 +267,13 @@ export async function listActiveSitesForUser(userId: string) {
 }
 
 export async function listAllowedOriginsForSite(siteId: string) {
-  const result = await getAuthPool().query<RawAllowedOriginRow>(
+  const result = await withDedicatedAuthClient((authClient) => authClient.query<RawAllowedOriginRow>(
     `SELECT "origin"
      FROM "SiteAllowedOrigin"
      WHERE "siteId" = $1
      ORDER BY "createdAt" ASC`,
     [siteId],
-  );
+  ));
 
   return result.rows
     .map((row) => String(row.origin || "").trim())
@@ -282,7 +282,7 @@ export async function listAllowedOriginsForSite(siteId: string) {
 
 export async function createApiKeyRecord(insertData: ApiKeyInsertRecord) {
   const id = newDbId();
-  const result = await getAuthPool().query<RawApiKeyRow>(
+  const result = await withDedicatedAuthClient((authClient) => authClient.query<RawApiKeyRow>(
     `INSERT INTO "ApiKey" (
        "id",
        "accountId",
@@ -335,7 +335,7 @@ export async function createApiKeyRecord(insertData: ApiKeyInsertRecord) {
       insertData.siteId,
       insertData.rotatedFromId,
     ],
-  );
+  ));
 
   return result.rows[0] ? mapApiKey(result.rows[0]) : null;
 }
@@ -344,7 +344,7 @@ export async function findApiKeyForAccount(args: {
   keyId: string;
   accountId: string;
 }) {
-  const result = await getAuthPool().query<RawApiKeyRow>(
+  const result = await withDedicatedAuthClient((authClient) => authClient.query<RawApiKeyRow>(
     `SELECT
        "id",
        "accountId",
@@ -368,7 +368,7 @@ export async function findApiKeyForAccount(args: {
        AND "accountId" = $2
      LIMIT 1`,
     [args.keyId, args.accountId],
-  );
+  ));
 
   return result.rows[0] ? mapApiKey(result.rows[0]) : null;
 }
@@ -453,7 +453,7 @@ export async function revokeApiKeyRecord(args: {
   keyId: string;
   revokedAt: Date;
 }) {
-  const result = await getAuthPool().query<RawApiKeyRow>(
+  const result = await withDedicatedAuthClient((authClient) => authClient.query<RawApiKeyRow>(
     `UPDATE "ApiKey"
      SET "status" = 'REVOKED'::"ApiKeyStatus",
          "rotatedAt" = $2,
@@ -479,7 +479,7 @@ export async function revokeApiKeyRecord(args: {
        "createdAt",
        "updatedAt"`,
     [args.keyId, args.revokedAt],
-  );
+  ));
 
   return result.rows[0] ? mapApiKey(result.rows[0]) : null;
 }
@@ -517,12 +517,12 @@ export async function replaceSiteAllowedOrigins(args: {
 }
 
 export async function listSiteAllowedOrigins(siteId: string) {
-  const result = await getAuthPool().query<RawAllowedOriginRow>(
+  const result = await withDedicatedAuthClient((authClient) => authClient.query<RawAllowedOriginRow>(
     `SELECT "origin"
      FROM "SiteAllowedOrigin"
      WHERE "siteId" = $1`,
     [siteId],
-  );
+  ));
 
   return result.rows
     .map((row) => String(row.origin || "").trim())

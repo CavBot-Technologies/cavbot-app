@@ -62,7 +62,7 @@ test("settings api-key runtime helpers use the auth pool instead of Prisma", () 
   assert.equal(workspaceSource.includes("expandRelatedExactOrigins"), true);
 
   assert.equal(runtimeSource.includes('from "@/lib/prisma"'), false);
-  assert.equal(runtimeSource.includes("getAuthPool"), true);
+  assert.equal(runtimeSource.includes("withDedicatedAuthClient"), true);
   assert.equal(runtimeSource.includes("withAuthTransaction"), true);
   assert.equal(runtimeSource.includes('"updatedAt"'), true);
   assert.equal(runtimeSource.includes("NOW(), NOW()"), true);
@@ -89,6 +89,7 @@ test("settings api-key runtime helpers use the auth pool instead of Prisma", () 
     assert.equal(source.includes("requireSettingsOwnerResilientSession"), true);
   }
   assert.equal(apiKeyRouteSource.includes("readApiKeyWorkspaceCookieHints"), true);
+  assert.equal(apiKeyRouteSource.includes("API_KEYS_DB_DEADLINE_MS = 25_000"), true);
   assert.equal(apiKeyRouteSource.includes("findSiteForAccount"), true);
   assert.equal(apiKeyRouteSource.includes("resolveApiKeyWorkspaceWithFallback"), true);
   assert.equal(rotateRouteSource.includes("readApiKeyWorkspaceCookieHints"), true);
@@ -100,7 +101,7 @@ test("settings api-key runtime helpers use the auth pool instead of Prisma", () 
   assert.equal(installStateRouteSource.includes("listSiteInstallState"), true);
   assert.equal(installStateRouteSource.includes("findSiteForAccount"), true);
   assert.equal(apiKeyRouteSource.includes("requestedSiteId"), true);
-  assert.equal(apiKeyRouteSource.includes("const scopedKeys = siteRecord?.id"), true);
+  assert.equal(apiKeyRouteSource.includes("const scopedKeys = keysForSelectedSite"), true);
   assert.equal(apiKeyRouteSource.includes("sites: workspace.sites.map"), true);
   assert.equal(apiKeysPanelSource.includes("/api/settings/api-keys?siteId="), true);
   assert.equal(apiKeysPanelSource.includes("/api/workspaces/selection"), true);
