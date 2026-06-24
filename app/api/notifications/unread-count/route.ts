@@ -1,8 +1,8 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireSession, requireUser, isApiAuthError } from "@/lib/apiAuth";
+import { getAuthPool } from "@/lib/authDb";
 import { ensureCavCloudShareExpirySoonNotifications } from "@/lib/cavcloud/notifications.server";
 import { buildGuardDecisionPayload } from "@/src/lib/cavguard/cavGuard.server";
 
@@ -33,29 +33,59 @@ function passiveAuthRequiredCount(errorCode: string) {
   } as const;
 }
 
+async function withUnreadCountDeadline<T>(promise: Promise<T>, label: string, timeoutMs = 2_500): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label}_TIMEOUT`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function countUnreadNotifications(args: { userId: string; accountId: string }) {
+  const result = await getAuthPool().query<{ count: string | number }>(
+    `SELECT COUNT(*) AS "count"
+     FROM "Notification"
+     WHERE "userId" = $1
+       AND "readAt" IS NULL
+       AND (
+         "accountId" IS NULL
+         OR ($2::text <> '' AND "accountId" = $2)
+       )`,
+    [args.userId, args.accountId],
+  );
+  const raw = result.rows[0]?.count ?? 0;
+  const count = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(count) ? count : 0;
+}
+
 export async function GET(req: NextRequest) {
   try {
-    const sess = await requireSession(req);
+    const sess = await withUnreadCountDeadline(requireSession(req), "UNREAD_SESSION", 2_500);
     requireUser(sess);
 
     const userId = s(sess.sub);
     const accountId = s(sess.accountId);
 
     if (accountId) {
-      try {
-        await ensureCavCloudShareExpirySoonNotifications({ accountId, userId });
-      } catch {
+      void ensureCavCloudShareExpirySoonNotifications({ accountId, userId }).catch(() => {
         // Keep unread badge resilient.
-      }
+      });
     }
 
-    const count = await prisma.notification.count({
-      where: {
+    const count = await withUnreadCountDeadline(
+      countUnreadNotifications({
         userId,
-        readAt: null,
-        OR: accountId ? [{ accountId }, { accountId: null }] : [{ accountId: null }],
-      },
-    });
+        accountId,
+      }),
+      "UNREAD_COUNT",
+      2_500,
+    ).catch(() => 0);
 
     return json({ ok: true, count }, 200);
   } catch (error) {

@@ -357,19 +357,27 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = (await readSanitizedJson(req, null)) as ApiKeyCreateBody | null;
-    const session = await requireSettingsOwnerResilientSession(req);
+    const session = await withApiKeysDeadline(requireSettingsOwnerResilientSession(req), "API_KEYS_CREATE_SESSION", 8_000);
     const workspaceHints = readApiKeyWorkspaceCookieHints(req);
     const requestedSiteId = String(body?.siteId ?? "").trim() || undefined;
-    let workspace = await resolveApiKeyWorkspaceWithFallback({
-      accountId: session.accountId,
-      requestedSiteId,
-      ...workspaceHints,
-    });
-    if (!hasUsableSite(workspace)) {
-      workspace = await workspaceFromAccountSites({
+    let workspace = await withApiKeysDeadline(
+      resolveApiKeyWorkspaceWithFallback({
         accountId: session.accountId,
         requestedSiteId,
-      });
+        ...workspaceHints,
+      }),
+      "API_KEYS_CREATE_WORKSPACE",
+      8_000,
+    ).catch(() => null);
+    if (!hasUsableSite(workspace)) {
+      workspace = await withApiKeysDeadline(
+        workspaceFromAccountSites({
+          accountId: session.accountId,
+          requestedSiteId,
+        }),
+        "API_KEYS_CREATE_ACCOUNT_SITE_FALLBACK",
+        8_000,
+      ).catch(() => null);
     }
 
     const type = toType(body?.type);
@@ -379,15 +387,23 @@ export async function POST(req: NextRequest) {
     if (bodySiteId) {
       const site =
         (projectId
-          ? await findSiteForProject({
-              siteId: bodySiteId,
-              projectId,
-            })
+          ? await withApiKeysDeadline(
+              findSiteForProject({
+                siteId: bodySiteId,
+                projectId,
+              }),
+              "API_KEYS_CREATE_SITE_PROJECT_LOOKUP",
+              8_000,
+            ).catch(() => null)
           : null) ??
-        (await findSiteForAccount({
-          siteId: bodySiteId,
-          accountId: session.accountId,
-        }));
+        (await withApiKeysDeadline(
+          findSiteForAccount({
+            siteId: bodySiteId,
+            accountId: session.accountId,
+          }),
+          "API_KEYS_CREATE_SITE_ACCOUNT_LOOKUP",
+          8_000,
+        ).catch(() => null));
       if (!site) return json({ ok: false, error: "SITE_NOT_FOUND" }, 404);
       siteId = site.id;
       projectId = site.projectId;
@@ -416,15 +432,15 @@ export async function POST(req: NextRequest) {
       scopes: Array.isArray(body?.scopes) ? body.scopes : undefined,
     });
 
-    const created = await createApiKeyRecord(insert.data);
+    const created = await withApiKeysDeadline(createApiKeyRecord(insert.data), "API_KEYS_CREATE_INSERT", 8_000);
     if (!created) {
       return json({ ok: false, error: "CREATE_KEY_FAILED", message: "Failed to create API key." }, 500);
     }
 
-    await syncWorkerProjectKeyBestEffort(created);
+    void syncWorkerProjectKeyBestEffort(created);
 
     if (session.accountId) {
-      await auditLogWrite({
+      void auditLogWrite({
         request: req,
         action: "KEY_CREATED",
         accountId: session.accountId,
