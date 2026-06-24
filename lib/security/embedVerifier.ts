@@ -154,7 +154,7 @@ type EmbedApiKeyRecord = {
   } | null;
 };
 
-const KEY_LOOKUP_DB_DEADLINE_MS = 2_500;
+const KEY_LOOKUP_DB_DEADLINE_MS = 8_000;
 const FIRST_PARTY_CAVBOT_PROJECT_KEYS = [
   "cavbot_pk_gHn737DTf4afJ2xGpBFzZQ",
   process.env.NEXT_PUBLIC_CAVBOT_PROJECT_KEY,

@@ -10,7 +10,7 @@ import { markWorkspaceSiteVerified } from "@/lib/workspaceSites.server";
 
 const DEDUPE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const REACTIVATION_WINDOW_MS = 30 * DEDUPE_WINDOW_MS;
-const BEST_EFFORT_TIMEOUT_MS = 1_500;
+const BEST_EFFORT_TIMEOUT_MS = 6_000;
 
 type Queryable = {
   query: <T = unknown>(text: string, values?: unknown[]) => Promise<{ rows: T[] }>;
