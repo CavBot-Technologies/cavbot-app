@@ -673,7 +673,7 @@ const clearError = useCallback((fieldId: string) => {
                 <div className="auth-sso-unavailable">Google sign-in unavailable</div>
               )}
             </div>
-
+ 
             <br />
             <br />
 

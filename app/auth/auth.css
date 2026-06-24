@@ -306,6 +306,7 @@ button{touch-action:manipulation}
   place-items:center;
   margin: 2px 0 0;
   position:relative;
+  border-radius: 4px;
 }
 .auth-divider::before{
   content:"";
